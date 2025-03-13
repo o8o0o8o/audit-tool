@@ -463,49 +463,6 @@ class SEOData {
   async #collectVitals(page) {
     console.time("collectVitals");
 
-    let CLS = 0;
-
-    const LCP = await page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          const observer = new PerformanceObserver(async (list) => {
-            const entries = list.getEntries();
-            const lcp = entries.at(-1);
-
-            observer.disconnect();
-
-            resolve(Number(lcp?.startTime || 0).toFixed(2));
-
-            CLS = await page.evaluate(
-              () =>
-                new Promise((resolve) => {
-                  const observer = new PerformanceObserver((list) => {
-                    let total = 0;
-                    for (const entry of list.getEntries()) {
-                      total += entry.value;
-                    }
-                    observer.disconnect();
-
-                    resolve(+total.toPrecision(2));
-                  });
-
-                  observer.observe({ type: "layout-shift", buffered: true });
-
-                  setTimeout(() => {
-                    observer.disconnect();
-
-                    resolve(0);
-                  }, 10000);
-                })
-            );
-          });
-          observer.observe({
-            type: "largest-contentful-paint",
-            buffered: true,
-          });
-        })
-    );
-
     const TTFB = await page.evaluate(
       () =>
         new Promise((resolve) => {
@@ -518,12 +475,54 @@ class SEOData {
 
               observer.disconnect();
 
-              resolve(ttfb.toFixed(2));
+              resolve(Number(ttfb.toFixed(2)));
             }
           });
           observer.observe({ type: "navigation", buffered: true });
         })
     );
+
+    const { LCP, CLS } = await page.evaluate(() => {
+      return new Promise((resolve) => {
+        let LCP = 0;
+        let CLS = 0;
+        let clsObserver;
+
+        // LCP Observer
+        const lcpObserver = new PerformanceObserver((list) => {
+          const entries = list.getEntries();
+          const lastLCP = entries.at(-1);
+
+          if (lastLCP) {
+            LCP = Number(lastLCP.startTime.toFixed(2));
+          }
+
+          lcpObserver.disconnect();
+
+          // Start CLS tracking after LCP is resolved
+          clsObserver = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+              if (!entry.hadRecentInput) {
+                CLS += entry.value;
+              }
+            }
+          });
+
+          clsObserver.observe({ type: "layout-shift", buffered: true });
+
+          // Stop tracking CLS after 5 seconds
+          setTimeout(() => {
+            clsObserver.disconnect();
+            resolve({ LCP, CLS: Number(CLS.toFixed(2)) });
+          }, 5000);
+        });
+
+        lcpObserver.observe({
+          type: "largest-contentful-paint",
+          buffered: true,
+        });
+      });
+    });
 
     console.timeEnd("collectVitals");
 

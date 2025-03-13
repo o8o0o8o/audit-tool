@@ -1,0 +1,19 @@
+{
+  "name": "audit-tool",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Sergey Labut",
+  "license": "ISC",
+  "dependencies": {
+    "node-html-parser": "^6.1.13",
+    "playwright": "^1.49.1",
+    "web-vitals": "^4.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  }
+}

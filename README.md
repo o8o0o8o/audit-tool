@@ -7,4 +7,4 @@ run commands:
 
 ### How to use
 
-run command: node start {https://yoursite}
+run command: node start https://yoursite

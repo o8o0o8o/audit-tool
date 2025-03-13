@@ -1,19 +1,29 @@
 const { parse } = require("node-html-parser");
 const fs = require("fs");
-const { chromium, errors } = require("playwright");
+const { chromium } = require("playwright");
+const { generateHTML } = require("./generateHTML");
 
 class SEOData {
   #results;
   #proceed;
+  #perf;
 
-  constructor(origin, proceed) {
+  constructor(origin, proceed, perf) {
     if (proceed === "--proceed") {
       this.#proceed = proceed;
+    }
+
+    if (perf === "--no-perf") {
+      this.#perf = false;
+    } else {
+      this.#perf = true;
     }
 
     this.origin = origin.replace(/\s/g, "").replace(/\/$/, "");
 
     this.domainName = this.origin.replace("https://", "");
+
+    this.file = `SEOAnalysis__${this.domainName}.json`;
 
     this.#results = {
       robots: { sitemaps: [], "user-agent": {} },
@@ -97,14 +107,14 @@ class SEOData {
       if (hTags[i].tag === "h1" && hTags[i].count > 1) {
         saveError(
           "Some pages have more than one h1 tag",
-          `${page} has more than one h1 tag`
+          `<a href="${page}">${page}</a> has more than one h1 tag`
         );
       }
 
       if (hTags[i].tag === "h2" && hTags[i].count > 10) {
         saveError(
           "Some pages have more than 10 h2 tags",
-          `${page} has more than ten h2 tags`
+          `<a href="${page}">${page}</a> has more than ten h2 tags`
         );
       }
 
@@ -113,7 +123,7 @@ class SEOData {
           `Some pages have incorrect h tags structure: preceding tag h${
             i + 1
           } is missing`,
-          `${page} has incorrect h tags structure: preceding tag h${
+          `<a href="${page}">${page}</a> has incorrect h tags structure: preceding tag h${
             i + 1
           } is missing`
         );
@@ -136,18 +146,17 @@ class SEOData {
     this.#results.analysis.overall.add(generalError);
 
     if (detailedError) {
-      this.#results.analysis.details.add(detailedError);
+      if (!this.#results.analysis.details[generalError]) {
+        this.#results.analysis.details[generalError] = [];
+      }
+
+      this.#results.analysis.details[generalError].push(detailedError);
     }
   }
 
-  async #restoreProgress(prefix) {
+  async #restoreProgress() {
     try {
-      const seoData = await JSON.parse(
-        fs.readFileSync(
-          `${prefix ?? ""}SEOAnalysis__${this.domainName}.json`,
-          "utf-8"
-        )
-      );
+      const seoData = await JSON.parse(fs.readFileSync(this.file, "utf-8"));
 
       this.#results = {
         ...seoData,
@@ -158,7 +167,6 @@ class SEOData {
         analysis: {
           ...seoData.analysis,
           overall: new Set(seoData.analysis.overall),
-          details: new Set(seoData.analysis.details),
         },
       };
     } catch (error) {
@@ -166,15 +174,21 @@ class SEOData {
     }
   }
 
-  saveData(prefix) {
+  saveData() {
     fs.writeFileSync(
-      `${prefix ?? ""}SEOAnalysis__${this.domainName}.json`,
+      this.file,
       JSON.stringify({
         ...this.#results,
         analysis: {
           ...this.#results.analysis,
           overall: Array.from(this.#results.analysis.overall),
-          details: Array.from(this.#results.analysis.details),
+          details: Object.entries(this.#results.analysis.details).reduce(
+            (prev, curr) => ({
+              ...prev,
+              [curr[0]]: Array.from(new Set(curr[1])).sort(),
+            }),
+            {}
+          ),
         },
         pageData: {
           ...this.#results.pageData,
@@ -397,40 +411,48 @@ class SEOData {
   async #basicTest(page, network, cpu, url) {
     console.time("basicTest");
 
-    const session = await page.context().newCDPSession(page);
+    if (this.#perf) {
+      const session = await page.context().newCDPSession(page);
 
-    // Enable performance metrics collection
-    await session.send("Performance.enable");
+      // Enable performance metrics collection
+      await session.send("Performance.enable");
 
-    // Apply CPU throttling if needed
-    if (!cpu.noThrottle && cpu.rate) {
-      await session.send("Emulation.setCPUThrottlingRate", { rate: cpu.rate });
-    }
+      // Apply CPU throttling if needed
+      if (!cpu.noThrottle && cpu.rate) {
+        await session.send("Emulation.setCPUThrottlingRate", {
+          rate: cpu.rate,
+        });
+      }
 
-    // Apply network throttling if needed
-    if (!network.noThrottle) {
-      await session.send("Network.enable");
-      await session.send("Network.emulateNetworkConditions", {
-        offline: false,
-        downloadThroughput: network.download,
-        uploadThroughput: network.upload,
-        latency: network.latency,
-      });
+      // Apply network throttling if needed
+      if (!network.noThrottle) {
+        await session.send("Network.enable");
+
+        await session.send("Network.emulateNetworkConditions", {
+          offline: false,
+          downloadThroughput: network.download,
+          uploadThroughput: network.upload,
+          latency: network.latency,
+        });
+      }
     }
 
     // Navigate to the page
-    const response = await page.goto(url, { waitUntil: "domcontentloaded" });
+    const response = await page.goto(url);
+
     const status = response?.status();
 
     let vitals = {};
 
-    if (status == 200) {
-      console.log(`Collect vitals: ${status} ${url}`);
+    if (this.#perf) {
+      if (status == 200) {
+        console.log(`Collect vitals: ${status} ${url}`);
 
-      // Collect performance metrics
-      vitals = await this.#collectVitals(page);
-    } else {
-      console.log(`Error: ${status} ${url}`);
+        // Collect performance metrics
+        vitals = await this.#collectVitals(page);
+      } else {
+        console.log(`Error: ${status} ${url}`);
+      }
     }
 
     console.timeEnd("basicTest");
@@ -441,15 +463,41 @@ class SEOData {
   async #collectVitals(page) {
     console.time("collectVitals");
 
-    // Collect Largest Contentful Paint (LCP)
+    let CLS = 0;
+
     const LCP = await page.evaluate(
       () =>
         new Promise((resolve) => {
-          const observer = new PerformanceObserver((list) => {
+          const observer = new PerformanceObserver(async (list) => {
             const entries = list.getEntries();
             const lcp = entries.at(-1);
+
             observer.disconnect();
+
             resolve(Number(lcp?.startTime || 0).toFixed(2));
+
+            CLS = await page.evaluate(
+              () =>
+                new Promise((resolve) => {
+                  const observer = new PerformanceObserver((list) => {
+                    let total = 0;
+                    for (const entry of list.getEntries()) {
+                      total += entry.value;
+                    }
+                    observer.disconnect();
+
+                    resolve(+total.toPrecision(2));
+                  });
+
+                  observer.observe({ type: "layout-shift", buffered: true });
+
+                  setTimeout(() => {
+                    observer.disconnect();
+
+                    resolve(0);
+                  }, 10000);
+                })
+            );
           });
           observer.observe({
             type: "largest-contentful-paint",
@@ -458,7 +506,6 @@ class SEOData {
         })
     );
 
-    // Collect Time to First Byte (TTFB)
     const TTFB = await page.evaluate(
       () =>
         new Promise((resolve) => {
@@ -468,27 +515,13 @@ class SEOData {
               const navigationEntry = entries[0];
               const ttfb =
                 navigationEntry.responseStart - navigationEntry.fetchStart;
+
               observer.disconnect();
+
               resolve(ttfb.toFixed(2));
             }
           });
           observer.observe({ type: "navigation", buffered: true });
-        })
-    );
-
-    // Collect Cumulative Layout Shift (CLS)
-    const CLS = await page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          const observer = new PerformanceObserver((list) => {
-            let total = 0;
-            for (const entry of list.getEntries()) {
-              total += entry.value;
-            }
-            observer.disconnect();
-            resolve(+total.toPrecision(2));
-          });
-          observer.observe({ type: "layout-shift", buffered: true });
         })
     );
 
@@ -506,10 +539,6 @@ class SEOData {
         viewport: { width: 414, height: 896 },
         // deviceScaleFactor: 2, // not working?
       });
-
-      const chromePage = await context.newPage();
-
-      // chromePage.setDefaultTimeout(30000);
 
       const alternatesErrors = [];
       const uniqueTitles = new Set();
@@ -550,7 +579,13 @@ class SEOData {
 
         let page = undefined;
 
+        const chromePage = await context.newPage();
+
+        // chromePage.setDefaultTimeout(30000);
+
         try {
+          let messageDetailed = url;
+
           page = await this.#withTimeout(
             this.#basicTest(
               chromePage,
@@ -561,7 +596,7 @@ class SEOData {
               .then(async (data) => ({ ...data, url }))
               .catch((error) => {
                 const messageOverall = `${error.name} ${error.message} ${error.cause}`;
-                const messageDetailed = `${url} ${messageOverall}`;
+                messageDetailed = `${url} ${messageOverall}`;
 
                 this.saveError(messageOverall, messageDetailed);
 
@@ -581,7 +616,8 @@ class SEOData {
                 this.#results.pageData.processedPages.add(url);
               }),
             30000,
-            "Core Web Vitals test failed. Page failed to load " + url
+            "Core Web Vitals test failed. Page failed to load " +
+              messageDetailed
           );
         } catch (error) {
           console.log(error);
@@ -660,7 +696,7 @@ class SEOData {
             if (!text) {
               this.saveError(
                 `Some pages have links without any text`,
-                `The page ${url} has a link without text`
+                `The page <a href="${url}">${url}</a> has a link without text "${href}"`
               );
             }
           }
@@ -682,7 +718,7 @@ class SEOData {
           if (TTFB > 800) {
             this.saveError(
               `Some pages have TTFB more than 800`,
-              `The page ${url} has TTFB more than 800 ${TTFB}`
+              `The page <a href="${url}">${url}</a> has TTFB more than 800 ${TTFB}`
             );
 
             console.log("TTFB: " + TTFB, url);
@@ -691,7 +727,7 @@ class SEOData {
           if (CLS > 0.1) {
             this.saveError(
               `Some pages CLS more than 0.1`,
-              `The page ${url} has CLS more than 0.1 ${CLS}`
+              `The page <a href="${url}">${url}</a> has CLS more than 0.1 ${CLS}`
             );
 
             console.log("CLS: " + CLS, url);
@@ -700,7 +736,7 @@ class SEOData {
           if (LCP > 2500) {
             this.saveError(
               `Some pages LCP more than 2500`,
-              `The page ${url} has LCP more than 2500 ${LCP}`
+              `The page <a href="${url}">${url}</a> has LCP more than 2500 ${LCP}`
             );
 
             console.log("LCP: " + LCP, url);
@@ -709,7 +745,7 @@ class SEOData {
           if (!title) {
             this.saveError(
               `Title is missing`,
-              `Title is missing for this page ${url}`
+              `Title is missing for this page <a href="${url}">${url}</a>`
             );
           } else {
             pageData.title = title;
@@ -717,7 +753,7 @@ class SEOData {
             if (uniqueTitles.has(title)) {
               this.saveError(
                 `Some pages have identical titles`,
-                `Title "${title}" is duplicated for this page ${url}`
+                `Title "${title}" is duplicated for this page <a href="${url}">${url}</a>`
               );
             }
 
@@ -742,7 +778,7 @@ class SEOData {
                 if (name === "description" && uniqueDescriptions.has(content)) {
                   this.saveError(
                     `Some pages have identical descriptions`,
-                    `Description "${content}" is duplicated for this page ${url}`
+                    `Description "${content}" is duplicated for this page <a href="${url}">${url}</a>`
                   );
                 }
 
@@ -760,7 +796,7 @@ class SEOData {
               ) {
                 this.saveError(
                   `Some meta tags are missing`,
-                  `Meta tag ${tag} is missing for this page ${url}`
+                  `Meta tag ${tag} is missing for this page <a href="${url}">${url}</a>`
                 );
               }
             }
@@ -796,14 +832,14 @@ class SEOData {
           if (!pageData.canonical) {
             this.saveError(
               `Canonicals are not set for some pages`,
-              `Canonical link is missing for this page ${url}`
+              `Canonical link is missing for this page <a href="${url}">${url}</a>`
             );
           }
 
           if (!pageData.alternates) {
             this.saveError(
               `Alternates are not set for some pages`,
-              `Alternates links are missing for this page ${url}`
+              `Alternates links are missing for this page <a href="${url}">${url}</a>`
             );
           } else {
             for (const alternate of pageData.alternates) {
@@ -818,7 +854,7 @@ class SEOData {
               if (count > 1) {
                 this.saveError(
                   `Some alternates are duplicated in head links`,
-                  `Alternate ${alternate.href} is duplicated for this page ${url}`
+                  `Alternate ${alternate.href} is duplicated for this page <a href="${url}">${url}</a>`
                 );
               }
             }
@@ -835,7 +871,7 @@ class SEOData {
                 } else {
                   this.saveError(
                     `Some alternates from sitemap don't match alternates form pages`,
-                    `Alternate ${pageAlternate.href} has no match in sitemap for loc ${pageData.canonical} for this page ${url}`
+                    `Alternate ${pageAlternate.href} has no match in sitemap for loc ${pageData.canonical} for this page <a href="${url}">${url}</a>`
                   );
                 }
               }
@@ -850,13 +886,13 @@ class SEOData {
                   if (sitemapAlternate.hreflang !== pageAlternate.hreflang) {
                     this.saveError(
                       `Some alternate hreflangs from sitemap don't match alternate hreflangs from pages`,
-                      `Alternate hreflangs ${pageAlternate.hreflang} doesn't match sitemap hreflang ${sitemapAlternate.hreflang} for loc ${pageData.canonical} for this page ${url}`
+                      `Alternate hreflangs ${pageAlternate.hreflang} doesn't match sitemap hreflang ${sitemapAlternate.hreflang} for loc ${pageData.canonical} for this page <a href="${url}">${url}</a>`
                     );
                   }
                 } else {
                   this.saveError(
                     `Some alternate hrefs from sitemap don't match alternates from pages`,
-                    `Alternate href ${pageAlternate.href} has no match in sitemap for canonical ${pageData.canonical} for this page ${url}`
+                    `Alternate href ${pageAlternate.href} has no match in sitemap for canonical ${pageData.canonical} for this page <a href="${url}">${url}</a>`
                   );
                 }
               }
@@ -864,7 +900,7 @@ class SEOData {
           } else {
             this.saveError(
               `Some loc and canonical don't match`,
-              `No matching loc corresponding canonical ${pageData.canonical} is found for this page ${url}`
+              `No matching loc corresponding canonical ${pageData.canonical} is found for this page <a href="${url}">${url}</a>`
             );
           }
 
@@ -876,11 +912,13 @@ class SEOData {
 
           this.saveError(
             `Some pages were not loaded.`,
-            `Page ${url} was not loaded`
+            `Page <a href="${url}">${url}</a> was not loaded`
           );
 
           failedPages.push(url);
         }
+
+        await chromePage.close();
       }
 
       await browser.close();
@@ -930,12 +968,12 @@ class SEOData {
     }
 
     if (isMultiLang && alternatesErrors.length) {
-      this.saveError(`Alternates are not set for some pages`);
-
-      this.#results.analysis.details = [
-        ...this.#results.analysis.details,
-        ...alternatesErrors,
-      ];
+      for (const alternatesError of alternatesErrors) {
+        this.saveError(
+          `Alternates are not set for some pages`,
+          alternatesError
+        );
+      }
     }
 
     this.#results.pageData.total = uniquePages.size;
@@ -943,8 +981,6 @@ class SEOData {
   }
 
   async audit() {
-    let prefix = "";
-
     try {
       if (this.#proceed) {
         console.log("Proceeding...");
@@ -963,7 +999,7 @@ class SEOData {
       this.saveError(error);
     }
 
-    this.saveData(prefix);
+    this.saveData();
   }
 }
 
@@ -971,9 +1007,11 @@ async function audit() {
   try {
     const origin = process.argv[2];
     const proceed = process.argv[3];
-    const seo = new SEOData(origin, proceed);
+    const perf = process.argv[4];
+    const seo = new SEOData(origin, proceed, perf);
 
-    await seo.audit(origin, proceed);
+    await seo.audit(origin, proceed, perf);
+    generateHTML(seo.file, seo.domainName);
   } catch (error) {
     console.log(error);
   }

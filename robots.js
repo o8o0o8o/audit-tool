@@ -107,14 +107,14 @@ class SEOData {
       if (hTags[i].tag === "h1" && hTags[i].count > 1) {
         saveError(
           "Some pages have more than one h1 tag",
-          `<a href="${page}">${page}</a> has more than one h1 tag`
+          `<a href="${page}">${page}</a> has ${hTags[i].count} h1 tags`
         );
       }
 
       if (hTags[i].tag === "h2" && hTags[i].count > 10) {
         saveError(
           "Some pages have more than 10 h2 tags",
-          `<a href="${page}">${page}</a> has more than ten h2 tags`
+          `<a href="${page}">${page}</a> has ${hTags[i].count} h2 tags`
         );
       }
 
@@ -597,7 +597,13 @@ class SEOData {
                 const messageOverall = `${error.name} ${error.message} ${error.cause}`;
                 messageDetailed = `${url} ${messageOverall}`;
 
-                this.saveError(messageOverall, messageDetailed);
+                for (const knownError of KNOWN_ERRORS) {
+                  if (messageOverall.includes(knownError)) {
+                    this.saveError(knownError, messageDetailed);
+                  } else {
+                    this.saveError(messageOverall, messageDetailed);
+                  }
+                }
 
                 console.log(messageDetailed);
 
@@ -717,7 +723,7 @@ class SEOData {
           if (TTFB > 800) {
             this.saveError(
               `Some pages have TTFB more than 800`,
-              `The page <a href="${url}">${url}</a> has TTFB more than 800 ${TTFB}`
+              `The page <a href="${url}">${url}</a> has TTFB ${TTFB}`
             );
 
             console.log("TTFB: " + TTFB, url);
@@ -726,7 +732,7 @@ class SEOData {
           if (CLS > 0.1) {
             this.saveError(
               `Some pages CLS more than 0.1`,
-              `The page <a href="${url}">${url}</a> has CLS more than 0.1 ${CLS}`
+              `The page <a href="${url}">${url}</a> has CLS ${CLS}`
             );
 
             console.log("CLS: " + CLS, url);
@@ -735,7 +741,7 @@ class SEOData {
           if (LCP > 2500) {
             this.saveError(
               `Some pages LCP more than 2500`,
-              `The page <a href="${url}">${url}</a> has LCP more than 2500 ${LCP}`
+              `The page <a href="${url}">${url}</a> has LCP ${LCP}`
             );
 
             console.log("LCP: " + LCP, url);
@@ -794,7 +800,7 @@ class SEOData {
                 )
               ) {
                 this.saveError(
-                  `Some meta tags are missing`,
+                  `Meta tag ${tag} is missing`,
                   `Meta tag ${tag} is missing for this page <a href="${url}">${url}</a>`
                 );
               }
@@ -1017,3 +1023,5 @@ async function audit() {
 }
 
 audit();
+
+const KNOWN_ERRORS = ["ERR_TOO_MANY_REDIRECTS"];

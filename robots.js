@@ -34,6 +34,7 @@ class SEOData {
         totalWithoutError: 0,
         totalWithError: 0,
         byError: {},
+        attempts: {},
       },
       analysis: { overall: new Set(), details: new Set() },
     };
@@ -152,6 +153,20 @@ class SEOData {
 
       this.#results.analysis.details[generalError].push(detailedError);
     }
+  }
+
+  #checkAttempts(url) {
+    if (this.#results.pageData.attempts[url] >= 3) {
+      this.#results.pageData.processedPages.add(url);
+    }
+  }
+
+  #saveAttempt(url) {
+    if (!this.#results.pageData.attempts[url]) {
+      this.#results.pageData.attempts[url] = 0;
+    }
+
+    this.#results.pageData.attempts[url] += 1;
   }
 
   async #restoreProgress() {
@@ -617,8 +632,9 @@ class SEOData {
                 this.#results.pageData.byError.crashed.push(url);
                 this.#results.pageData.byError.totalCrashed += 1;
 
-                // TODO: add retry mechanism
-                this.#results.pageData.processedPages.add(url);
+                this.#saveAttempt(url);
+
+                this.#checkAttempts(url);
               }),
             30000,
             "Core Web Vitals test failed. Page failed to load " +
@@ -626,6 +642,12 @@ class SEOData {
           );
         } catch (error) {
           console.log(error);
+
+          this.#saveAttempt(url);
+
+          this.#checkAttempts(url);
+
+          this.saveData();
 
           process.exit(1);
         }

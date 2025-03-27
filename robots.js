@@ -863,7 +863,7 @@ class SEOData {
             );
           }
 
-          if (!pageData.alternates) {
+          if (isMultiLang && !pageData.alternates) {
             this.saveError(
               `Alternates are not set for some pages`,
               `Alternates links are missing for this page <a href="${url}">${url}</a>`

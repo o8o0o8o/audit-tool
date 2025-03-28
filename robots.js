@@ -843,7 +843,10 @@ class SEOData {
             }
 
             if (rel === "alternate") {
-              isMultiLang = true;
+              // TODO: add other detection methods
+              if (link.hrefLang) {
+                isMultiLang = true;
+              }
 
               if (!pageData.alternates) {
                 pageData.alternates = [];
@@ -868,7 +871,7 @@ class SEOData {
               `Alternates are not set for some pages`,
               `Alternates links are missing for this page <a href="${url}">${url}</a>`
             );
-          } else {
+          } else if (pageData.alternates) {
             for (const alternate of pageData.alternates) {
               const count = pageData.alternates.reduce((acc, cur) => {
                 if (cur.href === alternate.href) {

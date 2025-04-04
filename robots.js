@@ -72,7 +72,7 @@ class SEOData {
     };
   }
 
-  async #checkImages(parsedPage, page, saveError) {
+  async #checkImages(parsedPage) {
     const images = [];
 
     for (const image of parsedPage.querySelectorAll("img")) {
@@ -279,6 +279,8 @@ class SEOData {
         console.log(message + " fallback to default sitemap url " + sitemapUrl);
 
         this.#results.sitemaps = { [sitemapUrl]: {} };
+
+        this.#results.robots.sitemaps.push(sitemapUrl);
       }
 
       for (const [key, value] of Object.entries(
@@ -307,13 +309,16 @@ class SEOData {
         lastmod: site.querySelector("lastmod")?.innerText,
         changefreq: site.querySelector("changefreq")?.innerText,
         priority: site.querySelector("priority")?.innerText,
-        alternates: {},
       };
 
       unique.add(processedData.loc);
 
       for (const alternate of site.querySelectorAll("xhtml:link")) {
         if (alternate.attributes.rel === "alternate") {
+          if (!processedData.alternates) {
+            processedData.alternates = {};
+          }
+
           processedData.alternates[alternate.attributes.href] = {
             hreflang: alternate.attributes.hreflang,
             href: alternate.attributes.href,
@@ -825,6 +830,8 @@ class SEOData {
                   `Meta tag ${tag} is missing`,
                   `Meta tag ${tag} is missing for this page <a href="${url}">${url}</a>`
                 );
+              } else if (tag === "keywords") {
+                // TODO: check if keywords are used in title, description, headings
               }
             }
           }
@@ -844,7 +851,7 @@ class SEOData {
 
             if (rel === "alternate") {
               // TODO: add other detection methods
-              if (link.hrefLang) {
+              if (link.hrefLang && link.hrefLang !== "x-default") {
                 isMultiLang = true;
               }
 
@@ -892,38 +899,34 @@ class SEOData {
 
           const matchingCanonical =
             this.#results.sitemaps.urls[pageData.canonical] ||
-            this.#results.sitemaps.urls[`${this.origin}pageData.canonical`];
+            this.#results.sitemaps.urls[`${this.origin}/${pageData.canonical}`];
 
           if (matchingCanonical) {
-            if (matchingCanonical.alternates && pageData.alternates) {
-              for (const pageAlternate of pageData.alternates) {
-                if (matchingCanonical.alternates[pageAlternate.href]) {
-                } else {
-                  this.saveError(
-                    `Some alternates from sitemap don't match alternates form pages`,
-                    `Alternate ${pageAlternate.href} has no match in sitemap for loc ${pageData.canonical} for this page <a href="${url}">${url}</a>`
-                  );
-                }
-              }
-            }
-
-            if (Array.isArray(pageData.alternates)) {
-              for (const pageAlternate of pageData.alternates) {
-                const sitemapAlternate =
-                  matchingCanonical.alternates[pageAlternate.href];
-
-                if (sitemapAlternate) {
-                  if (sitemapAlternate.hreflang !== pageAlternate.hreflang) {
+            if (matchingCanonical.alternates) {
+              if (pageData.alternates) {
+                for (const pageAlternate of pageData.alternates) {
+                  if (!matchingCanonical.alternates[pageAlternate.href]) {
                     this.saveError(
-                      `Some alternate hreflangs from sitemap don't match alternate hreflangs from pages`,
-                      `Alternate hreflangs ${pageAlternate.hreflang} doesn't match sitemap hreflang ${sitemapAlternate.hreflang} for loc ${pageData.canonical} for this page <a href="${url}">${url}</a>`
+                      `Some alternates from sitemap don't match alternates from pages`,
+                      `Alternate ${pageAlternate.href} has no match in sitemap for loc ${pageData.canonical} for this page <a href="${url}">${url}</a>`
                     );
                   }
-                } else {
-                  this.saveError(
-                    `Some alternate hrefs from sitemap don't match alternates from pages`,
-                    `Alternate href ${pageAlternate.href} has no match in sitemap for canonical ${pageData.canonical} for this page <a href="${url}">${url}</a>`
-                  );
+                }
+              }
+
+              if (Array.isArray(pageData.alternates)) {
+                for (const pageAlternate of pageData.alternates) {
+                  const sitemapAlternate =
+                    matchingCanonical.alternates[pageAlternate.href];
+
+                  if (sitemapAlternate) {
+                    if (sitemapAlternate.hreflang !== pageAlternate.hreflang) {
+                      this.saveError(
+                        `Some alternate hreflangs from sitemap don't match alternate hreflangs from pages`,
+                        `Alternate hreflangs ${pageAlternate.hreflang} doesn't match sitemap hreflang ${sitemapAlternate.hreflang} for loc ${pageData.canonical} for this page <a href="${url}">${url}</a>`
+                      );
+                    }
+                  }
                 }
               }
             }

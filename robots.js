@@ -431,6 +431,31 @@ class SEOData {
   async #basicTest(page, network, cpu, url) {
     console.time("basicTest");
 
+    const requests = {};
+
+    let totalResponseSize = 0;
+
+    page.on("request", async (request) => {
+      requests[request.url()] = { resourceType: request.resourceType() };
+    });
+
+    page.on("response", async (response) => {
+      let size = null;
+
+      try {
+        const body = await response.body();
+        size = body.length;
+
+        totalResponseSize += size;
+      } catch (e) {}
+
+      requests[response.url()] = {
+        ...requests[response.url()],
+        status: response.status(),
+        size,
+      };
+    });
+
     if (this.#perf) {
       const session = await page.context().newCDPSession(page);
 
@@ -477,7 +502,7 @@ class SEOData {
 
     console.timeEnd("basicTest");
 
-    return { ...vitals, status };
+    return { ...vitals, status, requests, totalResponseSize };
   }
 
   async #collectVitals(page) {
@@ -658,7 +683,8 @@ class SEOData {
         }
 
         if (page) {
-          const { url, status, CLS, TTFB, LCP } = page;
+          const { url, status, CLS, TTFB, LCP, requests, totalResponseSize } =
+            page;
 
           this.#results.pageData.pages[url] = {};
 
@@ -669,6 +695,26 @@ class SEOData {
           pageData.TTFB = TTFB;
           pageData.CLS = CLS;
           pageData.LCP = LCP;
+          pageData.requests = requests;
+          pageData.totalResponseSize = totalResponseSize;
+
+          if (totalResponseSize > 6_000_000) {
+            this.saveError(
+              `Some pages size is too big`,
+              `This page has size of ${totalResponseSize} bytes <a href="${url}">${url}</a>`
+            );
+          }
+
+          const totalNumberOfRequests = Object.keys(requests).length;
+
+          pageData.totalNumberOfRequests = totalNumberOfRequests;
+
+          if (totalNumberOfRequests > 20) {
+            this.saveError(
+              `Some pages have too many requests`,
+              `This page has ${totalNumberOfRequests} requests <a href="${url}">${url}</a>`
+            );
+          }
 
           if (status !== 200) {
             this.#results.pageData.totalWithError += 1;

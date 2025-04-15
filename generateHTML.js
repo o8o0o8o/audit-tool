@@ -13,9 +13,9 @@ function generateHTML(file, domainName) {
       return `<ul>${keys
         .map(
           (key) =>
-            `<li class="accordion-item"><button class="accordion-header">${key}</button>${renderJSON(
-              data[key]
-            )}</li>`
+            `<li class="accordion-item"><button class="accordion-header">${key} total ${
+              keys.length
+            }</button>${renderJSON(data[key])}</li>`
         )
         .join("")}</ul>`;
     } else {

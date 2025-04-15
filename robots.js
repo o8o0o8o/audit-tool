@@ -436,7 +436,11 @@ class SEOData {
     let totalResponseSize = 0;
 
     page.on("request", async (request) => {
-      requests[request.url()] = { resourceType: request.resourceType() };
+      requests[request.url()] = {
+        resourceType: request.resourceType(),
+        method: request.method(),
+        startTime: Date.now(),
+      };
     });
 
     page.on("response", async (response) => {
@@ -449,9 +453,13 @@ class SEOData {
         totalResponseSize += size;
       } catch (e) {}
 
+      const resUrl = response.url();
+
       requests[response.url()] = {
-        ...requests[response.url()],
+        ...requests[resUrl],
         status: response.status(),
+        endTime: Date.now(),
+        duration: requests[resUrl].endTime - requests[resUrl].startTime,
         size,
       };
     });
@@ -483,7 +491,7 @@ class SEOData {
     }
 
     // Navigate to the page
-    const response = await page.goto(url);
+    const response = await page.goto(url, { waitUntil: "load" });
 
     const status = response?.status();
 
@@ -500,9 +508,24 @@ class SEOData {
       }
     }
 
+    const metrics = await page.evaluate(() => {
+      return {
+        nav: performance.getEntriesByType("navigation"),
+        resources: performance.getEntriesByType("resource"),
+        paint: performance.getEntriesByType("paint"),
+      };
+    });
+
     console.timeEnd("basicTest");
 
-    return { ...vitals, status, requests, totalResponseSize };
+    return {
+      ...vitals,
+      status,
+      requests,
+      totalResponseSize,
+      metrics,
+      // blockers,
+    };
   }
 
   async #collectVitals(page) {
@@ -683,8 +706,17 @@ class SEOData {
         }
 
         if (page) {
-          const { url, status, CLS, TTFB, LCP, requests, totalResponseSize } =
-            page;
+          const {
+            url,
+            status,
+            CLS,
+            TTFB,
+            LCP,
+            requests,
+            totalResponseSize,
+            metrics,
+            blockers,
+          } = page;
 
           this.#results.pageData.pages[url] = {};
 
@@ -696,6 +728,8 @@ class SEOData {
           pageData.CLS = CLS;
           pageData.LCP = LCP;
           pageData.requests = requests;
+          pageData.metrics = metrics;
+          pageData.blockers = blockers;
           pageData.totalResponseSize = totalResponseSize;
 
           if (totalResponseSize > 6_000_000) {

@@ -1,0 +1,194 @@
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Converts audit data to CSV format for data analysis
+ * Generates multiple CSV files:
+ * - Pages overview with all metrics
+ * - Issues breakdown by severity
+ * - Performance metrics summary
+ * - Quick wins list
+ */
+
+function escapeCSV(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  // Escape quotes and wrap in quotes if contains comma, quote, or newline
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function generatePagesCSV(jsonData) {
+  const pages = jsonData.pageData?.pages || {};
+  const rows = [
+    ['URL', 'Status Code', 'Title', 'Description', 'H1 Count', 'Canonical', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Has Errors']
+  ];
+
+  Object.entries(pages).forEach(([url, data]) => {
+    rows.push([
+      url,
+      data.statusCode || '',
+      data.title || '',
+      data.description || '',
+      data.h1?.length || 0,
+      data.canonical || '',
+      data.vitals?.ttfb || '',
+      data.vitals?.lcp || '',
+      data.vitals?.cls || '',
+      data.totalSize ? (data.totalSize / (1024 * 1024)).toFixed(2) : '',
+      data.numberOfRequests || '',
+      (data.statusCode >= 400 || data.errors?.length > 0) ? 'Yes' : 'No'
+    ].map(escapeCSV));
+  });
+
+  return rows.map(row => row.join(',')).join('\n');
+}
+
+function generateIssuesCSV(jsonData) {
+  const details = jsonData.analysis?.details || {};
+  const rows = [
+    ['Issue', 'Severity', 'Affected Pages', 'Example URLs']
+  ];
+
+  Object.entries(details).forEach(([issue, data]) => {
+    const examples = (data.examples || []).slice(0, 5).join('; ');
+    rows.push([
+      issue,
+      data.severity || '',
+      data.examples?.length || 0,
+      examples
+    ].map(escapeCSV));
+  });
+
+  return rows.map(row => row.join(',')).join('\n');
+}
+
+function generatePerformanceCSV(jsonData) {
+  const pages = jsonData.pageData?.pages || {};
+  const rows = [
+    ['URL', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Load Time (ms)']
+  ];
+
+  Object.entries(pages).forEach(([url, data]) => {
+    if (data.vitals) {
+      rows.push([
+        url,
+        data.vitals.ttfb || '',
+        data.vitals.lcp || '',
+        data.vitals.cls || '',
+        data.totalSize ? (data.totalSize / (1024 * 1024)).toFixed(2) : '',
+        data.numberOfRequests || '',
+        data.vitals.loadTime || ''
+      ].map(escapeCSV));
+    }
+  });
+
+  return rows.map(row => row.join(',')).join('\n');
+}
+
+function generateQuickWinsCSV(jsonData) {
+  const quickWins = jsonData.analysis?.summary?.quickWins || [];
+  const rows = [
+    ['Priority', 'Issue', 'Severity', 'Impact', 'Effort', 'Affected Pages', 'How to Fix', 'Example URLs']
+  ];
+
+  quickWins.forEach((win, index) => {
+    const examples = (win.examples || []).slice(0, 3).join('; ');
+    rows.push([
+      index + 1,
+      win.issue || '',
+      win.severity || '',
+      win.impact || '',
+      win.effort || '',
+      win.affectedPages || 0,
+      win.fix || '',
+      examples
+    ].map(escapeCSV));
+  });
+
+  return rows.map(row => row.join(',')).join('\n');
+}
+
+function generateSummaryCSV(jsonData) {
+  const summary = jsonData.analysis?.summary || {};
+  const rows = [
+    ['Metric', 'Value'],
+    ['Overall SEO Score', summary.overallScore || 0],
+    ['Total Issues', summary.totalIssues || 0],
+    ['Critical Issues', summary.criticalCount || 0],
+    ['High Issues', summary.highCount || 0],
+    ['Medium Issues', summary.mediumCount || 0],
+    ['Low Issues', summary.lowCount || 0],
+    ['Pass Rate (%)', summary.passRate || 0],
+    ['Total URLs in Sitemap', jsonData.sitemaps?.total || 0],
+    ['Pages Crawled', jsonData.pageData?.totalWithoutError || 0],
+    ['Pages with Errors', jsonData.pageData?.totalWithError || 0],
+    ['Multilanguage', jsonData.isMultiLang ? 'Yes' : 'No']
+  ];
+
+  if (summary.categoryScores) {
+    rows.push(['SEO Score', summary.categoryScores.seo || 0]);
+    rows.push(['Performance Score', summary.categoryScores.performance || 0]);
+    rows.push(['Accessibility Score', summary.categoryScores.accessibility || 0]);
+    rows.push(['Security Score', summary.categoryScores.security || 0]);
+    rows.push(['Technical Score', summary.categoryScores.technical || 0]);
+  }
+
+  return rows.map(row => row.map(escapeCSV).join(',')).join('\n');
+}
+
+function generateAllCSVs(jsonFile, domainName) {
+  console.log(`\n📊 Generating CSV exports for ${domainName}...\n`);
+
+  const jsonData = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+
+  // Create CSV directory
+  const csvDir = `${domainName}_csv_exports`;
+  if (!fs.existsSync(csvDir)) {
+    fs.mkdirSync(csvDir);
+  }
+
+  // Generate each CSV file
+  const files = {
+    'pages_overview.csv': generatePagesCSV(jsonData),
+    'issues_breakdown.csv': generateIssuesCSV(jsonData),
+    'performance_metrics.csv': generatePerformanceCSV(jsonData),
+    'quick_wins.csv': generateQuickWinsCSV(jsonData),
+    'summary.csv': generateSummaryCSV(jsonData)
+  };
+
+  Object.entries(files).forEach(([filename, content]) => {
+    const filepath = `${csvDir}/${filename}`;
+    fs.writeFileSync(filepath, content);
+    const lines = content.split('\n').length - 1;
+    console.log(`  ✅ ${filename.padEnd(25)} (${lines} rows)`);
+  });
+
+  console.log(`\n📁 CSV files saved to: ${csvDir}/`);
+  console.log(`   You can now open these files in Excel, Google Sheets, or any CSV tool.\n`);
+}
+
+module.exports = { generateAllCSVs, escapeCSV };
+
+// CLI entry point
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  if (args.length === 0) {
+    console.error('Usage: node generateCSV.js <json-file>');
+    console.error('Example: node generateCSV.js audit-results/SEOAnalysis__example.com.json');
+    process.exit(1);
+  }
+
+  const jsonFile = args[0];
+  if (!fs.existsSync(jsonFile)) {
+    console.error(`Error: File not found: ${jsonFile}`);
+    process.exit(1);
+  }
+
+  // Extract domain name from filename (handle both with and without path)
+  const basename = path.basename(jsonFile);
+  const domainName = basename.replace('SEOAnalysis__', '').replace('.json', '');
+  generateAllCSVs(jsonFile, domainName);
+}

@@ -40,3 +40,4 @@ next-env.d.ts
 SEOAnalysis*
 *.html
 failedPages.json
+audit-results

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { FileManager } = require('./lib/storage/file-manager');
 
 /**
  * Audit History Manager
@@ -32,7 +33,7 @@ class HistoryManager {
     // Try new location first
     if (fs.existsSync(this.historyFile)) {
       try {
-        return JSON.parse(fs.readFileSync(this.historyFile, 'utf8'));
+        return FileManager.readJsonFile(this.historyFile);
       } catch (error) {
         console.error(`Error loading history: ${error.message}`);
         return { domain: this.domainName, audits: [] };
@@ -43,7 +44,7 @@ class HistoryManager {
     if (fs.existsSync(this.legacyHistoryFile)) {
       console.log(`📦 Migrating history from legacy location...`);
       try {
-        const legacyHistory = JSON.parse(fs.readFileSync(this.legacyHistoryFile, 'utf8'));
+        const legacyHistory = FileManager.readJsonFile(this.legacyHistoryFile);
         // Save to new location
         this.saveHistory(legacyHistory);
         console.log(`✓ History migrated to: ${this.historyFile}`);
@@ -220,6 +221,9 @@ class HistoryManager {
       return null;
     }
 
+    // Generate per-issue trends
+    const issueTrends = this.generateIssueTrends(history.audits);
+
     return {
       labels: history.audits.map(a => a.date),
       overallScores: history.audits.map(a => a.summary.overallScore),
@@ -237,8 +241,79 @@ class HistoryManager {
         ttfb: history.audits.map(a => a.performance?.avgTTFB || null).filter(v => v !== null),
         lcp: history.audits.map(a => a.performance?.avgLCP || null).filter(v => v !== null),
         cls: history.audits.map(a => a.performance?.avgCLS || null).filter(v => v !== null)
-      }
+      },
+      issueTrends
     };
+  }
+
+  /**
+   * Generate per-issue trend data across all audits
+   * @param {Array} audits - Array of audit snapshots
+   * @returns {Object} Issue trends with labels, counts, severity, and trend direction
+   */
+  generateIssueTrends(audits) {
+    if (audits.length < 2) {
+      return null;
+    }
+
+    // Collect all unique issues across all audits
+    const allIssues = new Set();
+    audits.forEach(audit => {
+      Object.keys(audit.issues || {}).forEach(issue => allIssues.add(issue));
+    });
+
+    const trends = {};
+    const labels = audits.map(a => a.date);
+
+    allIssues.forEach(issue => {
+      const counts = audits.map(audit => audit.issues?.[issue]?.count || 0);
+      const latestAudit = audits[audits.length - 1];
+      const severity = latestAudit.issues?.[issue]?.severity ||
+                       audits.find(a => a.issues?.[issue])?.issues?.[issue]?.severity || 'medium';
+
+      // Calculate trend direction
+      const firstNonZero = counts.findIndex(c => c > 0);
+      const lastNonZero = counts.length - 1 - [...counts].reverse().findIndex(c => c > 0);
+
+      let trend = 'stable';
+      if (firstNonZero === -1) {
+        trend = 'stable'; // All zeros
+      } else if (firstNonZero === counts.length - 1 && counts[firstNonZero] > 0) {
+        trend = 'new'; // Only appeared in latest audit
+      } else if (lastNonZero !== counts.length - 1 && counts[lastNonZero] > 0) {
+        trend = 'fixed'; // Disappeared in latest audits
+      } else {
+        // Compare first and last values
+        const firstVal = counts[firstNonZero] || 0;
+        const lastVal = counts[counts.length - 1] || 0;
+
+        if (lastVal < firstVal * 0.8) {
+          trend = 'improving';
+        } else if (lastVal > firstVal * 1.2) {
+          trend = 'worsening';
+        } else {
+          trend = 'stable';
+        }
+      }
+
+      // Calculate change from first occurrence to latest
+      const firstCount = counts[firstNonZero] || 0;
+      const latestCount = counts[counts.length - 1] || 0;
+      const change = latestCount - firstCount;
+      const changePercent = firstCount > 0 ? ((latestCount - firstCount) / firstCount * 100).toFixed(0) : 0;
+
+      trends[issue] = {
+        labels,
+        counts,
+        severity,
+        trend,
+        latestCount,
+        change,
+        changePercent
+      };
+    });
+
+    return trends;
   }
 }
 
@@ -252,7 +327,7 @@ if (require.main === module) {
   if (command === 'save' && args[1]) {
     const jsonFile = args[1];
     const domainName = jsonFile.replace('SEOAnalysis__', '').replace('.json', '');
-    const auditData = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+    const auditData = FileManager.readJsonFile(jsonFile);
 
     const manager = new HistoryManager(domainName);
     manager.addAuditSnapshot(auditData);

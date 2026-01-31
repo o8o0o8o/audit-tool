@@ -43,7 +43,14 @@ async function audit(restoredArgs) {
     }
 
     // Build arguments for child process
-    const childArgs = ["robots.js", `--origin=${origin}`];
+    // Use --max-old-space-size to increase heap limit for large sites
+    // Also use --expose-gc to allow manual garbage collection hints
+    const childArgs = [
+      "--max-old-space-size=8192",  // 8GB heap limit
+      "--expose-gc",                // Allow gc() calls
+      "robots.js",
+      `--origin=${origin}`
+    ];
     if (proceed) childArgs.push("--proceed");
     if (perf) childArgs.push("--perf");
     if (saveHtml) childArgs.push("--save-html");

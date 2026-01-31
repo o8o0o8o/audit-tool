@@ -42,11 +42,46 @@ node start --origin=https://example.com --perf --save-html --proceed --concurren
 - `--proceed` (optional) - Resume from saved progress after interruption
 - `--save-html` (optional) - Save full HTML snapshots of each crawled page
 - `--concurrency=<number>` (optional) - Number of pages to crawl in parallel (1-20, default: 5)
+- `--config=<path>` (optional) - Path to custom config file
+- `--init-config` (optional) - Generate sample `.seoauditrc` config file
 
 **Notes:**
 - Performance metrics collection is disabled by default for faster audits
 - HTML snapshots are not saved by default to reduce disk usage
 - Higher concurrency uses more system resources but completes audits faster
+
+### Configuration File
+
+Create a `.seoauditrc` file to customize thresholds and settings:
+
+```bash
+# Generate sample config
+node start --init-config
+```
+
+Example `.seoauditrc`:
+```json
+{
+  "thresholds": {
+    "TTFB": 1000,
+    "LCP": 3000,
+    "CLS": 0.15,
+    "TITLE_MIN": 40,
+    "TITLE_MAX": 70,
+    "DESCRIPTION_MIN": 100,
+    "DESCRIPTION_MAX": 180
+  },
+  "crawl": {
+    "concurrency": 10,
+    "timeout": 45000
+  },
+  "excludeUrls": [
+    "/admin/*",
+    "/staging/*",
+    "*.pdf"
+  ]
+}
+```
 
 ### Export to CSV
 
@@ -84,6 +119,29 @@ node historyManager.js list domain.com
 
 # Compare two historical audits
 node historyManager.js compare domain.com 0 1
+```
+
+### Programmatic Usage
+
+```javascript
+const { SEOData } = require('./robots');
+
+// Create audit instance
+const seo = new SEOData(
+  'https://example.com',  // origin
+  false,                  // proceed (resume from checkpoint)
+  true,                   // perf (collect performance metrics)
+  false,                  // saveHtml (save HTML snapshots)
+  5                       // concurrency
+);
+
+// Run audit
+await seo.audit();
+
+// Access results
+console.log(seo.data);            // Full results object
+console.log(seo.domainName);      // 'example.com'
+console.log(seo.file);            // Path to JSON results
 ```
 
 ## Output Files

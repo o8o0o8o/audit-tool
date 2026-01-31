@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { ReportDataProcessor } = require('./lib/reports/data-processor');
 
 /**
  * Converts audit data to CSV format for data analysis
@@ -142,7 +143,8 @@ function generateSummaryCSV(jsonData) {
 function generateAllCSVs(jsonFile, domainName) {
   console.log(`\n📊 Generating CSV exports for ${domainName}...\n`);
 
-  const jsonData = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+  // Use ReportDataProcessor to handle both multi-file and legacy formats
+  const jsonData = ReportDataProcessor.loadAuditData(jsonFile, domainName);
 
   // Create CSV directory
   const csvDir = `${domainName}_csv_exports`;
@@ -176,8 +178,9 @@ module.exports = { generateAllCSVs, escapeCSV };
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error('Usage: node generateCSV.js <json-file>');
-    console.error('Example: node generateCSV.js audit-results/SEOAnalysis__example.com.json');
+    console.error('Usage: node generateCSV.js <manifest-or-json-file>');
+    console.error('Example: node generateCSV.js audit-results/example.com/2024-01-15_12-00-00/manifest.json.gz');
+    console.error('Example: node generateCSV.js audit-results/example.com/2024-01-15_12-00-00/SEOAnalysis__example.com.json.gz');
     process.exit(1);
   }
 
@@ -187,8 +190,27 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  // Extract domain name from filename (handle both with and without path)
+  // Extract domain name from path or filename
   const basename = path.basename(jsonFile);
-  const domainName = basename.replace('SEOAnalysis__', '').replace('.json', '');
+  let domainName;
+
+  if (basename.startsWith('manifest')) {
+    // Multi-file format: extract domain from parent directory structure
+    // Path: audit-results/domain.com/timestamp/manifest.json.gz
+    const parts = jsonFile.split(path.sep);
+    const auditResultsIndex = parts.indexOf('audit-results');
+    if (auditResultsIndex >= 0 && parts.length > auditResultsIndex + 1) {
+      domainName = parts[auditResultsIndex + 1];
+    } else {
+      domainName = 'unknown';
+    }
+  } else {
+    // Legacy format: extract from filename
+    domainName = basename
+      .replace('SEOAnalysis__', '')
+      .replace('.json.gz', '')
+      .replace('.json', '');
+  }
+
   generateAllCSVs(jsonFile, domainName);
 }

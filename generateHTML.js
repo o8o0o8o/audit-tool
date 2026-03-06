@@ -97,7 +97,6 @@ function generateHTML(file, domainName, outputPath = null) {
       <a href="#executive-summary" class="skip-link">Skip to content</a>
 
       <!-- Dark mode toggle -->
-      <button class="theme-toggle" onclick="toggleDarkMode()" title="Toggle dark mode (D)" aria-label="Toggle dark mode">🌙</button>
 
       <!-- Sticky navigation sidebar -->
       <nav class="report-nav" id="reportNav" aria-label="Report sections">
@@ -112,16 +111,19 @@ function generateHTML(file, domainName, outputPath = null) {
       <!-- Floating action button menu -->
       <div class="fab-container">
           <div class="fab-menu" id="fabMenu">
+              <div class="fab-label">Share</div>
               <button class="fab-item" onclick="shareReport()">📤 Share Report</button>
               <button class="fab-item" onclick="copyScoreSummary()">📋 Copy Summary</button>
-              <button class="fab-item" onclick="exportCSV('summary')">📊 Export Summary</button>
-              <button class="fab-item" onclick="exportCSV('pages')">📄 Export Pages</button>
+              <div class="fab-divider"></div>
+              <div class="fab-label">Export</div>
+              <button class="fab-item" onclick="exportCSV('summary')">📊 Summary CSV</button>
+              <button class="fab-item" onclick="exportCSV('issues')">⚠️ Issues CSV</button>
+              <button class="fab-item" onclick="exportCSV('pages')">📄 Pages CSV</button>
+              <button class="fab-item" onclick="exportCSV('performance')">⚡ Performance CSV</button>
+              <button class="fab-item" onclick="exportCSV('quickwins')">🎯 Quick Wins CSV</button>
               <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
               <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
-              <button class="fab-item" onclick="toggleDarkMode()">🌙 Dark Mode</button>
-              <button class="fab-item" onclick="toggleColorblind()">👁 Color-blind Mode</button>
-              <button class="fab-item" onclick="toggleHighContrast()">◐ High Contrast</button>
-              <button class="fab-item" onclick="cycleTheme()">🎨 Theme</button>
+              <button class="fab-item" onclick="exportAll()">📦 Export All</button>
           </div>
           <button class="fab-toggle" id="fabToggle" title="Quick actions">+</button>
       </div>

@@ -57,6 +57,7 @@ async function audit() {
       console.error("  --origin=<url>          Website URL to audit (required unless --sitemap is used)");
       console.error("  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)");
       console.error("  --compare=<url>         Compare origin with another site (page-by-page comparison)");
+      console.error("  --compare-sitemap=<file> Local sitemap XML file for comparison site");
       console.error("  --proceed               Resume from saved progress");
       console.error("  --perf                  Enable performance metrics collection");
       console.error("  --save-html             Save HTML snapshots of pages");
@@ -73,6 +74,7 @@ async function audit() {
       console.error("");
       console.error("Comparison mode:");
       console.error("  node robots.js --origin=https://staging.example.com --compare=https://www.example.com");
+      console.error("  node robots.js --sitemap=./old.xml --compare-sitemap=./new.xml");
       console.error("");
       process.exit(1);
     }
@@ -108,30 +110,43 @@ async function audit() {
     if (args.perf) console.log(`📊 Performance metrics: enabled`);
 
     // Check if comparison mode
-    if (args.compare) {
-      if (!args.origin) {
+    if (args.compare || args.compareSitemap) {
+      if (!args.origin && !args.sitemap) {
         console.error("");
-        console.error("❌ Comparison mode requires --origin (cannot use --sitemap with --compare)");
-        console.error("");
-        process.exit(1);
-      }
-
-      // Validate compare URL
-      const compareValidation = validateURL(args.compare);
-      if (!compareValidation.valid) {
-        console.error("");
-        console.error(`❌ Invalid compare URL: ${compareValidation.error}`);
+        console.error("❌ Comparison mode requires --origin or --sitemap for the origin site");
         console.error("");
         process.exit(1);
       }
 
-      console.log(`🔀 Comparison mode: comparing with ${args.compare}`);
+      if (!args.compare && !args.compareSitemap) {
+        console.error("");
+        console.error("❌ Comparison mode requires --compare or --compare-sitemap for the comparison site");
+        console.error("");
+        process.exit(1);
+      }
 
-      // Warn if comparing same domain
-      const originDomain = new URL(args.origin).hostname;
-      const compareDomain = new URL(args.compare).hostname;
-      if (originDomain === compareDomain) {
-        console.log('⚠️  Warning: Comparing same domain - results may be identical');
+      // Validate compare URL if provided
+      if (args.compare) {
+        const compareValidation = validateURL(args.compare);
+        if (!compareValidation.valid) {
+          console.error("");
+          console.error(`❌ Invalid compare URL: ${compareValidation.error}`);
+          console.error("");
+          process.exit(1);
+        }
+      }
+
+      const originLabel = args.origin || args.sitemap;
+      const compareLabel = args.compare || args.compareSitemap;
+      console.log(`🔀 Comparison mode: ${originLabel} vs ${compareLabel}`);
+
+      // Warn if comparing same domain (only when both are URLs)
+      if (args.origin && args.compare) {
+        const originDomain = new URL(args.origin).hostname;
+        const compareDomain = new URL(args.compare).hostname;
+        if (originDomain === compareDomain) {
+          console.log('⚠️  Warning: Comparing same domain - results may be identical');
+        }
       }
 
       // Import ComparisonAudit (it now imports SEOData from lib/seo-data.js)
@@ -141,6 +156,8 @@ async function audit() {
         perf: args.perf,
         saveHtml: args.saveHtml,
         concurrency: args.concurrency,
+        sitemap: args.sitemap,
+        compareSitemap: args.compareSitemap,
       });
 
       await comparison.audit();

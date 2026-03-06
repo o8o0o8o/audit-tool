@@ -100,11 +100,21 @@ function validateArguments(args) {
     }
   }
 
-  // Validate sitemap file exists
+  // Validate sitemap files exist
   if (args.sitemap) {
     const fs = require('fs');
     if (!fs.existsSync(args.sitemap)) {
       return { valid: false, error: `Sitemap file not found: ${args.sitemap}` };
+    }
+  }
+
+  if (args.compareSitemap) {
+    const fs = require('fs');
+    if (!fs.existsSync(args.compareSitemap)) {
+      return { valid: false, error: `Compare sitemap file not found: ${args.compareSitemap}` };
+    }
+    if (!args.sitemap) {
+      return { valid: false, error: '--compare-sitemap requires --sitemap' };
     }
   }
 

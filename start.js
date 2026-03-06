@@ -37,6 +37,7 @@ async function audit(restoredArgs, restartCount = 0) {
       console.error("  --origin=<url>          Website URL to audit (required unless --sitemap is used)");
       console.error("  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)");
       console.error("  --compare=<url>         Compare origin with another site (page-by-page comparison)");
+      console.error("  --compare-sitemap=<file> Local sitemap XML file for comparison site");
       console.error("  --proceed               Resume from saved progress");
       console.error("  --perf                  Enable performance metrics collection");
       console.error("  --save-html             Save full HTML snapshots of each page");
@@ -53,7 +54,7 @@ async function audit(restoredArgs, restartCount = 0) {
       console.error("");
       console.error("Comparison mode:");
       console.error("  node start --origin=https://staging.example.com --compare=https://www.example.com");
-      console.error("  node start --origin=https://new-site.com --compare=https://old-site.com --perf");
+      console.error("  node start --sitemap=./old.xml --compare-sitemap=./new.xml --perf");
       process.exit(1);
     }
 
@@ -97,6 +98,7 @@ async function audit(restoredArgs, restartCount = 0) {
     ];
     if (origin) childArgs.push(`--origin=${origin}`);
     if (sitemap) childArgs.push(`--sitemap=${sitemap}`);
+    if (args.compareSitemap) childArgs.push(`--compare-sitemap=${args.compareSitemap}`);
     if (compare) childArgs.push(`--compare=${compare}`);
     if (proceed) childArgs.push("--proceed");
     if (perf) childArgs.push("--perf");
@@ -129,6 +131,7 @@ async function audit(restoredArgs, restartCount = 0) {
           origin: args.origin,
           compare: args.compare,
           sitemap: args.sitemap,
+          compareSitemap: args.compareSitemap,
           proceed: true,
           perf: args.perf,
           saveHtml: args.saveHtml,

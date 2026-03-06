@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { HistoryManager } = require('./historyManager');
+const { escapeHtml } = require('./lib/reports/html-utils');
 
 /**
  * Generate HTML comparison report between two audits
@@ -31,7 +32,7 @@ function generateComparisonHTML(domainName, oldIndex, newIndex) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audit Comparison - ${domainName}</title>
+    <title>Audit Comparison - ${escapeHtml(domainName)}</title>
     <style>
         * {
             margin: 0;
@@ -376,7 +377,7 @@ function generateComparisonHTML(domainName, oldIndex, newIndex) {
         <div class="section">
             <h2>✅ Improvements (${comparison.improvements.length})</h2>
             <ul class="changes-list">
-                ${comparison.improvements.map(imp => `<li class="improvement">${imp}</li>`).join('')}
+                ${comparison.improvements.map(imp => `<li class="improvement">${escapeHtml(imp)}</li>`).join('')}
             </ul>
         </div>
         ` : ''}
@@ -385,7 +386,7 @@ function generateComparisonHTML(domainName, oldIndex, newIndex) {
         <div class="section">
             <h2>⚠️ Regressions (${comparison.regressions.length})</h2>
             <ul class="changes-list">
-                ${comparison.regressions.map(reg => `<li class="regression">${reg}</li>`).join('')}
+                ${comparison.regressions.map(reg => `<li class="regression">${escapeHtml(reg)}</li>`).join('')}
             </ul>
         </div>
         ` : ''}
@@ -460,5 +461,5 @@ Example: node generateComparison.js example.com 1 2
   }
 
   const [domainName, oldIndex, newIndex] = args;
-  generateComparisonHTML(domainName, parseInt(oldIndex) - 1, parseInt(newIndex) - 1);
+  generateComparisonHTML(domainName, parseInt(oldIndex, 10) - 1, parseInt(newIndex, 10) - 1);
 }

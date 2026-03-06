@@ -1,6 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 
+// Import validators for input sanitization
+const { sanitizeDomainName } = require("./validators");
+
 // Import report modules
 const { ReportDataProcessor } = require("./lib/reports/data-processor");
 const { THRESHOLDS } = require("./lib/reports/metrics-metadata");
@@ -29,14 +32,44 @@ const {
   getChartsSection,
   getConfigInfo,
   getPagesTable,
+  getTechnologyStack,
 } = require("./lib/reports/sections");
 
 function generateHTML(file, domainName, outputPath = null) {
-  // Determine output path
-  const htmlOutputPath = outputPath || `${domainName}.html`;
+  // Sanitize domain name to prevent injection
+  const safeDomainName = sanitizeDomainName(domainName);
 
-  // Load all data using the data processor
-  const reportData = ReportDataProcessor.prepareReportData(file, domainName);
+  // Determine output path
+  const htmlOutputPath = outputPath || `${safeDomainName}.html`;
+
+  // Load all data using the data processor with error recovery
+  let reportData;
+  let loadError = null;
+
+  try {
+    reportData = ReportDataProcessor.prepareReportData(file, domainName);
+  } catch (error) {
+    loadError = error;
+    console.error(`⚠️  Error loading report data: ${error.message}`);
+    console.error('Attempting partial recovery...');
+
+    // Attempt to create minimal report data for error display
+    reportData = {
+      jsonData: {
+        analysis: { overall: [], details: {}, bySeverity: {}, summary: { totalIssues: 0 } },
+        sitemaps: { total: 0 },
+        isMultiLang: false,
+        scoring: null,
+        quickWins: [],
+      },
+      pageData: { totalWithoutError: 0, totalWithError: 0 },
+      pages: [],
+      timing: {},
+      trendData: null,
+      previousAudit: null,
+    };
+  }
+
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
 
   const pagesWithMetrics = pages.filter(p => p.TTFB !== undefined);
@@ -51,7 +84,7 @@ function generateHTML(file, domainName, outputPath = null) {
   <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>SEO Audit Report - ${domainName}</title>
+      <title>SEO Audit Report - ${escapeHtml(safeDomainName)}</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
       ${getStyles()}
   </head>
@@ -59,7 +92,7 @@ function generateHTML(file, domainName, outputPath = null) {
       <div class="container">
           <header>
               <h1>SEO Audit Report</h1>
-              <p class="subtitle">${escapeHtml(domainName)}</p>
+              <p class="subtitle">${escapeHtml(safeDomainName)}</p>
               <p class="subtitle">Generated on ${new Date().toLocaleString()}</p>
               ${timing.elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml(timing.elapsedTimeFormatted)}</p>` : ''}
               <div class="stats">
@@ -105,7 +138,7 @@ function generateHTML(file, domainName, outputPath = null) {
                   </div>
               </div>
 
-              <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px; backdrop-filter: blur(10px);">
+              <div class="export-section" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px; backdrop-filter: blur(10px);">
                   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
                       <div style="font-size: 14px; opacity: 0.9;">
                           📊 <strong>Export Data:</strong> Download audit data for analysis in Excel, Google Sheets, or other tools
@@ -116,6 +149,7 @@ function generateHTML(file, domainName, outputPath = null) {
                           <button onclick="exportCSV('performance')" class="export-btn">⚡ Performance CSV</button>
                           <button onclick="exportCSV('quickwins')" class="export-btn">🎯 Quick Wins CSV</button>
                           <button onclick="exportCSV('summary')" class="export-btn">📊 Summary CSV</button>
+                          <button onclick="saveToPDF()" class="pdf-btn">📥 Save to PDF</button>
                       </div>
                   </div>
               </div>
@@ -153,6 +187,21 @@ function generateHTML(file, domainName, outputPath = null) {
               </div>
           </header>
 
+          ${loadError ? `
+          <div class="section" style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+              <h2 style="color: #dc2626; margin-top: 0;">⚠️ Report Generation Error</h2>
+              <p style="color: #991b1b;">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
+              <details style="margin-top: 10px;">
+                  <summary style="cursor: pointer; color: #dc2626; font-weight: 600;">Error Details</summary>
+                  <pre style="background: #fee2e2; padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: #991b1b;">${escapeHtml(loadError.message)}${loadError.stack ? '\n\n' + escapeHtml(loadError.stack) : ''}</pre>
+              </details>
+              <p style="color: #6b7280; margin-top: 15px; font-size: 14px;">
+                  <strong>Troubleshooting:</strong> Check that the audit data file exists and is not corrupted.
+                  Try re-running the audit with <code>--proceed</code> flag to resume from the last checkpoint.
+              </p>
+          </div>
+          ` : ''}
+
           ${getHistoricalProgress({ jsonData, trendData, previousAudit })}
 
           ${getExecutiveSummary({ jsonData })}
@@ -164,6 +213,8 @@ function generateHTML(file, domainName, outputPath = null) {
           ${getPerformanceStats({ jsonData })}
 
           ${getChartsSection()}
+
+          ${getTechnologyStack({ pages })}
 
           ${getConfigInfo({ jsonData, pages })}
 
@@ -192,8 +243,13 @@ function generateHTML(file, domainName, outputPath = null) {
   </body>
   </html>`;
 
-  fs.writeFileSync(htmlOutputPath, htmlContent);
-  console.log(`✅ HTML report generated: ${htmlOutputPath}`);
+  try {
+    fs.writeFileSync(htmlOutputPath, htmlContent);
+    console.log(`✅ HTML report generated: ${htmlOutputPath}`);
+  } catch (writeError) {
+    console.error(`❌ Failed to write HTML report to ${htmlOutputPath}: ${writeError.message}`);
+    throw writeError;
+  }
 }
 
 module.exports = { generateHTML };
@@ -204,6 +260,7 @@ if (require.main === module) {
   if (args.length === 0) {
     console.error('Usage: node generateHTML.js <json-file>');
     console.error('Example: node generateHTML.js audit-results/SEOAnalysis__example.com.json');
+    console.error('Example: node generateHTML.js audit-results/domain.com/2026-01-01_12-00-00/manifest.json.gz');
     process.exit(1);
   }
 
@@ -213,10 +270,27 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  // Extract domain name from filename (handle both with and without path)
   const basename = path.basename(jsonFile);
-  const domainName = basename.replace('SEOAnalysis__', '').replace('.json', '').replace('.gz', '');
+  let domainName;
+  let outputPath;
 
-  console.log(`Generating HTML report for ${domainName}...`);
-  generateHTML(jsonFile, domainName);
+  // Check if this is a multi-file format (manifest.json.gz)
+  if (basename === 'manifest.json.gz' || basename === 'manifest.json') {
+    // Extract domain from directory structure: audit-results/domain.com/timestamp/manifest.json.gz
+    const dir = path.dirname(jsonFile);
+    const parentDir = path.dirname(dir);
+    domainName = path.basename(parentDir);
+
+    // Output to same directory as manifest
+    outputPath = path.join(dir, `${domainName}.html`);
+    console.log(`Generating HTML report for ${domainName}...`);
+  } else {
+    // Legacy format: SEOAnalysis__domain.com.json.gz
+    // Use sanitizeDomainName for consistent domain handling
+    const rawDomain = basename.replace('SEOAnalysis__', '').replace(/\.json(\.gz)?$/, '');
+    domainName = sanitizeDomainName(rawDomain);
+    console.log(`Generating HTML report for ${domainName}...`);
+  }
+
+  generateHTML(jsonFile, domainName, outputPath);
 }

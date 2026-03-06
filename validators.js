@@ -150,9 +150,17 @@ function containsSuspiciousPatterns(input) {
     /[;&|`$(){}[\]]/,           // Shell metacharacters
     /<script/i,                  // XSS attempts
     /javascript:/i,              // JS protocol
-    /on\w+\s*=/i,               // Event handlers
+    /on\w+\s*=/i,               // Event handlers (onclick=, onerror=, etc.)
     /\.\.\//,                    // Path traversal
-    /\0/                         // Null bytes
+    /\0/,                        // Null bytes
+    /\beval\s*\(/i,             // eval() calls
+    /\bFunction\s*\(/i,         // Function() constructor
+    /\$\{[^}]+\}/,              // Template literal expressions ${...}
+    /\bnew\s+Function\b/i,      // new Function()
+    /\bsetTimeout\s*\([^,]*,/i, // setTimeout with string arg
+    /\bsetInterval\s*\([^,]*,/i, // setInterval with string arg
+    /data:\s*text\/html/i,      // Data URLs with HTML
+    /vbscript:/i,               // VBScript protocol
   ];
 
   return suspiciousPatterns.some(pattern => pattern.test(input));
@@ -197,8 +205,12 @@ class RateLimiter {
   }
 }
 
+// Alias for naming consistency (camelCase preferred in Node.js)
+const validateUrl = validateURL;
+
 module.exports = {
   validateURL,
+  validateUrl,  // Alias for consistency with lib/utils.js naming convention
   sanitizeFilename,
   validateArguments,
   sanitizeDomainName,

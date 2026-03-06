@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { FileManager } = require('./lib/storage/file-manager');
+const { sanitizeDomainName } = require('./validators');
 
 /**
  * Audit History Manager
@@ -12,9 +14,10 @@ class HistoryManager {
     this.domainName = domainName;
     this.baseResultsDir = baseResultsDir;
 
-    // New structure: audit-results/domain.com/audit-history.json
+    // New structure: audit-results/domain.com/audit-history.json.gz (compressed)
     this.domainDir = path.join(this.baseResultsDir, this.domainName);
-    this.historyFile = path.join(this.domainDir, 'audit-history.json');
+    this.historyFile = path.join(this.domainDir, 'audit-history.json.gz');
+    this.historyFileUncompressed = path.join(this.domainDir, 'audit-history.json');
 
     // Legacy path for backward compatibility
     this.legacyHistoryDir = '.audit-history';
@@ -30,13 +33,47 @@ class HistoryManager {
   }
 
   loadHistory() {
-    // Try new location first
+    // Try compressed file first
     if (fs.existsSync(this.historyFile)) {
       try {
         return FileManager.readJsonFile(this.historyFile);
       } catch (error) {
-        console.error(`Error loading history: ${error.message}`);
+        console.error(`Error loading compressed history: ${error.message}`);
         return { domain: this.domainName, audits: [] };
+      }
+    }
+
+    // Try uncompressed file (migrate to compressed)
+    if (fs.existsSync(this.historyFileUncompressed)) {
+      console.log(`📦 Migrating history to compressed format...`);
+      try {
+        const uncompressedHistory = JSON.parse(fs.readFileSync(this.historyFileUncompressed, 'utf-8'));
+        // Save to compressed format
+        this.saveHistory(uncompressedHistory);
+
+        // Verify the compressed file was written correctly before deleting old file
+        if (fs.existsSync(this.historyFile)) {
+          try {
+            // Verify we can read the compressed file
+            const verifyData = FileManager.readJsonFile(this.historyFile);
+            if (verifyData && verifyData.audits && verifyData.audits.length === uncompressedHistory.audits.length) {
+              // Safe to remove old uncompressed file
+              try {
+                fs.unlinkSync(this.historyFileUncompressed);
+                console.log(`✓ History migrated to compressed: ${this.historyFile}`);
+              } catch (unlinkError) {
+                console.warn(`⚠️  Could not remove old history file: ${unlinkError.message}`);
+              }
+            } else {
+              console.warn(`⚠️  Migration verification failed - keeping both files`);
+            }
+          } catch (verifyError) {
+            console.warn(`⚠️  Could not verify compressed file - keeping both files: ${verifyError.message}`);
+          }
+        }
+        return uncompressedHistory;
+      } catch (error) {
+        console.error(`Error migrating uncompressed history: ${error.message}`);
       }
     }
 
@@ -45,20 +82,58 @@ class HistoryManager {
       console.log(`📦 Migrating history from legacy location...`);
       try {
         const legacyHistory = FileManager.readJsonFile(this.legacyHistoryFile);
-        // Save to new location
+
+        // Validate legacy history structure
+        if (!legacyHistory || typeof legacyHistory !== 'object') {
+          throw new Error('Legacy history file is empty or invalid');
+        }
+        if (!Array.isArray(legacyHistory.audits)) {
+          legacyHistory.audits = [];
+        }
+
+        // Save to new compressed location
         this.saveHistory(legacyHistory);
         console.log(`✓ History migrated to: ${this.historyFile}`);
         return legacyHistory;
       } catch (error) {
         console.error(`Error migrating history: ${error.message}`);
+        console.log(`  ℹ️  Starting with fresh history. Old data preserved at: ${this.legacyHistoryFile}`);
       }
     }
 
+    // No history found - this is normal for first audit
     return { domain: this.domainName, audits: [] };
   }
 
   saveHistory(history) {
-    fs.writeFileSync(this.historyFile, JSON.stringify(history, null, 2));
+    // Save as compressed gzip JSON with atomic write (temp file + rename)
+    const jsonString = JSON.stringify(history);
+    const compressedData = zlib.gzipSync(jsonString);
+
+    // Write to temp file first, then rename for atomic operation
+    const tempFile = `${this.historyFile}.tmp`;
+    try {
+      fs.writeFileSync(tempFile, compressedData);
+
+      // Verify temp file was written correctly
+      const stats = fs.statSync(tempFile);
+      if (stats.size === 0) {
+        throw new Error('Temp file is empty');
+      }
+
+      // Atomic rename (on same filesystem, this is atomic)
+      fs.renameSync(tempFile, this.historyFile);
+    } catch (error) {
+      // Clean up temp file if it exists
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
   }
 
   addAuditSnapshot(auditData, runTimestamp = null) {
@@ -83,6 +158,7 @@ class HistoryManager {
       },
       issues: this.extractIssuesSummary(auditData),
       performance: this.extractPerformanceSummary(auditData),
+      technologies: this.extractTechnologiesSummary(auditData),
       quickWins: (auditData.analysis?.summary?.quickWins || []).map(qw => ({
         issue: qw.issue,
         affectedPages: qw.affectedPages,
@@ -115,15 +191,16 @@ class HistoryManager {
 
   extractPerformanceSummary(auditData) {
     const pages = auditData.pageData?.pages || {};
-    const pagesWithPerf = Object.values(pages).filter(p => p.vitals);
+    const pagesWithPerf = Object.values(pages).filter(p => p.vitals || p.TTFB);
 
     if (pagesWithPerf.length === 0) return null;
 
     const avg = arr => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
-    const ttfbValues = pagesWithPerf.map(p => p.vitals.ttfb || 0).filter(v => v > 0);
-    const lcpValues = pagesWithPerf.map(p => p.vitals.lcp || 0).filter(v => v > 0);
-    const clsValues = pagesWithPerf.map(p => p.vitals.cls || 0).filter(v => v > 0);
+    // Support both old (vitals.ttfb) and new (TTFB) formats
+    const ttfbValues = pagesWithPerf.map(p => p.TTFB || p.vitals?.ttfb || 0).filter(v => v > 0);
+    const lcpValues = pagesWithPerf.map(p => p.LCP || p.vitals?.lcp || 0).filter(v => v > 0);
+    const clsValues = pagesWithPerf.map(p => p.CLS || p.vitals?.cls || 0).filter(v => v > 0);
 
     return {
       avgTTFB: avg(ttfbValues).toFixed(0),
@@ -133,6 +210,21 @@ class HistoryManager {
     };
   }
 
+  extractTechnologiesSummary(auditData) {
+    const pages = auditData.pageData?.pages || {};
+    const allTechs = new Set();
+
+    for (const page of Object.values(pages)) {
+      const tech = page.technologies || {};
+      const technologies = tech.technologies || [];
+      for (const t of technologies) {
+        allTechs.add(t.name);
+      }
+    }
+
+    return Array.from(allTechs);
+  }
+
   getLatestAudit() {
     const history = this.loadHistory();
     return history.audits.length > 0 ? history.audits[history.audits.length - 1] : null;
@@ -140,7 +232,11 @@ class HistoryManager {
 
   getAuditByIndex(index) {
     const history = this.loadHistory();
-    return history.audits[index] || null;
+    // Validate index bounds
+    if (typeof index !== 'number' || index < 0 || index >= history.audits.length) {
+      return null;
+    }
+    return history.audits[index];
   }
 
   getAllAudits() {
@@ -273,19 +369,25 @@ class HistoryManager {
 
       // Calculate trend direction
       const firstNonZero = counts.findIndex(c => c > 0);
-      const lastNonZero = counts.length - 1 - [...counts].reverse().findIndex(c => c > 0);
+      const reverseIndex = [...counts].reverse().findIndex(c => c > 0);
+      // Handle case when all counts are 0 (reverseIndex would be -1)
+      const lastNonZero = reverseIndex === -1 ? -1 : counts.length - 1 - reverseIndex;
+      const latestCount = counts[counts.length - 1] || 0;
 
       let trend = 'stable';
       if (firstNonZero === -1) {
-        trend = 'stable'; // All zeros
-      } else if (firstNonZero === counts.length - 1 && counts[firstNonZero] > 0) {
-        trend = 'new'; // Only appeared in latest audit
-      } else if (lastNonZero !== counts.length - 1 && counts[lastNonZero] > 0) {
-        trend = 'fixed'; // Disappeared in latest audits
+        // All counts are zero - issue never existed
+        trend = 'stable';
+      } else if (firstNonZero === counts.length - 1) {
+        // Only appeared in the latest audit
+        trend = 'new';
+      } else if (latestCount === 0 && lastNonZero < counts.length - 1) {
+        // Was present before but not in latest - issue is fixed
+        trend = 'fixed';
       } else {
-        // Compare first and last values
-        const firstVal = counts[firstNonZero] || 0;
-        const lastVal = counts[counts.length - 1] || 0;
+        // Compare first occurrence value to latest value
+        const firstVal = counts[firstNonZero];
+        const lastVal = latestCount;
 
         if (lastVal < firstVal * 0.8) {
           trend = 'improving';
@@ -298,7 +400,7 @@ class HistoryManager {
 
       // Calculate change from first occurrence to latest
       const firstCount = counts[firstNonZero] || 0;
-      const latestCount = counts[counts.length - 1] || 0;
+      // latestCount already defined above
       const change = latestCount - firstCount;
       const changePercent = firstCount > 0 ? ((latestCount - firstCount) / firstCount * 100).toFixed(0) : 0;
 
@@ -326,7 +428,9 @@ if (require.main === module) {
 
   if (command === 'save' && args[1]) {
     const jsonFile = args[1];
-    const domainName = jsonFile.replace('SEOAnalysis__', '').replace('.json', '');
+    // Extract domain name from filename and sanitize consistently
+    const rawDomain = path.basename(jsonFile).replace('SEOAnalysis__', '').replace(/\.json(\.gz)?$/, '');
+    const domainName = sanitizeDomainName(rawDomain);
     const auditData = FileManager.readJsonFile(jsonFile);
 
     const manager = new HistoryManager(domainName);
@@ -345,8 +449,8 @@ if (require.main === module) {
   }
   else if (command === 'compare' && args[1] && args[2] && args[3]) {
     const domainName = args[1];
-    const oldIndex = parseInt(args[2]) - 1;
-    const newIndex = parseInt(args[3]) - 1;
+    const oldIndex = parseInt(args[2], 10) - 1;
+    const newIndex = parseInt(args[3], 10) - 1;
 
     const manager = new HistoryManager(domainName);
     const oldAudit = manager.getAuditByIndex(oldIndex);

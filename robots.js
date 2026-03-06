@@ -306,6 +306,7 @@ async function audit() {
       exclude: args.exclude,
       limit: args.limit,
       dryRun: args.dryRun,
+      cruxApiKey: config.apiKeys?.crux || null,
     });
     _seoInstance = seo;
 
@@ -344,6 +345,7 @@ async function audit() {
           const { RepoOrchestrator } = require('./lib/orchestrators/repo-orchestrator');
           const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath, seo.data);
           seo.data.repoAnalysis = repoAnalysis;
+          seo.fileManager.writeRepoAnalysis(repoAnalysis);
 
           // Merge repo issues into the main error aggregator
           for (const issue of repoAnalysis.issues || []) {

@@ -1,4 +1,21 @@
 #!/usr/bin/env node
+
+// Load .env file if present
+const fs = require("fs");
+const path = require("path");
+const envFile = path.join(__dirname, ".env");
+if (fs.existsSync(envFile)) {
+  for (const line of fs.readFileSync(envFile, "utf-8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    const value = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, "");
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
 const { spawn } = require("child_process");
 const { parseArgs } = require("./lib/args-parser");
 const { validateURL } = require("./validators");
@@ -39,14 +56,12 @@ async function audit(restoredArgs, restartCount = 0) {
       process.exit(0);
     }
 
-    const { origin, sitemap } = args;
-
     // Interactive mode when no args provided
-    if (!origin && !sitemap && !restoredArgs && process.stdin.isTTY) {
+    if (!args.origin && !args.sitemap && !restoredArgs && process.stdin.isTTY) {
       args = await interactiveMode();
     }
 
-    const { compare, proceed, perf, saveHtml } = args;
+    const { origin, sitemap, compare, proceed, perf, saveHtml } = args;
 
     // Validate that origin or sitemap is provided
     if (!args.origin && !args.sitemap) {

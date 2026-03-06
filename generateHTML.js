@@ -90,11 +90,62 @@ function generateHTML(file, domainName, outputPath = null) {
       ${getStyles()}
   </head>
   <body>
+      <!-- Reading progress bar -->
+      <div class="reading-progress" id="readingProgress"></div>
+
+      <!-- Skip to content for keyboard users -->
+      <a href="#executive-summary" class="skip-link">Skip to content</a>
+
+      <!-- Dark mode toggle -->
+      <button class="theme-toggle" onclick="toggleDarkMode()" title="Toggle dark mode (D)" aria-label="Toggle dark mode">🌙</button>
+
+      <!-- Sticky navigation sidebar -->
+      <nav class="report-nav" id="reportNav" aria-label="Report sections">
+          <a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>
+          <a href="#quick-wins" title="Quick Wins">🎯<span class="nav-label">Quick Wins</span></a>
+          <a href="#top-issues" title="Top Issues">⚠️<span class="nav-label">Issues</span></a>
+          <a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>
+          <a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>
+          <a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>
+      </nav>
+
+      <!-- Floating action button menu -->
+      <div class="fab-container">
+          <div class="fab-menu" id="fabMenu">
+              <button class="fab-item" onclick="shareReport()">📤 Share Report</button>
+              <button class="fab-item" onclick="copyScoreSummary()">📋 Copy Summary</button>
+              <button class="fab-item" onclick="exportCSV('summary')">📊 Export Summary</button>
+              <button class="fab-item" onclick="exportCSV('pages')">📄 Export Pages</button>
+              <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
+              <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
+              <button class="fab-item" onclick="toggleDarkMode()">🌙 Dark Mode</button>
+              <button class="fab-item" onclick="toggleColorblind()">👁 Color-blind Mode</button>
+              <button class="fab-item" onclick="toggleHighContrast()">◐ High Contrast</button>
+              <button class="fab-item" onclick="cycleTheme()">🎨 Theme</button>
+          </div>
+          <button class="fab-toggle" id="fabToggle" title="Quick actions">+</button>
+      </div>
+
+      <!-- Back to top button -->
+      <button class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top (T)" aria-label="Back to top">↑</button>
+
+      <!-- Global search -->
+      <div class="global-search" id="globalSearch">
+          <input type="text" id="globalSearchInput" placeholder="Search report..." autocomplete="off">
+          <span class="search-count" id="searchCount"></span>
+      </div>
+
+      <!-- Keyboard shortcut hint -->
+      <div class="keyboard-hint" id="keyboardHint">
+          Press <kbd>?</kbd> for keyboard shortcuts &middot; <kbd>s</kbd> to search
+      </div>
+
       <div class="container">
           <header>
-              <h1>SEO Audit Report</h1>
+              ${jsonData.branding?.logo ? `<img src="${escapeHtml(jsonData.branding.logo)}" alt="Logo" style="max-height:40px;margin-bottom:10px;">` : ''}
+              <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}SEO Audit Report</h1>
               <p class="subtitle">${escapeHtml(safeDomainName)}</p>
-              <p class="subtitle">Generated on ${new Date().toLocaleString()}</p>
+              <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
               ${timing.elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml(timing.elapsedTimeFormatted)}</p>` : ''}
               <div class="stats">
                   <div class="stat">
@@ -151,6 +202,8 @@ function generateHTML(file, domainName, outputPath = null) {
                           <button onclick="exportCSV('quickwins')" class="export-btn">🎯 Quick Wins CSV</button>
                           <button onclick="exportCSV('summary')" class="export-btn">📊 Summary CSV</button>
                           <button onclick="saveToPDF()" class="pdf-btn">📥 Save to PDF</button>
+                          <button onclick="exportMarkdown()" class="export-btn" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">📝 Markdown</button>
+                          <button onclick="exportAll()" class="export-btn" style="background: linear-gradient(135deg, #ec4899 0%, #be185d 100%);">📦 Export All</button>
                       </div>
                   </div>
               </div>
@@ -203,17 +256,37 @@ function generateHTML(file, domainName, outputPath = null) {
           </div>
           ` : ''}
 
+          <!-- Section tabs for quick navigation -->
+          <div class="section-tabs" id="sectionTabs">
+              <button class="section-tab active" data-target="executive-summary">Summary</button>
+              <button class="section-tab" data-target="quick-wins">Quick Wins</button>
+              <button class="section-tab" data-target="top-issues">Issues</button>
+              <button class="section-tab" data-target="performance">Performance</button>
+              <button class="section-tab" data-target="charts">Charts</button>
+              <button class="section-tab" data-target="pages-table">Pages</button>
+          </div>
+
           ${getHistoricalProgress({ jsonData, trendData, previousAudit })}
 
+          <div id="executive-summary">
           ${getExecutiveSummary({ jsonData })}
+          </div>
 
+          <div id="quick-wins">
           ${getQuickWins({ jsonData })}
+          </div>
 
+          <div id="top-issues">
           ${getTopIssues({ jsonData })}
+          </div>
 
+          <div id="performance">
           ${getPerformanceStats({ jsonData })}
+          </div>
 
+          <div id="charts">
           ${getChartsSection()}
+          </div>
 
           ${getTechnologyStack({ pages })}
 
@@ -221,10 +294,19 @@ function generateHTML(file, domainName, outputPath = null) {
 
           ${getConfigInfo({ jsonData, pages })}
 
+          <div id="pages-table">
           ${getPagesTable({ pages, hasPerformanceMetrics: pagesWithMetrics.length > 0 })}
+          </div>
 
           <footer>
-              <p>SEO Audit Tool - Generated with Node.js & Playwright</p>
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                  <p>SEO Audit Tool v${require('./package.json').version} - Generated ${new Date().toISOString()}</p>
+                  <p style="opacity: 0.7;">Node.js ${process.version} | Playwright | ${pages.length} pages analyzed</p>
+                  <div style="display: flex; gap: 8px;">
+                      <button onclick="shareReport()" style="padding: 4px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; cursor: pointer; font-size: 12px;">Share</button>
+                      <button onclick="window.print()" style="padding: 4px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; cursor: pointer; font-size: 12px;">Print</button>
+                  </div>
+              </div>
           </footer>
       </div>
 
@@ -239,6 +321,15 @@ function generateHTML(file, domainName, outputPath = null) {
                   <div class="modal-url" id="modalUrl"></div>
                   <div id="modalBody"></div>
               </div>
+          </div>
+      </div>
+
+      <!-- Selection bar for bulk actions -->
+      <div class="selection-bar" id="selectionBar">
+          <span id="selectionCount">0 rows selected</span>
+          <div>
+              <button onclick="exportSelectedCSV()">Export Selected CSV</button>
+              <button onclick="clearSelection()">Clear Selection</button>
           </div>
       </div>
 

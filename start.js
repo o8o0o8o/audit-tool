@@ -1,6 +1,8 @@
+#!/usr/bin/env node
 const { spawn } = require("child_process");
 const { parseArgs } = require("./lib/args-parser");
 const { validateURL } = require("./validators");
+const { printHelp, interactiveMode } = require("./lib/cli-interactive");
 
 const MAX_RESTART_ATTEMPTS = 3;
 
@@ -22,41 +24,33 @@ process.on('uncaughtException', (error) => {
 async function audit(restoredArgs, restartCount = 0) {
   try {
     // Parse arguments from command line or use restored values
-    const args = restoredArgs || parseArgs(process.argv.slice(2));
+    let args = restoredArgs || parseArgs(process.argv.slice(2));
 
-    const { origin, compare, sitemap, proceed, perf, saveHtml } = args;
+    // Handle --version flag
+    if (args.version) {
+      const pkg = require('./package.json');
+      console.log(`seo-audit v${pkg.version}`);
+      process.exit(0);
+    }
+
+    // Handle --help flag
+    if (args.help) {
+      printHelp();
+      process.exit(0);
+    }
+
+    const { origin, sitemap } = args;
+
+    // Interactive mode when no args provided
+    if (!origin && !sitemap && !restoredArgs && process.stdin.isTTY) {
+      args = await interactiveMode();
+    }
+
+    const { compare, proceed, perf, saveHtml } = args;
 
     // Validate that origin or sitemap is provided
-    if (!origin && !sitemap) {
-      console.error("Error: Website URL or sitemap file is required");
-      console.error("");
-      console.error("Usage: node start --origin=<website-url> [OPTIONS]");
-      console.error("       node start --sitemap=<file> [OPTIONS]");
-      console.error("");
-      console.error("Options:");
-      console.error("  --origin=<url>          Website URL to audit (required unless --sitemap is used)");
-      console.error("  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)");
-      console.error("  --compare=<url>         Compare origin with another site (page-by-page comparison)");
-      console.error("  --compare-sitemap=<file> Local sitemap XML file for comparison site");
-      console.error("  --proceed               Resume from saved progress");
-      console.error("  --perf                  Enable performance metrics collection");
-      console.error("  --save-html             Save full HTML snapshots of each page");
-      console.error("  --concurrency=<number>  Number of pages to crawl in parallel (1-20, default: 5)");
-      console.error("  --repo=<path>           Local git repo for source code analysis");
-      console.error("  --heap-size=<mb>        Node.js heap size in MB (512-32768, default: 8192)");
-      console.error("");
-      console.error("Examples:");
-      console.error("  node start --origin=https://example.com");
-      console.error("  node start --origin=https://example.com --perf");
-      console.error("  node start --sitemap=./sitemap.xml --perf");
-      console.error("  node start --origin=https://example.com --repo=../my-website");
-      console.error("  node start --origin=https://example.com --save-html");
-      console.error("  node start --origin=https://example.com --concurrency=10");
-      console.error("  node start --origin=https://example.com --proceed --perf");
-      console.error("");
-      console.error("Comparison mode:");
-      console.error("  node start --origin=https://staging.example.com --compare=https://www.example.com");
-      console.error("  node start --sitemap=./old.xml --compare-sitemap=./new.xml --perf");
+    if (!args.origin && !args.sitemap) {
+      printHelp();
       process.exit(1);
     }
 
@@ -107,6 +101,25 @@ async function audit(restoredArgs, restartCount = 0) {
     if (saveHtml) childArgs.push("--save-html");
     if (args.concurrency) childArgs.push(`--concurrency=${args.concurrency}`);
     if (args.repo) childArgs.push(`--repo=${args.repo}`);
+    if (args.open) childArgs.push("--open");
+    if (args.verbose) childArgs.push("--verbose");
+    if (args.ci !== null && args.ci !== undefined) childArgs.push(`--ci=${args.ci}`);
+    if (args.json) childArgs.push("--json");
+    if (args.exclude && args.exclude.length > 0) {
+      args.exclude.forEach(pattern => childArgs.push(`--exclude=${pattern}`));
+    }
+    if (args.limit) childArgs.push(`--limit=${args.limit}`);
+    if (args.onlyErrors) childArgs.push("--only-errors");
+    if (args.dryRun) childArgs.push("--dry-run");
+    if (args.quiet) childArgs.push("--quiet");
+    if (args.preset) childArgs.push(`--preset=${args.preset}`);
+    if (args.webhook) childArgs.push(`--webhook=${args.webhook}`);
+    if (args.generateCi) childArgs.push("--generate-ci");
+    if (args.validateConfig) childArgs.push("--validate-config");
+    if (args.sites) childArgs.push(`--sites=${args.sites}`);
+    if (args.slack) childArgs.push(`--slack=${args.slack}`);
+    if (args.brandLogo) childArgs.push(`--brand-logo=${args.brandLogo}`);
+    if (args.brandName) childArgs.push(`--brand-name=${args.brandName}`);
 
     const child = spawn("node", childArgs, {
       stdio: "inherit",
@@ -120,6 +133,28 @@ async function audit(restoredArgs, restartCount = 0) {
     child.on("exit", async (code) => {
       if (code !== 0) {
         console.log("\n⚠️  Process crashed or interrupted (exit code: " + code + ")");
+
+        // Try to show crash progress summary
+        try {
+          const { FileManager } = require("./lib/storage/file-manager");
+          const { sanitizeDomainName } = require("./validators");
+          const domain = args.origin ? sanitizeDomainName(args.origin) : (args.sitemap ? 'sitemap' : 'unknown');
+          const latestRun = FileManager.findLatestRun(domain);
+          if (latestRun) {
+            const fs = require('fs');
+            const manifestPath = require('path').join(latestRun, 'manifest.json.gz');
+            if (fs.existsSync(manifestPath)) {
+              const zlib = require('zlib');
+              const data = JSON.parse(zlib.gunzipSync(fs.readFileSync(manifestPath)));
+              const processed = data.pageData?.processedPages?.length || Object.keys(data.pageData?.pages || {}).length;
+              const total = data.sitemaps?.total || 0;
+              if (total > 0) {
+                const pct = ((processed / total) * 100).toFixed(1);
+                console.log(`   Progress before crash: ${processed}/${total} pages (${pct}%)`);
+              }
+            }
+          }
+        } catch (_) { /* ignore - best effort */ }
 
         if (restartCount >= MAX_RESTART_ATTEMPTS) {
           console.error(`\n❌ Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached. Giving up.`);
@@ -140,6 +175,21 @@ async function audit(restoredArgs, restartCount = 0) {
           saveHtml: args.saveHtml,
           concurrency: args.concurrency,
           repo: args.repo,
+          open: args.open,
+          verbose: args.verbose,
+          ci: args.ci,
+          json: args.json,
+          exclude: args.exclude,
+          limit: args.limit,
+          onlyErrors: args.onlyErrors,
+          quiet: args.quiet,
+          preset: args.preset,
+          webhook: args.webhook,
+          sites: args.sites,
+          slack: args.slack,
+          brandLogo: args.brandLogo,
+          brandName: args.brandName,
+          validateConfig: args.validateConfig,
         }, restartCount + 1);
       } else {
         console.log("\n✅ Audit completed successfully (exit code: 0)");
@@ -151,4 +201,19 @@ async function audit(restoredArgs, restartCount = 0) {
   }
 }
 
-audit();
+// Check for watch mode
+const watchArgs = parseArgs(process.argv.slice(2));
+if (watchArgs.watch) {
+  const intervalMin = watchArgs.watch;
+  console.log(`\nWatch mode: re-auditing every ${intervalMin} minute(s). Press Ctrl+C to stop.\n`);
+
+  (async function watchLoop() {
+    while (true) {
+      await audit();
+      console.log(`\nNext audit in ${intervalMin} minute(s)...`);
+      await new Promise(r => setTimeout(r, intervalMin * 60 * 1000));
+    }
+  })();
+} else {
+  audit();
+}

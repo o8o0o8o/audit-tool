@@ -27,7 +27,7 @@ function validateURL(urlString) {
 
     // Only allow HTTP/HTTPS protocols
     if (!['http:', 'https:'].includes(url.protocol)) {
-      return { valid: false, error: `Unsupported protocol: ${url.protocol}. Only http: and https: are allowed` };
+      return { valid: false, error: `Unsupported protocol: ${url.protocol}. Only http: and https: are allowed.\n  Hint: Use https://${url.hostname} instead.` };
     }
 
     // Check for valid hostname

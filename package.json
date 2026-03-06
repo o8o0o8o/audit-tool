@@ -2,11 +2,15 @@
   "name": "audit-tool",
   "version": "1.0.0",
   "description": "Automated SEO audit tool",
-  "main": "index.js",
+  "main": "robots.js",
+  "bin": {
+    "seo-audit": "./start.js"
+  },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=16.0.0"
   },
   "scripts": {
+    "audit": "node start.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Sergey Labut",

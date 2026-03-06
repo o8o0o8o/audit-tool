@@ -24,23 +24,55 @@ function escapeCSV(value) {
 function generatePagesCSV(jsonData) {
   const pages = jsonData.pageData?.pages || {};
   const rows = [
-    ['URL', 'Status Code', 'Title', 'Description', 'H1 Count', 'Canonical', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Has Errors']
+    ['URL', 'Status Code', 'Source', 'Segment', 'Title', 'Title Length', 'Description', 'Desc Length',
+     'H1 Count', 'H2 Count', 'Canonical', 'Canonical Match',
+     'TTFB (ms)', 'FCP (ms)', 'LCP (ms)', 'CLS', 'Page Size (bytes)', 'Requests',
+     'Word Count', 'Text/HTML %', 'Readability',
+     'Security Score', 'Cache Score', 'A11y Score', 'Content Score',
+     'Images Total', 'Images Lazy', 'Incoming Links',
+     'Missing Meta Count', 'Render Blocking', 'Has Errors']
   ];
 
   Object.entries(pages).forEach(([url, data]) => {
+    const h1Count = Array.isArray(data.headings)
+      ? (data.headings.find(h => h.tag === 'h1')?.count || 0)
+      : (data.headings?.h1?.length || 0);
+    const h2Count = Array.isArray(data.headings)
+      ? (data.headings.find(h => h.tag === 'h2')?.count || 0)
+      : (data.headings?.h2?.length || 0);
+
     rows.push([
       url,
-      data.statusCode || '',
+      data.status || data.statusCode || '',
+      data.foundIn || 'sitemap',
+      data.segment || 'other',
       data.title || '',
+      data.title?.length || 0,
       data.description || '',
-      data.h1?.length || 0,
+      data.description?.length || 0,
+      h1Count,
+      h2Count,
       data.canonical || '',
-      data.vitals?.ttfb || '',
-      data.vitals?.lcp || '',
-      data.vitals?.cls || '',
-      data.totalSize ? (data.totalSize / (1024 * 1024)).toFixed(2) : '',
-      data.numberOfRequests || '',
-      (data.statusCode >= 400 || data.errors?.length > 0) ? 'Yes' : 'No'
+      data.canonical === url ? 'Yes' : (data.canonical ? 'No' : 'Missing'),
+      data.TTFB || data.vitals?.ttfb || '',
+      data.FCP || '',
+      data.LCP || data.vitals?.lcp || '',
+      data.CLS !== undefined ? data.CLS : (data.vitals?.cls || ''),
+      data.totalResponseSize || data.totalSize || '',
+      data.totalNumberOfRequests || data.numberOfRequests || '',
+      data.contentQuality?.wordCount || '',
+      data.contentQuality?.textToHtmlRatio || '',
+      data.contentQuality?.readabilityScore || '',
+      data.security?.securityScore ?? '',
+      data.caching?.cacheScore ?? '',
+      data.accessibility?.a11yScore ?? '',
+      data.contentQuality?.contentScore ?? '',
+      data.imageOptimization?.totalImages || '',
+      data.imageOptimization?.withLazyLoading || '',
+      data.incomingLinksCount || 0,
+      data.missingMetaTags?.length || 0,
+      data.resourceOptimization?.renderBlocking?.totalBlocking || '',
+      (data.status >= 400 || data.statusCode >= 400) ? 'Yes' : 'No'
     ].map(escapeCSV));
   });
 
@@ -114,9 +146,12 @@ function generateQuickWinsCSV(jsonData) {
 
 function generateSummaryCSV(jsonData) {
   const summary = jsonData.analysis?.summary || {};
+  const score = summary.overallScore || 0;
+  const grade = score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
   const rows = [
     ['Metric', 'Value'],
-    ['Overall SEO Score', summary.overallScore || 0],
+    ['Overall SEO Score', score],
+    ['Grade', grade],
     ['Total Issues', summary.totalIssues || 0],
     ['Critical Issues', summary.criticalCount || 0],
     ['High Issues', summary.highCount || 0],

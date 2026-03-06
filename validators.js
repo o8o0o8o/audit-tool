@@ -225,6 +225,46 @@ class RateLimiter {
   }
 }
 
+/**
+ * Validates a repository path for source code analysis
+ * @param {string} repoPath - Path to the repository
+ * @returns {{valid: boolean, error?: string}}
+ */
+function validateRepoPath(repoPath) {
+  if (!repoPath || typeof repoPath !== 'string') {
+    return { valid: false, error: 'Repository path must be a non-empty string' };
+  }
+
+  const fs = require('fs');
+  const path = require('path');
+
+  // Resolve to absolute path
+  const resolved = path.resolve(repoPath);
+
+  // Check for path traversal attempts
+  if (repoPath.includes('\0')) {
+    return { valid: false, error: 'Repository path contains invalid characters' };
+  }
+
+  // Check path exists and is a directory
+  try {
+    const stats = fs.statSync(resolved);
+    if (!stats.isDirectory()) {
+      return { valid: false, error: `Not a directory: ${resolved}` };
+    }
+  } catch {
+    return { valid: false, error: `Directory not found: ${resolved}` };
+  }
+
+  // Check for package.json
+  const packageJsonPath = path.join(resolved, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    return { valid: false, error: `No package.json found in: ${resolved}` };
+  }
+
+  return { valid: true, resolvedPath: resolved };
+}
+
 // Alias for naming consistency (camelCase preferred in Node.js)
 const validateUrl = validateURL;
 
@@ -233,6 +273,7 @@ module.exports = {
   validateUrl,  // Alias for consistency with lib/utils.js naming convention
   sanitizeFilename,
   validateArguments,
+  validateRepoPath,
   sanitizeDomainName,
   containsSuspiciousPatterns,
   RateLimiter

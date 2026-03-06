@@ -62,6 +62,7 @@ async function audit() {
       console.error("  --perf                  Enable performance metrics collection");
       console.error("  --save-html             Save HTML snapshots of pages");
       console.error("  --concurrency=<number>  Parallel pages (1-20, default: 5)");
+      console.error("  --repo=<path>           Local git repo for source code analysis");
       console.error("  --config=<path>         Path to config file");
       console.error("  --init-config           Generate sample .seoauditrc file");
       console.error("");
@@ -69,6 +70,7 @@ async function audit() {
       console.error("  node robots.js --origin=https://example.com");
       console.error("  node robots.js --origin=https://example.com --perf");
       console.error("  node robots.js --sitemap=./sitemap.xml --perf");
+      console.error("  node robots.js --origin=https://example.com --repo=../my-website");
       console.error("  node robots.js --origin=https://example.com --config=my-config.json");
       console.error("  node robots.js --init-config");
       console.error("");
@@ -167,6 +169,35 @@ async function audit() {
     const seo = new SEOData(args.origin, args.proceed, args.perf, args.saveHtml, args.concurrency, args.sitemap);
 
     await seo.audit();
+
+    // Run repo analysis if --repo flag is provided
+    if (args.repo) {
+      const { validateRepoPath } = require('./validators');
+      const repoValidation = validateRepoPath(args.repo);
+      if (!repoValidation.valid) {
+        console.error(`\n⚠️  Repo analysis skipped: ${repoValidation.error}`);
+      } else {
+        console.log(`\n📂 Running source code analysis on: ${repoValidation.resolvedPath}`);
+        try {
+          const { RepoOrchestrator } = require('./lib/orchestrators/repo-orchestrator');
+          const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath, seo.data);
+          seo.data.repoAnalysis = repoAnalysis;
+
+          // Merge repo issues into the main error aggregator
+          for (const issue of repoAnalysis.issues || []) {
+            seo.saveError(issue.message, issue.detail, issue.severity);
+          }
+          for (const warning of repoAnalysis.warnings || []) {
+            seo.saveError(warning.message, warning.detail, warning.severity);
+          }
+
+          const issueCount = (repoAnalysis.issues?.length || 0) + (repoAnalysis.warnings?.length || 0);
+          console.log(`✅ Repo analysis complete: ${issueCount} finding(s)`);
+        } catch (error) {
+          console.error('⚠️  Repo analysis failed:', error.message);
+        }
+      }
+    }
 
     // Save to history for tracking
     try {

@@ -42,12 +42,14 @@ async function audit(restoredArgs, restartCount = 0) {
       console.error("  --perf                  Enable performance metrics collection");
       console.error("  --save-html             Save full HTML snapshots of each page");
       console.error("  --concurrency=<number>  Number of pages to crawl in parallel (1-20, default: 5)");
+      console.error("  --repo=<path>           Local git repo for source code analysis");
       console.error("  --heap-size=<mb>        Node.js heap size in MB (512-32768, default: 8192)");
       console.error("");
       console.error("Examples:");
       console.error("  node start --origin=https://example.com");
       console.error("  node start --origin=https://example.com --perf");
       console.error("  node start --sitemap=./sitemap.xml --perf");
+      console.error("  node start --origin=https://example.com --repo=../my-website");
       console.error("  node start --origin=https://example.com --save-html");
       console.error("  node start --origin=https://example.com --concurrency=10");
       console.error("  node start --origin=https://example.com --proceed --perf");
@@ -104,6 +106,7 @@ async function audit(restoredArgs, restartCount = 0) {
     if (perf) childArgs.push("--perf");
     if (saveHtml) childArgs.push("--save-html");
     if (args.concurrency) childArgs.push(`--concurrency=${args.concurrency}`);
+    if (args.repo) childArgs.push(`--repo=${args.repo}`);
 
     const child = spawn("node", childArgs, {
       stdio: "inherit",
@@ -136,6 +139,7 @@ async function audit(restoredArgs, restartCount = 0) {
           perf: args.perf,
           saveHtml: args.saveHtml,
           concurrency: args.concurrency,
+          repo: args.repo,
         }, restartCount + 1);
       } else {
         console.log("\n✅ Audit completed successfully (exit code: 0)");

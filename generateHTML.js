@@ -33,6 +33,7 @@ const {
   getConfigInfo,
   getPagesTable,
   getTechnologyStack,
+  getSourceCodeAnalysis,
 } = require("./lib/reports/sections");
 
 function generateHTML(file, domainName, outputPath = null) {
@@ -215,6 +216,8 @@ function generateHTML(file, domainName, outputPath = null) {
           ${getChartsSection()}
 
           ${getTechnologyStack({ pages })}
+
+          ${getSourceCodeAnalysis({ jsonData })}
 
           ${getConfigInfo({ jsonData, pages })}
 

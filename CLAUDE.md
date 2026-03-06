@@ -62,13 +62,14 @@ audit-tool/
 │   │   │   └── security-analyzer.js         # HTTPS, security headers
 │   │   ├── seo/
 │   │   │   ├── advanced-schema-validator.js # Detailed schema validation (FAQ, Product, etc.)
+│   │   │   ├── aeo-analyzer.js              # AI Search Readiness (AEO), llms.txt, AI crawlers
 │   │   │   ├── crawlability-analyzer.js     # Robots.txt analysis
 │   │   │   ├── eeat-analyzer.js             # E-E-A-T signals (author, trust, expertise)
 │   │   │   ├── heading-analyzer.js          # H1-H6 structure
 │   │   │   ├── image-analyzer.js            # Alt text validation
 │   │   │   ├── indexability-analyzer.js     # Canonical, noindex
 │   │   │   ├── structured-data-analyzer.js  # Schema.org markup
-│   │   │   ├── technical-seo-analyzer.js    # Meta refresh, CMS detection, JS frameworks
+│   │   │   ├── technical-seo-analyzer.js    # Meta refresh, CMS detection, JS frameworks, DOCTYPE, iframes, HTML size
 │   │   │   └── url-architecture-analyzer.js # URL structure, parameters, depth
 │   │   ├── site-wide/
 │   │   │   ├── analytics-validator.js       # Cross-site tracking
@@ -244,6 +245,7 @@ Input validation and security:
 - **security-analyzer.js**: HTTPS, security headers (CSP, X-Frame-Options, HSTS)
 
 ### SEO
+- **aeo-analyzer.js**: AI Search Readiness (AEO) - llms.txt validation, AI crawler rules (GPTBot, ClaudeBot, PerplexityBot), semantic HTML ratio, content structure scoring, FAQ/Q&A detection
 - **crawlability-analyzer.js**: Robots.txt, crawl efficiency
 - **heading-analyzer.js**: H1-H6 structure and hierarchy
 - **image-analyzer.js**: Alt text and image metadata

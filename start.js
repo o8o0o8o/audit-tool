@@ -24,16 +24,18 @@ async function audit(restoredArgs, restartCount = 0) {
     // Parse arguments from command line or use restored values
     const args = restoredArgs || parseArgs(process.argv.slice(2));
 
-    const { origin, compare, proceed, perf, saveHtml } = args;
+    const { origin, compare, sitemap, proceed, perf, saveHtml } = args;
 
-    // Validate that origin is provided
-    if (!origin) {
-      console.error("Error: Website URL is required");
+    // Validate that origin or sitemap is provided
+    if (!origin && !sitemap) {
+      console.error("Error: Website URL or sitemap file is required");
       console.error("");
       console.error("Usage: node start --origin=<website-url> [OPTIONS]");
+      console.error("       node start --sitemap=<file> [OPTIONS]");
       console.error("");
       console.error("Options:");
-      console.error("  --origin=<url>          Website URL to audit (required)");
+      console.error("  --origin=<url>          Website URL to audit (required unless --sitemap is used)");
+      console.error("  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)");
       console.error("  --compare=<url>         Compare origin with another site (page-by-page comparison)");
       console.error("  --proceed               Resume from saved progress");
       console.error("  --perf                  Enable performance metrics collection");
@@ -44,6 +46,7 @@ async function audit(restoredArgs, restartCount = 0) {
       console.error("Examples:");
       console.error("  node start --origin=https://example.com");
       console.error("  node start --origin=https://example.com --perf");
+      console.error("  node start --sitemap=./sitemap.xml --perf");
       console.error("  node start --origin=https://example.com --save-html");
       console.error("  node start --origin=https://example.com --concurrency=10");
       console.error("  node start --origin=https://example.com --proceed --perf");
@@ -54,12 +57,23 @@ async function audit(restoredArgs, restartCount = 0) {
       process.exit(1);
     }
 
-    // URL validation using centralized validator
-    const originValidation = validateURL(origin);
-    if (!originValidation.valid) {
-      console.error(`Error: Invalid URL "${origin}"`);
-      console.error(originValidation.error);
-      process.exit(1);
+    // URL validation using centralized validator (skip when using sitemap file)
+    if (origin) {
+      const originValidation = validateURL(origin);
+      if (!originValidation.valid) {
+        console.error(`Error: Invalid URL "${origin}"`);
+        console.error(originValidation.error);
+        process.exit(1);
+      }
+    }
+
+    // Validate sitemap file exists
+    if (sitemap) {
+      const fs = require('fs');
+      if (!fs.existsSync(sitemap)) {
+        console.error(`Error: Sitemap file not found: "${sitemap}"`);
+        process.exit(1);
+      }
     }
 
     // Validate compare URL if provided
@@ -80,8 +94,9 @@ async function audit(restoredArgs, restartCount = 0) {
       `--max-old-space-size=${heapSize}`,  // Heap limit (default 8GB, configurable via NODE_HEAP_SIZE env or --heap-size arg)
       "--expose-gc",                        // Allow gc() calls
       "robots.js",
-      `--origin=${origin}`
     ];
+    if (origin) childArgs.push(`--origin=${origin}`);
+    if (sitemap) childArgs.push(`--sitemap=${sitemap}`);
     if (compare) childArgs.push(`--compare=${compare}`);
     if (proceed) childArgs.push("--proceed");
     if (perf) childArgs.push("--perf");
@@ -113,6 +128,7 @@ async function audit(restoredArgs, restartCount = 0) {
         await audit({
           origin: args.origin,
           compare: args.compare,
+          sitemap: args.sitemap,
           proceed: true,
           perf: args.perf,
           saveHtml: args.saveHtml,

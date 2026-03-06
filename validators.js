@@ -87,15 +87,25 @@ function sanitizeFilename(filename) {
  * @returns {{valid: boolean, error?: string}}
  */
 function validateArguments(args) {
-  // Check required --origin argument
-  if (!args.origin) {
-    return { valid: false, error: 'Missing required argument: --origin' };
+  // Allow --sitemap without --origin (origin is derived from sitemap URLs)
+  if (!args.origin && !args.sitemap) {
+    return { valid: false, error: 'Missing required argument: --origin (or --sitemap=<file>)' };
   }
 
-  // Validate origin URL
-  const urlValidation = validateURL(args.origin);
-  if (!urlValidation.valid) {
-    return { valid: false, error: `Invalid origin URL: ${urlValidation.error}` };
+  // Validate origin URL if provided
+  if (args.origin) {
+    const urlValidation = validateURL(args.origin);
+    if (!urlValidation.valid) {
+      return { valid: false, error: `Invalid origin URL: ${urlValidation.error}` };
+    }
+  }
+
+  // Validate sitemap file exists
+  if (args.sitemap) {
+    const fs = require('fs');
+    if (!fs.existsSync(args.sitemap)) {
+      return { valid: false, error: `Sitemap file not found: ${args.sitemap}` };
+    }
   }
 
   // Validate boolean flags

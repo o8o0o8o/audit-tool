@@ -51,9 +51,11 @@ async function audit() {
       console.error(`❌ ${validation.error}`);
       console.error("");
       console.error("Usage: node robots.js --origin=<website-url> [OPTIONS]");
+      console.error("       node robots.js --sitemap=<file> [OPTIONS]");
       console.error("");
       console.error("Options:");
-      console.error("  --origin=<url>          Website URL to audit (required)");
+      console.error("  --origin=<url>          Website URL to audit (required unless --sitemap is used)");
+      console.error("  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)");
       console.error("  --compare=<url>         Compare origin with another site (page-by-page comparison)");
       console.error("  --proceed               Resume from saved progress");
       console.error("  --perf                  Enable performance metrics collection");
@@ -65,6 +67,7 @@ async function audit() {
       console.error("Examples:");
       console.error("  node robots.js --origin=https://example.com");
       console.error("  node robots.js --origin=https://example.com --perf");
+      console.error("  node robots.js --sitemap=./sitemap.xml --perf");
       console.error("  node robots.js --origin=https://example.com --config=my-config.json");
       console.error("  node robots.js --init-config");
       console.error("");
@@ -87,21 +90,32 @@ async function audit() {
       args.concurrency = config.crawl.concurrency;
     }
 
-    // Additional URL validation
-    const urlValidation = validateURL(args.origin);
-    if (!urlValidation.valid) {
-      console.error("");
-      console.error(`❌ Invalid URL: ${urlValidation.error}`);
-      console.error("");
-      process.exit(1);
+    // Additional URL validation (skip when using sitemap file)
+    if (args.origin) {
+      const urlValidation = validateURL(args.origin);
+      if (!urlValidation.valid) {
+        console.error("");
+        console.error(`❌ Invalid URL: ${urlValidation.error}`);
+        console.error("");
+        process.exit(1);
+      }
+      console.log(`✅ URL validated: ${args.origin}`);
+    } else if (args.sitemap) {
+      console.log(`📄 Using local sitemap: ${args.sitemap}`);
     }
 
-    console.log(`✅ URL validated: ${args.origin}`);
     console.log(`🔄 Concurrency: ${args.concurrency} pages at a time`);
     if (args.perf) console.log(`📊 Performance metrics: enabled`);
 
     // Check if comparison mode
     if (args.compare) {
+      if (!args.origin) {
+        console.error("");
+        console.error("❌ Comparison mode requires --origin (cannot use --sitemap with --compare)");
+        console.error("");
+        process.exit(1);
+      }
+
       // Validate compare URL
       const compareValidation = validateURL(args.compare);
       if (!compareValidation.valid) {
@@ -133,7 +147,7 @@ async function audit() {
       return;
     }
 
-    const seo = new SEOData(args.origin, args.proceed, args.perf, args.saveHtml, args.concurrency);
+    const seo = new SEOData(args.origin, args.proceed, args.perf, args.saveHtml, args.concurrency, args.sitemap);
 
     await seo.audit();
 

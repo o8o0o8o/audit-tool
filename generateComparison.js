@@ -391,6 +391,45 @@ function generateComparisonHTML(domainName, oldIndex, newIndex) {
         </div>
         ` : ''}
 
+        ${(() => {
+            const oldIns = oldAudit.insights;
+            const newIns = newAudit.insights;
+            if (!oldIns && !newIns) return '';
+            const oi = oldIns || {};
+            const ni = newIns || {};
+            const insightMetrics = [
+              { label: 'Language Mismatches', old: oi.languageMismatches ?? '-', new: ni.languageMismatches ?? '-', inverse: true },
+              { label: 'Broken Outbound Links', old: oi.brokenOutboundLinks ?? '-', new: ni.brokenOutboundLinks ?? '-', inverse: true },
+              { label: 'Near-Duplicate Pages', old: oi.nearDuplicatePages ?? '-', new: ni.nearDuplicatePages ?? '-', inverse: true },
+              { label: 'Pages Without CTAs', old: oi.pagesWithoutCTAs ?? '-', new: ni.pagesWithoutCTAs ?? '-', inverse: true },
+              { label: 'Avg Unused JS %', old: oi.avgJsUnused ?? '-', new: ni.avgJsUnused ?? '-', inverse: true },
+              { label: 'Avg Unused CSS %', old: oi.avgCssUnused ?? '-', new: ni.avgCssUnused ?? '-', inverse: true },
+            ].filter(m => m.old !== '-' || m.new !== '-');
+            if (insightMetrics.length === 0) return '';
+            return `
+        <div class="section">
+            <h2>Content & Code Insights</h2>
+            <div class="comparison-grid">
+                ${insightMetrics.map(m => {
+                  const oldVal = typeof m.old === 'number' ? m.old : 0;
+                  const newVal = typeof m.new === 'number' ? m.new : 0;
+                  const diff = newVal - oldVal;
+                  const cls = m.inverse ? deltaClass(-diff) : deltaClass(diff);
+                  return `
+                <div class="metric-card">
+                    <div class="metric-label">${m.label}</div>
+                    <div class="metric-comparison">
+                        <span class="old-value">${m.old}</span>
+                        <span class="arrow">→</span>
+                        <span class="new-value">${m.new}</span>
+                        <span class="delta ${cls}">${deltaSymbol(diff)}${diff}</span>
+                    </div>
+                </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+        })()}
+
         ${comparison.performanceDeltas ? `
         <div class="section">
             <h2>Performance Metrics Change</h2>

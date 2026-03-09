@@ -159,6 +159,7 @@ class HistoryManager {
       issues: this.extractIssuesSummary(auditData),
       performance: this.extractPerformanceSummary(auditData),
       technologies: this.extractTechnologiesSummary(auditData),
+      insights: this.extractInsightsSummary(auditData),
       quickWins: (auditData.analysis?.summary?.quickWins || []).map(qw => ({
         issue: qw.issue,
         affectedPages: qw.affectedPages,
@@ -207,6 +208,33 @@ class HistoryManager {
       avgLCP: avg(lcpValues).toFixed(0),
       avgCLS: avg(clsValues).toFixed(3),
       pagesWithMetrics: pagesWithPerf.length
+    };
+  }
+
+  extractInsightsSummary(auditData) {
+    const pages = Object.values(auditData.pageData?.pages || {});
+    if (pages.length === 0) return null;
+
+    const langMismatches = pages.filter(p => p.languageDetection?.match === false).length;
+    const brokenOutbound = pages.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length || 0), 0);
+    const similarPages = pages.filter(p => p.contentSimilarity?.similarPages?.length > 0).length;
+    const noCta = pages.filter(p => p.ctaData?.summary?.total === 0).length;
+
+    const coveragePages = pages.filter(p => p.codeCoverage?.js?.ratio != null);
+    const avgJsUnused = coveragePages.length > 0
+      ? +(coveragePages.reduce((s, p) => s + p.codeCoverage.js.ratio, 0) / coveragePages.length).toFixed(1)
+      : null;
+    const avgCssUnused = coveragePages.length > 0 && coveragePages.some(p => p.codeCoverage?.css?.ratio != null)
+      ? +(coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).reduce((s, p) => s + p.codeCoverage.css.ratio, 0) / coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).length).toFixed(1)
+      : null;
+
+    return {
+      languageMismatches: langMismatches,
+      brokenOutboundLinks: brokenOutbound,
+      nearDuplicatePages: similarPages,
+      pagesWithoutCTAs: noCta,
+      avgJsUnused,
+      avgCssUnused,
     };
   }
 
@@ -283,6 +311,18 @@ class HistoryManager {
       };
     }
 
+    // Compare insight metrics
+    if (oldAudit.insights && newAudit.insights) {
+      comparison.insightDeltas = {};
+      for (const key of ['languageMismatches', 'brokenOutboundLinks', 'nearDuplicatePages', 'pagesWithoutCTAs', 'avgJsUnused', 'avgCssUnused']) {
+        const oldVal = oldAudit.insights[key];
+        const newVal = newAudit.insights[key];
+        if (oldVal != null && newVal != null) {
+          comparison.insightDeltas[key] = newVal - oldVal;
+        }
+      }
+    }
+
     // Detect fixed issues and new issues
     const oldIssues = new Set(Object.keys(oldAudit.issues));
     const newIssues = new Set(Object.keys(newAudit.issues));
@@ -338,7 +378,13 @@ class HistoryManager {
         lcp: history.audits.map(a => a.performance?.avgLCP || null).filter(v => v !== null),
         cls: history.audits.map(a => a.performance?.avgCLS || null).filter(v => v !== null)
       },
-      issueTrends
+      issueTrends,
+      insights: {
+        languageMismatches: history.audits.map(a => a.insights?.languageMismatches ?? null),
+        brokenOutboundLinks: history.audits.map(a => a.insights?.brokenOutboundLinks ?? null),
+        nearDuplicatePages: history.audits.map(a => a.insights?.nearDuplicatePages ?? null),
+        avgJsUnused: history.audits.map(a => a.insights?.avgJsUnused ?? null),
+      }
     };
   }
 

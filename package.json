@@ -11,7 +11,7 @@
   },
   "scripts": {
     "audit": "node start.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test 'tests/**/*.test.js'"
   },
   "author": "Sergey Labut",
   "license": "ISC",

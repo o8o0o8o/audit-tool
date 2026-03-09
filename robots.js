@@ -306,6 +306,7 @@ async function audit() {
       exclude: args.exclude,
       limit: args.limit,
       dryRun: args.dryRun,
+      screenshots: args.screenshots,
       cruxApiKey: config.apiKeys?.crux || null,
     });
     _seoInstance = seo;

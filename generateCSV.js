@@ -30,7 +30,11 @@ function generatePagesCSV(jsonData) {
      'Word Count', 'Text/HTML %', 'Readability',
      'Security Score', 'Cache Score', 'A11y Score', 'Content Score',
      'Images Total', 'Images Lazy', 'Incoming Links',
-     'Missing Meta Count', 'Render Blocking', 'Has Errors']
+     'Missing Meta Count', 'Render Blocking', 'Has Errors',
+     'Detected Language', 'Lang Match', 'Internal PageRank',
+     'CTAs Total', 'CTAs Above Fold', 'Forms',
+     'JS Unused %', 'CSS Unused %',
+     'Broken Outbound Links', 'Main Content Words', 'Boilerplate %']
   ];
 
   Object.entries(pages).forEach(([url, data]) => {
@@ -72,7 +76,18 @@ function generatePagesCSV(jsonData) {
       data.incomingLinksCount || 0,
       data.missingMetaTags?.length || 0,
       data.resourceOptimization?.renderBlocking?.totalBlocking || '',
-      (data.status >= 400 || data.statusCode >= 400) ? 'Yes' : 'No'
+      (data.status >= 400 || data.statusCode >= 400) ? 'Yes' : 'No',
+      data.languageDetection?.detectedLanguage || '',
+      data.languageDetection?.match != null ? (data.languageDetection.match ? 'Yes' : 'No') : '',
+      data.internalPageRank != null ? data.internalPageRank.toFixed(6) : '',
+      data.ctaData?.summary?.total ?? '',
+      data.ctaData?.summary?.aboveFoldCount ?? '',
+      data.ctaData?.summary?.forms ?? '',
+      data.codeCoverage?.js?.ratio ?? '',
+      data.codeCoverage?.css?.ratio ?? '',
+      data.outboundLinkHealth?.broken?.length ?? '',
+      data.contentQuality?.wordCountBySection?.main ?? '',
+      data.contentQuality?.wordCountBySection?.boilerplateRatio ?? ''
     ].map(escapeCSV));
   });
 

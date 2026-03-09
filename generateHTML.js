@@ -34,6 +34,7 @@ const {
   getPagesTable,
   getTechnologyStack,
   getSourceCodeAnalysis,
+  getContentInsights,
 } = require("./lib/reports/sections");
 
 function generateHTML(file, domainName, outputPath = null) {
@@ -105,6 +106,7 @@ function generateHTML(file, domainName, outputPath = null) {
           <a href="#top-issues" title="Top Issues">⚠️<span class="nav-label">Issues</span></a>
           <a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>
           <a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>
+          <a href="#content-insights" title="Content Insights">🔍<span class="nav-label">Insights</span></a>
           <a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>
       </nav>
 
@@ -293,6 +295,8 @@ function generateHTML(file, domainName, outputPath = null) {
           ${getTechnologyStack({ pages })}
 
           ${getSourceCodeAnalysis({ jsonData })}
+
+          ${getContentInsights({ jsonData })}
 
           ${getConfigInfo({ jsonData, pages })}
 

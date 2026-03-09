@@ -37,7 +37,6 @@ audit-tool/
 ├── validators.js               # Input validation and sanitization
 ├── lib/
 │   ├── args-parser.js          # CLI argument parsing
-│   ├── args-parser.js          # CLI argument parsing
 │   ├── config-loader.js        # Configuration file loading (.seoauditrc)
 │   ├── constants.js            # Centralized configuration and thresholds
 │   ├── utils.js                # Shared utility functions
@@ -48,14 +47,18 @@ audit-tool/
 │   │   ├── analytics/
 │   │   │   └── analytics-tracking-analyzer.js  # GA4, GTM verification
 │   │   ├── content/
-│   │   │   ├── content-quality-analyzer.js  # Readability, word count
+│   │   │   ├── content-quality-analyzer.js  # Readability, word count, word count by section
+│   │   │   ├── cta-detector-analyzer.js     # CTA detection (buttons, forms, tel/mailto links)
 │   │   │   ├── freshness-analyzer.js        # Content freshness, update signals
+│   │   │   ├── language-detection-analyzer.js # Trigram-based language detection, lang attr matching
 │   │   │   ├── link-quality-analyzer.js     # Link analysis
+│   │   │   ├── outbound-link-checker.js     # External link health checking with rate limiting
 │   │   │   └── thin-content-analyzer.js     # Thin/insufficient content detection
 │   │   ├── international/
 │   │   │   └── international-seo-analyzer.js  # hreflang validation
 │   │   ├── performance/
 │   │   │   ├── caching-analyzer.js          # CDN, cache headers
+│   │   │   ├── code-coverage-analyzer.js    # JS/CSS unused code via CDP Coverage API
 │   │   │   ├── image-optimization-analyzer.js  # Image optimization
 │   │   │   └── resource-optimization-analyzer.js  # Render-blocking
 │   │   ├── security/
@@ -68,16 +71,19 @@ audit-tool/
 │   │   │   ├── heading-analyzer.js          # H1-H6 structure
 │   │   │   ├── image-analyzer.js            # Alt text validation
 │   │   │   ├── indexability-analyzer.js     # Canonical, noindex
+│   │   │   ├── response-header-analyzer.js   # Vary, Link, X-Robots-Tag, Content-Language headers
 │   │   │   ├── structured-data-analyzer.js  # Schema.org markup
 │   │   │   ├── technical-seo-analyzer.js    # Meta refresh, CMS detection, JS frameworks, DOCTYPE, iframes, HTML size
 │   │   │   └── url-architecture-analyzer.js # URL structure, parameters, depth
 │   │   ├── site-wide/
 │   │   │   ├── analytics-validator.js       # Cross-site tracking
+│   │   │   ├── content-similarity-analyzer.js # Near-duplicate content via Jaccard similarity
 │   │   │   ├── duplicate-checker.js         # Duplicate content
 │   │   │   ├── indexability-validator.js    # Site-wide indexability
 │   │   │   ├── international-seo-validator.js  # Language consistency
 │   │   │   ├── keyword-cannibalisation-analyzer.js # Keyword conflicts detection
 │   │   │   ├── link-structure-analyzer.js   # Internal link patterns
+│   │   │   ├── internal-pagerank-analyzer.js # Iterative PageRank on internal link graph
 │   │   │   ├── link-depth-analyzer.js       # Orphan pages, link depth analysis
 │   │   │   ├── social-media-validator.js    # Social meta tags
 │   │   │   └── structured-data-validator.js # Schema consistency
@@ -107,7 +113,10 @@ audit-tool/
 │   │       ├── historical-progress.js
 │   │       ├── charts-section.js
 │   │       ├── config-info.js
-│   │       └── pages-table.js
+│   │       ├── pages-table.js
+│   │       ├── content-insights.js    # New insights: PageRank, similarity, language, CTAs, coverage
+│   │       ├── technology-stack.js
+│   │       └── source-code-analysis.js
 │   ├── scoring/
 │   │   └── score-calculator.js  # Score calculation and recommendations
 │   ├── storage/
@@ -117,6 +126,8 @@ audit-tool/
 │       ├── progress-reporter.js # Real-time crawl progress display
 │       └── cli-summary.js       # CLI summary output after audit
 ├── package.json
+├── tests/
+│   └── analyzers.test.js        # Unit tests for analyzers (node --test)
 └── README.md
 ```
 
@@ -274,7 +285,7 @@ npx playwright install
 
 ### Running an Audit
 ```bash
-node start --origin=<website-url> [--perf] [--save-html] [--proceed] [--concurrency=<number>]
+node start --origin=<website-url> [--perf] [--save-html] [--screenshots] [--proceed] [--concurrency=<number>]
 ```
 
 ### Export to CSV

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Enable TypeScript imports via tsx
+require('tsx/cjs');
+
 // Load .env file if present
 const fs = require("fs");
 const path = require("path");

@@ -1,3 +1,6 @@
+// Enable TypeScript imports via tsx
+require('tsx/cjs');
+
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');

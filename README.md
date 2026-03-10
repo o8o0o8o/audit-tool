@@ -14,26 +14,26 @@ npx playwright install
 ### Basic Audit
 
 ```bash
-node start --origin=https://example.com
+npx tsx start.ts --origin=https://example.com
 ```
 
 ### With Options
 
 ```bash
 # Enable performance metrics collection (LCP, CLS, TTFB)
-node start --origin=https://example.com --perf
+npx tsx start.ts --origin=https://example.com --perf
 
 # Resume from saved progress
-node start --origin=https://example.com --proceed
+npx tsx start.ts --origin=https://example.com --proceed
 
 # Save HTML snapshots of each page
-node start --origin=https://example.com --save-html
+npx tsx start.ts --origin=https://example.com --save-html
 
 # Set parallel crawling (faster audits)
-node start --origin=https://example.com --concurrency=10
+npx tsx start.ts --origin=https://example.com --concurrency=10
 
 # Combine options
-node start --origin=https://example.com --perf --save-html --proceed --concurrency=10
+npx tsx start.ts --origin=https://example.com --perf --save-html --proceed --concurrency=10
 ```
 
 **Options:**
@@ -56,7 +56,7 @@ Create a `.seoauditrc` file to customize thresholds and settings:
 
 ```bash
 # Generate sample config
-node start --init-config
+npx tsx start.ts --init-config
 ```
 
 Example `.seoauditrc`:
@@ -86,7 +86,7 @@ Example `.seoauditrc`:
 ### Export to CSV
 
 ```bash
-node generateCSV.js audit-results/domain.com/2024-01-15_10-30-00/SEOAnalysis__domain.com.json.gz
+npx tsx generateCSV.ts audit-results/domain.com/2024-01-15_10-30-00/SEOAnalysis__domain.com.json.gz
 ```
 
 Creates CSV files in `domain.com_csv_exports/`:
@@ -100,10 +100,10 @@ Creates CSV files in `domain.com_csv_exports/`:
 
 ```bash
 # List available audit history
-node historyManager.js list domain.com
+npx tsx historyManager.ts list domain.com
 
 # Compare two audits (by index from list)
-node generateComparison.js domain.com 0 1
+npx tsx generateComparison.ts domain.com 0 1
 ```
 
 Creates `domain.com_comparison_0_vs_1.html` with side-by-side comparison.
@@ -112,19 +112,19 @@ Creates `domain.com_comparison_0_vs_1.html` with side-by-side comparison.
 
 ```bash
 # Save current audit to history
-node historyManager.js save audit-results/domain.com/2024-01-15_10-30-00/SEOAnalysis__domain.com.json.gz
+npx tsx historyManager.ts save audit-results/domain.com/2024-01-15_10-30-00/SEOAnalysis__domain.com.json.gz
 
 # List all audits for a domain
-node historyManager.js list domain.com
+npx tsx historyManager.ts list domain.com
 
 # Compare two historical audits
-node historyManager.js compare domain.com 0 1
+npx tsx historyManager.ts compare domain.com 0 1
 ```
 
 ### Programmatic Usage
 
-```javascript
-const { SEOData } = require('./robots');
+```typescript
+import { SEOData } from './robots';
 
 // Create audit instance
 const seo = new SEOData(

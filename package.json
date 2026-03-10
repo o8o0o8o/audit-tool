@@ -7,11 +7,14 @@
     "seo-audit": "./start.js"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
-    "audit": "node start.js",
-    "test": "node --test 'tests/**/*.test.js'"
+    "audit": "tsx start.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test 'tests/**/*.test.js'",
+    "test:ts": "tsx --test 'tests/**/*.test.ts'"
   },
   "author": "Sergey Labut",
   "license": "ISC",
@@ -21,6 +24,8 @@
     "web-vitals": "^4.2.4"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2"
+    "@types/node": "^22.19.15",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

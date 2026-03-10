@@ -3,12 +3,12 @@
  * Provides secure validation for user inputs and URLs
  */
 
+import type { ValidationResult } from './lib/types';
+
 /**
  * Validates and sanitizes a URL
- * @param {string} urlString - URL to validate
- * @returns {{valid: boolean, url?: URL, error?: string}}
  */
-function validateURL(urlString) {
+export function validateURL(urlString: string): ValidationResult {
   if (!urlString || typeof urlString !== 'string') {
     return { valid: false, error: 'URL must be a non-empty string' };
   }
@@ -49,36 +49,28 @@ function validateURL(urlString) {
 
     const isPrivate = privatePatterns.some(pattern => pattern.test(url.hostname));
     if (isPrivate) {
-      console.warn(`⚠️  Warning: Auditing private/local address: ${url.hostname}`);
+      console.warn(`\u26A0\uFE0F  Warning: Auditing private/local address: ${url.hostname}`);
     }
 
     return { valid: true, url };
   } catch (error) {
-    return { valid: false, error: `Invalid URL: ${error.message}` };
+    return { valid: false, error: `Invalid URL: ${(error as Error).message}` };
   }
 }
 
 /**
  * Sanitizes a filename to prevent path traversal
- * @param {string} filename - Filename to sanitize
- * @returns {string} - Safe filename
  */
-function sanitizeFilename(filename) {
+export function sanitizeFilename(filename: string): string {
   if (!filename) return 'unnamed';
 
   const sanitized = filename
-    // Remove path separators
     .replace(/[\/\\]/g, '_')
-    // Remove null bytes (raw and URL-encoded)
     .replace(/\0/g, '')
     .replace(/%00/gi, '')
-    // Remove control characters
     .replace(/[\x00-\x1f\x7f]/g, '')
-    // Remove dangerous characters
     .replace(/[<>:"|?*]/g, '_')
-    // Remove leading/trailing dots and spaces
     .replace(/^[\s.]+|[\s.]+$/g, '')
-    // Limit length
     .substring(0, 255);
 
   return sanitized || 'unnamed';
@@ -86,10 +78,14 @@ function sanitizeFilename(filename) {
 
 /**
  * Validates command-line arguments
- * @param {object} args - Parsed arguments object
- * @returns {{valid: boolean, error?: string}}
  */
-function validateArguments(args) {
+export function validateArguments(args: {
+  origin?: string;
+  sitemap?: string;
+  compareSitemap?: string;
+  perf?: boolean | string;
+  proceed?: boolean | string;
+}): { valid: boolean; error?: string } {
   // Allow --sitemap without --origin (origin is derived from sitemap URLs)
   if (!args.origin && !args.sitemap) {
     return { valid: false, error: 'Missing required argument: --origin (or --sitemap=<file>)' };
@@ -135,56 +131,44 @@ function validateArguments(args) {
 
 /**
  * Sanitizes a domain name for use in filenames
- * @param {string} domain - Domain name
- * @returns {string} - Sanitized domain
  */
-function sanitizeDomainName(domain) {
+export function sanitizeDomainName(domain: string): string {
   if (!domain) return 'unknown';
 
   return domain
     .toLowerCase()
-    // Remove protocol
     .replace(/^https?:\/\//, '')
-    // Remove www.
     .replace(/^www\./, '')
-    // Remove trailing slash
     .replace(/\/$/, '')
-    // Remove port
     .replace(/:\d+$/, '')
-    // Keep only alphanumeric, dots, and hyphens
     .replace(/[^a-z0-9.-]/g, '_')
-    // Remove leading/trailing dots and hyphens
     .replace(/^[.-]+|[.-]+$/g, '')
-    // Collapse multiple underscores
     .replace(/_+/g, '_')
-    // Limit length
     .substring(0, 100);
 }
 
 /**
  * Checks if a string contains potential injection patterns
- * @param {string} input - Input to check
- * @returns {boolean} - True if suspicious patterns found
  */
-function containsSuspiciousPatterns(input) {
+export function containsSuspiciousPatterns(input: string): boolean {
   if (!input || typeof input !== 'string') return false;
 
   const suspiciousPatterns = [
-    /[;&|`$(){}[\]]/,           // Shell metacharacters
-    /<script/i,                  // XSS attempts
-    /javascript:/i,              // JS protocol
-    /on\w+\s*=/i,               // Event handlers (onclick=, onerror=, etc.)
-    /\.\.\//,                    // Path traversal
-    /\0/,                        // Null bytes
-    /%00/i,                      // URL-encoded null bytes
-    /\beval\s*\(/i,             // eval() calls
-    /\bFunction\s*\(/i,         // Function() constructor
-    /\$\{[^}]+\}/,              // Template literal expressions ${...}
-    /\bnew\s+Function\b/i,      // new Function()
-    /\bsetTimeout\s*\([^,]*,/i, // setTimeout with string arg
-    /\bsetInterval\s*\([^,]*,/i, // setInterval with string arg
-    /data:\s*text\/html/i,      // Data URLs with HTML
-    /vbscript:/i,               // VBScript protocol
+    /[;&|`$(){}[\]]/,
+    /<script/i,
+    /javascript:/i,
+    /on\w+\s*=/i,
+    /\.\.\//,
+    /\0/,
+    /%00/i,
+    /\beval\s*\(/i,
+    /\bFunction\s*\(/i,
+    /\$\{[^}]+\}/,
+    /\bnew\s+Function\b/i,
+    /\bsetTimeout\s*\([^,]*,/i,
+    /\bsetInterval\s*\([^,]*,/i,
+    /data:\s*text\/html/i,
+    /vbscript:/i,
   ];
 
   return suspiciousPatterns.some(pattern => pattern.test(input));
@@ -193,20 +177,19 @@ function containsSuspiciousPatterns(input) {
 /**
  * Rate limiting helper for preventing abuse
  */
-class RateLimiter {
-  constructor(maxRequests = 10, windowMs = 1000) {
+export class RateLimiter {
+  private maxRequests: number;
+  private windowMs: number;
+  private requests: number[];
+
+  constructor(maxRequests: number = 10, windowMs: number = 1000) {
     this.maxRequests = maxRequests;
     this.windowMs = windowMs;
     this.requests = [];
   }
 
-  /**
-   * Checks if request is allowed
-   * @returns {boolean}
-   */
-  isAllowed() {
+  isAllowed(): boolean {
     const now = Date.now();
-    // Remove old requests outside the window
     this.requests = this.requests.filter(time => now - time < this.windowMs);
 
     if (this.requests.length >= this.maxRequests) {
@@ -217,11 +200,7 @@ class RateLimiter {
     return true;
   }
 
-  /**
-   * Gets time until next request is allowed (ms)
-   * @returns {number}
-   */
-  getTimeUntilReset() {
+  getTimeUntilReset(): number {
     if (this.requests.length === 0) return 0;
     const oldestRequest = Math.min(...this.requests);
     const resetTime = oldestRequest + this.windowMs;
@@ -231,10 +210,8 @@ class RateLimiter {
 
 /**
  * Validates a repository path for source code analysis
- * @param {string} repoPath - Path to the repository
- * @returns {{valid: boolean, error?: string}}
  */
-function validateRepoPath(repoPath) {
+export function validateRepoPath(repoPath: string): ValidationResult {
   if (!repoPath || typeof repoPath !== 'string') {
     return { valid: false, error: 'Repository path must be a non-empty string' };
   }
@@ -242,15 +219,12 @@ function validateRepoPath(repoPath) {
   const fs = require('fs');
   const path = require('path');
 
-  // Resolve to absolute path
-  const resolved = path.resolve(repoPath);
+  const resolved: string = path.resolve(repoPath);
 
-  // Check for path traversal attempts
   if (repoPath.includes('\0')) {
     return { valid: false, error: 'Repository path contains invalid characters' };
   }
 
-  // Check path exists and is a directory
   try {
     const stats = fs.statSync(resolved);
     if (!stats.isDirectory()) {
@@ -260,7 +234,6 @@ function validateRepoPath(repoPath) {
     return { valid: false, error: `Directory not found: ${resolved}` };
   }
 
-  // Check for package.json
   const packageJsonPath = path.join(resolved, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
     return { valid: false, error: `No package.json found in: ${resolved}` };
@@ -269,25 +242,25 @@ function validateRepoPath(repoPath) {
   return { valid: true, resolvedPath: resolved };
 }
 
-// Alias for naming consistency (camelCase preferred in Node.js)
-const validateUrl = validateURL;
+// Alias for naming consistency
+export const validateUrl = validateURL;
 
+// CommonJS compatibility
 module.exports = {
   validateURL,
-  validateUrl,  // Alias for consistency with lib/utils.js naming convention
+  validateUrl,
   sanitizeFilename,
   validateArguments,
   validateRepoPath,
   sanitizeDomainName,
   containsSuspiciousPatterns,
-  RateLimiter
+  RateLimiter,
 };
 
 // CLI testing
 if (require.main === module) {
   console.log('Testing validators...\n');
 
-  // Test URL validation
   const testURLs = [
     'https://example.com',
     'http://localhost:3000',
@@ -300,7 +273,7 @@ if (require.main === module) {
   console.log('URL Validation Tests:');
   testURLs.forEach(url => {
     const result = validateURL(url);
-    console.log(`  ${url}: ${result.valid ? '✅ Valid' : '❌ ' + result.error}`);
+    console.log(`  ${url}: ${result.valid ? '\u2705 Valid' : '\u274C ' + result.error}`);
   });
 
   console.log('\nFilename Sanitization Tests:');
@@ -312,7 +285,7 @@ if (require.main === module) {
   ];
 
   testFilenames.forEach(filename => {
-    console.log(`  "${filename}" → "${sanitizeFilename(filename)}"`);
+    console.log(`  "${filename}" \u2192 "${sanitizeFilename(filename)}"`);
   });
 
   console.log('\nDomain Sanitization Tests:');
@@ -323,12 +296,12 @@ if (require.main === module) {
   ];
 
   testDomains.forEach(domain => {
-    console.log(`  "${domain}" → "${sanitizeDomainName(domain)}"`);
+    console.log(`  "${domain}" \u2192 "${sanitizeDomainName(domain)}"`);
   });
 
   console.log('\nRate Limiter Test:');
   const limiter = new RateLimiter(3, 1000);
   for (let i = 0; i < 5; i++) {
-    console.log(`  Request ${i + 1}: ${limiter.isAllowed() ? '✅ Allowed' : '❌ Rate limited'}`);
+    console.log(`  Request ${i + 1}: ${limiter.isAllowed() ? '\u2705 Allowed' : '\u274C Rate limited'}`);
   }
 }

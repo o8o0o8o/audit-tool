@@ -609,14 +609,14 @@ class AuditOrchestrator {
    * @private
    */
   static #processValidationResult(result: any, saveError: Function) {
-    // Process issues
+    // Process issues (support both message/detail and title/description field names)
     for (const issue of result.issues || []) {
-      saveError(issue.message, issue.detail, issue.severity);
+      saveError(issue.message || issue.title, issue.detail || issue.description, issue.severity);
     }
 
     // Process warnings
     for (const warning of result.warnings || []) {
-      saveError(warning.message, warning.detail, warning.severity);
+      saveError(warning.message || warning.title, warning.detail || warning.description, warning.severity);
     }
   }
 

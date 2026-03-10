@@ -303,8 +303,8 @@ class LinkingOpportunityAnalyzer {
     if (opportunities.length > totalPages * 0.3) {
       const highValueOpps = opportunities.filter(o => o.relevanceScore >= 60);
       issues.push({
-        title: 'Significant internal linking opportunities',
-        description: `${opportunities.length} pages could benefit from additional internal links. ${highValueOpps.length} have high-value opportunities (score ≥60). Improving internal linking can boost page authority and help search engines discover content.`,
+        message: 'Significant internal linking opportunities',
+        detail: `${opportunities.length} pages could benefit from additional internal links. ${highValueOpps.length} have high-value opportunities (score ≥60). Improving internal linking can boost page authority and help search engines discover content.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -314,8 +314,8 @@ class LinkingOpportunityAnalyzer {
     if (excellentOpps.length > 5) {
       const topPages = excellentOpps.slice(0, 3).map(o => o.sourcePage.split('/').pop() || 'homepage').join(', ');
       issues.push({
-        title: 'High-impact linking opportunities available',
-        description: `${excellentOpps.length} pages have excellent internal linking opportunities (score ≥80). Top pages: ${topPages}. These links would significantly improve content discoverability.`,
+        message: 'High-impact linking opportunities available',
+        detail: `${excellentOpps.length} pages have excellent internal linking opportunities (score ≥80). Top pages: ${topPages}. These links would significantly improve content discoverability.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -337,8 +337,8 @@ class LinkingOpportunityAnalyzer {
 
     if (orphanCandidates.length > 5) {
       issues.push({
-        title: 'Pages with few links could receive more',
-        description: `${orphanCandidates.length} pages have very few incoming links but share content themes with other pages. Adding links to these pages would improve their visibility.`,
+        message: 'Pages with few links could receive more',
+        detail: `${orphanCandidates.length} pages have very few incoming links but share content themes with other pages. Adding links to these pages would improve their visibility.`,
         severity: SEVERITY.LOW,
       });
     }

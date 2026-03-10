@@ -153,7 +153,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         type: 'Empty anchor text',
         count: linkAnalysis.emptyAnchorLinks.length,
-        severity: 'MEDIUM'
+        severity: 'medium'
       });
     }
 
@@ -161,7 +161,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         type: 'Generic anchor text',
         count: linkAnalysis.genericAnchorLinks.length,
-        severity: 'LOW'
+        severity: 'low'
       });
     }
 
@@ -169,7 +169,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         type: 'Broken internal links',
         count: linkAnalysis.brokenLinks.length,
-        severity: 'HIGH'
+        severity: 'high'
       });
     }
 
@@ -177,7 +177,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         type: 'Links to non-indexable pages',
         count: linkAnalysis.linksToNonIndexable.length,
-        severity: 'MEDIUM'
+        severity: 'medium'
       });
     }
 
@@ -186,7 +186,7 @@ class LinkQualityAnalyzer {
         type: 'Links pointing to redirects',
         count: linkAnalysis.redirectLinks.length,
         details: linkAnalysis.redirectLinks.slice(0, 5).map(l => `${l.href} -> ${l.redirectsTo}`),
-        severity: linkAnalysis.redirectLinks.length > 5 ? 'MEDIUM' : 'LOW'
+        severity: linkAnalysis.redirectLinks.length > 5 ? 'medium' : 'low'
       });
     }
 
@@ -202,7 +202,7 @@ class LinkQualityAnalyzer {
         type: 'Internal links with nofollow',
         count: internalNofollowLinks.length,
         details: internalNofollowLinks.slice(0, 5).map(l => l.href),
-        severity: internalNofollowLinks.length > 3 ? 'MEDIUM' : 'LOW'
+        severity: internalNofollowLinks.length > 3 ? 'medium' : 'low'
       });
     }
 
@@ -211,7 +211,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         type: 'Too many on-page links',
         count: linkAnalysis.totalLinks,
-        severity: linkAnalysis.totalLinks > 300 ? 'HIGH' : 'MEDIUM'
+        severity: linkAnalysis.totalLinks > 300 ? 'high' : 'medium'
       });
     }
 

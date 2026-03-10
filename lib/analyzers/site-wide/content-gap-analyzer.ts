@@ -322,8 +322,8 @@ class ContentGapAnalyzer {
     // Issue 1: Many low-coverage topics
     if (coverage.low.length > 10) {
       issues.push({
-        title: 'Many topics with thin coverage',
-        description: `${coverage.low.length} topic clusters are covered by only 1 page each. Consider creating more in-depth content or pillar pages to improve topical authority.`,
+        message: 'Many topics with thin coverage',
+        detail: `${coverage.low.length} topic clusters are covered by only 1 page each. Consider creating more in-depth content or pillar pages to improve topical authority.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -333,8 +333,8 @@ class ContentGapAnalyzer {
     if (highOpportunityGaps.length > 0) {
       const topTopics = highOpportunityGaps.slice(0, 5).map(g => g.topic).join(', ');
       issues.push({
-        title: 'High-opportunity content gaps identified',
-        description: `${highOpportunityGaps.length} topics have high opportunity scores but limited page coverage. Top opportunities: ${topTopics}`,
+        message: 'High-opportunity content gaps identified',
+        detail: `${highOpportunityGaps.length} topics have high opportunity scores but limited page coverage. Top opportunities: ${topTopics}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -342,8 +342,8 @@ class ContentGapAnalyzer {
     // Issue 3: Keyword concentration
     if (coverage.high.length < coverage.low.length * 0.2) {
       issues.push({
-        title: 'Content may lack topical focus',
-        description: `Most topics (${coverage.low.length}) are covered by single pages, while only ${coverage.high.length} topics have deep coverage. Consider building out topic clusters with supporting content.`,
+        message: 'Content may lack topical focus',
+        detail: `Most topics (${coverage.low.length}) are covered by single pages, while only ${coverage.high.length} topics have deep coverage. Consider building out topic clusters with supporting content.`,
         severity: SEVERITY.LOW,
       });
     }

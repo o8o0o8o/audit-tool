@@ -240,8 +240,8 @@ class PageSegmentAnalyzer {
       const indexableSearchPages = segments.search.statusBreakdown['2xx'] || 0;
       if (indexableSearchPages > 10) {
         issues.push({
-          title: `Search pages may cause duplicate content`,
-          description: `${indexableSearchPages} search result pages are returning 2xx status. Consider blocking search pages from indexing to prevent duplicate content issues.`,
+          message: `Search pages may cause duplicate content`,
+          detail: `${indexableSearchPages} search result pages are returning 2xx status. Consider blocking search pages from indexing to prevent duplicate content issues.`,
           severity: SEVERITY.MEDIUM,
           segment: 'search',
         });
@@ -252,8 +252,8 @@ class PageSegmentAnalyzer {
     Object.values(segments).forEach((segment: any) => {
       if (segment.count > 5 && segment.avgWordCount < 100 && segment.type !== 'search' && segment.type !== 'api' && segment.type !== 'account' && segment.type !== 'checkout') {
         issues.push({
-          title: `${segment.label} have thin content`,
-          description: `${segment.count} page(s) in ${segment.label} segment have an average of only ${segment.avgWordCount} words. Consider adding more content.`,
+          message: `${segment.label} have thin content`,
+          detail: `${segment.count} page(s) in ${segment.label} segment have an average of only ${segment.avgWordCount} words. Consider adding more content.`,
           severity: SEVERITY.MEDIUM,
           segment: segment.type,
         });
@@ -268,8 +268,8 @@ class PageSegmentAnalyzer {
 
       if (errorRate > 20 && segment.count > 5) {
         issues.push({
-          title: `High error rate in ${segment.label}`,
-          description: `${errorRate.toFixed(0)}% of pages in ${segment.label} return 4xx/5xx errors (${segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']} pages). Investigate and fix these errors.`,
+          message: `High error rate in ${segment.label}`,
+          detail: `${errorRate.toFixed(0)}% of pages in ${segment.label} return 4xx/5xx errors (${segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']} pages). Investigate and fix these errors.`,
           severity: SEVERITY.HIGH,
           segment: segment.type,
         });
@@ -283,8 +283,8 @@ class PageSegmentAnalyzer {
 
     if (otherPercentage > 70 && totalPages > 20) {
       issues.push({
-        title: `Unstructured URL patterns`,
-        description: `${otherPercentage.toFixed(0)}% of pages don't follow standard URL patterns. Consider organizing pages into clear categories (blog, products, etc.) for better SEO.`,
+        message: `Unstructured URL patterns`,
+        detail: `${otherPercentage.toFixed(0)}% of pages don't follow standard URL patterns. Consider organizing pages into clear categories (blog, products, etc.) for better SEO.`,
         severity: SEVERITY.LOW,
         segment: 'other',
       });
@@ -295,8 +295,8 @@ class PageSegmentAnalyzer {
       const indexableApi = segments.api.statusBreakdown['2xx'] || 0;
       if (indexableApi > 0) {
         issues.push({
-          title: `API/technical pages may be indexed`,
-          description: `${indexableApi} API or technical pages are returning 2xx status and may be indexed. These should typically return 404 or be blocked by robots.txt.`,
+          message: `API/technical pages may be indexed`,
+          detail: `${indexableApi} API or technical pages are returning 2xx status and may be indexed. These should typically return 404 or be blocked by robots.txt.`,
           severity: SEVERITY.MEDIUM,
           segment: 'api',
         });

@@ -18,7 +18,8 @@ This tool performs comprehensive SEO audits by:
 
 ## Technology Stack
 
-- **Runtime**: Node.js
+- **Language**: TypeScript (strict mode incrementally enabled)
+- **Runtime**: Node.js with tsx (TypeScript executor)
 - **Browser Automation**: Playwright (Chromium)
 - **HTML Parsing**: node-html-parser
 - **Performance Monitoring**: Web Vitals API
@@ -28,128 +29,128 @@ This tool performs comprehensive SEO audits by:
 
 ```
 audit-tool/
-├── start.js                    # Entry point - spawns audit with restart capability
-├── robots.js                   # SEOData class - thin orchestration layer (~380 lines)
-├── generateHTML.js             # HTML report generator - thin orchestrator (~190 lines)
-├── generateCSV.js              # CSV export generator
-├── generateComparison.js       # Audit comparison HTML report
-├── historyManager.js           # Historical audit tracking
-├── validators.js               # Input validation and sanitization
+├── start.ts                    # Entry point - spawns audit with restart capability
+├── robots.ts                   # SEOData class - thin orchestration layer (~380 lines)
+├── generateHTML.ts             # HTML report generator - thin orchestrator (~190 lines)
+├── generateCSV.ts              # CSV export generator
+├── generateComparison.ts       # Audit comparison HTML report
+├── historyManager.ts           # Historical audit tracking
+├── validators.ts               # Input validation and sanitization
 ├── lib/
-│   ├── args-parser.js          # CLI argument parsing
-│   ├── config-loader.js        # Configuration file loading (.seoauditrc)
-│   ├── constants.js            # Centralized configuration and thresholds
-│   ├── utils.js                # Shared utility functions
+│   ├── args-parser.ts          # CLI argument parsing
+│   ├── config-loader.ts        # Configuration file loading (.seoauditrc)
+│   ├── constants.ts            # Centralized configuration and thresholds
+│   ├── utils.ts                # Shared utility functions
 │   ├── analyzers/
 │   │   ├── accessibility/
-│   │   │   ├── accessibility-analyzer.js    # WCAG 2.1 compliance
-│   │   │   └── mobile-friendly-analyzer.js  # Mobile viewport testing
+│   │   │   ├── accessibility-analyzer.ts    # WCAG 2.1 compliance
+│   │   │   └── mobile-friendly-analyzer.ts  # Mobile viewport testing
 │   │   ├── analytics/
-│   │   │   └── analytics-tracking-analyzer.js  # GA4, GTM verification
+│   │   │   └── analytics-tracking-analyzer.ts  # GA4, GTM verification
 │   │   ├── content/
-│   │   │   ├── content-quality-analyzer.js  # Readability, word count, word count by section
-│   │   │   ├── cta-detector-analyzer.js     # CTA detection (buttons, forms, tel/mailto links)
-│   │   │   ├── freshness-analyzer.js        # Content freshness, update signals
-│   │   │   ├── language-detection-analyzer.js # Trigram-based language detection, lang attr matching
-│   │   │   ├── link-quality-analyzer.js     # Link analysis
-│   │   │   ├── outbound-link-checker.js     # External link health checking with rate limiting
-│   │   │   └── thin-content-analyzer.js     # Thin/insufficient content detection
+│   │   │   ├── content-quality-analyzer.ts  # Readability, word count, word count by section
+│   │   │   ├── cta-detector-analyzer.ts     # CTA detection (buttons, forms, tel/mailto links)
+│   │   │   ├── freshness-analyzer.ts        # Content freshness, update signals
+│   │   │   ├── language-detection-analyzer.ts # Trigram-based language detection, lang attr matching
+│   │   │   ├── link-quality-analyzer.ts     # Link analysis
+│   │   │   ├── outbound-link-checker.ts     # External link health checking with rate limiting
+│   │   │   └── thin-content-analyzer.ts     # Thin/insufficient content detection
 │   │   ├── international/
-│   │   │   └── international-seo-analyzer.js  # hreflang validation
+│   │   │   └── international-seo-analyzer.ts  # hreflang validation
 │   │   ├── performance/
-│   │   │   ├── caching-analyzer.js          # CDN, cache headers
-│   │   │   ├── code-coverage-analyzer.js    # JS/CSS unused code via CDP Coverage API
-│   │   │   ├── image-optimization-analyzer.js  # Image optimization
-│   │   │   └── resource-optimization-analyzer.js  # Render-blocking
+│   │   │   ├── caching-analyzer.ts          # CDN, cache headers
+│   │   │   ├── code-coverage-analyzer.ts    # JS/CSS unused code via CDP Coverage API
+│   │   │   ├── image-optimization-analyzer.ts  # Image optimization
+│   │   │   └── resource-optimization-analyzer.ts  # Render-blocking
 │   │   ├── security/
-│   │   │   └── security-analyzer.js         # HTTPS, security headers
+│   │   │   └── security-analyzer.ts         # HTTPS, security headers
 │   │   ├── seo/
-│   │   │   ├── advanced-schema-validator.js # Detailed schema validation (FAQ, Product, etc.)
-│   │   │   ├── aeo-analyzer.js              # AI Search Readiness (AEO), llms.txt, AI crawlers
-│   │   │   ├── crawlability-analyzer.js     # Robots.txt analysis
-│   │   │   ├── eeat-analyzer.js             # E-E-A-T signals (author, trust, expertise)
-│   │   │   ├── heading-analyzer.js          # H1-H6 structure
-│   │   │   ├── image-analyzer.js            # Alt text validation
-│   │   │   ├── indexability-analyzer.js     # Canonical, noindex
-│   │   │   ├── response-header-analyzer.js   # Vary, Link, X-Robots-Tag, Content-Language headers
-│   │   │   ├── structured-data-analyzer.js  # Schema.org markup
-│   │   │   ├── technical-seo-analyzer.js    # Meta refresh, CMS detection, JS frameworks, DOCTYPE, iframes, HTML size
-│   │   │   └── url-architecture-analyzer.js # URL structure, parameters, depth
+│   │   │   ├── advanced-schema-validator.ts # Detailed schema validation (FAQ, Product, etc.)
+│   │   │   ├── aeo-analyzer.ts              # AI Search Readiness (AEO), llms.txt, AI crawlers
+│   │   │   ├── crawlability-analyzer.ts     # Robots.txt analysis
+│   │   │   ├── eeat-analyzer.ts             # E-E-A-T signals (author, trust, expertise)
+│   │   │   ├── heading-analyzer.ts          # H1-H6 structure
+│   │   │   ├── image-analyzer.ts            # Alt text validation
+│   │   │   ├── indexability-analyzer.ts     # Canonical, noindex
+│   │   │   ├── response-header-analyzer.ts   # Vary, Link, X-Robots-Tag, Content-Language headers
+│   │   │   ├── structured-data-analyzer.ts  # Schema.org markup
+│   │   │   ├── technical-seo-analyzer.ts    # Meta refresh, CMS detection, JS frameworks, DOCTYPE, iframes, HTML size
+│   │   │   └── url-architecture-analyzer.ts # URL structure, parameters, depth
 │   │   ├── site-wide/
-│   │   │   ├── analytics-validator.js       # Cross-site tracking
-│   │   │   ├── content-similarity-analyzer.js # Near-duplicate content via Jaccard similarity
-│   │   │   ├── duplicate-checker.js         # Duplicate content
-│   │   │   ├── indexability-validator.js    # Site-wide indexability
-│   │   │   ├── international-seo-validator.js  # Language consistency
-│   │   │   ├── keyword-cannibalisation-analyzer.js # Keyword conflicts detection
-│   │   │   ├── link-structure-analyzer.js   # Internal link patterns
-│   │   │   ├── internal-pagerank-analyzer.js # Iterative PageRank on internal link graph
-│   │   │   ├── link-depth-analyzer.js       # Orphan pages, link depth analysis
-│   │   │   ├── social-media-validator.js    # Social meta tags
-│   │   │   └── structured-data-validator.js # Schema consistency
+│   │   │   ├── analytics-validator.ts       # Cross-site tracking
+│   │   │   ├── content-similarity-analyzer.ts # Near-duplicate content via Jaccard similarity
+│   │   │   ├── duplicate-checker.ts         # Duplicate content
+│   │   │   ├── indexability-validator.ts    # Site-wide indexability
+│   │   │   ├── international-seo-validator.ts  # Language consistency
+│   │   │   ├── keyword-cannibalisation-analyzer.ts # Keyword conflicts detection
+│   │   │   ├── link-structure-analyzer.ts   # Internal link patterns
+│   │   │   ├── internal-pagerank-analyzer.ts # Iterative PageRank on internal link graph
+│   │   │   ├── link-depth-analyzer.ts       # Orphan pages, link depth analysis
+│   │   │   ├── social-media-validator.ts    # Social meta tags
+│   │   │   └── structured-data-validator.ts # Schema consistency
 │   │   └── social/
-│   │       └── social-media-analyzer.js     # OG tags, Twitter cards
+│   │       └── social-media-analyzer.ts     # OG tags, Twitter cards
 │   ├── crawler/
-│   │   ├── crawler-engine.js    # Page crawling, browser management, analysis
-│   │   └── vitals-collector.js  # Core Web Vitals collection
+│   │   ├── crawler-engine.ts    # Page crawling, browser management, analysis
+│   │   └── vitals-collector.ts  # Core Web Vitals collection
 │   ├── orchestrators/
-│   │   ├── audit-orchestrator.js   # Site-wide validation, page analysis workflow
-│   │   └── progress-manager.js     # Checkpoint persistence and restoration
+│   │   ├── audit-orchestrator.ts   # Site-wide validation, page analysis workflow
+│   │   └── progress-manager.ts     # Checkpoint persistence and restoration
 │   ├── parsers/
-│   │   ├── robots-parser.js     # Robots.txt parsing
-│   │   └── sitemap-parser.js    # Sitemap XML parsing
+│   │   ├── robots-parser.ts     # Robots.txt parsing
+│   │   └── sitemap-parser.ts    # Sitemap XML parsing
 │   ├── reports/
-│   │   ├── data-processor.js    # Report data loading and processing
-│   │   ├── html-utils.js        # HTML helper functions (escaping, formatting)
-│   │   ├── metrics-metadata.js  # Thresholds and metric definitions
+│   │   ├── data-processor.ts    # Report data loading and processing
+│   │   ├── html-utils.ts        # HTML helper functions (escaping, formatting)
+│   │   ├── metrics-metadata.ts  # Thresholds and metric definitions
 │   │   └── sections/            # HTML report section generators
-│   │       ├── index.js         # Section exports
-│   │       ├── styles.js        # CSS styles
-│   │       ├── scripts.js       # JavaScript (charts, interactivity)
-│   │       ├── executive-summary.js
-│   │       ├── quick-wins.js
-│   │       ├── top-issues.js
-│   │       ├── performance-stats.js
-│   │       ├── historical-progress.js
-│   │       ├── charts-section.js
-│   │       ├── config-info.js
-│   │       ├── pages-table.js
-│   │       ├── content-insights.js    # New insights: PageRank, similarity, language, CTAs, coverage
-│   │       ├── technology-stack.js
-│   │       └── source-code-analysis.js
+│   │       ├── index.ts         # Section exports
+│   │       ├── styles.ts        # CSS styles
+│   │       ├── scripts.ts       # JavaScript (charts, interactivity)
+│   │       ├── executive-summary.ts
+│   │       ├── quick-wins.ts
+│   │       ├── top-issues.ts
+│   │       ├── performance-stats.ts
+│   │       ├── historical-progress.ts
+│   │       ├── charts-section.ts
+│   │       ├── config-info.ts
+│   │       ├── pages-table.ts
+│   │       ├── content-insights.ts    # New insights: PageRank, similarity, language, CTAs, coverage
+│   │       ├── technology-stack.ts
+│   │       └── source-code-analysis.ts
 │   ├── scoring/
-│   │   └── score-calculator.js  # Score calculation and recommendations
+│   │   └── score-calculator.ts  # Score calculation and recommendations
 │   ├── storage/
-│   │   └── file-manager.js      # File operations, compression, archiving
+│   │   └── file-manager.ts      # File operations, compression, archiving
 │   └── utils/
-│       ├── error-aggregator.js  # Error tracking and aggregation
-│       ├── progress-reporter.js # Real-time crawl progress display
-│       └── cli-summary.js       # CLI summary output after audit
+│       ├── error-aggregator.ts  # Error tracking and aggregation
+│       ├── progress-reporter.ts # Real-time crawl progress display
+│       └── cli-summary.ts       # CLI summary output after audit
 ├── package.json
 ├── tests/
-│   └── analyzers.test.js        # Unit tests for analyzers (node --test)
+│   └── analyzers.test.ts        # Unit tests for analyzers (node --test)
 └── README.md
 ```
 
 ## Key Files
 
-### start.js
+### start.ts
 Entry point that spawns the audit process as a child process. Handles process crashes by automatically restarting with `--proceed` flag to resume from saved progress.
 
-### robots.js
+### robots.ts
 Thin orchestration layer (~380 lines) containing the `SEOData` class. Exports `SEOData` for programmatic use. Delegates heavy lifting to:
-- `lib/crawler/crawler-engine.js` - Page crawling and browser management
-- `lib/orchestrators/audit-orchestrator.js` - Page analysis workflow
-- `lib/orchestrators/progress-manager.js` - Checkpoint persistence
-- `lib/utils/error-aggregator.js` - Error tracking
+- `lib/crawler/crawler-engine.ts` - Page crawling and browser management
+- `lib/orchestrators/audit-orchestrator.ts` - Page analysis workflow
+- `lib/orchestrators/progress-manager.ts` - Checkpoint persistence
+- `lib/utils/error-aggregator.ts` - Error tracking
 
-### generateHTML.js
+### generateHTML.ts
 Thin HTML report orchestrator (~190 lines). Composes reports using extracted modules:
-- `lib/reports/data-processor.js` - Data loading and processing
-- `lib/reports/html-utils.js` - HTML helper functions
+- `lib/reports/data-processor.ts` - Data loading and processing
+- `lib/reports/html-utils.ts` - HTML helper functions
 - `lib/reports/sections/` - Template section generators
 
-### lib/crawler/crawler-engine.js
+### lib/crawler/crawler-engine.ts
 Core crawling engine handling:
 - Browser lifecycle management (Playwright)
 - Batch processing with concurrency control
@@ -158,21 +159,21 @@ Core crawling engine handling:
 - Redirect chain tracking
 - Link discovery and incoming link tracking
 
-### lib/orchestrators/audit-orchestrator.js
+### lib/orchestrators/audit-orchestrator.ts
 Audit workflow coordination:
 - `analyzePages()` - Main crawling orchestration
 - `runSiteWideValidation()` - Post-crawl site-wide checks
 - Multilanguage detection
 - Orphaned page identification
 
-### lib/orchestrators/progress-manager.js
+### lib/orchestrators/progress-manager.ts
 Checkpoint persistence and restoration:
 - `loadProgress()` - Restore from checkpoint files
 - `saveProgress()` - Save with archiving support
 - Archive file management for large sites
 - Data optimization for storage
 
-### lib/args-parser.js
+### lib/args-parser.ts
 Centralized CLI argument parsing. Supports:
 - `--origin=<url>` - Target website
 - `--proceed` - Resume from saved progress
@@ -180,7 +181,7 @@ Centralized CLI argument parsing. Supports:
 - `--save-html` - Save HTML snapshots
 - `--concurrency=<n>` - Parallel crawling (1-20, default: 5)
 
-### lib/constants.js
+### lib/constants.ts
 Centralized configuration including:
 - Severity levels: CRITICAL, HIGH, MEDIUM, LOW
 - Performance thresholds: TTFB (800ms), LCP (2500ms), CLS (0.1), FCP (1800ms)
@@ -188,28 +189,28 @@ Centralized configuration including:
 - Network conditions: slow3g, fast3g, slow4g, normal
 - Meta tags to monitor (18 different tags)
 
-### lib/storage/file-manager.js
+### lib/storage/file-manager.ts
 Handles file operations with:
 - Automatic gzip compression (70-80% space reduction)
 - Auto-archiving for large sites (>5000 pages)
 - Directory structure: `audit-results/domain.com/YYYY-MM-DD_HH-MM-SS/`
 - Backward compatible with legacy uncompressed files
 
-### lib/scoring/score-calculator.js
+### lib/scoring/score-calculator.ts
 Score calculation system:
 - Overall score (0-100)
 - Category scores: SEO, Performance, Accessibility, Security, Technical
 - Quick wins identification (high impact, low effort)
 - Fix recommendations with effort estimates
 
-### historyManager.js
+### historyManager.ts
 Historical audit tracking:
 - Saves audit snapshots over time
 - Comparison between audits
 - Trend data generation
 - Detects improvements and regressions
 
-### generateCSV.js
+### generateCSV.ts
 Exports audit data to CSV files:
 - `pages_overview.csv` - All metrics per page
 - `issues_breakdown.csv` - Issues by severity
@@ -217,14 +218,14 @@ Exports audit data to CSV files:
 - `quick_wins.csv` - Prioritized actions
 - `summary.csv` - High-level statistics
 
-### generateComparison.js
+### generateComparison.ts
 Generates HTML comparison report:
 - Side-by-side score comparison
 - Category score deltas
 - Performance metrics changes
 - Improvements and regressions
 
-### validators.js
+### validators.ts
 Input validation and security:
 - URL validation with protocol checking
 - Filename sanitization (prevents path traversal)
@@ -234,46 +235,46 @@ Input validation and security:
 ## Analyzer Modules
 
 ### Accessibility
-- **accessibility-analyzer.js**: WCAG 2.1 compliance checks
-- **mobile-friendly-analyzer.js**: Mobile viewport and touch targets
+- **accessibility-analyzer.ts**: WCAG 2.1 compliance checks
+- **mobile-friendly-analyzer.ts**: Mobile viewport and touch targets
 
 ### Analytics
-- **analytics-tracking-analyzer.js**: GA4, GTM, other tracking verification
+- **analytics-tracking-analyzer.ts**: GA4, GTM, other tracking verification
 
 ### Content
-- **content-quality-analyzer.js**: Readability, word count, keyword density, text-to-HTML ratio
-- **link-quality-analyzer.js**: Internal/external link analysis
+- **content-quality-analyzer.ts**: Readability, word count, keyword density, text-to-HTML ratio
+- **link-quality-analyzer.ts**: Internal/external link analysis
 
 ### International SEO
-- **international-seo-analyzer.js**: hreflang tag validation, language consistency
+- **international-seo-analyzer.ts**: hreflang tag validation, language consistency
 
 ### Performance
-- **caching-analyzer.js**: CDN detection, cache headers, Service Worker
-- **image-optimization-analyzer.js**: Image format, size, lazy loading
-- **resource-optimization-analyzer.js**: Render-blocking resources, minification
+- **caching-analyzer.ts**: CDN detection, cache headers, Service Worker
+- **image-optimization-analyzer.ts**: Image format, size, lazy loading
+- **resource-optimization-analyzer.ts**: Render-blocking resources, minification
 
 ### Security
-- **security-analyzer.js**: HTTPS, security headers (CSP, X-Frame-Options, HSTS)
+- **security-analyzer.ts**: HTTPS, security headers (CSP, X-Frame-Options, HSTS)
 
 ### SEO
-- **aeo-analyzer.js**: AI Search Readiness (AEO) - llms.txt validation, AI crawler rules (GPTBot, ClaudeBot, PerplexityBot), semantic HTML ratio, content structure scoring, FAQ/Q&A detection
-- **crawlability-analyzer.js**: Robots.txt, crawl efficiency
-- **heading-analyzer.js**: H1-H6 structure and hierarchy
-- **image-analyzer.js**: Alt text and image metadata
-- **indexability-analyzer.js**: Canonical, noindex, nofollow
-- **structured-data-analyzer.js**: Schema.org markup validation
+- **aeo-analyzer.ts**: AI Search Readiness (AEO) - llms.txt validation, AI crawler rules (GPTBot, ClaudeBot, PerplexityBot), semantic HTML ratio, content structure scoring, FAQ/Q&A detection
+- **crawlability-analyzer.ts**: Robots.txt, crawl efficiency
+- **heading-analyzer.ts**: H1-H6 structure and hierarchy
+- **image-analyzer.ts**: Alt text and image metadata
+- **indexability-analyzer.ts**: Canonical, noindex, nofollow
+- **structured-data-analyzer.ts**: Schema.org markup validation
 
 ### Site-Wide Validators
-- **analytics-validator.js**: Cross-site tracking consistency
-- **duplicate-checker.js**: Duplicate titles and descriptions
-- **indexability-validator.js**: Site-wide indexability issues
-- **international-seo-validator.js**: Language implementation consistency
-- **link-structure-analyzer.js**: Internal link patterns
-- **social-media-validator.js**: Social meta tag consistency
-- **structured-data-validator.js**: Schema markup consistency
+- **analytics-validator.ts**: Cross-site tracking consistency
+- **duplicate-checker.ts**: Duplicate titles and descriptions
+- **indexability-validator.ts**: Site-wide indexability issues
+- **international-seo-validator.ts**: Language implementation consistency
+- **link-structure-analyzer.ts**: Internal link patterns
+- **social-media-validator.ts**: Social meta tag consistency
+- **structured-data-validator.ts**: Schema markup consistency
 
 ### Social
-- **social-media-analyzer.js**: Open Graph tags, Twitter cards
+- **social-media-analyzer.ts**: Open Graph tags, Twitter cards
 
 ## Usage
 
@@ -285,25 +286,25 @@ npx playwright install
 
 ### Running an Audit
 ```bash
-node start --origin=<website-url> [--perf] [--save-html] [--screenshots] [--proceed] [--concurrency=<number>]
+npx tsx start.ts --origin=<website-url> [--perf] [--save-html] [--screenshots] [--proceed] [--concurrency=<number>]
 ```
 
 ### Export to CSV
 ```bash
-node generateCSV.js <json-file-path>
+npx tsx generateCSV.ts <json-file-path>
 ```
 
 ### Compare Audits
 ```bash
-node historyManager.js list <domain>
-node generateComparison.js <domain> <old-index> <new-index>
+npx tsx historyManager.ts list <domain>
+npx tsx generateComparison.ts <domain> <old-index> <new-index>
 ```
 
 ### History Management
 ```bash
-node historyManager.js save <json-file>
-node historyManager.js list <domain>
-node historyManager.js compare <domain> <old> <new>
+npx tsx historyManager.ts save <json-file>
+npx tsx historyManager.ts list <domain>
+npx tsx historyManager.ts compare <domain> <old> <new>
 ```
 
 ## Output Files
@@ -407,7 +408,7 @@ viewport: { width: 414, height: 896 } // Mobile viewport
 ## Error Handling
 
 ### Automatic Restart
-If the process crashes, `start.js` automatically restarts with `--proceed` to resume from the last checkpoint.
+If the process crashes, `start.ts` automatically restarts with `--proceed` to resume from the last checkpoint.
 
 ### Retry Logic
 - Up to 3 attempts per page

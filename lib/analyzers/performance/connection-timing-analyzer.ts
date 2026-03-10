@@ -1,0 +1,342 @@
+/**
+ * Connection Timing Analyzer
+ * Analyzes DNS lookup, TCP connection, and TLS negotiation times
+ */
+
+import { SEVERITY } from '../../constants';
+import type { Issue, ChromePage } from '../../types';
+
+class ConnectionTimingAnalyzer {
+  /**
+   * Analyze connection timing
+   * @param {Object} chromePage - Playwright page object
+   * @param {Object} requests - Network requests
+   * @param {string} url - Page URL
+   * @returns {Object} Analysis results
+   */
+  static async analyze(chromePage: ChromePage, requests: any[], url: string) {
+    const issues: Issue[] = [];
+    const warnings: Issue[] = [];
+
+    const timingData = {
+      document: null as any,
+      dns: { total: 0, slow: [] as any[] },
+      tcp: { total: 0, slow: [] as any[] },
+      tls: { total: 0, slow: [] as any[] },
+      ttfb: { total: 0, slow: [] as any[] },
+      uniqueOrigins: [] as string[],
+      originTimings: {} as Record<string, any>,
+      resourceTimings: [] as any[],
+    };
+
+    // 1. Get Navigation Timing for main document
+    const navTiming = await this.#getNavigationTiming(chromePage);
+    timingData.document = navTiming;
+
+    // 2. Get Resource Timing for all requests
+    const resourceTimings = await this.#getResourceTimings(chromePage);
+    timingData.resourceTimings = resourceTimings;
+
+    // 3. Analyze timings by origin
+    const originAnalysis = this.#analyzeByOrigin(resourceTimings, url);
+    timingData.uniqueOrigins = originAnalysis.origins;
+    timingData.originTimings = originAnalysis.timings;
+
+    // 4. Identify slow connections
+    const slowAnalysis = this.#findSlowConnections(resourceTimings);
+    timingData.dns.slow = slowAnalysis.slowDns;
+    timingData.tcp.slow = slowAnalysis.slowTcp;
+    timingData.tls.slow = slowAnalysis.slowTls;
+    timingData.ttfb.slow = slowAnalysis.slowTtfb;
+
+    // Calculate totals
+    timingData.dns.total = resourceTimings.reduce((sum: number, r: any) => sum + (r.dns || 0), 0);
+    timingData.tcp.total = resourceTimings.reduce((sum: number, r: any) => sum + (r.tcp || 0), 0);
+    timingData.tls.total = resourceTimings.reduce((sum: number, r: any) => sum + (r.tls || 0), 0);
+
+    // Generate issues
+
+    // Slow document DNS
+    if (navTiming?.dns! > 100) {
+      issues.push({
+        message: 'Slow DNS lookup for main document',
+        detail: `<a href="${url}">${url}</a> DNS lookup took ${navTiming!.dns}ms. Consider DNS prefetching or changing DNS provider.`,
+        severity: navTiming!.dns! > 200 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
+      });
+    }
+
+    // Slow document TLS
+    if (navTiming?.tls! > 100) {
+      warnings.push({
+        message: 'Slow TLS negotiation',
+        detail: `<a href="${url}">${url}</a> TLS negotiation took ${navTiming!.tls}ms. Ensure TLS 1.3 is enabled and session resumption is configured.`,
+        severity: SEVERITY.MEDIUM,
+      });
+    }
+
+    // Slow document TTFB
+    if (navTiming?.ttfb! > 600) {
+      issues.push({
+        message: 'Slow server response time (TTFB)',
+        detail: `<a href="${url}">${url}</a> server response took ${navTiming!.ttfb}ms. Optimize server-side processing, use caching, or consider a CDN.`,
+        severity: navTiming!.ttfb! > 1000 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
+      });
+    }
+
+    // Too many unique origins
+    if (timingData.uniqueOrigins.length > 15) {
+      warnings.push({
+        message: 'Too many third-party origins',
+        detail: `<a href="${url}">${url}</a> connects to ${timingData.uniqueOrigins.length} different origins. Each requires DNS lookup and connection setup. Consider reducing or using dns-prefetch.`,
+        severity: SEVERITY.MEDIUM,
+      });
+    }
+
+    // Slow third-party DNS
+    if (slowAnalysis.slowDns.length > 3) {
+      warnings.push({
+        message: 'Multiple slow DNS lookups',
+        detail: `${slowAnalysis.slowDns.length} resources had DNS lookups over 50ms. Add <link rel="dns-prefetch"> for: ${slowAnalysis.slowDns.slice(0, 3).map(d => d.origin).join(', ')}`,
+        severity: SEVERITY.LOW,
+      });
+    }
+
+    // Missing preconnect for slow origins
+    const slowOrigins = this.#getSlowOrigins(originAnalysis.timings);
+    if (slowOrigins.length > 0) {
+      const hasPreconnect = await this.#checkPreconnect(chromePage, slowOrigins);
+      if (!hasPreconnect) {
+        warnings.push({
+          message: 'Slow third-party connections without preconnect',
+          detail: `Consider adding preconnect for: ${slowOrigins.slice(0, 3).join(', ')}`,
+          severity: SEVERITY.LOW,
+        });
+      }
+    }
+
+    return { issues, warnings, timingData };
+  }
+
+  /**
+   * Get navigation timing for main document
+   * @private
+   */
+  static async #getNavigationTiming(chromePage: ChromePage) {
+    try {
+      return await chromePage.evaluate(() => {
+        const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+        if (!nav) return null;
+
+        return {
+          dns: Math.round(nav.domainLookupEnd - nav.domainLookupStart),
+          tcp: Math.round(nav.connectEnd - nav.connectStart),
+          tls: nav.secureConnectionStart > 0
+            ? Math.round(nav.connectEnd - nav.secureConnectionStart)
+            : 0,
+          ttfb: Math.round(nav.responseStart - nav.requestStart),
+          download: Math.round(nav.responseEnd - nav.responseStart),
+          total: Math.round(nav.responseEnd - nav.startTime),
+          protocol: nav.nextHopProtocol,
+        };
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Get resource timing for all resources
+   * @private
+   */
+  static async #getResourceTimings(chromePage: ChromePage) {
+    try {
+      return await chromePage.evaluate(() => {
+        const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+
+        return resources.map(r => {
+          let origin;
+          try {
+            origin = new URL(r.name).origin;
+          } catch (e) {
+            origin = 'unknown';
+          }
+
+          return {
+            url: r.name.substring(0, 100),
+            origin,
+            initiatorType: r.initiatorType,
+            dns: Math.round(r.domainLookupEnd - r.domainLookupStart),
+            tcp: Math.round(r.connectEnd - r.connectStart),
+            tls: r.secureConnectionStart > 0
+              ? Math.round(r.connectEnd - r.secureConnectionStart)
+              : 0,
+            ttfb: Math.round(r.responseStart - r.requestStart),
+            download: Math.round(r.responseEnd - r.responseStart),
+            total: Math.round(r.duration),
+            size: r.transferSize || 0,
+            protocol: r.nextHopProtocol,
+          };
+        });
+      });
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * Analyze timings by origin
+   * @private
+   */
+  static #analyzeByOrigin(resourceTimings: any[], pageUrl: string) {
+    const timings: Record<string, any> = {};
+    const pageOrigin = new URL(pageUrl).origin;
+
+    for (const resource of resourceTimings) {
+      const origin = resource.origin;
+      if (!origin || origin === 'unknown') continue;
+
+      if (!timings[origin]) {
+        timings[origin] = {
+          isFirstParty: origin === pageOrigin,
+          requestCount: 0,
+          totalDns: 0,
+          totalTcp: 0,
+          totalTls: 0,
+          totalSize: 0,
+          protocol: resource.protocol,
+        };
+      }
+
+      timings[origin].requestCount++;
+      timings[origin].totalDns += resource.dns || 0;
+      timings[origin].totalTcp += resource.tcp || 0;
+      timings[origin].totalTls += resource.tls || 0;
+      timings[origin].totalSize += resource.size || 0;
+    }
+
+    return {
+      origins: Object.keys(timings),
+      timings,
+    };
+  }
+
+  /**
+   * Find slow connections
+   * @private
+   */
+  static #findSlowConnections(resourceTimings: any[]) {
+    const slowDns: any[] = [];
+    const slowTcp: any[] = [];
+    const slowTls: any[] = [];
+    const slowTtfb: any[] = [];
+
+    for (const resource of resourceTimings) {
+      if (resource.dns > 50) {
+        slowDns.push({ url: resource.url, origin: resource.origin, time: resource.dns });
+      }
+      if (resource.tcp > 50) {
+        slowTcp.push({ url: resource.url, origin: resource.origin, time: resource.tcp });
+      }
+      if (resource.tls > 50) {
+        slowTls.push({ url: resource.url, origin: resource.origin, time: resource.tls });
+      }
+      if (resource.ttfb > 200) {
+        slowTtfb.push({ url: resource.url, origin: resource.origin, time: resource.ttfb });
+      }
+    }
+
+    return { slowDns, slowTcp, slowTls, slowTtfb };
+  }
+
+  /**
+   * Get origins with slow total connection time
+   * @private
+   */
+  static #getSlowOrigins(originTimings: Record<string, any>) {
+    const slowOrigins: string[] = [];
+
+    for (const [origin, data] of Object.entries(originTimings)) {
+      if (data.isFirstParty) continue;
+
+      const avgConnectionTime = (data.totalDns + data.totalTcp + data.totalTls) / data.requestCount;
+      if (avgConnectionTime > 100) {
+        slowOrigins.push(origin);
+      }
+    }
+
+    return slowOrigins;
+  }
+
+  /**
+   * Check for preconnect hints
+   * @private
+   */
+  static async #checkPreconnect(chromePage: ChromePage, origins: string[]) {
+    try {
+      return await chromePage.evaluate((targetOrigins) => {
+        const preconnects = document.querySelectorAll('link[rel="preconnect"]');
+        const preconnectOrigins = Array.from(preconnects).map(l => {
+          try {
+            return new URL((l as HTMLLinkElement).href).origin;
+          } catch (e) {
+            return null;
+          }
+        });
+
+        return targetOrigins.some(o => preconnectOrigins.includes(o));
+      }, origins);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Site-wide connection timing analysis
+   * @param {Object} pages - All pages
+   * @returns {Object} Analysis results
+   */
+  static analyzeSiteWide(pages: Record<string, any>) {
+    const issues: any[] = [];
+    const warnings: any[] = [];
+
+    let pagesWithSlowDns = 0;
+    let pagesWithSlowTtfb = 0;
+    let totalUniqueOrigins = new Set();
+
+    for (const [url, page] of Object.entries(pages)) {
+      if (page.timingData) {
+        if (page.timingData.document?.dns > 100) {
+          pagesWithSlowDns++;
+        }
+        if (page.timingData.document?.ttfb > 600) {
+          pagesWithSlowTtfb++;
+        }
+        for (const origin of page.timingData.uniqueOrigins || []) {
+          totalUniqueOrigins.add(origin);
+        }
+      }
+    }
+
+    const totalPages = Object.keys(pages).length;
+
+    if (pagesWithSlowTtfb > totalPages * 0.3) {
+      issues.push({
+        message: `${pagesWithSlowTtfb} pages have slow server response`,
+        detail: 'Many pages have TTFB over 600ms. Review server performance, caching, and CDN configuration.',
+        severity: SEVERITY.HIGH,
+      });
+    }
+
+    if (totalUniqueOrigins.size > 50) {
+      warnings.push({
+        message: `Site connects to ${totalUniqueOrigins.size} unique origins`,
+        detail: 'Large number of third-party connections increases page load time. Review and consolidate external services.',
+        severity: SEVERITY.MEDIUM,
+      });
+    }
+
+    return { issues, warnings };
+  }
+}
+
+export { ConnectionTimingAnalyzer };

@@ -13,15 +13,13 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
     "noEmit": false,
     "incremental": true,
     "isolatedModules": true
   },
   "include": [
-    "**/*.ts",
-    "**/*.js"
+    "**/*.ts"
   ],
   "exclude": [
     "node_modules",

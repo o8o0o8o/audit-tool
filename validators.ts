@@ -245,18 +245,6 @@ export function validateRepoPath(repoPath: string): ValidationResult {
 // Alias for naming consistency
 export const validateUrl = validateURL;
 
-// CommonJS compatibility
-module.exports = {
-  validateURL,
-  validateUrl,
-  sanitizeFilename,
-  validateArguments,
-  validateRepoPath,
-  sanitizeDomainName,
-  containsSuspiciousPatterns,
-  RateLimiter,
-};
-
 // CLI testing
 if (require.main === module) {
   console.log('Testing validators...\n');

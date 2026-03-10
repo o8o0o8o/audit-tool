@@ -2,19 +2,18 @@
   "name": "audit-tool",
   "version": "1.0.0",
   "description": "Automated SEO audit tool",
-  "main": "robots.js",
+  "main": "robots.ts",
   "bin": {
-    "seo-audit": "./start.js"
+    "seo-audit": "./start.ts"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "audit": "tsx start.js",
+    "audit": "tsx start.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "node --require tsx/cjs --test 'tests/**/*.test.js'",
-    "test:ts": "tsx --test 'tests/**/*.test.ts'"
+    "test": "tsx --test 'tests/**/*.test.ts'"
   },
   "author": "Sergey Labut",
   "license": "ISC",

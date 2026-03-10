@@ -8,7 +8,7 @@
 export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low';
 
 export interface Issue {
-  message: string;
+  message?: string;
   detail?: string;
   severity: SeverityLevel;
   title?: string;
@@ -19,12 +19,12 @@ export interface Issue {
 
 export interface AnalyzerResult {
   issues: Issue[];
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 export interface SiteWideAnalyzerResult {
   issues: Issue[];
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 // ─── Page Data ───────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ export interface PageInfo {
   indexability?: IndexabilityAnalysis;
   international?: InternationalAnalysis;
   urlAnalysis?: UrlAnalysis;
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 export interface PageData {
@@ -114,7 +114,7 @@ export interface AlternateLink {
 
 export interface AnalysisData {
   overall: Issue[];
-  details: Record<string, unknown>;
+  details: Record<string, any>;
 }
 
 export interface AuditMetadata {
@@ -149,7 +149,7 @@ export interface AccessibilityAnalysis {
   issues: Issue[];
   ariaLandmarks?: string[];
   formLabels?: { labeled: number; unlabeled: number };
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 export interface SecurityAnalysis {
@@ -319,6 +319,31 @@ export interface AggregatedError {
   count: number;
   severity: SeverityLevel;
   examples: string[];
+}
+
+// ─── Common Analyzer Parameter Types ─────────────────────────────────────────
+
+/** node-html-parser HTMLElement - used as parsedPage parameter */
+export type ParsedPage = import('node-html-parser').HTMLElement;
+
+/** Playwright Page - used as chromePage parameter */
+export type ChromePage = import('playwright').Page;
+
+/** Playwright Response - used as response parameter */
+export type ChromeResponse = import('playwright').Response;
+
+/** Network request info collected during crawl */
+export interface NetworkRequest {
+  url: string;
+  method?: string;
+  resourceType?: string;
+  status?: number;
+  headers?: Record<string, string>;
+  size?: number;
+  transferSize?: number;
+  mimeType?: string;
+  timing?: Record<string, number>;
+  [key: string]: any;
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────────────

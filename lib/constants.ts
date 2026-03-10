@@ -270,18 +270,3 @@ export function normalizeTextForComparison(text: string): string {
 
   return normalized;
 }
-
-// CommonJS compatibility - allows existing require() calls to work
-module.exports = {
-  KNOWN_ERRORS,
-  SEVERITY,
-  THRESHOLDS,
-  CRAWL_SETTINGS,
-  VIEWPORT,
-  NETWORK_CONDITIONS,
-  CPU_CONDITIONS,
-  META_TAGS,
-  META_TAGS_CONFIG,
-  getMetaTagSeverity,
-  normalizeTextForComparison,
-};

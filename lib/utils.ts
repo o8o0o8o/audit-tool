@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { THRESHOLDS, SEVERITY } from './constants';
 import type { SeverityLevel, Issue, UrlAnalysis } from './types';
 // Import core URL validation from validators.js for consistency
-const { validateURL: coreValidateURL } = require('../validators');
+import { validateURL as coreValidateURL } from '../validators';
 
 // Tracking parameters to always strip (marketing, analytics, session)
 const TRACKING_PARAMS = new Set([
@@ -381,22 +381,6 @@ function generateTimestamp(): string {
 }
 
 export {
-  normalizeUrl,
-  stripHashFragment,
-  validateUrl,
-  createSafeFilename,
-  analyzeUrlStructure,
-  formatElapsedTime,
-  formatLogMessage,
-  formatErrorMessage,
-  formatWarningMessage,
-  generateTimestamp,
-  LOG_PREFIX,
-  TRACKING_PARAMS,
-};
-
-// CommonJS compatibility
-module.exports = {
   normalizeUrl,
   stripHashFragment,
   validateUrl,

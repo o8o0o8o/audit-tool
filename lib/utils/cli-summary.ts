@@ -28,19 +28,41 @@ function strip(str: string) {
 }
 
 /**
- * Pad text to width, accounting for ANSI codes
+ * Calculate display width of a string in a terminal,
+ * accounting for wide characters (emojis, CJK, etc.)
+ */
+function displayWidth(str: string): number {
+  const stripped = strip(str);
+  let width = 0;
+  for (const char of stripped) {
+    const cp = char.codePointAt(0)!;
+    if (cp > 0xFFFF) {
+      // Supplementary plane (most emojis) — 2 columns
+      width += 2;
+    } else if (cp >= 0x2600 && cp <= 0x26FF) {
+      // Miscellaneous Symbols (⚡♿☀ etc.) — 2 columns in most terminals
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * Pad text to width, accounting for ANSI codes and wide characters
  */
 function pad(text: string, width: number) {
-  const visible = strip(text).length;
+  const visible = displayWidth(text);
   if (visible >= width) return text;
   return text + ' '.repeat(width - visible);
 }
 
 /**
- * Center text in width, accounting for ANSI codes
+ * Center text in width, accounting for ANSI codes and wide characters
  */
 function center(text: string, width: number) {
-  const visible = strip(text).length;
+  const visible = displayWidth(text);
   const padding = Math.max(0, width - visible);
   const left = Math.floor(padding / 2);
   const right = padding - left;

@@ -3,7 +3,7 @@ const { generateHTML } = require("./generateHTML");
 
 // Import modularized components
 const { parseArgs } = require("./lib/args-parser");
-const { loadConfig, generateSampleConfig } = require("./lib/config-loader");
+const { loadConfig, generateSampleConfig, applyConfigToConstants } = require("./lib/config-loader");
 const { printAuditSummary, getJsonSummary } = require("./lib/utils/cli-summary");
 
 // Import SEOData from extracted module (avoids circular dependency)
@@ -193,7 +193,11 @@ async function audit() {
 
     // Load configuration (from file or defaults)
     const { getConfigSummary } = require('./lib/config-loader');
+    const constants = require('./lib/constants');
     const config = loadConfig(args.config);
+
+    // Apply user-defined thresholds from .seoauditrc to constants
+    applyConfigToConstants(config, constants);
 
     // Show config summary in verbose mode
     if (args.verbose) {
@@ -387,14 +391,14 @@ async function audit() {
       console.log('⚠️  Could not save audit history:', error.message);
     }
 
-    // Generate HTML report in the same directory as the JSON file
-    const htmlOutputPath = seo.fileManager.getHtmlFilePath();
-    generateHTML(seo.file, seo.domainName, htmlOutputPath);
-
-    // Store branding info if provided
+    // Store branding info if provided (must be set before HTML generation)
     if (args.brandLogo || args.brandName) {
       seo.data.branding = { logo: args.brandLogo, name: args.brandName };
     }
+
+    // Generate HTML report in the same directory as the JSON file
+    const htmlOutputPath = seo.fileManager.getHtmlFilePath();
+    generateHTML(seo.file, seo.domainName, htmlOutputPath);
 
     // Generate SVG score badge
     try {

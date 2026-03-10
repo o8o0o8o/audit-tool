@@ -114,6 +114,7 @@ async function audit(restoredArgs, restartCount = 0) {
     if (proceed) childArgs.push("--proceed");
     if (perf) childArgs.push("--perf");
     if (saveHtml) childArgs.push("--save-html");
+    if (args.screenshots) childArgs.push("--screenshots");
     if (args.concurrency) childArgs.push(`--concurrency=${args.concurrency}`);
     if (args.repo) childArgs.push(`--repo=${args.repo}`);
     if (args.open) childArgs.push("--open");
@@ -174,7 +175,7 @@ async function audit(restoredArgs, restartCount = 0) {
         if (restartCount >= MAX_RESTART_ATTEMPTS) {
           console.error(`\n❌ Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached. Giving up.`);
           console.error("Please check the logs above for errors and try again manually.");
-          process.exit(1);
+          throw new Error(`Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached`);
         }
 
         console.log(`🔄 Restarting with --proceed to resume from saved progress (attempt ${restartCount + 1}/${MAX_RESTART_ATTEMPTS})...\n`);
@@ -205,6 +206,9 @@ async function audit(restoredArgs, restartCount = 0) {
           brandLogo: args.brandLogo,
           brandName: args.brandName,
           validateConfig: args.validateConfig,
+          screenshots: args.screenshots,
+          dryRun: args.dryRun,
+          generateCi: args.generateCi,
         }, restartCount + 1);
       } else {
         console.log("\n✅ Audit completed successfully (exit code: 0)");
@@ -224,11 +228,15 @@ if (watchArgs.watch) {
 
   (async function watchLoop() {
     while (true) {
-      await audit();
+      try {
+        await audit();
+      } catch (err) {
+        console.error(`\n⚠️ Audit failed: ${err.message}. Will retry next cycle.`);
+      }
       console.log(`\nNext audit in ${intervalMin} minute(s)...`);
       await new Promise(r => setTimeout(r, intervalMin * 60 * 1000));
     }
   })();
 } else {
-  audit();
+  audit().catch(() => process.exit(1));
 }

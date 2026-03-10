@@ -257,7 +257,7 @@ function generateComparisonHTML(domainName, oldIndex, newIndex) {
     <div class="container">
         <div class="header">
             <h1>📊 Audit Comparison Report</h1>
-            <div class="date-range">${domainName}</div>
+            <div class="date-range">${escapeHtml(domainName)}</div>
             <div class="date-range">${comparison.oldDate} → ${comparison.newDate}</div>
         </div>
 
@@ -470,6 +470,65 @@ function generateComparisonHTML(domainName, oldIndex, newIndex) {
                     </div>
                 </div>
             </div>
+
+            ${oldAudit.performance.p75TTFB && newAudit.performance.p75TTFB ? `
+            <h3 style="margin-top: 25px; color: #374151;">P75 Percentiles (Core Web Vitals standard)</h3>
+            <div class="comparison-grid">
+                <div class="metric-card" style="border-left-color: #8b5cf6;">
+                    <div class="metric-label">P75 TTFB</div>
+                    <div class="metric-comparison">
+                        <span class="old-value">${oldAudit.performance.p75TTFB}ms</span>
+                        <span class="arrow">→</span>
+                        <span class="new-value">${newAudit.performance.p75TTFB}ms</span>
+                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance.p75TTFB) - parseFloat(oldAudit.performance.p75TTFB)))}">
+                            ${deltaSymbol(parseFloat(newAudit.performance.p75TTFB) - parseFloat(oldAudit.performance.p75TTFB))}${(parseFloat(newAudit.performance.p75TTFB) - parseFloat(oldAudit.performance.p75TTFB)).toFixed(0)}ms
+                        </span>
+                    </div>
+                </div>
+                <div class="metric-card" style="border-left-color: #ec4899;">
+                    <div class="metric-label">P75 LCP</div>
+                    <div class="metric-comparison">
+                        <span class="old-value">${oldAudit.performance.p75LCP}ms</span>
+                        <span class="arrow">→</span>
+                        <span class="new-value">${newAudit.performance.p75LCP}ms</span>
+                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance.p75LCP) - parseFloat(oldAudit.performance.p75LCP)))}">
+                            ${deltaSymbol(parseFloat(newAudit.performance.p75LCP) - parseFloat(oldAudit.performance.p75LCP))}${(parseFloat(newAudit.performance.p75LCP) - parseFloat(oldAudit.performance.p75LCP)).toFixed(0)}ms
+                        </span>
+                    </div>
+                </div>
+                <div class="metric-card" style="border-left-color: #14b8a6;">
+                    <div class="metric-label">P75 CLS</div>
+                    <div class="metric-comparison">
+                        <span class="old-value">${oldAudit.performance.p75CLS}</span>
+                        <span class="arrow">→</span>
+                        <span class="new-value">${newAudit.performance.p75CLS}</span>
+                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance.p75CLS) - parseFloat(oldAudit.performance.p75CLS)))}">
+                            ${deltaSymbol(parseFloat(newAudit.performance.p75CLS) - parseFloat(oldAudit.performance.p75CLS))}${(parseFloat(newAudit.performance.p75CLS) - parseFloat(oldAudit.performance.p75CLS)).toFixed(3)}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
+
+        ${comparison.fixed && comparison.fixed.length > 0 ? `
+        <div class="section">
+            <h2>🔧 Fixed Issues (${comparison.fixed.length})</h2>
+            <p style="color: #6b7280; margin-bottom: 15px;">Issues present in the old audit but resolved in the new one.</p>
+            <ul class="changes-list">
+                ${comparison.fixed.map(issue => `<li class="improvement">✓ ${escapeHtml(issue)}</li>`).join('')}
+            </ul>
+        </div>
+        ` : ''}
+
+        ${comparison.newIssues && comparison.newIssues.length > 0 ? `
+        <div class="section">
+            <h2>🆕 New Issues (${comparison.newIssues.length})</h2>
+            <p style="color: #6b7280; margin-bottom: 15px;">Issues not present in the old audit that appeared in the new one.</p>
+            <ul class="changes-list">
+                ${comparison.newIssues.map(issue => `<li class="regression">✗ ${escapeHtml(issue)}</li>`).join('')}
+            </ul>
         </div>
         ` : ''}
     </div>

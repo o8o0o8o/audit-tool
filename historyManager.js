@@ -197,16 +197,25 @@ class HistoryManager {
     if (pagesWithPerf.length === 0) return null;
 
     const avg = arr => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const p75 = arr => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length * 0.75)];
+    };
 
     // Support both old (vitals.ttfb) and new (TTFB) formats
     const ttfbValues = pagesWithPerf.map(p => p.TTFB || p.vitals?.ttfb || 0).filter(v => v > 0);
     const lcpValues = pagesWithPerf.map(p => p.LCP || p.vitals?.lcp || 0).filter(v => v > 0);
-    const clsValues = pagesWithPerf.map(p => p.CLS || p.vitals?.cls || 0).filter(v => v > 0);
+    // CLS=0 is a perfect score (no layout shift) — don't filter it out
+    const clsValues = pagesWithPerf.map(p => p.CLS ?? p.vitals?.cls ?? null).filter(v => v !== null && v !== undefined);
 
     return {
       avgTTFB: avg(ttfbValues).toFixed(0),
       avgLCP: avg(lcpValues).toFixed(0),
       avgCLS: avg(clsValues).toFixed(3),
+      p75TTFB: p75(ttfbValues).toFixed(0),
+      p75LCP: p75(lcpValues).toFixed(0),
+      p75CLS: p75(clsValues).toFixed(3),
       pagesWithMetrics: pagesWithPerf.length
     };
   }
@@ -374,9 +383,10 @@ class HistoryManager {
         technical: history.audits.map(a => a.summary.categoryScores?.technical || 0)
       },
       performance: {
-        ttfb: history.audits.map(a => a.performance?.avgTTFB || null).filter(v => v !== null),
-        lcp: history.audits.map(a => a.performance?.avgLCP || null).filter(v => v !== null),
-        cls: history.audits.map(a => a.performance?.avgCLS || null).filter(v => v !== null)
+        // Keep nulls to maintain alignment with labels array (Chart.js handles null as gaps)
+        ttfb: history.audits.map(a => a.performance?.avgTTFB ?? null),
+        lcp: history.audits.map(a => a.performance?.avgLCP ?? null),
+        cls: history.audits.map(a => a.performance?.avgCLS ?? null)
       },
       issueTrends,
       insights: {

@@ -267,6 +267,8 @@ function generateHTML(file, domainName, outputPath = null) {
               <button class="section-tab" data-target="top-issues">Issues</button>
               <button class="section-tab" data-target="performance">Performance</button>
               <button class="section-tab" data-target="charts">Charts</button>
+              <button class="section-tab" data-target="content-insights">Insights</button>
+              <button class="section-tab" data-target="technology-stack">Tech Stack</button>
               <button class="section-tab" data-target="pages-table">Pages</button>
           </div>
 
@@ -292,11 +294,15 @@ function generateHTML(file, domainName, outputPath = null) {
           ${getChartsSection()}
           </div>
 
+          <div id="technology-stack">
           ${getTechnologyStack({ pages })}
+          </div>
 
           ${getSourceCodeAnalysis({ jsonData })}
 
+          <div id="content-insights">
           ${getContentInsights({ jsonData })}
+          </div>
 
           ${getConfigInfo({ jsonData, pages })}
 

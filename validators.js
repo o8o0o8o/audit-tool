@@ -66,11 +66,12 @@ function validateURL(urlString) {
 function sanitizeFilename(filename) {
   if (!filename) return 'unnamed';
 
-  return filename
+  const sanitized = filename
     // Remove path separators
     .replace(/[\/\\]/g, '_')
-    // Remove null bytes
+    // Remove null bytes (raw and URL-encoded)
     .replace(/\0/g, '')
+    .replace(/%00/gi, '')
     // Remove control characters
     .replace(/[\x00-\x1f\x7f]/g, '')
     // Remove dangerous characters
@@ -79,6 +80,8 @@ function sanitizeFilename(filename) {
     .replace(/^[\s.]+|[\s.]+$/g, '')
     // Limit length
     .substring(0, 255);
+
+  return sanitized || 'unnamed';
 }
 
 /**
@@ -173,6 +176,7 @@ function containsSuspiciousPatterns(input) {
     /on\w+\s*=/i,               // Event handlers (onclick=, onerror=, etc.)
     /\.\.\//,                    // Path traversal
     /\0/,                        // Null bytes
+    /%00/i,                      // URL-encoded null bytes
     /\beval\s*\(/i,             // eval() calls
     /\bFunction\s*\(/i,         // Function() constructor
     /\$\{[^}]+\}/,              // Template literal expressions ${...}

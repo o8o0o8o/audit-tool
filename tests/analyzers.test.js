@@ -244,6 +244,77 @@ describe('ScoreCalculator - new patterns', () => {
     // "x-robots-tag" matches "robots" pattern → categorized as SEO
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
+
+  it('scales penalty by affected page count from details', () => {
+    // 2% affected vs 80% affected on same total should differ
+    const pages100 = {};
+    for (let i = 0; i < 100; i++) pages100[`https://example.com/${i}`] = {};
+
+    const fewAffected = {
+      bySeverity: { critical: [], high: [], medium: [], low: [] },
+      details: {
+        'Some pages have missing or empty title': { severity: 'high', count: 2, examples: ['a', 'b'] },
+      },
+    };
+    const manyAffected = {
+      bySeverity: { critical: [], high: [], medium: [], low: [] },
+      details: {
+        'Some pages have missing or empty title': { severity: 'high', count: 80, examples: ['a', 'b', 'c'] },
+      },
+    };
+
+    const scoresFew = ScoreCalculator.calculateCategoryScores(fewAffected, pages100);
+    const scoresMany = ScoreCalculator.calculateCategoryScores(manyAffected, pages100);
+    assert.ok(scoresMany.seo < scoresFew.seo, `Expected many-affected penalty (${scoresMany.seo}) < few-affected penalty (${scoresFew.seo})`);
+  });
+
+  it('reads security score from page.security.securityScore', () => {
+    const pages = {
+      'https://example.com/': { security: { securityScore: 60 } },
+      'https://example.com/about': { security: { securityScore: 40 } },
+    };
+    const analysisData = {
+      bySeverity: { critical: [], high: [], medium: [], low: [] },
+      details: {},
+    };
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages);
+    assert.strictEqual(scores.security, 50, `Expected security=50 (avg of 60,40), got ${scores.security}`);
+  });
+
+  it('reads accessibility from formData.accessibilityScore and violations', () => {
+    const pages = {
+      'https://example.com/': {
+        formData: { accessibilityScore: 80 },
+        accessibility: { violationCount: 2 }, // 100 - 2*10 = 80
+      },
+    };
+    const analysisData = {
+      bySeverity: { critical: [], high: [], medium: [], low: [] },
+      details: {},
+    };
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages);
+    // Average of 80 (formData) and 80 (violations) = 80
+    assert.strictEqual(scores.accessibility, 80, `Expected accessibility=80, got ${scores.accessibility}`);
+  });
+
+  it('identifies structural issues as quick wins', () => {
+    const details = {
+      'Some pages have redirect chains or loops': {
+        severity: 'critical',
+        count: 10,
+        examples: ['https://example.com/a', 'https://example.com/b'],
+      },
+      'Some pages have very thin content': {
+        severity: 'high',
+        count: 20,
+        examples: ['https://example.com/c'],
+      },
+    };
+    const quickWins = ScoreCalculator.identifyQuickWins(details);
+    const issues = quickWins.map(q => q.issue);
+    assert.ok(issues.includes('Some pages have redirect chains or loops'), 'Expected redirect chains in quick wins');
+    assert.ok(issues.includes('Some pages have very thin content'), 'Expected thin content in quick wins');
+  });
 });
 
 // ============================================================

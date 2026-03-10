@@ -13,7 +13,11 @@ const { ReportDataProcessor } = require('./lib/reports/data-processor');
 
 function escapeCSV(value) {
   if (value === null || value === undefined) return '';
-  const str = String(value);
+  let str = String(value);
+  // Prevent CSV formula injection (Excel/Sheets interpret =, +, -, @ as formulas)
+  if (/^[=+\-@]/.test(str)) {
+    str = "'" + str;
+  }
   // Escape quotes and wrap in quotes if contains comma, quote, or newline
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
@@ -26,7 +30,8 @@ function generatePagesCSV(jsonData) {
   const rows = [
     ['URL', 'Status Code', 'Source', 'Segment', 'Title', 'Title Length', 'Description', 'Desc Length',
      'H1 Count', 'H2 Count', 'Canonical', 'Canonical Match',
-     'TTFB (ms)', 'FCP (ms)', 'LCP (ms)', 'CLS', 'Page Size (bytes)', 'Requests',
+     'TTFB (ms)', 'FCP (ms)', 'LCP (ms)', 'CLS', 'INP (ms)', 'TBT (ms)',
+     'Page Size (bytes)', 'Requests', 'Redirect Count',
      'Word Count', 'Text/HTML %', 'Readability',
      'Security Score', 'Cache Score', 'A11y Score', 'Content Score',
      'Images Total', 'Images Lazy', 'Incoming Links',
@@ -34,7 +39,8 @@ function generatePagesCSV(jsonData) {
      'Detected Language', 'Lang Match', 'Internal PageRank',
      'CTAs Total', 'CTAs Above Fold', 'Forms',
      'JS Unused %', 'CSS Unused %',
-     'Broken Outbound Links', 'Main Content Words', 'Boilerplate %']
+     'Broken Outbound Links', 'Main Content Words', 'Boilerplate %',
+     'E-E-A-T Score', 'Has Author', 'Has Citations']
   ];
 
   Object.entries(pages).forEach(([url, data]) => {
@@ -62,8 +68,11 @@ function generatePagesCSV(jsonData) {
       data.FCP || '',
       data.LCP || data.vitals?.lcp || '',
       data.CLS !== undefined ? data.CLS : (data.vitals?.cls || ''),
+      data.INP || '',
+      data.TBT || '',
       data.totalResponseSize || data.totalSize || '',
       data.totalNumberOfRequests || data.numberOfRequests || '',
+      data.redirectCount || 0,
       data.contentQuality?.wordCount || '',
       data.contentQuality?.textToHtmlRatio || '',
       data.contentQuality?.readabilityScore || '',
@@ -87,7 +96,10 @@ function generatePagesCSV(jsonData) {
       data.codeCoverage?.css?.ratio ?? '',
       data.outboundLinkHealth?.broken?.length ?? '',
       data.contentQuality?.wordCountBySection?.main ?? '',
-      data.contentQuality?.wordCountBySection?.boilerplateRatio ?? ''
+      data.contentQuality?.wordCountBySection?.boilerplateRatio ?? '',
+      data.eeat?.score ?? '',
+      data.eeat?.hasAuthor ? 'Yes' : 'No',
+      data.eeat?.hasCitations ? 'Yes' : 'No',
     ].map(escapeCSV));
   });
 
@@ -105,7 +117,7 @@ function generateIssuesCSV(jsonData) {
     rows.push([
       issue,
       data.severity || '',
-      data.examples?.length || 0,
+      data.count || data.examples?.length || 0,
       examples
     ].map(escapeCSV));
   });
@@ -116,19 +128,28 @@ function generateIssuesCSV(jsonData) {
 function generatePerformanceCSV(jsonData) {
   const pages = jsonData.pageData?.pages || {};
   const rows = [
-    ['URL', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Load Time (ms)']
+    ['URL', 'TTFB (ms)', 'FCP (ms)', 'LCP (ms)', 'CLS', 'INP (ms)', 'TBT (ms)', 'TTI (ms)',
+     'Speed Index', 'Page Size (MB)', 'Requests', 'Redirect Count',
+     'LCP Bottleneck', 'LCP Recommendation']
   ];
 
   Object.entries(pages).forEach(([url, data]) => {
-    if (data.vitals) {
+    if (data.TTFB || data.LCP || data.CLS !== undefined) {
       rows.push([
         url,
-        data.vitals.ttfb || '',
-        data.vitals.lcp || '',
-        data.vitals.cls || '',
-        data.totalSize ? (data.totalSize / (1024 * 1024)).toFixed(2) : '',
-        data.numberOfRequests || '',
-        data.vitals.loadTime || ''
+        data.TTFB || '',
+        data.FCP || '',
+        data.LCP || '',
+        data.CLS !== undefined ? data.CLS : '',
+        data.INP || '',
+        data.TBT || '',
+        data.TTI || '',
+        data.speedIndex || '',
+        data.totalResponseSize ? (data.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
+        data.totalNumberOfRequests || '',
+        data.redirectCount || 0,
+        data.vitals?.lcpAnalysis?.bottleneck || '',
+        data.vitals?.lcpAnalysis?.recommendation || '',
       ].map(escapeCSV));
     }
   });

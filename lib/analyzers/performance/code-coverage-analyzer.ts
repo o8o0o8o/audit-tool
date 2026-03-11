@@ -27,9 +27,12 @@ class CodeCoverageAnalyzer {
         callCount: false,
         detailed: true,
       });
-      await client.send('DOM.enable');
-      await client.send('CSS.enable');
-      await client.send('CSS.startRuleUsageTracking');
+
+      // Use Playwright's CSS coverage API instead of CDP CSS.startRuleUsageTracking.
+      // The CDP rule-usage tracking only reports per-rule `used` booleans (selector matched any element),
+      // which marks nearly all rules as used. Playwright's API returns byte-level used ranges,
+      // giving accurate unused CSS measurement.
+      await chromePage.coverage.startCSSCoverage({ resetOnNavigation: false });
 
       // Store client on page for later retrieval
       chromePage.__coverageClient = client;
@@ -104,27 +107,28 @@ class CodeCoverageAnalyzer {
         }
       }
 
-      // Collect CSS coverage
-      const cssCoverage = await client.send('CSS.stopRuleUsageTracking');
-      if (cssCoverage?.ruleUsage) {
-        // Group by stylesheet
-        const stylesheets: Record<string, any> = {};
-        for (const rule of cssCoverage.ruleUsage) {
-          const sheetId = rule.styleSheetId;
-          if (!stylesheets[sheetId]) {
-            stylesheets[sheetId] = { total: 0, used: 0 };
-          }
-          const ruleSize = rule.endOffset - rule.startOffset;
-          stylesheets[sheetId].total += ruleSize;
-          if (rule.used) {
-            stylesheets[sheetId].used += ruleSize;
-          }
-        }
+      // Collect CSS coverage using Playwright's byte-level ranges API
+      const cssCoverage = await chromePage.coverage.stopCSSCoverage();
+      for (const entry of cssCoverage) {
+        if (!entry.url || entry.url.startsWith('data:')) continue;
+        const totalLength = entry.text?.length || 0;
+        if (totalLength === 0) continue;
 
-        for (const sheet of Object.values(stylesheets) as Record<string, any>[]) {
-          info.css.total += sheet.total;
-          info.css.used += sheet.used;
-          info.css.unused += (sheet.total - sheet.used);
+        // entry.ranges contains used byte ranges; unused = total - sum(used ranges)
+        const usedBytes = entry.ranges.reduce((sum, r) => sum + (r.end - r.start), 0);
+        const unusedBytes = Math.max(0, totalLength - usedBytes);
+
+        info.css.total += totalLength;
+        info.css.used += usedBytes;
+        info.css.unused += unusedBytes;
+
+        if (totalLength > 5000 && unusedBytes / totalLength > 0.5) {
+          info.css.files.push({
+            url: entry.url,
+            total: totalLength,
+            unused: unusedBytes,
+            unusedPercent: Math.round((unusedBytes / totalLength) * 100),
+          });
         }
       }
 
@@ -157,6 +161,8 @@ class CodeCoverageAnalyzer {
     // Sort files by unused bytes
     info.js.files.sort((a: any, b: any) => b.unused - a.unused);
     info.js.files = info.js.files.slice(0, 10); // Top 10
+    info.css.files.sort((a: any, b: any) => b.unused - a.unused);
+    info.css.files = info.css.files.slice(0, 10);
 
     // Report issues with top offending files for actionable insights
     if (info.js.ratio > 70 && info.js.total > 50000) {
@@ -174,9 +180,15 @@ class CodeCoverageAnalyzer {
     }
 
     if (info.css.ratio > 80 && info.css.total > 20000) {
+      const topCssFiles = info.css.files.slice(0, 3);
+      const cssFileList = topCssFiles.length > 0
+        ? '<br>Top unused stylesheets:<ul style="margin:4px 0;">' + topCssFiles.map((f: any) =>
+          `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`
+        ).join('') + '</ul>'
+        : '';
       issues.push({
         message: 'High percentage of unused CSS',
-        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${(info.css.unused / 1024).toFixed(0)}KB of ${(info.css.total / 1024).toFixed(0)}KB).`,
+        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${(info.css.unused / 1024).toFixed(0)}KB of ${(info.css.total / 1024).toFixed(0)}KB).${cssFileList}`,
         severity: SEVERITY.MEDIUM,
       });
     }

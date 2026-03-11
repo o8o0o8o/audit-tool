@@ -17,10 +17,11 @@ class CodeCoverageAnalyzer {
    * Must be called BEFORE page.goto()
    * @param {object} chromePage - Playwright page object
    */
-  static async startCoverage(chromePage: ChromePage & { __coverageClient?: unknown }) {
+  static async startCoverage(chromePage: ChromePage & { __coverageClient?: unknown }, existingClient?: unknown) {
     try {
-      // Get CDP session for coverage API
-      const client = await chromePage.context().newCDPSession(chromePage);
+      // Reuse existing CDP session if provided, otherwise create a new one
+      // Creating multiple CDP sessions on the same page can cause conflicts
+      const client = (existingClient || await chromePage.context().newCDPSession(chromePage)) as { send(method: string, params?: Record<string, unknown>): Promise<unknown> };
       await client.send('Profiler.enable');
       await client.send('Profiler.startPreciseCoverage', {
         callCount: false,
@@ -55,7 +56,7 @@ class CodeCoverageAnalyzer {
       unusedRatio: 0,
     };
 
-    const client = chromePage.__coverageClient as { send(method: string): Promise<any>; detach(): Promise<void> } | undefined;
+    const client = chromePage.__coverageClient as { send(method: string, params?: Record<string, unknown>): Promise<any>; detach(): Promise<void> } | undefined;
     if (!client) {
       return { info, issues, warnings };
     }

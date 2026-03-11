@@ -568,11 +568,10 @@ class CrawlerEngine {
             latency: network.latency ?? 0,
           });
         }
-      }
 
-      // Start code coverage collection before navigation
-      if (this.#options.perf) {
-        await CodeCoverageAnalyzer.startCoverage(page).catch(() => {});
+        // Start code coverage collection before navigation
+        // Reuse the same CDP session to avoid conflicts from multiple sessions on one page
+        await CodeCoverageAnalyzer.startCoverage(page, session).catch(() => {});
       }
 
       // Navigate to the page with explicit timeout

@@ -97,7 +97,7 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
   // A11y Score, ARIA, Form Labels, Landmarks, Focus Issues,
   // Content Score, Word Count, Text/HTML, Readability, Top Keywords, Language, PageRank, CTAs, JS Unused, Broken Links, Main Words
   // This is complex - just use colspan for the rest
-  const postColumns = 40; // approximate, we'll use a generous colspan
+  const postColumns = 43; // Page Size through Main Words
 
   return `
     <tr style="background: linear-gradient(90deg, #eff6ff 0%, #f0fdf4 100%); border-bottom: 2px solid #3b82f6;">
@@ -166,9 +166,9 @@ function getPagesTable(data: ReportSectionData) {
         <table id="pagesTable">
             <thead>
                 ${getTableHeader(hasPerformanceMetrics, hasCrux)}
+                ${hasCrux && hasPerformanceMetrics ? getCrUXBaselineRow(cruxData!) : ''}
             </thead>
             <tbody>
-                ${hasCrux && hasPerformanceMetrics ? getCrUXBaselineRow(cruxData!) : ''}
                 ${pages.map((page: PageInfo, index: number) => getTableRow(page, index, hasPerformanceMetrics)).join('')}
             </tbody>
         </table>

@@ -164,10 +164,6 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               ${(timing as Record<string, any>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, any>).elapsedTimeFormatted)}</p>` : ''}
               <div class="stats">
                   <div class="stat">
-                      <span class="stat-label">URLs in Sitemap:</span>
-                      <span class="stat-value">${jsonData.sitemaps?.total || 0}</span>
-                  </div>
-                  <div class="stat">
                       <span class="stat-label">Pages Crawled:</span>
                       <span class="stat-value">${pages.length}</span>
                   </div>
@@ -192,13 +188,15 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
                   </div>
                   ` : ''}
                   <div class="stat">
-                      <span class="stat-label">From Sitemap:</span>
+                      <span class="stat-label">In Sitemap:</span>
                       <span class="stat-value" style="color: #2563eb;">${pagesFromSitemap}</span>
                   </div>
+                  ${pagesDiscovered > 0 ? `
                   <div class="stat">
                       <span class="stat-label">Discovered:</span>
                       <span class="stat-value" style="color: #f59e0b;">${pagesDiscovered}</span>
                   </div>
+                  ` : ''}
                   <div class="stat">
                       <span class="stat-label">Multilanguage:</span>
                       <span class="stat-value" style="color: ${jsonData.isMultiLang ? '#10b981' : '#9ca3af'};">${jsonData.isMultiLang ? 'Yes' : 'No'}</span>

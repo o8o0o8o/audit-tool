@@ -707,7 +707,7 @@ function getStyles() {
           .sev-pill:hover { border-color: #9ca3af; }
           .sev-pill.active { background: #1f2937; color: white; border-color: #1f2937; }
 
-          .issues-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .issues-table { width: 100%; border-collapse: collapse; }
           .issues-table th {
               text-align: left;
               padding: 8px 12px;

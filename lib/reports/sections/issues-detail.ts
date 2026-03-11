@@ -163,7 +163,7 @@ function renderIssueRow(issue: IssueEntry, idx: number) {
     <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
       <td style="text-align:center;color:#9ca3af;font-size:12px;"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
-      <td style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;vertical-align:middle;">QUICK WIN</span>' : ''}</td>
+      <td style="font-weight:500;">${escapeHtml(key)}${isQuickWin ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;vertical-align:middle;">QUICK WIN</span>' : ''}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums;">${count}</td>
       <td style="text-align:right;font-size:12px;color:#6b7280;">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
     </tr>

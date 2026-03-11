@@ -58,7 +58,6 @@ function getPerformanceStats(data: ReportSectionData) {
       </div>
 
       ${getVitalsAttributionSection(pagesArray)}
-      ${getCodeCoverageStats(pagesArray)}
       ${getSlowestPagesSection(pagesArray)}
     </div>
   `;
@@ -250,55 +249,6 @@ function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => string | n
         <div><strong>P75:</strong> ${(p75(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P95:</strong> ${(p95(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P99:</strong> ${(p99(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
-      </div>
-    </div>
-  `;
-}
-
-/**
- * Generate code coverage summary cards
- */
-function getCodeCoverageStats(pagesArray: PageInfo[]) {
-  const jsPages = pagesArray.filter((p: PageInfo) => p.codeCoverage?.js?.ratio != null);
-  const cssPages = pagesArray.filter((p: PageInfo) => p.codeCoverage?.css?.ratio != null);
-
-  if (jsPages.length === 0 && cssPages.length === 0) return '';
-
-  const avgJsUnused = jsPages.length > 0
-    ? (jsPages.reduce((s: number, p: PageInfo) => s + p.codeCoverage.js.ratio, 0) / jsPages.length).toFixed(1)
-    : null;
-  const avgCssUnused = cssPages.length > 0
-    ? (cssPages.reduce((s: number, p: PageInfo) => s + p.codeCoverage.css.ratio, 0) / cssPages.length).toFixed(1)
-    : null;
-
-  const jsColor = Number(avgJsUnused) > 60 ? '#ef4444' : Number(avgJsUnused) > 40 ? '#f59e0b' : '#10b981';
-  const cssColor = Number(avgCssUnused) > 60 ? '#ef4444' : Number(avgCssUnused) > 40 ? '#f59e0b' : '#10b981';
-
-  return `
-    <div style="margin-bottom: 30px;">
-      <h3 style="color: #1f2937; margin-bottom: 12px;">📦 Code Coverage</h3>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-        ${avgJsUnused !== null ? `
-          <div style="background: white; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb; text-align: center;">
-            <div style="font-size: 28px; font-weight: 700; color: ${jsColor};">${avgJsUnused}%</div>
-            <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">Avg Unused JavaScript</div>
-            <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">${jsPages.length} pages analyzed</div>
-          </div>
-        ` : ''}
-        ${avgCssUnused !== null ? `
-          <div style="background: white; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb; text-align: center;">
-            <div style="font-size: 28px; font-weight: 700; color: ${cssColor};">${avgCssUnused}%</div>
-            <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">Avg Unused CSS</div>
-            <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">${cssPages.length} pages analyzed</div>
-          </div>
-        ` : ''}
-        ${avgJsUnused !== null ? `
-          <div style="background: white; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb; text-align: center;">
-            <div style="font-size: 28px; font-weight: 700; color: #374151;">${(jsPages.reduce((s, p) => s + (p.codeCoverage.js.totalBytes || 0), 0) / (1024 * 1024)).toFixed(1)}MB</div>
-            <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">Total JS Loaded</div>
-            <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">across all pages</div>
-          </div>
-        ` : ''}
       </div>
     </div>
   `;

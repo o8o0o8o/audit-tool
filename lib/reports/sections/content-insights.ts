@@ -313,10 +313,8 @@ function getOutboundLinksSection(pages: PageInfo[]) {
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 10)
     .map(([url, data]) => {
-      let short = url;
-      if (short.length > 70) short = short.substring(0, 67) + '...';
       const statusColor = data.status >= 500 ? '#dc2626' : data.status >= 400 ? '#ea580c' : '#6b7280';
-      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626;">${escapeHtml(short)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center;">${data.count}</td></tr>`;
+      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
     }).join('');
 
   return `

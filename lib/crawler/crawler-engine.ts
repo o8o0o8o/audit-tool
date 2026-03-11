@@ -2627,10 +2627,11 @@ class CrawlerEngine {
   #validateCanonicalMatchesSitemap(pageData: PageInfo, url: string, sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>) {
     const escapedUrl = escapeHtml(url);
     const canonical = pageData.canonical || '';
-    const escapedCanonical = escapeHtml(canonical);
+    const normalizedCanonical = canonical.startsWith('http') ? canonical : new URL(canonical, this.#options.origin).href;
+    const escapedCanonical = escapeHtml(normalizedCanonical);
     const matchingCanonical =
       sitemapUrls[canonical] ||
-      sitemapUrls[`${this.#options.origin}/${canonical}`];
+      sitemapUrls[normalizedCanonical];
 
     if (matchingCanonical) {
       if (matchingCanonical.alternates) {

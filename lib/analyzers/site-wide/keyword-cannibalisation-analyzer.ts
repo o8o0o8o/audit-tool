@@ -24,6 +24,66 @@ const STOPWORDS = new Set([
 
 class KeywordCannibalisationAnalyzer {
   /**
+   * Detect brand name from domain
+   */
+  static detectBrandName(pages: Record<string, PageInfo>): Set<string> {
+    const brandWords = new Set<string>();
+
+    for (const url of Object.keys(pages)) {
+      try {
+        const hostname = new URL(url).hostname;
+        // e.g. "ringgo.co.uk" -> "ringgo"
+        const domainPart = hostname.split('.')[0];
+        if (domainPart && domainPart.length >= 3) {
+          brandWords.add(domainPart.toLowerCase());
+        }
+      } catch { /* skip */ }
+      break; // Only need one URL
+    }
+
+    return brandWords;
+  }
+
+  /**
+   * Check if a keyword phrase is dominated by brand terms
+   */
+  static isBrandKeyword(keyword: string, brandWords: Set<string>): boolean {
+    const words = keyword.split(' ').filter(w => !this.isStopword(w));
+    if (words.length === 0) return false;
+    return words.every(w => brandWords.has(w));
+  }
+
+  /**
+   * Remove keywords that are subsets of other keywords in the same conflict set
+   * e.g. if "corporate solutions form" is flagged, remove "corporate solutions" and "solutions form"
+   */
+  static deduplicateSubsumedPhrases(conflicts: Map<string, any[]>): Map<string, any[]> {
+    const keywords = Array.from(conflicts.keys());
+    const toRemove = new Set<string>();
+
+    for (const shorter of keywords) {
+      for (const longer of keywords) {
+        if (shorter === longer) continue;
+        if (shorter.split(' ').length >= longer.split(' ').length) continue;
+        if (longer.includes(shorter)) {
+          const shorterPages = new Set(conflicts.get(shorter)!.map((p: any) => p.url));
+          const longerPages = conflicts.get(longer)!.map((p: any) => p.url);
+          // If all pages of the longer phrase are also in the shorter phrase, remove shorter
+          if (longerPages.every((url: string) => shorterPages.has(url))) {
+            toRemove.add(shorter);
+          }
+        }
+      }
+    }
+
+    const result = new Map(conflicts);
+    for (const key of toRemove) {
+      result.delete(key);
+    }
+    return result;
+  }
+
+  /**
    * Analyze site for keyword cannibalisation
    * @param {Object} pages - All pages data
    * @returns {Object} Analysis results
@@ -31,6 +91,7 @@ class KeywordCannibalisationAnalyzer {
   static analyze(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
+    const brandWords = this.detectBrandName(pages);
 
     // Build keyword maps
     const titleKeywords = new Map();  // keyword -> [urls]
@@ -39,27 +100,21 @@ class KeywordCannibalisationAnalyzer {
 
     for (const [url, page] of Object.entries(pages)) {
       // Skip error pages
-
       if (page.status !== 200) continue;
 
       // Extract and normalize title keywords
-
       if (page.title) {
-  
         const keywords = this.extractKeywords(page.title);
         for (const keyword of keywords) {
           if (!titleKeywords.has(keyword)) {
             titleKeywords.set(keyword, []);
           }
-    
           titleKeywords.get(keyword).push({ url, title: page.title });
         }
       }
 
       // Extract H1 keywords
-
       if (page.headings?.h1?.[0]) {
-  
         const h1 = page.headings.h1[0];
         const keywords = this.extractKeywords(h1);
         for (const keyword of keywords) {
@@ -81,9 +136,10 @@ class KeywordCannibalisationAnalyzer {
     }
 
     // Find cannibalisation in titles
-    const titleConflicts = this.findConflicts(titleKeywords, 2);
+    let titleConflicts = this.findConflicts(titleKeywords, 2);
+    titleConflicts = this.deduplicateSubsumedPhrases(titleConflicts);
     for (const [keyword, pages] of titleConflicts) {
-      if (this.isSignificantKeyword(keyword)) {
+      if (this.isSignificantKeyword(keyword, pages.length) && !this.isBrandKeyword(keyword, brandWords)) {
         issues.push({
           message: `Multiple pages targeting keyword: "${keyword}"`,
           detail: `${pages.length} pages have this keyword in title: ${pages.slice(0, 3).map((p: any) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`).join(', ')}${pages.length > 3 ? ` (+${pages.length - 3} more)` : ''}`,
@@ -93,9 +149,10 @@ class KeywordCannibalisationAnalyzer {
     }
 
     // Find cannibalisation in H1s
-    const h1Conflicts = this.findConflicts(h1Keywords, 2);
+    let h1Conflicts = this.findConflicts(h1Keywords, 2);
+    h1Conflicts = this.deduplicateSubsumedPhrases(h1Conflicts);
     for (const [keyword, pages] of h1Conflicts) {
-      if (this.isSignificantKeyword(keyword) && !titleConflicts.has(keyword)) {
+      if (this.isSignificantKeyword(keyword, pages.length) && !titleConflicts.has(keyword) && !this.isBrandKeyword(keyword, brandWords)) {
         warnings.push({
           message: `Multiple pages with similar H1 keyword: "${keyword}"`,
           detail: `${pages.length} pages target this in H1: ${pages.slice(0, 3).map((p: any) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`).join(', ')}`,
@@ -227,12 +284,18 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Check if keyword is significant enough to flag
    */
-  static isSignificantKeyword(keyword: string) {
-    // Must be at least 2 words or 6+ chars
+  static isSignificantKeyword(keyword: string, pageCount: number) {
     const words = keyword.split(' ');
-    if (words.length >= 2) return true;
-    if (keyword.length >= 6) return true;
-    return false;
+    // Single words: require 8+ chars and 3+ pages
+    if (words.length === 1) {
+      return keyword.length >= 8 && pageCount >= 3;
+    }
+    // Two-word phrases: require 3+ pages
+    if (words.length === 2) {
+      return pageCount >= 3;
+    }
+    // Three+ word phrases: 2 pages is enough
+    return true;
   }
 
   /**
@@ -242,9 +305,7 @@ class KeywordCannibalisationAnalyzer {
     const groups = [];
     const processed = new Set();
     const pageList = Object.entries(pages)
-
       .filter(([_, p]) => p.status === 200 && p.title)
-
       .map(([url, p]) => ({ url, title: p.title }));
 
     for (let i = 0; i < pageList.length; i++) {

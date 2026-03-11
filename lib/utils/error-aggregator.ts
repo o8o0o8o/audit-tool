@@ -97,6 +97,11 @@ class ErrorAggregator {
    * @param {string} severity - Error severity (critical, high, medium, low)
    */
   addError(generalError: string, detailedError: string | null, severity: SeverityLevel | string = SEVERITY.MEDIUM) {
+    // Skip empty general errors
+    if (!generalError || !generalError.trim()) {
+      return;
+    }
+
     // Add to overall set
     this.#analysis.overall.add(generalError);
 

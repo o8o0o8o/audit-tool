@@ -143,7 +143,7 @@ class LinkQualityAnalyzer {
 
     if (duplicateAnchors.length > 0) {
       linkAnalysis.warnings.push({
-        type: 'Duplicate anchor text',
+        message: 'Duplicate anchor text',
         details: duplicateAnchors
       });
     }
@@ -151,7 +151,7 @@ class LinkQualityAnalyzer {
     // Report issues
     if (linkAnalysis.emptyAnchorLinks.length > 0) {
       linkAnalysis.issues.push({
-        type: 'Empty anchor text',
+        message: 'Empty anchor text',
         count: linkAnalysis.emptyAnchorLinks.length,
         severity: 'medium'
       });
@@ -159,7 +159,7 @@ class LinkQualityAnalyzer {
 
     if (linkAnalysis.genericAnchorLinks.length > 3) {
       linkAnalysis.issues.push({
-        type: 'Generic anchor text',
+        message: 'Generic anchor text',
         count: linkAnalysis.genericAnchorLinks.length,
         severity: 'low'
       });
@@ -167,7 +167,7 @@ class LinkQualityAnalyzer {
 
     if (linkAnalysis.brokenLinks.length > 0) {
       linkAnalysis.issues.push({
-        type: 'Broken internal links',
+        message: 'Broken internal links',
         count: linkAnalysis.brokenLinks.length,
         severity: 'high'
       });
@@ -175,7 +175,7 @@ class LinkQualityAnalyzer {
 
     if (linkAnalysis.linksToNonIndexable.length > 0) {
       linkAnalysis.issues.push({
-        type: 'Links to non-indexable pages',
+        message: 'Links to non-indexable pages',
         count: linkAnalysis.linksToNonIndexable.length,
         severity: 'medium'
       });
@@ -183,7 +183,7 @@ class LinkQualityAnalyzer {
 
     if (linkAnalysis.redirectLinks.length > 0) {
       linkAnalysis.issues.push({
-        type: 'Links pointing to redirects',
+        message: 'Links pointing to redirects',
         count: linkAnalysis.redirectLinks.length,
         details: linkAnalysis.redirectLinks.slice(0, 5).map(l => `${l.href} -> ${l.redirectsTo}`),
         severity: linkAnalysis.redirectLinks.length > 5 ? 'medium' : 'low'
@@ -199,7 +199,7 @@ class LinkQualityAnalyzer {
 
     if (internalNofollowLinks.length > 0) {
       linkAnalysis.issues.push({
-        type: 'Internal links with nofollow',
+        message: 'Internal links with nofollow',
         count: internalNofollowLinks.length,
         details: internalNofollowLinks.slice(0, 5).map(l => l.href),
         severity: internalNofollowLinks.length > 3 ? 'medium' : 'low'
@@ -209,7 +209,7 @@ class LinkQualityAnalyzer {
     // Check for too many on-page links
     if (linkAnalysis.totalLinks > 150) {
       linkAnalysis.issues.push({
-        type: 'Too many on-page links',
+        message: 'Too many on-page links',
         count: linkAnalysis.totalLinks,
         severity: linkAnalysis.totalLinks > 300 ? 'high' : 'medium'
       });

@@ -274,6 +274,10 @@ import { LanguageDetectionAnalyzer } from '../analyzers/content/language-detecti
 import { CodeCoverageAnalyzer } from '../analyzers/performance/code-coverage-analyzer';
 import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
 
+// Circuit breaker constants
+const CIRCUIT_THRESHOLD = 10;  // Open after 10 consecutive failures
+const CIRCUIT_COOLDOWN = 60000; // 60 second cooldown
+
 class CrawlerEngine {
   #options: CrawlerInternalOptions;
   #callbacks: CrawlerCallbacks;
@@ -399,8 +403,6 @@ class CrawlerEngine {
    */
   #isCircuitOpen() {
     const now = Date.now();
-    const CIRCUIT_THRESHOLD = 10; // Open after 10 consecutive failures
-    const CIRCUIT_COOLDOWN = 60000; // 60 second cooldown
 
     if (this.#failureTracker.circuitOpen) {
       // Check if cooldown has passed
@@ -422,8 +424,6 @@ class CrawlerEngine {
    * @param {string} errorType - Type of error
    */
   #recordFailure(errorType: string) {
-    const CIRCUIT_THRESHOLD = 10;
-
     this.#failureTracker.consecutiveFailures++;
     this.#failureTracker.lastFailureTime = Date.now();
 
@@ -882,7 +882,7 @@ class CrawlerEngine {
         // Save every 5 batches (~25 pages) to reduce data loss on crash
         saveCounter++;
         if (saveCounter % 5 === 0) {
-          this.#callbacks.saveData();
+          await this.#callbacks.saveData();
         }
       }
 
@@ -927,7 +927,7 @@ class CrawlerEngine {
             }
           }
 
-          this.#callbacks.saveData();
+          await this.#callbacks.saveData();
         }
       }
 
@@ -981,7 +981,7 @@ class CrawlerEngine {
       }
 
       // Final save before converting data structures
-      this.#callbacks.saveData();
+      await this.#callbacks.saveData();
 
       // Convert incomingLinksTracking Map to results.pageData.incomingLinks
       // Process in chunks to prevent memory spikes on large sites
@@ -1341,7 +1341,8 @@ class CrawlerEngine {
     pageData.metrics = metrics;
     pageData.blockers = blockers;
     pageData.totalResponseSize = totalResponseSize;
-    pageData.response = { headers: responseHeaders || {} };
+    pageData.responseHeaders = responseHeaders || {};
+    pageData.response = { headers: pageData.responseHeaders };
 
     // Check page size threshold
     if (totalResponseSize > THRESHOLDS.PAGE_SIZE) {
@@ -1785,6 +1786,7 @@ class CrawlerEngine {
     if (pageData.response?.headers) {
       delete pageData.response;
     }
+    delete pageData.responseHeaders;
 
     // 29. Strip redirect chain (keep URLs for tooltip, limit to 10)
     const rc = pageData.redirectChain;

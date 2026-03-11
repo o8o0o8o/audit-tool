@@ -174,7 +174,7 @@ class AuditOrchestrator {
         sitemapUrls: results.sitemaps.urls,
       });
 
-      alternatesErrors = discoveredData.alternatesErrors;
+      alternatesErrors = [...alternatesErrors, ...discoveredData.alternatesErrors];
       isMultiLang = isMultiLang || discoveredData.isMultiLang;
       failedPages = [...discoveredData.failedPages, ...failedPages];
     }

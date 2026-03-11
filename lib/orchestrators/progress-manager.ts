@@ -91,6 +91,7 @@ class ProgressManager {
   #isWriting = false;
   #writeQueue: ProgressResults[] = [];
   #flushWaiters: Array<() => void> = [];
+  #pendingFlush: Promise<void> | null = null;
 
   fileManager: FileManager;
   verbose: boolean;
@@ -261,10 +262,11 @@ class ProgressManager {
     const pendingCount = Object.keys(this.#pendingPages).length;
     if (pendingCount >= MAX_PENDING_PAGES) {
       console.log(`  📦 Auto-flushing ${pendingCount} pending pages to prevent memory issues...`);
-      // Note: flushPendingPages is async but we don't await here to avoid blocking
-      // The write lock in flushPendingPages handles concurrency
-      this.flushPendingPages(true).catch(err => {
+      // Track the flush promise so saveProgress() can await it before writing
+      this.#pendingFlush = this.flushPendingPages(true).catch(err => {
         console.warn(`  ⚠️  Auto-flush failed: ${err.message}`);
+      }).finally(() => {
+        this.#pendingFlush = null;
       });
       return true;
     }
@@ -305,6 +307,16 @@ class ProgressManager {
    */
   getPendingCount() {
     return Object.keys(this.#pendingPages).length;
+  }
+
+  /**
+   * Wait for any in-progress auto-flush to complete.
+   * Call before saveProgress() to ensure no data is lost.
+   */
+  async waitForPendingFlush() {
+    if (this.#pendingFlush) {
+      await this.#pendingFlush;
+    }
   }
 
   /**

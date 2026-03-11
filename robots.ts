@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 import * as http from 'http';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { generateHTML } from './generateHTML';
 
 // Import modularized components
@@ -480,7 +480,7 @@ async function audit() {
       const score = seo.data.analysis?.summary?.overallScore || 0;
       const totalPages = Object.keys(seo.data.pageData?.pages || {}).length;
       if (process.platform === 'darwin') {
-        exec(`osascript -e 'display notification "Score: ${score}/100 | ${totalPages} pages crawled" with title "SEO Audit Complete" subtitle "${seo.domainName}"'`);
+        execFile('osascript', ['-e', `display notification "Score: ${score}/100 | ${totalPages} pages crawled" with title "SEO Audit Complete" subtitle "${seo.domainName}"`]);
       }
     } catch (_) { /* notification is optional */ }
 

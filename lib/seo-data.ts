@@ -302,7 +302,8 @@ class SEOData {
     }
   }
 
-  saveData() {
+  async saveData() {
+    await this.#progressManager.waitForPendingFlush();
     this.#progressManager.saveProgress(this.#results as any);
   }
 

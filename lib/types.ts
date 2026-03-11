@@ -31,29 +31,91 @@ export interface SiteWideAnalyzerResult {
 
 export interface PageInfo {
   url: string;
+  status?: number;
   statusCode?: number;
   title?: string;
+  titleLength?: number;
   description?: string;
+  descriptionLength?: number;
   canonical?: string;
   redirectChain?: Array<{url: string; status: number | string; timing?: number}>;
+  redirectCount?: number;
+  hasRedirects?: boolean;
   error?: string;
   issues?: Issue[];
-  // Performance metrics (lab)
+
+  // Page discovery
+  foundIn?: 'sitemap' | 'discovered';
+  discoveredOn?: string;
+  isMultiLang?: boolean;
+
+  // Performance metrics (lab) — uppercase variants set by crawler
+  TTFB?: number;
+  FCP?: number;
+  LCP?: number;
+  CLS?: number;
+  INP?: number;
+  TBT?: number;
+  TTI?: number;
+  speedIndex?: number;
+
+  // Performance metrics (lowercase aliases used in reports)
   ttfb?: number;
   lcp?: number;
   cls?: number;
   fcp?: number;
   inp?: number;
   tbt?: number;
+
+  // Navigation timing
+  domContentLoaded?: number;
+  domComplete?: number;
+  loadEvent?: number;
+
+  // Vitals attribution
+  vitals?: Record<string, unknown>;
+
   // CrUX field data (per-URL, only in perf mode)
   cruxFieldData?: {
     metrics: Record<string, { p75: number; distribution?: { good: number; needsImprovement: number; poor: number } }>;
     targetType: string;
   } | null;
+
   // Content
   wordCount?: number;
   h1?: string[];
   h2?: string[];
+
+  // Network / resource data
+  requests?: Record<string, unknown>;
+  metrics?: unknown;
+  blockers?: unknown;
+  totalResponseSize?: number;
+  totalNumberOfRequests?: number;
+  responseHeaders?: Record<string, string | undefined>;
+  response?: { headers: Record<string, string | undefined> };
+
+  // Links
+  links?: unknown;
+  linksCount?: number;
+  internalLinksCount?: number;
+  externalLinksCount?: number;
+  httpLinksCount?: number;
+  incomingLinks?: unknown;
+  incomingLinksCount?: number;
+  hasIncomingLinks?: boolean;
+
+  // Images
+  imagesCount?: number;
+  imagesWithoutAltCount?: number;
+
+  // Meta tags
+  meta?: unknown[];
+  metaMap?: Record<string, string>;
+  hasKeywords?: boolean;
+  hasViewport?: boolean;
+  alternates?: AlternateLink[];
+
   // Analysis results from various analyzers
   headings?: HeadingAnalysis;
   images?: ImageAnalysis;
@@ -66,6 +128,41 @@ export interface PageInfo {
   indexability?: IndexabilityAnalysis;
   international?: InternationalAnalysis;
   urlAnalysis?: UrlAnalysis;
+  linkAnalysis?: unknown;
+
+  // Advanced analyzer results
+  analyzerError?: { message: string; stack?: string };
+  soft404?: unknown;
+  freshnessData?: unknown;
+  thirdPartyData?: unknown;
+  timingData?: unknown;
+  criticalPathData?: unknown;
+  fontData?: unknown;
+  compressionData?: unknown;
+  imageOptimization?: unknown;
+  consoleAnalysis?: unknown;
+  formData?: unknown;
+  resourceOptimization?: unknown;
+  caching?: unknown;
+  mediaData?: unknown;
+  webComponentData?: unknown;
+  aboveFoldData?: unknown;
+  anchorTextData?: unknown;
+  externalLinksData?: unknown;
+  redirectAnalysis?: unknown;
+  resourceHintsData?: unknown;
+  mixedContentData?: unknown;
+  protocolData?: unknown;
+  pwaData?: unknown;
+  responseHeaderAnalysis?: unknown;
+  jsRenderingData?: unknown;
+  codeCoverage?: unknown;
+  outboundLinkHealth?: unknown;
+  technical?: unknown;
+  eeat?: unknown;
+  segment?: string;
+
+  // TODO: Remove this index signature once all dynamic properties are typed above
   [key: string]: any;
 }
 
@@ -698,7 +795,7 @@ export interface CrawlerEngineOptions {
 
 export interface CrawlerCallbacks {
   saveError: (generalError: string, detailedError: string, severity?: string) => void;
-  saveData: () => void;
+  saveData: () => void | Promise<void>;
   checkAttempts: (url: string) => void;
   saveAttempt: (url: string) => void;
 }

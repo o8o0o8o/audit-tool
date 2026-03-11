@@ -710,8 +710,8 @@ function getScripts(data: ReportSectionData) {
               }
           });
 
-          // Add click handlers to all cells with title attribute
-          document.querySelectorAll('td[title]:not([title=""])').forEach(cell => {
+          // Add click handlers to pages table cells with title attribute (not other tables)
+          document.querySelectorAll('#pagesTable td[title]:not([title=""])').forEach(cell => {
               cell.addEventListener('click', function(e) {
                   // Don't open modal if clicking a link
                   if (e.target.tagName === 'A') return;

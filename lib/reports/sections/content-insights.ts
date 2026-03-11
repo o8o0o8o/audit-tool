@@ -169,12 +169,14 @@ function getLanguageSection(pages: PageInfo[]) {
     .slice(0, 5)
     .map(([lang, count]) => {
       const pct = Math.round(((count as number) / withLang.length) * 100);
+      const label = `${count} pages (${pct}%)`;
+      // For narrow bars, show label outside so it doesn't get clipped
+      const labelInside = pct >= 15;
       return `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
         <span style="min-width: 30px; font-weight: 600; font-size: 13px; text-transform: uppercase;">${escapeHtml(lang)}</span>
-        <div style="flex: 1; height: 20px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
-          <div style="width: ${pct}%; height: 100%; background: #3b82f6; border-radius: 4px; display: flex; align-items: center; padding-left: 8px;">
-            <span style="color: white; font-size: 11px; font-weight: 600;">${count} pages (${pct}%)</span>
-          </div>
+        <div style="flex: 1; height: 20px; background: #e5e7eb; border-radius: 4px; position: relative;">
+          <div style="width: ${pct}%; height: 100%; background: #3b82f6; border-radius: 4px;"></div>
+          <span style="position: absolute; top: 0; left: 8px; line-height: 20px; font-size: 11px; font-weight: 600; color: ${labelInside ? 'white' : '#374151'};">${label}</span>
         </div>
       </div>`;
     }).join('');

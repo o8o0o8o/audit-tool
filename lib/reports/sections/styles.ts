@@ -815,6 +815,7 @@ function getStyles() {
               padding: 30px;
               margin: 30px auto;
               max-width: 100%;
+              overflow: hidden;
               box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
           }
 

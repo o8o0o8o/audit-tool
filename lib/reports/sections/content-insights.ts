@@ -315,7 +315,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
     .map(([url, data]) => {
       let short = url;
       if (short.length > 60) short = short.substring(0, 57) + '...';
-      return `<tr><td style="padding: 4px 8px; font-size: 12px;"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626;">${escapeHtml(short)}</a></td><td style="padding: 4px 8px; font-size: 12px; text-align: center;">${data.status}</td><td style="padding: 4px 8px; font-size: 12px; text-align: center;">${data.count}</td></tr>`;
+      return `<tr><td style="padding: 4px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626;">${escapeHtml(short)}</a></td><td style="padding: 4px 8px; font-size: 12px; text-align: center;">${data.status}</td><td style="padding: 4px 8px; font-size: 12px; text-align: center;">${data.count}</td></tr>`;
     }).join('');
 
   return `
@@ -335,7 +335,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
           <div style="font-size: 11px; color: #a16207;">Redirected</div>
         </div>
       </div>
-      ${brokenList ? `<table style="width: 100%; border-collapse: collapse;"><thead><tr style="background: #f9fafb;"><th style="padding: 6px 8px; text-align: left; font-size: 11px; color: #6b7280;">Broken URL</th><th style="padding: 6px 8px; font-size: 11px; color: #6b7280;">Status</th><th style="padding: 6px 8px; font-size: 11px; color: #6b7280;">Found on</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
+      ${brokenList ? `<table style="width: 100%; table-layout: fixed; border-collapse: collapse;"><thead><tr style="background: #f9fafb;"><th style="padding: 6px 8px; text-align: left; font-size: 11px; color: #6b7280;">Broken URL</th><th style="padding: 6px 8px; font-size: 11px; color: #6b7280; width: 60px;">Status</th><th style="padding: 6px 8px; font-size: 11px; color: #6b7280; width: 70px;">Found on</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
     </div>`;
 }
 

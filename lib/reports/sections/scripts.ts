@@ -2048,7 +2048,7 @@ function getScripts(data: ReportSectionData) {
           var countEl = document.getElementById('searchCount');
           if (!input) return;
 
-          var searchable = document.querySelectorAll('.container h2, .container h3, .container td, .container .summary-card-label, .container .info-card h3, .container .win-card, .container .issue-card');
+          var searchable = document.querySelectorAll('.container h2, .container h3, .container td, .container .summary-card-label, .container .info-card h3, .container .win-card, .container .issues-table-row');
           var originals = [];
           searchable.forEach(function(el) { originals.push(el.innerHTML); });
 
@@ -2900,7 +2900,7 @@ function getScripts(data: ReportSectionData) {
           tabs.forEach(function(tab) {
               var target = tab.getAttribute('data-target');
               if (target === 'top-issues') {
-                  var cards = document.querySelectorAll('.issue-card');
+                  var cards = document.querySelectorAll('.issues-table-row');
                   if (cards.length > 0) {
                       var badge = document.createElement('span');
                       badge.className = 'tab-badge';

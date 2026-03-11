@@ -675,6 +675,66 @@ function getStyles() {
               box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
           }
 
+          .issues-section {
+              background: white;
+              padding: 24px;
+              border-radius: 12px;
+              margin: 20px 0;
+              border: 1px solid #e5e7eb;
+          }
+
+          .severity-filter-bar {
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+          }
+
+          .sev-pill {
+              padding: 5px 12px;
+              border: 1px solid #d1d5db;
+              border-radius: 20px;
+              background: white;
+              cursor: pointer;
+              font-size: 12px;
+              font-weight: 500;
+              color: #374151;
+              transition: all 0.15s;
+              display: inline-flex;
+              align-items: center;
+          }
+
+          .sev-pill:hover { border-color: #9ca3af; }
+          .sev-pill.active { background: #1f2937; color: white; border-color: #1f2937; }
+
+          .issues-table { width: 100%; border-collapse: collapse; }
+          .issues-table th {
+              text-align: left;
+              padding: 8px 12px;
+              font-size: 11px;
+              color: #9ca3af;
+              border-bottom: 2px solid #e5e7eb;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+          }
+          .issues-table-row:hover { background: #f9fafb; }
+          .issues-table-row td {
+              padding: 10px 12px;
+              border-bottom: 1px solid #f3f4f6;
+              font-size: 14px;
+              vertical-align: middle;
+          }
+
+          .issue-sev-pill {
+              display: inline-block;
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-size: 11px;
+              font-weight: 600;
+              text-transform: capitalize;
+              white-space: nowrap;
+          }
+
           .wins-issues-title {
               font-size: 22px;
               font-weight: 700;
@@ -2253,9 +2313,16 @@ function getStyles() {
                   overflow: visible !important;
               }
 
-              /* Show all hidden examples */
-              [id^="issue-more-"] {
-                  display: block !important;
+              /* Show all hidden examples and issue details */
+              [id^="issue-more-"],
+              .issue-detail-row {
+                  display: table-row !important;
+              }
+
+              /* Hide filter pills and chevrons in print */
+              .severity-filter-bar,
+              .row-chevron {
+                  display: none !important;
               }
 
               /* Expand all details elements */

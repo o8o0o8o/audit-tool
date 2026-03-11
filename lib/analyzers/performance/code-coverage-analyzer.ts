@@ -1,6 +1,6 @@
 /**
  * Code Coverage Analyzer
- * Uses Playwright's Coverage API to measure unused CSS/JS ratio.
+ * Uses CDP Profiler for JS and CDP CSS.startRuleUsageTracking for CSS coverage.
  * Must be started BEFORE page navigation and stopped AFTER page load.
  *
  * Integration note: This analyzer requires special handling in the crawler engine.
@@ -11,31 +11,56 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
+interface CDPClient {
+  send(method: string, params?: Record<string, unknown>): Promise<any>;
+  detach(): Promise<void>;
+  on(event: string, handler: (params: any) => void): void;
+}
+
+interface StyleSheetInfo {
+  styleSheetId: string;
+  sourceURL: string;
+  length: number;
+}
+
 class CodeCoverageAnalyzer {
   /**
    * Start coverage collection on a page
    * Must be called BEFORE page.goto()
    * @param {object} chromePage - Playwright page object
    */
-  static async startCoverage(chromePage: ChromePage & { __coverageClient?: unknown }, existingClient?: unknown) {
+  static async startCoverage(chromePage: ChromePage & { __coverageClient?: unknown; __cssStyleSheets?: Map<string, StyleSheetInfo> }, existingClient?: unknown) {
     try {
       // Reuse existing CDP session if provided, otherwise create a new one
       // Creating multiple CDP sessions on the same page can cause conflicts
-      const client = (existingClient || await chromePage.context().newCDPSession(chromePage)) as { send(method: string, params?: Record<string, unknown>): Promise<unknown> };
+      const client = (existingClient || await chromePage.context().newCDPSession(chromePage)) as CDPClient;
       await client.send('Profiler.enable');
       await client.send('Profiler.startPreciseCoverage', {
         callCount: false,
         detailed: true,
       });
 
-      // Use Playwright's CSS coverage API instead of CDP CSS.startRuleUsageTracking.
-      // The CDP rule-usage tracking only reports per-rule `used` booleans (selector matched any element),
-      // which marks nearly all rules as used. Playwright's API returns byte-level used ranges,
-      // giving accurate unused CSS measurement.
-      await chromePage.coverage.startCSSCoverage({ resetOnNavigation: false });
+      // Use CDP CSS domain directly for CSS coverage.
+      // Playwright's coverage.startCSSCoverage() uses a separate internal CDP connection
+      // that fails to properly track rule usage for inline <style> tags (especially on
+      // Next.js/CSS-in-JS sites), reporting near-zero used bytes.
+      // Using the same CDP session as JS profiling gives accurate results.
+      const styleSheets = new Map<string, StyleSheetInfo>();
+      client.on('CSS.styleSheetAdded', (params: any) => {
+        const header = params.header;
+        styleSheets.set(header.styleSheetId, {
+          styleSheetId: header.styleSheetId,
+          sourceURL: header.sourceURL || '',
+          length: header.length || 0,
+        });
+      });
+      await client.send('DOM.enable');
+      await client.send('CSS.enable');
+      await client.send('CSS.startRuleUsageTracking');
 
-      // Store client on page for later retrieval
+      // Store client and stylesheet map on page for later retrieval
       chromePage.__coverageClient = client;
+      chromePage.__cssStyleSheets = styleSheets;
     } catch {
       // Coverage API may not be available in all browser contexts
     }
@@ -49,7 +74,7 @@ class CodeCoverageAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static async analyze(chromePage: ChromePage & { __coverageClient?: unknown }, requests: NetworkRequest[], url: string) {
+  static async analyze(chromePage: ChromePage & { __coverageClient?: unknown; __cssStyleSheets?: Map<string, StyleSheetInfo> }, requests: NetworkRequest[], url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -60,7 +85,8 @@ class CodeCoverageAnalyzer {
       unusedRatio: 0,
     };
 
-    const client = chromePage.__coverageClient as { send(method: string, params?: Record<string, unknown>): Promise<any>; detach(): Promise<void> } | undefined;
+    const client = chromePage.__coverageClient as CDPClient | undefined;
+    const styleSheets = chromePage.__cssStyleSheets;
     if (!client) {
       return { info, issues, warnings };
     }
@@ -107,34 +133,68 @@ class CodeCoverageAnalyzer {
         }
       }
 
-      // Collect CSS coverage using Playwright's byte-level ranges API
-      const cssCoverage = await chromePage.coverage.stopCSSCoverage();
-      for (const entry of cssCoverage) {
-        if (!entry.url || entry.url.startsWith('data:')) continue;
-        const totalLength = entry.text?.length || 0;
-        if (totalLength === 0) continue;
+      // Collect CSS coverage using CDP rule usage tracking directly.
+      // CDP CSS.stopRuleUsageTracking returns per-rule byte offsets with used boolean.
+      // We group by stylesheet, get the text, and compute used vs unused byte ranges.
+      const ruleUsageResult = await client.send('CSS.stopRuleUsageTracking');
+      if (ruleUsageResult?.ruleUsage && styleSheets) {
+        // Group rule usage by stylesheet
+        const sheetUsage = new Map<string, { used: { start: number; end: number }[]; unused: { start: number; end: number }[] }>();
+        for (const rule of ruleUsageResult.ruleUsage) {
+          if (!sheetUsage.has(rule.styleSheetId)) {
+            sheetUsage.set(rule.styleSheetId, { used: [], unused: [] });
+          }
+          const entry = sheetUsage.get(rule.styleSheetId)!;
+          const range = { start: rule.startOffset, end: rule.endOffset };
+          if (rule.used) {
+            entry.used.push(range);
+          } else {
+            entry.unused.push(range);
+          }
+        }
 
-        // entry.ranges contains used byte ranges; unused = total - sum(used ranges)
-        const usedBytes = entry.ranges.reduce((sum, r) => sum + (r.end - r.start), 0);
-        const unusedBytes = Math.max(0, totalLength - usedBytes);
+        // Process each stylesheet
+        for (const [sheetId, usage] of sheetUsage) {
+          const sheetInfo = styleSheets.get(sheetId);
+          // Get the actual text length for accurate total
+          let textLength = 0;
+          let sheetUrl = sheetInfo?.sourceURL || '';
+          try {
+            const textResult = await client.send('CSS.getStyleSheetText', { styleSheetId: sheetId });
+            textLength = textResult?.text?.length || 0;
+          } catch {
+            // Stylesheet may have been removed; use length from header
+            textLength = sheetInfo?.length || 0;
+          }
+          if (textLength === 0) continue;
+          if (sheetUrl.startsWith('data:')) continue;
 
-        info.css.total += totalLength;
-        info.css.used += usedBytes;
-        info.css.unused += unusedBytes;
+          // Use page URL for inline styles (empty sourceURL)
+          if (!sheetUrl) sheetUrl = url;
 
-        if (totalLength > 5000 && unusedBytes / totalLength > 0.5) {
-          info.css.files.push({
-            url: entry.url,
-            total: totalLength,
-            unused: unusedBytes,
-            unusedPercent: Math.round((unusedBytes / totalLength) * 100),
-          });
+          const usedBytes = CodeCoverageAnalyzer.#mergeAndSumRanges(usage.used);
+          const unusedBytes = Math.max(0, textLength - usedBytes);
+
+          info.css.total += textLength;
+          info.css.used += usedBytes;
+          info.css.unused += unusedBytes;
+
+          if (textLength > 5000 && unusedBytes / textLength > 0.5) {
+            info.css.files.push({
+              url: sheetUrl,
+              total: textLength,
+              unused: unusedBytes,
+              unusedPercent: Math.round((unusedBytes / textLength) * 100),
+            });
+          }
         }
       }
 
       // Stop JS coverage
       await client.send('Profiler.stopPreciseCoverage');
       await client.send('Profiler.disable');
+      await client.send('CSS.disable');
+      await client.send('DOM.disable');
     } catch {
       // Coverage collection can fail in various edge cases
       return { info, issues, warnings };
@@ -142,6 +202,7 @@ class CodeCoverageAnalyzer {
       // Clean up
       try { await client.detach(); } catch { /* ignore */ }
       delete chromePage.__coverageClient;
+      delete chromePage.__cssStyleSheets;
     }
 
     // Calculate ratios
@@ -316,6 +377,33 @@ class CodeCoverageAnalyzer {
       } else {
         total += current.end - current.start;
         current = sorted[i];
+      }
+    }
+    total += current.end - current.start;
+
+    return total;
+  }
+
+  /**
+   * Merge overlapping ranges {start, end} and sum total bytes
+   * @param {Array} ranges - [{start, end}]
+   * @returns {number} Total unique bytes covered
+   * @private
+   */
+  static #mergeAndSumRanges(ranges: { start: number; end: number }[]) {
+    if (ranges.length === 0) return 0;
+
+    const sorted = [...ranges].sort((a, b) => a.start - b.start);
+
+    let total = 0;
+    let current = { start: sorted[0].start, end: sorted[0].end };
+
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].start <= current.end) {
+        current.end = Math.max(current.end, sorted[i].end);
+      } else {
+        total += current.end - current.start;
+        current = { start: sorted[i].start, end: sorted[i].end };
       }
     }
     total += current.end - current.start;

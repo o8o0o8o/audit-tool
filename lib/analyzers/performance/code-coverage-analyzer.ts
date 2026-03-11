@@ -74,17 +74,20 @@ class CodeCoverageAnalyzer {
             return Math.max(sum, ...fn.ranges.map((r: any) => r.endOffset));
           }, 0);
 
-          const usedRanges: Record<string, any>[] = [];
+          // V8's detailed coverage uses nested ranges: each function's first range
+          // covers the entire body (count > 0 if called). Inner ranges with count === 0
+          // are the precise uncovered "holes". Summing count === 0 ranges gives actual unused bytes.
+          const unusedRanges: Record<string, any>[] = [];
           for (const fn of entry.functions) {
             for (const range of fn.ranges) {
-              if (range.count > 0) {
-                usedRanges.push(range);
+              if (range.count === 0) {
+                unusedRanges.push(range);
               }
             }
           }
 
-          const usedBytes = CodeCoverageAnalyzer.#mergeAndSum(usedRanges);
-          const unusedBytes = Math.max(0, totalLength - usedBytes);
+          const unusedBytes = CodeCoverageAnalyzer.#mergeAndSum(unusedRanges);
+          const usedBytes = Math.max(0, totalLength - unusedBytes);
 
           info.js.total += totalLength;
           info.js.used += usedBytes;

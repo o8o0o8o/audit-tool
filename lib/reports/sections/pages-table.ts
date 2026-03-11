@@ -17,6 +17,17 @@ import {
 } from '../html-utils';
 import type { PageInfo, ReportSectionData, HeadingCount, AccessibilityAnalysis, ContentQualityAnalysis } from '../../types';
 
+interface CrUXMetric {
+  percentiles?: { p75?: number };
+  distribution?: { good?: number; needsImprovement?: number; poor?: number };
+}
+
+interface CrUXData {
+  metrics?: Record<string, CrUXMetric>;
+  target?: string;
+  targetType?: string;
+}
+
 /**
  * Get column header with description tooltip from METRIC_INFO
  * @param {string} signalKey - Key from METRIC_INFO
@@ -40,6 +51,73 @@ function getColumnHeader(signalKey: string, displayName: string | null = null, t
 }
 
 /**
+ * Performance column header with optional "Lab" label when CrUX data is present
+ */
+function getPerfColumnHeader(signalKey: string, displayName: string, thresholdText: string, hasCrux: boolean) {
+  const info = METRIC_INFO[signalKey];
+  const description = info ? info.description : '';
+
+  return `
+    <th class="sortable" data-type="number" title="${escapeHtml(description)}">
+      ${escapeHtml(displayName)} ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:400;color:#6b7280;">🔬 Lab</span>' : ''}
+      ${info?.learnMore ? `<a href="${info.learnMore}" target="_blank" class="learn-more-link" title="Learn more">ⓘ</a>` : ''}
+      <span class="threshold">${escapeHtml(thresholdText)}</span>
+    </th>
+  `;
+}
+
+/**
+ * Generate a CrUX baseline row showing field data p75 values from real users.
+ * Displayed as the first row in the table for easy comparison against per-page lab data.
+ */
+function getCrUXBaselineRow(cruxData: CrUXData) {
+  const metrics = cruxData.metrics || {};
+  const targetLabel = cruxData.targetType === 'url' ? 'URL-level' : 'Origin-level';
+
+  function formatCrUXValue(metric: string): string {
+    const data = metrics[metric];
+    const p75 = data?.percentiles?.p75;
+    if (p75 == null || isNaN(Number(p75))) return '<span style="color:#9ca3af;">N/A</span>';
+    const threshold: Record<string, number> = { TTFB: 800, FCP: 1800, LCP: 2500, CLS: 0.1, INP: 200 };
+    const val = Number(p75);
+    const limit = threshold[metric] || 0;
+    const passing = metric === 'CLS' ? val <= limit : val <= limit;
+    const color = passing ? '#10b981' : '#ef4444';
+    const display = metric === 'CLS' ? val.toFixed(2) : `${Math.round(val)}ms`;
+    return `<span style="color:${color};font-weight:600;">${display}</span>`;
+  }
+
+  // Count columns before perf columns: #, URL, Source, Segment, Incoming, URL Length, URL Depth, Redirects, HTTP Links, Status, Title, Description = 12
+  const preColumns = 12;
+  // Count columns after perf columns by reading the rest of the header (Page Size onwards)
+  // Page Size, Requests, Canonical, H1, H2, H Structure, Missing Meta, Alternates, Links w/o Text,
+  // Security Score, Missing Headers, Insecure Cookies, Mixed Content, Forms w/o CSRF, Inline Scripts,
+  // Cache Score, CDN, Cached Static, Uncached Static, Service Worker,
+  // Images (4 cells from getImageOptimizationCells), Render Blocking, Uncompressed, Unminified,
+  // A11y Score, ARIA, Form Labels, Landmarks, Focus Issues,
+  // Content Score, Word Count, Text/HTML, Readability, Top Keywords, Language, PageRank, CTAs, JS Unused, Broken Links, Main Words
+  // This is complex - just use colspan for the rest
+  const postColumns = 40; // approximate, we'll use a generous colspan
+
+  return `
+    <tr style="background: linear-gradient(90deg, #eff6ff 0%, #f0fdf4 100%); border-bottom: 2px solid #3b82f6;">
+        <td style="text-align:center;font-size:11px;color:#3b82f6;font-weight:700;">🌐</td>
+        <td colspan="11" style="font-size:12px;font-weight:600;color:#1d4ed8;padding:8px;">
+            CrUX Field Data (${escapeHtml(targetLabel)}) — Real user p75 values
+            <span style="font-weight:400;color:#6b7280;font-size:11px;margin-left:8px;">${escapeHtml(cruxData.target || '')}</span>
+        </td>
+        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX TTFB p75 from real users">${formatCrUXValue('TTFB')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX FCP p75 from real users">${formatCrUXValue('FCP')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX LCP p75 from real users">${formatCrUXValue('LCP')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX CLS p75 from real users">${formatCrUXValue('CLS')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX INP p75 from real users">${formatCrUXValue('INP')}</td>
+        <td colspan="${postColumns}" style="font-size:11px;color:#6b7280;text-align:left;padding-left:10px;">
+            <span style="background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:3px;font-size:10px;">FIELD DATA</span>
+        </td>
+    </tr>`;
+}
+
+/**
  * Generate the pages table section
  * @param {Object} data - Report data
  * @param {Array} data.pages - Array of page data
@@ -48,6 +126,8 @@ function getColumnHeader(signalKey: string, displayName: string | null = null, t
  */
 function getPagesTable(data: ReportSectionData) {
   const { pages, hasPerformanceMetrics = false } = data;
+  const cruxData = (data.jsonData?.cruxData || null) as CrUXData | null;
+  const hasCrux = !!(cruxData?.metrics);
 
   return `
     <div class="table-filters" style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
@@ -85,9 +165,10 @@ function getPagesTable(data: ReportSectionData) {
     <div class="table-container">
         <table id="pagesTable">
             <thead>
-                ${getTableHeader(hasPerformanceMetrics)}
+                ${getTableHeader(hasPerformanceMetrics, hasCrux)}
             </thead>
             <tbody>
+                ${hasCrux && hasPerformanceMetrics ? getCrUXBaselineRow(cruxData!) : ''}
                 ${pages.map((page: PageInfo, index: number) => getTableRow(page, index, hasPerformanceMetrics)).join('')}
             </tbody>
         </table>
@@ -98,7 +179,7 @@ function getPagesTable(data: ReportSectionData) {
 /**
  * Generate the table header row with descriptions from METRIC_INFO
  */
-function getTableHeader(hasPerformanceMetrics: boolean) {
+function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
   return `
     <tr>
         <th style="width: 50px; text-align: center;">#</th>
@@ -129,12 +210,12 @@ function getTableHeader(hasPerformanceMetrics: boolean) {
         ${getColumnHeader('titleLength', 'Title', `${THRESHOLDS.TITLE_MIN}-${THRESHOLDS.TITLE_MAX} chars`)}
         ${getColumnHeader('descriptionLength', 'Description', `${THRESHOLDS.DESCRIPTION_MIN}-${THRESHOLDS.DESCRIPTION_MAX} chars`)}
         ${hasPerformanceMetrics ? `
-        ${getColumnHeader('ttfb', 'TTFB', `≤ ${THRESHOLDS.TTFB}ms`)}
-        ${getColumnHeader('fcp', 'FCP', `≤ ${THRESHOLDS.FCP}ms`)}
-        ${getColumnHeader('lcp', 'LCP', `≤ ${THRESHOLDS.LCP}ms`)}
-        ${getColumnHeader('cls', 'CLS', `≤ ${THRESHOLDS.CLS}`)}
+        ${getPerfColumnHeader('ttfb', 'TTFB', `≤ ${THRESHOLDS.TTFB}ms`, hasCrux)}
+        ${getPerfColumnHeader('fcp', 'FCP', `≤ ${THRESHOLDS.FCP}ms`, hasCrux)}
+        ${getPerfColumnHeader('lcp', 'LCP', `≤ ${THRESHOLDS.LCP}ms`, hasCrux)}
+        ${getPerfColumnHeader('cls', 'CLS', `≤ ${THRESHOLDS.CLS}`, hasCrux)}
         <th class="sortable" data-type="number" title="Interaction to Next Paint - measures responsiveness to user input. Core Web Vital since March 2024.">
-            INP
+            INP ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:400;color:#6b7280;">🔬 Lab</span>' : ''}
             <span class="threshold">≤ ${THRESHOLDS.INP || 200}ms</span>
         </th>
         ` : ''}
@@ -264,6 +345,43 @@ function getTableHeader(hasPerformanceMetrics: boolean) {
 }
 
 /**
+ * Generate a performance metric cell with lab value and optional CrUX field data
+ */
+function getPerfCell(page: PageInfo, metric: string, labValue: number | undefined, threshold: number, unit: string) {
+  const crux = page.cruxFieldData?.metrics?.[metric];
+  const isCls = metric === 'CLS';
+
+  // Lab display
+  const hasLab = isCls ? labValue !== undefined : !!labValue;
+  const labDisplay = hasLab
+    ? (isCls ? String(labValue) : `${labValue}${unit}`)
+    : 'N/A';
+  const labColor = hasLab ? getMetricColor(labValue!, threshold, true) : '#9ca3af';
+
+  // CrUX field display
+  if (crux) {
+    const fieldP75 = crux.p75;
+    const fieldDisplay = isCls ? fieldP75.toFixed(2) : `${Math.round(fieldP75)}${unit}`;
+    const fieldPassing = isCls ? fieldP75 <= threshold : fieldP75 <= threshold;
+    const fieldColor = fieldPassing ? '#10b981' : '#ef4444';
+    const goodPct = crux.distribution?.good ?? 0;
+
+    return `
+      <td class="metric-cell" style="text-align:center;line-height:1.3;" title="Lab: ${labDisplay} | Field p75: ${fieldDisplay} (${goodPct}% good)">
+          <span style="color:${labColor};font-weight:600;font-size:12px;">🔬 ${labDisplay}</span><br>
+          <span style="color:${fieldColor};font-weight:600;font-size:11px;">🌐 ${fieldDisplay}</span>
+      </td>`;
+  }
+
+  // No CrUX — lab only
+  const tooltip = getMetricTooltip(labValue, threshold, metric, unit === 'ms' ? 'ms' : '', true);
+  return `
+    <td class="metric-cell" style="color:${labColor};" title="${tooltip}">
+        ${labDisplay}
+    </td>`;
+}
+
+/**
  * Generate a single table row for a page
  */
 function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boolean) {
@@ -365,21 +483,11 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             <span>${escapeHtml(page.description?.substring(0, 40) || 'No description')}${(page.description?.length || 0) > 40 ? '...' : ''}</span>
         </td>
         ${hasPerformanceMetrics ? `
-        <td class="metric-cell" style="color: ${getMetricColor(page.TTFB, THRESHOLDS.TTFB, true)};" title="${getMetricTooltip(page.TTFB, THRESHOLDS.TTFB, 'TTFB', 'ms', true)}">
-            ${page.TTFB || 'N/A'}${page.TTFB ? 'ms' : ''}
-        </td>
-        <td class="metric-cell" style="color: ${getMetricColor(page.FCP, THRESHOLDS.FCP, true)};" title="${getMetricTooltip(page.FCP, THRESHOLDS.FCP, 'FCP', 'ms', true)}">
-            ${page.FCP || 'N/A'}${page.FCP ? 'ms' : ''}
-        </td>
-        <td class="metric-cell" style="color: ${getMetricColor(page.LCP, THRESHOLDS.LCP, true)};" title="${getMetricTooltip(page.LCP, THRESHOLDS.LCP, 'LCP', 'ms', true)}">
-            ${page.LCP || 'N/A'}${page.LCP ? 'ms' : ''}
-        </td>
-        <td class="metric-cell" style="color: ${getMetricColor(page.CLS, THRESHOLDS.CLS, true)};" title="${getMetricTooltip(page.CLS, THRESHOLDS.CLS, 'CLS', '', true)}">
-            ${page.CLS !== undefined ? page.CLS : 'N/A'}
-        </td>
-        <td class="metric-cell" style="color: ${getMetricColor(page.INP, THRESHOLDS.INP || 200, true)};" title="${page.INP ? 'INP: ' + page.INP + 'ms' + (page.vitals?.lcpAnalysis?.bottleneck ? ' | LCP bottleneck: ' + page.vitals.lcpAnalysis.bottleneck : '') : 'No INP data'}">
-            ${page.INP || 'N/A'}${page.INP ? 'ms' : ''}
-        </td>
+        ${getPerfCell(page, 'TTFB', page.TTFB, THRESHOLDS.TTFB, 'ms')}
+        ${getPerfCell(page, 'FCP', page.FCP, THRESHOLDS.FCP, 'ms')}
+        ${getPerfCell(page, 'LCP', page.LCP, THRESHOLDS.LCP, 'ms')}
+        ${getPerfCell(page, 'CLS', page.CLS, THRESHOLDS.CLS, '')}
+        ${getPerfCell(page, 'INP', page.INP, THRESHOLDS.INP || 200, 'ms')}
         ` : ''}
         <td class="metric-cell" style="color: ${getMetricColor(page.totalResponseSize, THRESHOLDS.PAGE_SIZE, true)};" title="${getMetricTooltip(page.totalResponseSize, THRESHOLDS.PAGE_SIZE, 'Page Size', ' bytes', true)}">
             ${formatBytes(page.totalResponseSize || 0)}

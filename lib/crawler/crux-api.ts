@@ -139,6 +139,17 @@ class CrUXAPI {
   }
 
   /**
+   * Fetch CrUX data for a specific URL only (no origin fallback).
+   * Used for per-page field data in perf mode.
+   * Returns null quickly if no URL-level data exists.
+   */
+  static async fetchCrUXForUrl(url: string, apiKey: string | null = null, formFactor: string = 'ALL_FORM_FACTORS'): Promise<CrUXFieldData | null> {
+    const key = apiKey || process.env.CRUX_API_KEY || null;
+    if (!key) return null;
+    return this.#queryCrUX(url, 'url', key, formFactor);
+  }
+
+  /**
    * Query CrUX API
    * @private
    */

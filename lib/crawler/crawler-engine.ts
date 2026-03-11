@@ -935,6 +935,52 @@ class CrawlerEngine {
       // Print crawl summary
       progress.printSummary();
 
+      // Fetch per-URL CrUX field data (only in perf mode with API key)
+      if (this.#options.perf && !abortRequested) {
+        const cruxApiKey = process.env.CRUX_API_KEY || this.#options.cruxApiKey || null;
+        if (cruxApiKey) {
+          const processedUrls = Array.from(results.pageData.processedPages);
+          const successUrls = processedUrls.filter(u => results.pageData.pages[u] && !results.pageData.pages[u].error);
+          console.log(`\n🌐 Fetching per-URL CrUX field data for ${successUrls.length} page(s)...`);
+          let cruxFound = 0;
+          // Fetch in small batches to respect rate limits
+          const CRUX_BATCH_SIZE = 5;
+          for (let i = 0; i < successUrls.length; i += CRUX_BATCH_SIZE) {
+            const urlBatch = successUrls.slice(i, i + CRUX_BATCH_SIZE);
+            const cruxResults = await Promise.allSettled(
+              urlBatch.map(url => CrUXAPI.fetchCrUXForUrl(url, cruxApiKey))
+            );
+            for (let j = 0; j < urlBatch.length; j++) {
+              const cruxResult = cruxResults[j];
+              if (cruxResult.status === 'fulfilled' && cruxResult.value) {
+                const fieldData = cruxResult.value;
+                const page = results.pageData.pages[urlBatch[j]];
+                if (page) {
+                  page.cruxFieldData = {
+                    targetType: fieldData.targetType,
+                    metrics: {},
+                  };
+                  for (const [metric, data] of Object.entries(fieldData.metrics)) {
+                    if (data.percentiles?.p75 != null) {
+                      page.cruxFieldData.metrics[metric] = {
+                        p75: data.percentiles.p75,
+                        distribution: data.distribution,
+                      };
+                    }
+                  }
+                  cruxFound++;
+                }
+              }
+            }
+            // Small delay between batches to avoid rate limiting
+            if (i + CRUX_BATCH_SIZE < successUrls.length) {
+              await new Promise(r => setTimeout(r, 200));
+            }
+          }
+          console.log(`   ✓ CrUX URL-level data found for ${cruxFound}/${successUrls.length} page(s)`);
+        }
+      }
+
       // Final save before converting data structures
       this.#callbacks.saveData();
 

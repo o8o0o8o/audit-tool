@@ -28,6 +28,7 @@ function getPerformanceStats(data: ReportSectionData) {
   const ttfbValues = pagesWithPerf.map(p => p.TTFB || 0).filter(v => v > 0).sort((a, b) => a - b);
   const lcpValues = pagesWithPerf.map(p => p.LCP || 0).filter(v => v > 0).sort((a, b) => a - b);
   const clsValues = pagesWithPerf.map(p => p.CLS || 0).filter(v => v >= 0).sort((a, b) => a - b);
+  const fcpValues = pagesWithPerf.map(p => p.FCP || 0).filter(v => v > 0).sort((a, b) => a - b);
   const inpValues = pagesWithPerf.map(p => p.INP || 0).filter(v => v > 0).sort((a, b) => a - b);
   const pageSizes = pagesArray.map(p => p.totalResponseSize || 0).filter(v => v > 0).sort((a, b) => a - b);
 
@@ -39,7 +40,7 @@ function getPerformanceStats(data: ReportSectionData) {
   const p99 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.99)] : 0;
 
   // Build CrUX comparison section if available
-  const cruxSection = cruxData ? getCrUXSection(cruxData, { ttfbValues, lcpValues, clsValues }, p75) : '';
+  const cruxSection = cruxData ? getCrUXSection(cruxData, { ttfbValues, lcpValues, clsValues, fcpValues, inpValues }, p75) : '';
 
   return `
     <div class="charts-section">
@@ -66,13 +67,15 @@ function getPerformanceStats(data: ReportSectionData) {
 /**
  * Generate CrUX comparison section
  */
-function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbValues: number[]; lcpValues: number[]; clsValues: number[] }, p75Fn: (arr: number[]) => number) {
+function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbValues: number[]; lcpValues: number[]; clsValues: number[]; fcpValues: number[]; inpValues: number[] }, p75Fn: (arr: number[]) => number) {
   if (!cruxData || !cruxData.metrics) return '';
 
   const labP75 = {
     LCP: labMetrics.lcpValues.length > 0 ? p75Fn(labMetrics.lcpValues) : null,
     CLS: labMetrics.clsValues.length > 0 ? p75Fn(labMetrics.clsValues) : null,
     TTFB: labMetrics.ttfbValues.length > 0 ? p75Fn(labMetrics.ttfbValues) : null,
+    FCP: labMetrics.fcpValues.length > 0 ? p75Fn(labMetrics.fcpValues) : null,
+    INP: labMetrics.inpValues.length > 0 ? p75Fn(labMetrics.inpValues) : null,
   };
 
   const metrics = cruxData.metrics as Record<string, Record<string, unknown>> | undefined;
@@ -89,7 +92,7 @@ function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbVal
 
     // Format values
     const fieldDisplay = metric === 'CLS' ? fieldP75.toFixed(2) : `${Math.round(fieldP75)}ms`;
-    const labDisplay = labValue !== null
+    const labDisplay = labValue != null
       ? (metric === 'CLS' ? labValue.toFixed(3) : `${Math.round(labValue)}ms`)
       : 'N/A';
 
@@ -102,7 +105,7 @@ function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbVal
 
     // Compare lab vs field
     let comparisonText = '';
-    if (labValue !== null) {
+    if (labValue != null) {
       const diff = labValue - fieldP75;
       const percentDiff = fieldP75 > 0 ? Math.round(Math.abs(diff / fieldP75) * 100) : 0;
       if (diff > fieldP75 * 0.2) {

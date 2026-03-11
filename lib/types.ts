@@ -38,13 +38,18 @@ export interface PageInfo {
   redirectChain?: Array<{url: string; status: number | string; timing?: number}>;
   error?: string;
   issues?: Issue[];
-  // Performance metrics
+  // Performance metrics (lab)
   ttfb?: number;
   lcp?: number;
   cls?: number;
   fcp?: number;
   inp?: number;
   tbt?: number;
+  // CrUX field data (per-URL, only in perf mode)
+  cruxFieldData?: {
+    metrics: Record<string, { p75: number; distribution?: { good: number; needsImprovement: number; poor: number } }>;
+    targetType: string;
+  } | null;
   // Content
   wordCount?: number;
   h1?: string[];

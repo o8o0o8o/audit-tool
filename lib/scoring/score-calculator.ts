@@ -431,6 +431,15 @@ class ScoreCalculator {
           { text: 'Remove Unused CSS', url: 'https://web.dev/articles/unused-css-rules' }
         ]
       },
+      'Large amount of unused code': {
+        effort: '1-2 hours',
+        fix: 'Audit your JS/CSS bundles with source maps or coverage tools. Split large bundles with dynamic imports, remove unused dependencies, and defer non-critical scripts.',
+        example: '// Dynamic import for non-critical code\nconst module = await import("./heavy-feature.js");\n\n// Defer non-critical CSS\n<link rel="preload" href="non-critical.css" as="style" onload="this.rel=\'stylesheet\'">',
+        resources: [
+          { text: 'Remove Unused Code', url: 'https://web.dev/articles/remove-unused-code' },
+          { text: 'Code Splitting', url: 'https://web.dev/articles/reduce-javascript-payloads-with-code-splitting' }
+        ]
+      },
       'Page has broken outbound link(s)': {
         effort: '15 minutes',
         fix: 'Fix or remove broken external links. Broken outbound links hurt user trust and may negatively impact SEO.',

@@ -158,11 +158,17 @@ class CodeCoverageAnalyzer {
     info.js.files.sort((a: any, b: any) => b.unused - a.unused);
     info.js.files = info.js.files.slice(0, 10); // Top 10
 
-    // Report issues
+    // Report issues with top offending files for actionable insights
     if (info.js.ratio > 70 && info.js.total > 50000) {
+      const topFiles = info.js.files.slice(0, 3);
+      const fileList = topFiles.length > 0
+        ? '<br>Top unused scripts:<ul style="margin:4px 0;">' + topFiles.map((f: any) =>
+          `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`
+        ).join('') + '</ul>'
+        : '';
       issues.push({
         message: 'High percentage of unused JavaScript',
-        detail: `<a href="${url}">${url}</a>: ${info.js.ratio}% of JavaScript is unused (${(info.js.unused / 1024).toFixed(0)}KB of ${(info.js.total / 1024).toFixed(0)}KB). Consider code splitting or removing unused bundles.`,
+        detail: `<a href="${url}">${url}</a>: ${info.js.ratio}% of JavaScript is unused (${(info.js.unused / 1024).toFixed(0)}KB of ${(info.js.total / 1024).toFixed(0)}KB).${fileList}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -170,15 +176,21 @@ class CodeCoverageAnalyzer {
     if (info.css.ratio > 80 && info.css.total > 20000) {
       issues.push({
         message: 'High percentage of unused CSS',
-        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${(info.css.unused / 1024).toFixed(0)}KB of ${(info.css.total / 1024).toFixed(0)}KB). Consider purging unused CSS rules.`,
+        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${(info.css.unused / 1024).toFixed(0)}KB of ${(info.css.total / 1024).toFixed(0)}KB).`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     if (info.totalUnusedBytes > 500000) {
+      const topFiles = info.js.files.slice(0, 5);
+      const fileList = topFiles.length > 0
+        ? '<br>Largest unused bundles:<ul style="margin:4px 0;">' + topFiles.map((f: any) =>
+          `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB of ${(f.total / 1024).toFixed(0)}KB)</li>`
+        ).join('') + '</ul>'
+        : '';
       warnings.push({
         message: 'Large amount of unused code',
-        detail: `<a href="${url}">${url}</a>: ${(info.totalUnusedBytes / 1024).toFixed(0)}KB of unused code (${info.unusedRatio}% of total). This significantly impacts page load time.`,
+        detail: `<a href="${url}">${url}</a>: ${(info.totalUnusedBytes / 1024).toFixed(0)}KB of unused code (${info.unusedRatio}% of total). This significantly impacts page load time.${fileList}`,
         severity: SEVERITY.HIGH,
       });
     }

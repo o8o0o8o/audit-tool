@@ -231,16 +231,16 @@ class JavaScriptRenderingAnalyzer {
     if (html.includes('__NUXT__') || html.includes('/_nuxt/')) {
       return 'Nuxt.js';
     }
-    if (html.includes('ng-version') || html.includes('ng-app')) {
+    if (html.includes('ng-version="') || html.includes('_ngcontent-') || html.includes('_nghost-')) {
       return 'Angular';
     }
-    if (html.includes('data-reactroot') || html.includes('__REACT_')) {
+    if (html.includes('data-reactroot') || html.includes('data-reactid') || html.includes('__REACT_')) {
       return 'React';
     }
-    if (html.includes('data-v-') || html.includes('Vue.js')) {
+    if (html.includes('data-v-') || html.includes('__VUE__')) {
       return 'Vue.js';
     }
-    if (html.includes('data-ember') || html.includes('ember-')) {
+    if (html.includes('data-ember-action') || html.includes('class="ember-view"')) {
       return 'Ember.js';
     }
     if (html.includes('svelte-') || html.includes('__svelte')) {

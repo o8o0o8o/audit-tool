@@ -20,9 +20,9 @@ class TechnologyDetector {
       { name: 'Wix', patterns: { html: [/wix\.com/i, /wixstatic\.com/i], meta: { generator: /wix/i } } },
       { name: 'Webflow', patterns: { html: [/webflow/i], meta: { generator: /webflow/i }, scripts: [/webflow/i] } },
       { name: 'Ghost', patterns: { meta: { generator: /ghost/i }, html: [/ghost\.org/i] } },
-      { name: 'Contentful', patterns: { html: [/contentful/i], scripts: [/contentful/i] } },
-      { name: 'Sanity', patterns: { scripts: [/sanity\.io|cdn\.sanity/i] } },
-      { name: 'Strapi', patterns: { html: [/strapi/i] } },
+      { name: 'Contentful', patterns: { scripts: [/contentful\.com|\/contentful\./i] } },
+      { name: 'Sanity', patterns: { scripts: [/sanity\.io|cdn\.sanity\.io/i] } },
+      { name: 'Strapi', patterns: { scripts: [/\/strapi\//i] } },
       { name: 'HubSpot CMS', patterns: { html: [/hs-scripts\.com/i, /hubspot/i], scripts: [/hubspot/i] } },
       { name: 'BigCommerce', patterns: { html: [/bigcommerce/i], scripts: [/bigcommerce/i] } },
       { name: 'Magento', patterns: { html: [/mage\/cookies/i, /Magento_/i], cookies: [/^PHPSESSID/i, /^frontend/i] } },
@@ -31,31 +31,31 @@ class TechnologyDetector {
 
     // JavaScript Frameworks
     frameworks: [
-      { name: 'React', patterns: { html: [/react/i, /_reactRoot/i, /data-reactroot/i], scripts: [/react\.production|react\.development|react-dom/i], globals: ['React', '__REACT_DEVTOOLS_GLOBAL_HOOK__'] } },
-      { name: 'Next.js', patterns: { html: [/__NEXT_DATA__/i, /_next\//i], scripts: [/_next\//i], globals: ['__NEXT_DATA__'] } },
-      { name: 'Vue.js', patterns: { html: [/v-cloak|v-if|v-for|data-v-/i], scripts: [/vue\.js|vue\.min\.js|vue\.runtime/i], globals: ['Vue', '__VUE__'] } },
-      { name: 'Nuxt.js', patterns: { html: [/__NUXT__|_nuxt\//i], scripts: [/_nuxt\//i], globals: ['__NUXT__'] } },
-      { name: 'Angular', patterns: { html: [/ng-version|ng-app|\[ng/i], scripts: [/angular\.js|angular\.min|@angular/i], globals: ['angular', 'ng'] } },
-      { name: 'Svelte', patterns: { html: [/svelte/i], scripts: [/svelte/i] } },
-      { name: 'SvelteKit', patterns: { html: [/__sveltekit/i], scripts: [/sveltekit/i] } },
-      { name: 'Gatsby', patterns: { html: [/gatsby/i, /___gatsby/i], scripts: [/gatsby/i] } },
-      { name: 'Remix', patterns: { html: [/__remixContext/i], globals: ['__remixContext'] } },
-      { name: 'Astro', patterns: { html: [/astro-/i], scripts: [/astro/i] } },
-      { name: 'jQuery', patterns: { scripts: [/jquery[\.-]?\d|jquery\.min/i], globals: ['jQuery', '$'] } },
-      { name: 'Alpine.js', patterns: { html: [/x-data|x-init|x-show/i], scripts: [/alpine/i] } },
-      { name: 'HTMX', patterns: { html: [/hx-get|hx-post|hx-trigger/i], scripts: [/htmx/i] } },
-      { name: 'Ember.js', patterns: { html: [/ember/i], scripts: [/ember/i], globals: ['Ember'] } },
-      { name: 'Backbone.js', patterns: { scripts: [/backbone/i], globals: ['Backbone'] } },
+      { name: 'React', patterns: { html: [/data-reactroot|data-reactid|__react/i], scripts: [/react\.production|react\.development|react-dom/i], globals: ['React', '__REACT_DEVTOOLS_GLOBAL_HOOK__'] } },
+      { name: 'Next.js', patterns: { html: [/__NEXT_DATA__|_next\/static|_next\/image/], scripts: [/_next\/static\//], globals: ['__NEXT_DATA__'] } },
+      { name: 'Vue.js', patterns: { html: [/data-v-[a-f0-9]{6,}/i, /v-cloak/i], scripts: [/\/vue\.js|\/vue\.min\.js|\/vue\.runtime|\/vue@/i], globals: ['Vue', '__VUE__'] } },
+      { name: 'Nuxt.js', patterns: { html: [/__NUXT__/], scripts: [/_nuxt\//], globals: ['__NUXT__'] } },
+      { name: 'Angular', patterns: { html: [/ng-version="/, /_ngcontent-/, /_nghost-/], scripts: [/\/@angular\//i, /\/angular\.min\.js/i] } },
+      { name: 'Svelte', patterns: { html: [/svelte-[a-z0-9]+|__svelte/], scripts: [/\/svelte\//i, /svelte\.min\.js/i] } },
+      { name: 'SvelteKit', patterns: { html: [/__sveltekit/], scripts: [/sveltekit/i] } },
+      { name: 'Gatsby', patterns: { html: [/id="___gatsby"|___gatsby/], scripts: [/\/gatsby-/i] } },
+      { name: 'Remix', patterns: { html: [/__remixContext/], globals: ['__remixContext'] } },
+      { name: 'Astro', patterns: { html: [/astro-island|data-astro/], scripts: [/astro\/[a-z]/i] } },
+      { name: 'jQuery', patterns: { scripts: [/\/jquery[\.-]\d|\/jquery\.min\.js/i], globals: ['jQuery'] } },
+      { name: 'Alpine.js', patterns: { html: [/x-data\s*=|x-init\s*=/i], scripts: [/\/alpine[\.\/@]/i] } },
+      { name: 'HTMX', patterns: { html: [/hx-get\s*=|hx-post\s*=|hx-trigger\s*=/i], scripts: [/\/htmx[\.\/@]/i] } },
+      { name: 'Ember.js', patterns: { html: [/data-ember-action|id="ember\d+"|class="ember-view"/], scripts: [/\/ember\.js|\/ember\.min\.js|\/ember\.prod/i], globals: ['Ember'] } },
+      { name: 'Backbone.js', patterns: { scripts: [/\/backbone[\.\-]|\/backbone\.min\.js/i], globals: ['Backbone'] } },
     ],
 
     // CSS Frameworks
     cssFrameworks: [
-      { name: 'Tailwind CSS', patterns: { html: [/class="[^"]*(?:flex|grid|p-\d|m-\d|text-|bg-|border-)[^"]*"/i] } },
-      { name: 'Bootstrap', patterns: { html: [/class="[^"]*(?:container|row|col-|btn|navbar)[^"]*"/i], scripts: [/bootstrap/i] } },
-      { name: 'Material UI', patterns: { html: [/MuiBox|Mui[A-Z]/i], scripts: [/@mui|material-ui/i] } },
-      { name: 'Chakra UI', patterns: { html: [/chakra/i], scripts: [/chakra/i] } },
-      { name: 'Bulma', patterns: { html: [/class="[^"]*(?:is-|has-)[^"]*"/i, /bulma/i] } },
-      { name: 'Foundation', patterns: { html: [/class="[^"]*(?:cell|grid-x|grid-y)[^"]*"/i], scripts: [/foundation/i] } },
+      { name: 'Tailwind CSS', patterns: { html: [/class="[^"]*(?:sm:|md:|lg:|xl:)[^"]*"/i, /class="[^"]*(?:p-\d|m-\d|text-\w+-\d{3}|bg-\w+-\d{3})[^"]*"/i] } },
+      { name: 'Bootstrap', patterns: { html: [/class="[^"]*(?:col-(?:sm|md|lg|xl)-\d|navbar-(?:brand|toggler)|btn-(?:primary|secondary|success|danger))[^"]*"/i], scripts: [/\/bootstrap[\.\-]|\/bootstrap\.min/i] } },
+      { name: 'Material UI', patterns: { html: [/class="[^"]*Mui[A-Z][a-z]+-root[^"]*"/], scripts: [/\/@mui\//i, /\/material-ui\//i] } },
+      { name: 'Chakra UI', patterns: { html: [/class="[^"]*chakra-[a-z]/i], scripts: [/\/@chakra-ui\//i] } },
+      { name: 'Bulma', patterns: { html: [/class="[^"]*(?:is-size-\d|is-(?:primary|success|warning|danger|info)|has-text-|column is-)[^"]*"/i], scripts: [/\/bulma[\.\/@]/i] } },
+      { name: 'Foundation', patterns: { html: [/class="[^"]*(?:grid-x|grid-y|cell (?:small|medium|large)-\d)[^"]*"/i], scripts: [/\/foundation[\.\-]/i] } },
     ],
 
     // Analytics & Tracking
@@ -83,9 +83,9 @@ class TechnologyDetector {
     marketing: [
       { name: 'HubSpot', patterns: { scripts: [/js\.hs-scripts\.com|hubspot/i] } },
       { name: 'Mailchimp', patterns: { html: [/mailchimp/i], scripts: [/mailchimp|chimpstatic/i] } },
-      { name: 'Intercom', patterns: { scripts: [/intercom/i], globals: ['Intercom'] } },
-      { name: 'Drift', patterns: { scripts: [/drift\.com/i], globals: ['drift'] } },
-      { name: 'Zendesk', patterns: { scripts: [/zendesk/i], globals: ['zE', 'Zendesk'] } },
+      { name: 'Intercom', patterns: { scripts: [/widget\.intercom\.io|intercomcdn/i], globals: ['Intercom'] } },
+      { name: 'Drift', patterns: { scripts: [/js\.driftt\.com|drift\.com\/include/i], globals: ['drift'] } },
+      { name: 'Zendesk', patterns: { scripts: [/static\.zdassets\.com|zopim/i], globals: ['zE'] } },
       { name: 'Crisp', patterns: { scripts: [/crisp\.chat/i], globals: ['$crisp'] } },
       { name: 'Tawk.to', patterns: { scripts: [/tawk\.to/i], globals: ['Tawk_API'] } },
       { name: 'LiveChat', patterns: { scripts: [/livechat/i], globals: ['LiveChatWidget'] } },
@@ -102,7 +102,7 @@ class TechnologyDetector {
       { name: 'Fastly', patterns: { headers: { 'x-served-by': /cache/i, via: /varnish/i } } },
       { name: 'AWS CloudFront', patterns: { headers: { 'x-amz-cf-id': /./i, via: /cloudfront/i } } },
       { name: 'Akamai', patterns: { headers: { 'x-akamai': /./i, server: /akamai/i } } },
-      { name: 'Vercel', patterns: { headers: { 'x-vercel-id': /./i, server: /vercel/i }, html: [/vercel/i] } },
+      { name: 'Vercel', patterns: { headers: { 'x-vercel-id': /./i, server: /vercel/i } } },
       { name: 'Netlify', patterns: { headers: { 'x-nf-request-id': /./i, server: /netlify/i } } },
       { name: 'GitHub Pages', patterns: { headers: { server: /github/i } } },
       { name: 'Render', patterns: { headers: { 'x-render-origin-server': /./i } } },
@@ -168,13 +168,13 @@ class TechnologyDetector {
     other: [
       { name: 'PWA', patterns: { html: [/manifest\.json/i], globals: ['serviceWorker'] } },
       { name: 'AMP', patterns: { html: [/<html[^>]*amp/i, /cdn\.ampproject\.org/i] } },
-      { name: 'Turbo', patterns: { html: [/data-turbo/i], scripts: [/turbo/i] } },
-      { name: 'Stimulus', patterns: { html: [/data-controller/i], scripts: [/stimulus/i] } },
-      { name: 'Partytown', patterns: { scripts: [/partytown/i] } },
-      { name: 'Sentry', patterns: { scripts: [/sentry/i], globals: ['Sentry'] } },
-      { name: 'DataDog', patterns: { scripts: [/datadoghq/i] } },
-      { name: 'New Relic', patterns: { scripts: [/newrelic|nr-data/i] } },
-      { name: 'LaunchDarkly', patterns: { scripts: [/launchdarkly/i] } },
+      { name: 'Turbo', patterns: { html: [/data-turbo-/i], scripts: [/\/turbo[\.\/@]/i] } },
+      { name: 'Stimulus', patterns: { html: [/data-controller\s*=/i], scripts: [/\/stimulus[\.\/@]/i] } },
+      { name: 'Partytown', patterns: { scripts: [/\/partytown\//i] } },
+      { name: 'Sentry', patterns: { scripts: [/browser\.sentry-cdn|sentry\.io\/\d/i], globals: ['Sentry'] } },
+      { name: 'DataDog', patterns: { scripts: [/datadoghq\.com/i] } },
+      { name: 'New Relic', patterns: { scripts: [/nr-data\.net|newrelic\.com/i] } },
+      { name: 'LaunchDarkly', patterns: { scripts: [/launchdarkly\.com/i] } },
     ],
   };
 
@@ -207,11 +207,11 @@ class TechnologyDetector {
     try {
       const result = await chromePage.evaluate(() => {
         const knownGlobals = [
-          'React', '__REACT_DEVTOOLS_GLOBAL_HOOK__', 'Vue', '__VUE__', 'angular', 'ng',
-          'jQuery', '$', 'Ember', 'Backbone', '__NEXT_DATA__', '__NUXT__', '__remixContext',
-          'mixpanel', 'amplitude', 'analytics', 'heap', 'FS', 'LogRocket', 'posthog',
-          'Intercom', 'drift', 'zE', 'Zendesk', '$crisp', 'Tawk_API', 'LiveChatWidget',
-          'Stripe', 'paypal', 'grecaptcha', 'Sentry', 'serviceWorker'
+          'React', '__REACT_DEVTOOLS_GLOBAL_HOOK__', 'Vue', '__VUE__',
+          'jQuery', 'Ember', 'Backbone', '__NEXT_DATA__', '__NUXT__', '__remixContext',
+          'mixpanel', 'amplitude', 'heap', 'FS', 'LogRocket', 'posthog',
+          'Intercom', 'drift', 'zE', '$crisp', 'Tawk_API', 'LiveChatWidget',
+          'Stripe', 'paypal', 'grecaptcha', 'Sentry'
         ];
         return knownGlobals.filter(g => {
           try {

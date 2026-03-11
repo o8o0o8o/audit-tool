@@ -186,7 +186,7 @@ class TechnicalSEOAnalyzer {
     }
 
     // Angular
-    if (html.includes('ng-version') || html.includes('_ngcontent')) {
+    if (html.includes('ng-version="') || html.includes('_ngcontent-') || html.includes('_nghost-')) {
       return 'Angular';
     }
 

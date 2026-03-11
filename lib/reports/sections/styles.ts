@@ -2508,6 +2508,41 @@ function getStyles() {
                   word-break: break-all;
               }
 
+              /* Hide non-essential columns in pages table for PDF.
+                 Keep: #(1) URL(2) Status(10) Title(11) Desc(12)
+                       LCP(15) CLS(16) PageSize(18) Requests(19)
+                       Canonical(20) H1(21) Score(45) WordCount(51) */
+              .table-container th,
+              .table-container td {
+                  display: none !important;
+              }
+              .table-container th:nth-child(1),  .table-container td:nth-child(1),
+              .table-container th:nth-child(2),  .table-container td:nth-child(2),
+              .table-container th:nth-child(10), .table-container td:nth-child(10),
+              .table-container th:nth-child(11), .table-container td:nth-child(11),
+              .table-container th:nth-child(12), .table-container td:nth-child(12),
+              .table-container th:nth-child(15), .table-container td:nth-child(15),
+              .table-container th:nth-child(16), .table-container td:nth-child(16),
+              .table-container th:nth-child(18), .table-container td:nth-child(18),
+              .table-container th:nth-child(19), .table-container td:nth-child(19),
+              .table-container th:nth-child(20), .table-container td:nth-child(20),
+              .table-container th:nth-child(21), .table-container td:nth-child(21),
+              .table-container th:nth-child(45), .table-container td:nth-child(45),
+              .table-container th:nth-child(51), .table-container td:nth-child(51) {
+                  display: table-cell !important;
+              }
+
+              .table-container table {
+                  min-width: 100% !important;
+                  table-layout: fixed !important;
+              }
+
+              .table-container th.url-col {
+                  width: 25% !important;
+                  min-width: 0 !important;
+                  max-width: none !important;
+              }
+
               /* === Info sections / Config === */
               .info-section {
                   padding: 15px !important;

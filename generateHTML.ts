@@ -27,8 +27,7 @@ import {
   getStyles,
   getScripts,
   getExecutiveSummary,
-  getQuickWins,
-  getTopIssues,
+  getIssuesDetail,
   getPerformanceStats,
   getHistoricalProgress,
   getChartsSection,
@@ -115,8 +114,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
       <!-- Sticky navigation sidebar -->
       <nav class="report-nav" id="reportNav" aria-label="Report sections">
           <a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>
-          <a href="#quick-wins" title="Quick Wins">🎯<span class="nav-label">Quick Wins</span></a>
-          <a href="#top-issues" title="Top Issues">⚠️<span class="nav-label">Issues</span></a>
+          <a href="#issues-detail" title="Issues">📋<span class="nav-label">Issues</span></a>
           <a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>
           <a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>
           <a href="#content-insights" title="Content Insights">🔍<span class="nav-label">Insights</span></a>
@@ -135,7 +133,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               <button class="fab-item" onclick="exportCSV('issues')">⚠️ Issues CSV</button>
               <button class="fab-item" onclick="exportCSV('pages')">📄 Pages CSV</button>
               <button class="fab-item" onclick="exportCSV('performance')">⚡ Performance CSV</button>
-              <button class="fab-item" onclick="exportCSV('quickwins')">🎯 Quick Wins CSV</button>
+              <button class="fab-item" onclick="exportCSV('issues')">📋 Issues CSV</button>
               <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
               <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
               <button class="fab-item" onclick="exportAll()">📦 Export All</button>
@@ -216,7 +214,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
                           <button onclick="exportCSV('pages')" class="export-btn">📄 Pages CSV</button>
                           <button onclick="showIssueFilterModal()" class="export-btn">⚠️ Issues CSV</button>
                           <button onclick="exportCSV('performance')" class="export-btn">⚡ Performance CSV</button>
-                          <button onclick="exportCSV('quickwins')" class="export-btn">🎯 Quick Wins CSV</button>
+                          <button onclick="exportCSV('issues')" class="export-btn">📋 All Issues CSV</button>
                           <button onclick="exportCSV('summary')" class="export-btn">📊 Summary CSV</button>
                           <button onclick="saveToPDF()" class="pdf-btn">📥 Save to PDF</button>
                           <button onclick="exportMarkdown()" class="export-btn" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">📝 Markdown</button>
@@ -276,8 +274,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
           <!-- Section tabs for quick navigation -->
           <div class="section-tabs" id="sectionTabs">
               <button class="section-tab active" data-target="executive-summary">Summary</button>
-              <button class="section-tab" data-target="quick-wins">Quick Wins</button>
-              <button class="section-tab" data-target="top-issues">Issues</button>
+              <button class="section-tab" data-target="issues-detail">Issues</button>
               <button class="section-tab" data-target="performance">Performance</button>
               <button class="section-tab" data-target="charts">Charts</button>
               <button class="section-tab" data-target="content-insights">Insights</button>
@@ -291,12 +288,8 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
           ${getExecutiveSummary(sectionData)}
           </div>
 
-          <div id="quick-wins">
-          ${getQuickWins(sectionData)}
-          </div>
-
-          <div id="top-issues">
-          ${getTopIssues(sectionData)}
+          <div id="issues-detail">
+          ${getIssuesDetail(sectionData)}
           </div>
 
           <div id="performance">

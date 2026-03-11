@@ -6,8 +6,7 @@
 import { getStyles } from './styles';
 import { getScripts } from './scripts';
 import { getExecutiveSummary } from './executive-summary';
-import { getQuickWins } from './quick-wins';
-import { getTopIssues } from './top-issues';
+import { getIssuesDetail } from './issues-detail';
 import { getPerformanceStats } from './performance-stats';
 import { getHistoricalProgress } from './historical-progress';
 import { getChartsSection } from './charts-section';
@@ -17,4 +16,4 @@ import { getTechnologyStack } from './technology-stack';
 import { getSourceCodeAnalysis } from './source-code-analysis';
 import { getContentInsights } from './content-insights';
 
-export { getStyles, getScripts, getExecutiveSummary, getQuickWins, getTopIssues, getPerformanceStats, getHistoricalProgress, getChartsSection, getConfigInfo, getPagesTable, getTechnologyStack, getSourceCodeAnalysis, getContentInsights };
+export { getStyles, getScripts, getExecutiveSummary, getIssuesDetail, getPerformanceStats, getHistoricalProgress, getChartsSection, getConfigInfo, getPagesTable, getTechnologyStack, getSourceCodeAnalysis, getContentInsights };

@@ -27,6 +27,7 @@ class CodeCoverageAnalyzer {
         callCount: false,
         detailed: true,
       });
+      await client.send('DOM.enable');
       await client.send('CSS.enable');
       await client.send('CSS.startRuleUsageTracking');
 

@@ -311,11 +311,12 @@ function getOutboundLinksSection(pages: PageInfo[]) {
 
   const brokenList = [...brokenUrls.entries()]
     .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 5)
+    .slice(0, 10)
     .map(([url, data]) => {
       let short = url;
-      if (short.length > 60) short = short.substring(0, 57) + '...';
-      return `<tr><td style="padding: 4px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626;">${escapeHtml(short)}</a></td><td style="padding: 4px 8px; font-size: 12px; text-align: center;">${data.status}</td><td style="padding: 4px 8px; font-size: 12px; text-align: center;">${data.count}</td></tr>`;
+      if (short.length > 70) short = short.substring(0, 67) + '...';
+      const statusColor = data.status >= 500 ? '#dc2626' : data.status >= 400 ? '#ea580c' : '#6b7280';
+      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626;">${escapeHtml(short)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center;">${data.count}</td></tr>`;
     }).join('');
 
   return `
@@ -335,7 +336,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
           <div style="font-size: 11px; color: #a16207;">Redirected</div>
         </div>
       </div>
-      ${brokenList ? `<table style="width: 100%; table-layout: fixed; border-collapse: collapse;"><thead><tr style="background: #f9fafb;"><th style="padding: 6px 8px; text-align: left; font-size: 11px; color: #6b7280;">Broken URL</th><th style="padding: 6px 8px; font-size: 11px; color: #6b7280; width: 60px;">Status</th><th style="padding: 6px 8px; font-size: 11px; color: #6b7280; width: 70px;">Found on</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
+      ${brokenList ? `<table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;"><thead><tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; font-weight: 600;">Broken URL</th><th style="padding: 8px; font-size: 11px; color: #6b7280; font-weight: 600; width: 70px; text-align: center;">Status</th><th style="padding: 8px; font-size: 11px; color: #6b7280; font-weight: 600; width: 80px; text-align: center;">Pages</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
     </div>`;
 }
 

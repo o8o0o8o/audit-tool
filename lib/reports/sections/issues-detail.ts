@@ -101,14 +101,21 @@ function getIssuesDetail(data: ReportSectionData) {
 
       ${counts.critical > 0 ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#991b1b;"><strong>${counts.critical} critical issue${counts.critical > 1 ? 's' : ''}</strong> require immediate attention.</div>` : ''}
 
-      <table class="issues-table">
+      <table class="issues-table" style="table-layout:fixed;width:100%;">
+        <colgroup>
+          <col style="width:32px;">
+          <col style="width:80px;">
+          <col>
+          <col style="width:70px;">
+          <col style="width:90px;">
+        </colgroup>
         <thead>
           <tr>
-            <th style="width:32px;"></th>
-            <th style="width:80px;">Severity</th>
+            <th></th>
+            <th>Severity</th>
             <th>Issue</th>
-            <th style="width:70px;text-align:right;">Count</th>
-            <th style="width:90px;text-align:right;">Effort</th>
+            <th style="text-align:right;">Count</th>
+            <th style="text-align:right;">Effort</th>
           </tr>
         </thead>
         <tbody>
@@ -163,7 +170,7 @@ function renderIssueRow(issue: IssueEntry, idx: number) {
     <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
       <td style="text-align:center;color:#9ca3af;font-size:12px;"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
-      <td style="font-weight:500;">${escapeHtml(key)}${isQuickWin ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;vertical-align:middle;">QUICK WIN</span>' : ''}</td>
+      <td style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;vertical-align:middle;">QUICK WIN</span>' : ''}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums;">${count}</td>
       <td style="text-align:right;font-size:12px;color:#6b7280;">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
     </tr>

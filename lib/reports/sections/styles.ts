@@ -91,21 +91,21 @@ function getStyles() {
               pointer-events: none;
           }
 
-          table {
+          .table-container table {
               width: 100%;
               min-width: 4500px;
               border-collapse: collapse;
               font-size: 13px;
           }
 
-          thead {
+          .table-container thead {
               background: #f9fafb;
               position: sticky;
               top: 0;
               z-index: 10;
           }
 
-          th {
+          .table-container th {
               padding: 12px 8px;
               text-align: left;
               font-weight: 600;
@@ -114,22 +114,22 @@ function getStyles() {
               white-space: nowrap;
           }
 
-          th.url-col {
+          .table-container th.url-col {
               min-width: 300px;
               max-width: 400px;
           }
 
-          th .threshold {
+          .table-container th .threshold {
               display: block;
               font-size: 11px;
               font-weight: 500;
           }
 
-          th[title] {
+          .table-container th[title] {
               cursor: help;
           }
 
-          th[title]:hover {
+          .table-container th[title]:hover {
               background: #f3f4f6;
           }
 
@@ -150,25 +150,25 @@ function getStyles() {
               margin-top: 2px;
           }
 
-          td {
+          .table-container td {
               padding: 10px 8px;
               border-bottom: 1px solid #e5e7eb;
               color: #6b7280;
           }
 
-          tr:hover td {
+          .table-container tr:hover td {
               background: #f9fafb;
           }
 
-          tr:hover td:first-child {
+          .table-container tr:hover td:first-child {
               background: #e5e7eb;
           }
 
-          tr:last-child td {
+          .table-container tr:last-child td {
               border-bottom: none;
           }
 
-          tbody tr td:first-child {
+          .table-container tbody tr td:first-child {
               position: sticky;
               left: 0;
               background: white;
@@ -176,7 +176,7 @@ function getStyles() {
               border-right: 1px solid #e5e7eb;
           }
 
-          tbody tr:hover td:first-child {
+          .table-container tbody tr:hover td:first-child {
               background: #e5e7eb;
           }
 
@@ -707,7 +707,7 @@ function getStyles() {
           .sev-pill:hover { border-color: #9ca3af; }
           .sev-pill.active { background: #1f2937; color: white; border-color: #1f2937; }
 
-          .issues-table { width: 100%; border-collapse: collapse; }
+          .issues-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
           .issues-table th {
               text-align: left;
               padding: 8px 12px;
@@ -876,7 +876,7 @@ function getStyles() {
               padding: 30px;
               margin: 30px auto;
               max-width: 100%;
-              overflow: hidden;
+              overflow-x: auto;
               box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
           }
 

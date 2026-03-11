@@ -316,7 +316,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
     .slice(0, 10)
     .map(([url, data]) => {
       const statusColor = data.status >= 500 ? '#dc2626' : data.status >= 400 ? '#ea580c' : '#6b7280';
-      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
+      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
     }).join('');
 
   return `
@@ -336,7 +336,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
           <div style="font-size: 11px; color: #a16207;">Redirected</div>
         </div>
       </div>
-      ${brokenList ? `<table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;"><colgroup><col style="width: auto;"><col style="width: 70px;"><col style="width: 80px;"></colgroup><thead><tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; font-weight: 600;">Broken URL</th><th style="padding: 8px; font-size: 11px; color: #6b7280; font-weight: 600; text-align: center;">Status</th><th style="padding: 8px; font-size: 11px; color: #6b7280; font-weight: 600; text-align: center;">Pages</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
+      ${brokenList ? `<table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;"><colgroup><col><col style="width: 70px;"><col style="width: 80px;"></colgroup><thead><tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; font-weight: 600;">Broken URL</th><th style="padding: 8px; font-size: 11px; color: #6b7280; font-weight: 600; text-align: center;">Status</th><th style="padding: 8px; font-size: 11px; color: #6b7280; font-weight: 600; text-align: center;">Pages</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
     </div>`;
 }
 

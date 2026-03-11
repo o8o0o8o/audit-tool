@@ -116,13 +116,16 @@ class LanguageDetectionAnalyzer {
       .map(([tri]) => tri);
 
     // Compare against each language profile
+    // Use a fixed penalty so shorter profiles (e.g. zh with 30 trigrams) don't get
+    // an unfair advantage over longer ones (e.g. en with 55 trigrams).
+    const MISS_PENALTY = 100;
     const scores: Record<string, number> = {};
     for (const [lang, profile] of Object.entries(LANGUAGE_PROFILES)) {
       let distance = 0;
       for (let i = 0; i < textProfile.length; i++) {
         const profileIdx = profile.indexOf(textProfile[i]);
         if (profileIdx === -1) {
-          distance += profile.length; // Penalty for missing trigram
+          distance += MISS_PENALTY;
         } else {
           distance += Math.abs(i - profileIdx);
         }

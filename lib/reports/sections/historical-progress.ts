@@ -4,6 +4,9 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import type { ReportSectionData, TrendDataCompat, AuditSnapshot, IssueTrend } from '../../types';
+
+type IssueTrendItem = IssueTrend & { issue: string; priorityScore: number };
 
 /**
  * Generate the historical progress section
@@ -13,11 +16,13 @@ import { escapeHtml } from '../html-utils';
  * @param {Object} data.previousAudit - Previous audit for comparison
  * @returns {string} HTML string for the historical progress section
  */
-function getHistoricalProgress(data: any) {
+function getHistoricalProgress(data: ReportSectionData) {
   const { jsonData, trendData, previousAudit } = data;
 
-  const currentScore = jsonData.analysis?.summary?.overallScore || 0;
-  const currentIssues = jsonData.analysis?.summary?.totalIssues || 0;
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const summaryObj = (analysisObj.summary || {}) as Record<string, unknown>;
+  const currentScore = (summaryObj.overallScore || 0) as number;
+  const currentIssues = (summaryObj.totalIssues || 0) as number;
   const auditCount = trendData?.labels?.length || 1;
 
   // Show first audit message if no previous audit
@@ -88,7 +93,7 @@ function getHistoricalProgress(data: any) {
 /**
  * Show trends for new insight metrics (language, coverage, outbound links)
  */
-function getInsightTrends(trendData: any) {
+function getInsightTrends(trendData: TrendDataCompat | null) {
   if (!trendData?.insights) return '';
 
   const metrics = [
@@ -101,9 +106,9 @@ function getInsightTrends(trendData: any) {
   const rows = [];
   for (const m of metrics) {
     const values = trendData.insights[m.key];
-    if (!values || values.every(v => v === null)) continue;
+    if (!values || values.every((v: number | null) => v === null)) continue;
 
-    const nonNull = values.filter(v => v !== null);
+    const nonNull = values.filter((v: number | null) => v !== null);
     if (nonNull.length < 2) continue;
 
     const first = nonNull[0];
@@ -141,28 +146,28 @@ function getInsightTrends(trendData: any) {
  * @param {Object} trendData - Trend data including issueTrends
  * @returns {string} HTML string for the issue trends section
  */
-function getIssueTrendsSection(trendData: any) {
+function getIssueTrendsSection(trendData: TrendDataCompat) {
   if (!trendData.issueTrends || Object.keys(trendData.issueTrends).length === 0) {
     return '';
   }
 
   // Get top 10 most significant trending issues
   const sortedIssues = Object.entries(trendData.issueTrends)
-    .map(([issue, data]: [string, any]) => ({
+    .map(([issue, data]: [string, IssueTrend]) => ({
       issue,
       ...data,
       // Priority score: critical/high severity + high count + significant change
       priorityScore: getSeverityWeight(data.severity) * data.latestCount * (1 + Math.abs(data.change) / 10)
     }))
-    .filter((item: any) => item.latestCount > 0 || item.trend === 'fixed') // Only show active or recently fixed
-    .sort((a: any, b: any) => b.priorityScore - a.priorityScore)
+    .filter((item: IssueTrendItem) => item.latestCount > 0 || item.trend === 'fixed') // Only show active or recently fixed
+    .sort((a: IssueTrendItem, b: IssueTrendItem) => b.priorityScore - a.priorityScore)
     .slice(0, 10);
 
   if (sortedIssues.length === 0) {
     return '';
   }
 
-  const issueRows = sortedIssues.map((item: any, index: number) => {
+  const issueRows = sortedIssues.map((item: IssueTrendItem, index: number) => {
     const trendIcon = getTrendIcon(item.trend);
     const severityColor = getSeverityColor(item.severity);
     const changeText = getChangeText(item);
@@ -267,7 +272,7 @@ function getTrendColor(trend: string) {
   return colors[trend] || '#6b7280';
 }
 
-function getChangeText(item: any) {
+function getChangeText(item: IssueTrendItem) {
   if (item.trend === 'new') return 'New';
   if (item.trend === 'fixed') return 'Fixed';
   if (item.change === 0) return 'No change';
@@ -303,7 +308,7 @@ function getDeltaCard(title: string, value: number, isPositive: boolean, subtitl
 /**
  * Generate an info card (static value)
  */
-function getInfoCard(title: string, value: any, gradientStart: string, gradientEnd: string, subtitle: string) {
+function getInfoCard(title: string, value: string | number, gradientStart: string, gradientEnd: string, subtitle: string) {
   return `
     <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: 8px; text-align: center;">
       <div style="font-size: 14px; opacity: 0.9; margin-bottom: 10px;">${title}</div>
@@ -316,9 +321,11 @@ function getInfoCard(title: string, value: any, gradientStart: string, gradientE
 /**
  * Generate category score deltas between current and previous audit
  */
-function getCategoryDeltaCards(jsonData: any, previousAudit: any) {
-  const currentCats = jsonData.analysis?.summary?.categoryScores || {};
-  const prevCats = previousAudit?.summary?.categoryScores || {};
+function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit: AuditSnapshot | null) {
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const summaryObj = (analysisObj.summary || {}) as Record<string, unknown>;
+  const currentCats = (summaryObj.categoryScores || {}) as Record<string, number>;
+  const prevCats = (previousAudit?.summary?.categoryScores || {}) as Record<string, number>;
 
   const categories = [
     { key: 'seo', name: 'SEO', icon: '🔍' },

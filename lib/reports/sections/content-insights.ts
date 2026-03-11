@@ -12,16 +12,18 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import type { PageInfo, ReportSectionData } from '../../types';
 
 /**
  * Generate the content insights section
  * @param {Object} data - Report data
  * @returns {string} HTML string
  */
-function getContentInsights(data: any) {
+function getContentInsights(data: ReportSectionData) {
   const { jsonData } = data;
-  const pages = jsonData.pageData?.pages || {};
-  const pagesArray = Object.values(pages);
+  const pageData = (jsonData.pageData || {}) as Record<string, unknown>;
+  const pages = (pageData.pages || {}) as Record<string, PageInfo>;
+  const pagesArray: PageInfo[] = Object.values(pages);
 
   if (pagesArray.length === 0) return '';
 
@@ -47,7 +49,7 @@ function getContentInsights(data: any) {
   `;
 }
 
-function getPageRankSection(pages: any[]) {
+function getPageRankSection(pages: PageInfo[]) {
   const ranked = pages
     .filter(p => p.internalPageRank != null)
     .sort((a, b) => (b.internalPageRank || 0) - (a.internalPageRank || 0));
@@ -101,12 +103,12 @@ function getPageRankSection(pages: any[]) {
     </div>`;
 }
 
-function getContentSimilaritySection(pages: any[]) {
+function getContentSimilaritySection(pages: PageInfo[]) {
   const withSimilarity = pages.filter(p => p.contentSimilarity?.groupSize > 1);
   if (withSimilarity.length === 0) return '';
 
   // Group by similarity groups
-  const groups: Record<string, any> = {};
+  const groups: Record<string, { urls: string[]; size: number }> = {};
   for (const page of withSimilarity) {
     const key = [page.url, ...(page.contentSimilarity.similarPages || [])].sort().join('|');
     if (!groups[key]) {
@@ -118,15 +120,15 @@ function getContentSimilaritySection(pages: any[]) {
   }
 
   const groupList = Object.values(groups).slice(0, 5);
-  const groupHtml = groupList.map((g: any) => {
+  const groupHtml = groupList.map((g) => {
     const urls = g.urls.slice(0, 4).map((u: string) => {
       let short;
       try { short = new URL(u).pathname; } catch { short = u; }
       return `<li style="font-size: 12px; margin: 2px 0;"><a href="${escapeHtml(u)}" target="_blank" style="color: #2563eb;">${escapeHtml(short)}</a></li>`;
     }).join('');
     return `<div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
-      <div style="font-size: 12px; font-weight: 600; color: #92400e; margin-bottom: 4px;">${(g as any).size} similar pages</div>
-      <ul style="margin: 0; padding-left: 16px;">${urls}${(g as any).urls.length > 4 ? `<li style="font-size: 11px; color: #92400e;">...and ${(g as any).urls.length - 4} more</li>` : ''}</ul>
+      <div style="font-size: 12px; font-weight: 600; color: #92400e; margin-bottom: 4px;">${g.size} similar pages</div>
+      <ul style="margin: 0; padding-left: 16px;">${urls}${g.urls.length > 4 ? `<li style="font-size: 11px; color: #92400e;">...and ${g.urls.length - 4} more</li>` : ''}</ul>
     </div>`;
   }).join('');
 
@@ -147,7 +149,7 @@ function getContentSimilaritySection(pages: any[]) {
     </div>`;
 }
 
-function getLanguageSection(pages: any[]) {
+function getLanguageSection(pages: PageInfo[]) {
   const withLang = pages.filter(p => p.languageDetection?.detectedLanguage);
   if (withLang.length === 0) return '';
 
@@ -194,7 +196,7 @@ function getLanguageSection(pages: any[]) {
     </div>`;
 }
 
-function getCTASection(pages: any[]) {
+function getCTASection(pages: PageInfo[]) {
   const withCTA = pages.filter(p => p.ctaData?.summary);
   if (withCTA.length === 0) return '';
 
@@ -238,7 +240,7 @@ function getCTASection(pages: any[]) {
     </div>`;
 }
 
-function getCodeCoverageSection(pages: any[]) {
+function getCodeCoverageSection(pages: PageInfo[]) {
   const withCoverage = pages.filter(p => p.codeCoverage?.totalBytes > 0);
   if (withCoverage.length === 0) return '';
 
@@ -286,7 +288,7 @@ function getCodeCoverageSection(pages: any[]) {
     </div>`;
 }
 
-function getOutboundLinksSection(pages: any[]) {
+function getOutboundLinksSection(pages: PageInfo[]) {
   const withData = pages.filter(p => p.outboundLinkHealth?.totalChecked > 0);
   if (withData.length === 0) return '';
 
@@ -337,7 +339,7 @@ function getOutboundLinksSection(pages: any[]) {
     </div>`;
 }
 
-function getResponseHeadersSection(pages: any[]) {
+function getResponseHeadersSection(pages: PageInfo[]) {
   const withData = pages.filter(p => p.responseHeaderAnalysis);
   if (withData.length === 0) return '';
 
@@ -366,13 +368,13 @@ function getResponseHeadersSection(pages: any[]) {
     </div>`;
 }
 
-function getWordCountBreakdown(pages: any[]) {
+function getWordCountBreakdown(pages: PageInfo[]) {
   const withData = pages.filter(p => p.contentQuality?.wordCountBySection);
   if (withData.length < 3) return '';
 
   const totals = { main: 0, nav: 0, header: 0, footer: 0, sidebar: 0 };
   for (const page of withData) {
-    const s = page.contentQuality.wordCountBySection;
+    const s = page.contentQuality!.wordCountBySection;
     totals.main += s.main || 0;
     totals.nav += s.nav || 0;
     totals.header += s.header || 0;

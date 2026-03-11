@@ -128,7 +128,7 @@ class MobileFriendlyAnalyzer {
       // 6. Check for fixed positioning elements that might cover content
       const fixedElements = Array.from(document.querySelectorAll('*')).filter(el => {
         const style = window.getComputedStyle(el);
-        return style.position === 'fixed' && (el as any).offsetHeight > 0;
+        return style.position === 'fixed' && (el as HTMLElement).offsetHeight > 0;
       });
 
       let fixedAreaPercent = 0;

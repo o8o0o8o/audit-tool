@@ -189,11 +189,11 @@ class TechnologyDetector {
    */
   static async detect(chromePage: ChromePage, parsedPage: ParsedPage, htmlContent: string, responseHeaders: Record<string, any> = {}, requests: Record<string, any> = {}) {
     const detected = {
-      technologies: [] as any[],
+      technologies: [] as Record<string, any>[],
       byCategory: {} as Record<string, string[]>,
       summary: {
         total: 0,
-        categories: [] as any[],
+        categories: [] as Record<string, any>[],
       },
     };
 
@@ -205,7 +205,7 @@ class TechnologyDetector {
     // Get global variables from browser context
     let globals: string[] = [];
     try {
-      globals = await chromePage.evaluate(() => {
+      const result = await chromePage.evaluate(() => {
         const knownGlobals = [
           'React', '__REACT_DEVTOOLS_GLOBAL_HOOK__', 'Vue', '__VUE__', 'angular', 'ng',
           'jQuery', '$', 'Ember', 'Backbone', '__NEXT_DATA__', '__NUXT__', '__remixContext',
@@ -221,6 +221,7 @@ class TechnologyDetector {
           }
         });
       });
+      globals = result as string[];
     } catch {
       // Browser context not available
     }
@@ -230,12 +231,12 @@ class TechnologyDetector {
       detected.byCategory[category] = [];
 
       for (const sig of signatures) {
-        const detectionMethods = this.#matchSignature(sig, htmlLower, headersLower, scriptSrcs, metaTags, globals as string[]);
+        const detectionMethods = this.#matchSignature(sig, htmlLower, headersLower, scriptSrcs, metaTags, globals);
         if (detectionMethods) {
           const tech = {
             name: sig.name,
             category: this.#formatCategory(category),
-            confidence: this.#calculateConfidence(sig, htmlLower, headersLower, scriptSrcs, metaTags, globals as string[]),
+            confidence: this.#calculateConfidence(sig, htmlLower, headersLower, scriptSrcs, metaTags, globals),
             detectedBy: detectionMethods,
           };
           detected.technologies.push(tech);
@@ -258,9 +259,9 @@ class TechnologyDetector {
    */
   static detectFromHtml(htmlContent: string, responseHeaders: Record<string, any> = {}, scriptSrcs: string[] = []) {
     const detected = {
-      technologies: [] as any[],
+      technologies: [] as Record<string, any>[],
       byCategory: {} as Record<string, string[]>,
-      summary: { total: 0, categories: [] as any[] },
+      summary: { total: 0, categories: [] as Record<string, any>[] },
     };
 
     const htmlLower = (htmlContent || '').toLowerCase();
@@ -297,9 +298,9 @@ class TechnologyDetector {
    * @private
    * @returns {Object|null} Detection methods or null if not matched
    */
-  static #matchSignature(sig: any, htmlLower: string, headersLower: Record<string, any>, scriptSrcs: string[], metaTags: Record<string, string>, globals: string[]) {
+  static #matchSignature(sig: Record<string, any>, htmlLower: string, headersLower: Record<string, any>, scriptSrcs: string[], metaTags: Record<string, string>, globals: string[]) {
     const patterns = sig.patterns || {};
-    const methods: any[] = [];
+    const methods: Record<string, any>[] = [];
 
     // Check HTML patterns
     if (patterns.html) {
@@ -374,7 +375,7 @@ class TechnologyDetector {
    * Calculate confidence level
    * @private
    */
-  static #calculateConfidence(sig: any, htmlLower: string, headersLower: Record<string, any>, scriptSrcs: string[], metaTags: Record<string, string>, globals: string[]) {
+  static #calculateConfidence(sig: Record<string, any>, htmlLower: string, headersLower: Record<string, any>, scriptSrcs: string[], metaTags: Record<string, string>, globals: string[]) {
     let matches = 0;
     const patterns = sig.patterns || {};
 
@@ -409,8 +410,8 @@ class TechnologyDetector {
    * Extract script sources from page
    * @private
    */
-  static #extractScriptSources(parsedPage: ParsedPage | null, requests: Record<string, any>) {
-    const sources = new Set();
+  static #extractScriptSources(parsedPage: ParsedPage | null, requests: Record<string, any>): string[] {
+    const sources = new Set<string>();
 
     // From HTML
     if (parsedPage) {

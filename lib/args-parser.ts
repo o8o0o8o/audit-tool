@@ -3,6 +3,7 @@
  * Centralized argument parsing to avoid duplication
  */
 
+import type { ParsedArgs } from './types';
 import * as os from 'os';
 
 /**
@@ -44,8 +45,8 @@ function calculateSafeConcurrency() {
  * @param {string[]} args - Command-line arguments
  * @returns {object} Parsed arguments
  */
-function parseArgs(args: string[]) {
-  const parsed: Record<string, any> = {
+function parseArgs(args: string[]): ParsedArgs {
+  const parsed: ParsedArgs = {
     origin: null as string | null,
     compare: null as string | null, // URL of comparison site for page-by-page comparison
     sitemap: null as string | null, // Path to local sitemap XML file
@@ -97,7 +98,7 @@ function parseArgs(args: string[]) {
     } else if (arg.startsWith("--preset=")) {
       const preset = arg.substring("--preset=".length).toLowerCase();
       if (['quick', 'standard', 'deep'].includes(preset)) {
-        parsed.preset = preset;
+        parsed.preset = preset as ParsedArgs['preset'];
       } else {
         parsed.warnings.push(`Unknown preset "${preset}". Use: quick, standard, or deep.`);
       }

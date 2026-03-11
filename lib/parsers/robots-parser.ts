@@ -138,11 +138,11 @@ class RobotsParser {
       // Check for sitemap and add fallback if needed
       this.#checkSitemaps(origin, result);
 
-    } catch (error: any) {
-      const message = `Error during processing robots.txt: ${error.message}`;
+    } catch (error: unknown) {
+      const message = `Error during processing robots.txt: ${(error as Error).message}`;
       result.errors.push({
         message,
-        detail: error.cause ? String(error.cause) : null,
+        detail: (error as Error).cause ? String((error as Error).cause) : null,
         severity: SEVERITY.HIGH
       });
       console.log(message);
@@ -601,7 +601,7 @@ class RobotsParser {
    * @param {object} result - Parsed robots.txt result
    * @returns {boolean} Whether the path is allowed
    */
-  static isPathAllowed(path: string, userAgent: string, result: any) {
+  static isPathAllowed(path: string, userAgent: string, result: RobotsResult) {
     // Get rules for this user-agent, falling back to wildcard
     const rules = result.userAgents[userAgent] || result.userAgents['*'];
     if (!rules) return true; // No rules = allowed
@@ -634,7 +634,7 @@ class RobotsParser {
     if (matchedDisallow && !matchedAllow) return false;
 
     // Both match - longer rule wins, Allow wins ties
-    return matchedAllow.length >= matchedDisallow.length;
+    return matchedAllow!.length >= matchedDisallow!.length;
   }
 
   /**
@@ -715,7 +715,7 @@ if (require.main === module) {
     }
 
     console.log('\n⚠️  Issues Found:', result.errors.length);
-    const bySeverity: Record<string, any[]> = { critical: [], high: [], medium: [], low: [] };
+    const bySeverity: Record<string, Array<{ message: string; detail: string | null; severity: string }>> = { critical: [], high: [], medium: [], low: [] };
     result.errors.forEach(err => bySeverity[err.severity].push(err));
 
     for (const [severity, errors] of Object.entries(bySeverity)) {

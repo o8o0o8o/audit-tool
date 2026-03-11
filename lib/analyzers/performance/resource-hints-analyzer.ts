@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class ResourceHintsAnalyzer {
   /**
@@ -13,17 +13,17 @@ class ResourceHintsAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      preload: [] as any[],
-      prefetch: [] as any[],
-      preconnect: [] as any[],
-      dnsPrefetch: [] as any[],
-      modulePreload: [] as any[],
-      missingHints: [] as any[],
-      unnecessaryHints: [] as any[],
+      preload: [] as Record<string, any>[],
+      prefetch: [] as Record<string, any>[],
+      preconnect: [] as Record<string, any>[],
+      dnsPrefetch: [] as Record<string, any>[],
+      modulePreload: [] as Record<string, any>[],
+      missingHints: [] as Record<string, any>[],
+      unnecessaryHints: [] as Record<string, any>[],
     };
 
     // Extract resource hints from page data
@@ -153,7 +153,7 @@ class ResourceHintsAnalyzer {
   /**
    * Check if URL is preloaded
    */
-  static isPreloaded(url: string, preloads: any[]) {
+  static isPreloaded(url: string, preloads: Record<string, any>[]) {
     return preloads.some((p: any) => {
       const href = p.href || p;
       return href === url || url.includes(href) || href.includes(url);
@@ -163,7 +163,7 @@ class ResourceHintsAnalyzer {
   /**
    * Extract third-party origins from page resources
    */
-  static extractThirdPartyOrigins(pageData: any, pageUrl: string) {
+  static extractThirdPartyOrigins(pageData: PageInfo, pageUrl: string) {
     const origins = new Map();
     const pageOrigin = this.getOrigin(pageUrl);
 
@@ -245,7 +245,7 @@ class ResourceHintsAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

@@ -9,6 +9,56 @@ import * as path from 'path';
 import { SEVERITY } from '../constants';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
+import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel } from '../types';
+
+interface AnalyzeContext {
+  results: {
+    sitemaps: { urls: Record<string, SitemapUrl> };
+    isMultiLang?: boolean;
+    pageData: {
+      pages: Record<string, PageInfo>;
+      processedPages: Set<string> | string[];
+      totalWithoutError: number;
+      totalWithError: number;
+      byError: Record<string, number>;
+      attempts: Record<string, number>;
+      total?: number;
+      isMultiLang?: boolean;
+      incomingLinks?: Record<string, string[]>;
+    };
+  };
+  crawlerEngine: {
+    crawlPages: (opts: Record<string, unknown>) => Promise<{
+      alternatesErrors: string[];
+      isMultiLang: boolean;
+      failedPages: string[];
+    }>;
+  };
+  incomingLinksTracking: Map<string, Set<string>>;
+  saveError: SaveErrorFn;
+  resultsDir: string;
+}
+
+interface PageDataForValidation {
+  pages: Record<string, PageInfo>;
+  incomingLinks?: Record<string, string[]>;
+  segments?: unknown;
+  segmentStats?: unknown;
+  contentGaps?: unknown;
+  contentCoverage?: unknown;
+  contentGapStats?: unknown;
+  linkingOpportunities?: unknown;
+  linkingStats?: unknown;
+  externalLinkVerification?: unknown;
+}
+
+type SaveErrorFn = (generalError: string, detailedError: string | null | undefined, severity?: SeverityLevel | string) => void;
+
+interface ValidationResult {
+  issues?: Issue[];
+  warnings?: Issue[];
+  [key: string]: unknown;
+}
 
 // Default timeout for validators (30 seconds)
 const VALIDATOR_TIMEOUT_MS = 30000;
@@ -75,11 +125,11 @@ class AuditOrchestrator {
    * @param {string} context.resultsDir - Directory for results
    * @returns {Promise<void>}
    */
-  static async analyzePages(context: any) {
+  static async analyzePages(context: AnalyzeContext) {
     const { results, crawlerEngine, incomingLinksTracking, saveError, resultsDir } = context;
 
     const uniquePages = new Set(Object.keys(results.sitemaps.urls));
-    const collectedURLs = new Set();
+    const collectedURLs = new Set<string>();
     const pagesToCrawl = Array.from(uniquePages);
 
     // Detect multilanguage site
@@ -167,7 +217,7 @@ class AuditOrchestrator {
    * Detect if site is multilanguage from sitemap, existing pages, or URL patterns
    * @private
    */
-  static #detectMultilanguage(results: any) {
+  static #detectMultilanguage(results: AnalyzeContext['results']) {
     let isMultiLang = results.isMultiLang || false;
 
     if (!isMultiLang) {
@@ -176,7 +226,7 @@ class AuditOrchestrator {
         const sitemapEntry = results.sitemaps.urls[url];
         if (sitemapEntry.alternates && Object.keys(sitemapEntry.alternates).length > 0) {
           const hasValidAlternate = Object.values(sitemapEntry.alternates).some(
-              (alt: any) => alt.hreflang && alt.hreflang !== 'x-default'
+              (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default'
           );
           if (hasValidAlternate) {
             console.log(`Detected multilanguage site from sitemap entry: ${url}`);
@@ -191,7 +241,7 @@ class AuditOrchestrator {
       for (const url in results.pageData.pages) {
         const page = results.pageData.pages[url];
         if (page.alternates && page.alternates.length > 0) {
-          const hasValidAlternate = page.alternates.some(alt => alt.hreflang && alt.hreflang !== 'x-default');
+          const hasValidAlternate = page.alternates.some((alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default');
           if (hasValidAlternate) {
             console.log(`Detected multilanguage site from previously crawled page: ${url}`);
             return true;
@@ -217,7 +267,7 @@ class AuditOrchestrator {
    * Detect language patterns in URLs (subdirectories like /en/, /de/, /fr/)
    * @private
    */
-  static #detectLanguagePatternsInUrls(urls: Record<string, any>) {
+  static #detectLanguagePatternsInUrls(urls: Record<string, SitemapUrl>) {
     // Common language codes (ISO 639-1)
     const langCodes = new Set([
       'en', 'de', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh',
@@ -230,7 +280,7 @@ class AuditOrchestrator {
     const langRegionPattern = /^\/([a-z]{2})(-[a-z]{2})?\//i;
     const subdomainPattern = /^([a-z]{2})(-[a-z]{2})?\.(?!www\.)/i;
 
-    const detectedLanguages = new Set();
+    const detectedLanguages = new Set<string>();
     let urlsChecked = 0;
     const maxUrlsToCheck = 100; // Limit for performance
 
@@ -273,7 +323,7 @@ class AuditOrchestrator {
    * Report orphaned pages (pages without incoming links)
    * @private
    */
-  static #reportOrphanedPages(results: any, saveError: Function) {
+  static #reportOrphanedPages(results: AnalyzeContext['results'], saveError: SaveErrorFn) {
     let orphanedPagesCount = 0;
 
     for (const url in results.pageData.pages) {
@@ -301,7 +351,7 @@ class AuditOrchestrator {
    * @param {boolean} isMultiLang - Whether site has multiple languages
    * @param {Function} saveError - Callback to save errors
    */
-  static async runSiteWideValidation(pageData: any, origin: string, isMultiLang: boolean, saveError: Function) {
+  static async runSiteWideValidation(pageData: PageDataForValidation, origin: string, isMultiLang: boolean, saveError: SaveErrorFn) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
     const analysisConfig = config.analysis || {};
@@ -496,8 +546,8 @@ class AuditOrchestrator {
           VALIDATOR_TIMEOUT_MS
         );
         AuditOrchestrator.#processValidationResult(result, saveError);
-      } catch (error: any) {
-        console.error(`Error running ${validator.name} validator:`, error.message);
+      } catch (error: unknown) {
+        console.error(`Error running ${validator.name} validator:`, (error as Error).message);
       }
     }
 
@@ -517,9 +567,9 @@ class AuditOrchestrator {
       }
 
       // Process segment issues
-      AuditOrchestrator.#processValidationResult({ issues: segmentResult.issues }, saveError);
-    } catch (error: any) {
-      console.error('Error running Page Segment analyzer:', error.message);
+      AuditOrchestrator.#processValidationResult({ issues: segmentResult.issues as Issue[] }, saveError);
+    } catch (error: unknown) {
+      console.error('Error running Page Segment analyzer:', (error as Error).message);
     }
 
     // Run Content Gap Analyzer and store results
@@ -533,8 +583,8 @@ class AuditOrchestrator {
 
       // Process content gap issues
       AuditOrchestrator.#processValidationResult({ issues: contentGapResult.issues }, saveError);
-    } catch (error: any) {
-      console.error('Error running Content Gap analyzer:', error.message);
+    } catch (error: unknown) {
+      console.error('Error running Content Gap analyzer:', (error as Error).message);
     }
 
     // Run Internal Linking Opportunity Analyzer and store results
@@ -547,8 +597,8 @@ class AuditOrchestrator {
 
       // Process linking opportunity issues
       AuditOrchestrator.#processValidationResult({ issues: linkingResult.issues }, saveError);
-    } catch (error: any) {
-      console.error('Error running Linking Opportunity analyzer:', error.message);
+    } catch (error: unknown) {
+      console.error('Error running Linking Opportunity analyzer:', (error as Error).message);
     }
 
     // Run External Link HTTP Verification (async, potentially slow)
@@ -563,8 +613,8 @@ class AuditOrchestrator {
 
       // Process issues
       AuditOrchestrator.#processValidationResult(externalVerifyResult, saveError);
-    } catch (error: any) {
-      console.error('Error verifying external links:', error.message);
+    } catch (error: unknown) {
+      console.error('Error verifying external links:', (error as Error).message);
     }
   }
 
@@ -576,7 +626,7 @@ class AuditOrchestrator {
    * @returns {*} Function result or empty result on timeout
    * @private
    */
-  static #runWithTimeout(fn: Function, name: string, timeoutMs: number) {
+  static #runWithTimeout(fn: () => Record<string, any>, name: string, timeoutMs: number): ValidationResult {
     const startTime = Date.now();
 
     // For synchronous validators, we can't truly timeout, but we can track duration
@@ -592,11 +642,11 @@ class AuditOrchestrator {
       }
 
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - startTime;
       if (duration > timeoutMs * 0.9) {
         // Likely timed out or hit resource limits
-        console.error(`❌ ${name} validator failed after ${(duration / 1000).toFixed(1)}s: ${error.message}`);
+        console.error(`❌ ${name} validator failed after ${(duration / 1000).toFixed(1)}s: ${(error as Error).message}`);
       }
       throw error;
     }
@@ -608,15 +658,15 @@ class AuditOrchestrator {
    * @param {Function} saveError - Callback to save errors
    * @private
    */
-  static #processValidationResult(result: any, saveError: Function) {
+  static #processValidationResult(result: ValidationResult, saveError: SaveErrorFn) {
     // Process issues (support both message/detail and title/description field names)
     for (const issue of result.issues || []) {
-      saveError(issue.message || issue.title, issue.detail || issue.description, issue.severity);
+      saveError(issue.message || issue.title || '', issue.detail || issue.description, issue.severity);
     }
 
     // Process warnings
     for (const warning of result.warnings || []) {
-      saveError(warning.message || warning.title, warning.detail || warning.description, warning.severity);
+      saveError(warning.message || warning.title || '', warning.detail || warning.description, warning.severity);
     }
   }
 

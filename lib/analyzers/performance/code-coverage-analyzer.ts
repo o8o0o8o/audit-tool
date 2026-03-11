@@ -9,7 +9,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage } from '../../types';
+import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
 class CodeCoverageAnalyzer {
   /**
@@ -17,7 +17,7 @@ class CodeCoverageAnalyzer {
    * Must be called BEFORE page.goto()
    * @param {object} chromePage - Playwright page object
    */
-  static async startCoverage(chromePage: ChromePage & { __coverageClient?: any }) {
+  static async startCoverage(chromePage: ChromePage & { __coverageClient?: unknown }) {
     try {
       // Get CDP session for coverage API
       const client = await chromePage.context().newCDPSession(chromePage);
@@ -44,18 +44,18 @@ class CodeCoverageAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static async analyze(chromePage: ChromePage & { __coverageClient?: any }, requests: any[], url: string) {
+  static async analyze(chromePage: ChromePage & { __coverageClient?: unknown }, requests: NetworkRequest[], url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      js: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as any[] },
-      css: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as any[] },
+      js: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as Record<string, any>[] },
+      css: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as Record<string, any>[] },
       totalUnusedBytes: 0,
       totalBytes: 0,
       unusedRatio: 0,
     };
 
-    const client = chromePage.__coverageClient;
+    const client = chromePage.__coverageClient as { send(method: string): Promise<any>; detach(): Promise<void> } | undefined;
     if (!client) {
       return { info, issues, warnings };
     }
@@ -72,7 +72,7 @@ class CodeCoverageAnalyzer {
             return Math.max(sum, ...fn.ranges.map((r: any) => r.endOffset));
           }, 0);
 
-          const usedRanges: any[] = [];
+          const usedRanges: Record<string, any>[] = [];
           for (const fn of entry.functions) {
             for (const range of fn.ranges) {
               if (range.count > 0) {
@@ -116,7 +116,7 @@ class CodeCoverageAnalyzer {
           }
         }
 
-        for (const sheet of Object.values(stylesheets) as any[]) {
+        for (const sheet of Object.values(stylesheets) as Record<string, any>[]) {
           info.css.total += sheet.total;
           info.css.used += sheet.used;
           info.css.unused += (sheet.total - sheet.used);
@@ -186,10 +186,10 @@ class CodeCoverageAnalyzer {
    * @param {object} allPages - All page data
    * @returns {object} Site-wide analysis results
    */
-  static analyzeSiteWide(allPages: Record<string, any>) {
+  static analyzeSiteWide(allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const pages = Object.values(allPages) as any[];
+    const pages = Object.values(allPages) as PageInfo[];
 
     let totalJS = 0;
     let totalUnusedJS = 0;
@@ -246,7 +246,7 @@ class CodeCoverageAnalyzer {
     }
 
     // Report commonly unused scripts
-    const frequentlyUnused = (Object.values(unusedScripts) as any[])
+    const frequentlyUnused = (Object.values(unusedScripts) as Record<string, any>[])
       .filter((s: any) => s.count >= Math.min(3, pagesWithData * 0.5))
       .sort((a: any, b: any) => b.count - a.count);
 
@@ -271,7 +271,7 @@ class CodeCoverageAnalyzer {
    * @returns {number} Total unique bytes covered
    * @private
    */
-  static #mergeAndSum(ranges: any[]) {
+  static #mergeAndSum(ranges: Record<string, any>[]) {
     if (ranges.length === 0) return 0;
 
     const sorted = ranges

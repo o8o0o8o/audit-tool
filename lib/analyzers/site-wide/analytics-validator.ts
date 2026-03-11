@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide Analytics Validator
@@ -12,7 +12,7 @@ class AnalyticsValidator {
    * @param {Object} allPages - Object containing all page data { url: pageData }
    * @returns {Object} { issues: [], warnings: [], coverageStats: {}, trackingIds: {} }
    */
-  static validateAnalyticsImplementation(allPages: Record<string, any>) {
+  static validateAnalyticsImplementation(allPages: Record<string, PageInfo>) {
     console.log('\nAnalyzing analytics and tracking implementation across pages...');
 
     const analyticsStats = {

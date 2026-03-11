@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import pkg from './package.json';
+import type { ReportSectionData } from './lib/types';
 
 // Import validators for input sanitization
 import { sanitizeDomainName } from './validators';
@@ -51,9 +52,9 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
 
   try {
     reportData = ReportDataProcessor.prepareReportData(file, domainName);
-  } catch (error: any) {
+  } catch (error: unknown) {
     loadError = error;
-    console.error(`⚠️  Error loading report data: ${error.message}`);
+    console.error(`⚠️  Error loading report data: ${(error as Error).message}`);
     console.error('Attempting partial recovery...');
 
     // Attempt to create minimal report data for error display
@@ -75,11 +76,22 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
 
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
 
-  const pagesWithMetrics = pages.filter((p: any) => p.TTFB !== undefined);
+  const pagesWithMetrics = pages.filter(p => p.TTFB !== undefined);
 
   // Count pages by source
-  const pagesFromSitemap = pages.filter((p: any) => p.foundIn === 'sitemap').length;
-  const pagesDiscovered = pages.filter((p: any) => p.foundIn === 'discovered').length;
+  const pagesFromSitemap = pages.filter(p => p.foundIn === 'sitemap').length;
+  const pagesDiscovered = pages.filter(p => p.foundIn === 'discovered').length;
+
+  // Build section data object for report generators
+  const sectionData: ReportSectionData = {
+    jsonData,
+    pages,
+    pageData: pageData as ReportSectionData['pageData'],
+    timing: timing as Record<string, unknown>,
+    trendData: trendData as ReportSectionData['trendData'],
+    previousAudit: previousAudit as ReportSectionData['previousAudit'],
+    hasPerformanceMetrics: pagesWithMetrics.length > 0,
+  };
 
   let htmlContent = `
   <!DOCTYPE html>
@@ -151,7 +163,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}SEO Audit Report</h1>
               <p class="subtitle">${escapeHtml(safeDomainName)}</p>
               <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
-              ${timing.elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml(timing.elapsedTimeFormatted)}</p>` : ''}
+              ${(timing as Record<string, any>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, any>).elapsedTimeFormatted)}</p>` : ''}
               <div class="stats">
                   <div class="stat">
                       <span class="stat-label">URLs in Sitemap:</span>
@@ -252,7 +264,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               <p style="color: #991b1b;">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
               <details style="margin-top: 10px;">
                   <summary style="cursor: pointer; color: #dc2626; font-weight: 600;">Error Details</summary>
-                  <pre style="background: #fee2e2; padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: #991b1b;">${escapeHtml(loadError.message)}${loadError.stack ? '\n\n' + escapeHtml(loadError.stack) : ''}</pre>
+                  <pre style="background: #fee2e2; padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: #991b1b;">${escapeHtml((loadError as Error).message)}${(loadError as Error).stack ? '\n\n' + escapeHtml((loadError as Error).stack!) : ''}</pre>
               </details>
               <p style="color: #6b7280; margin-top: 15px; font-size: 14px;">
                   <strong>Troubleshooting:</strong> Check that the audit data file exists and is not corrupted.
@@ -273,22 +285,22 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               <button class="section-tab" data-target="pages-table">Pages</button>
           </div>
 
-          ${getHistoricalProgress({ jsonData, trendData, previousAudit })}
+          ${getHistoricalProgress(sectionData)}
 
           <div id="executive-summary">
-          ${getExecutiveSummary({ jsonData })}
+          ${getExecutiveSummary(sectionData)}
           </div>
 
           <div id="quick-wins">
-          ${getQuickWins({ jsonData })}
+          ${getQuickWins(sectionData)}
           </div>
 
           <div id="top-issues">
-          ${getTopIssues({ jsonData })}
+          ${getTopIssues(sectionData)}
           </div>
 
           <div id="performance">
-          ${getPerformanceStats({ jsonData })}
+          ${getPerformanceStats(sectionData)}
           </div>
 
           <div id="charts">
@@ -296,19 +308,19 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
           </div>
 
           <div id="technology-stack">
-          ${getTechnologyStack({ pages })}
+          ${getTechnologyStack(sectionData)}
           </div>
 
-          ${getSourceCodeAnalysis({ jsonData })}
+          ${getSourceCodeAnalysis(sectionData)}
 
           <div id="content-insights">
-          ${getContentInsights({ jsonData })}
+          ${getContentInsights(sectionData)}
           </div>
 
-          ${getConfigInfo({ jsonData, pages })}
+          ${getConfigInfo(sectionData)}
 
           <div id="pages-table">
-          ${getPagesTable({ pages, hasPerformanceMetrics: pagesWithMetrics.length > 0 })}
+          ${getPagesTable(sectionData)}
           </div>
 
           <footer>
@@ -346,15 +358,15 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
           </div>
       </div>
 
-      ${getScripts({ pageData, jsonData, trendData, domainName })}
+      ${getScripts({ ...sectionData, domainName: safeDomainName })}
   </body>
   </html>`;
 
   try {
     fs.writeFileSync(htmlOutputPath, htmlContent);
     console.log(`✅ HTML report generated: ${htmlOutputPath}`);
-  } catch (writeError: any) {
-    console.error(`❌ Failed to write HTML report to ${htmlOutputPath}: ${writeError.message}`);
+  } catch (writeError: unknown) {
+    console.error(`❌ Failed to write HTML report to ${htmlOutputPath}: ${(writeError as Error).message}`);
     throw writeError;
   }
 }

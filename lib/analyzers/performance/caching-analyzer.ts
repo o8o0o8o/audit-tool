@@ -1,7 +1,7 @@
-import type { ChromePage } from '../../types';
+import type { ChromePage, NetworkRequest } from '../../types';
 
 class CachingAnalyzer {
-  static async analyzeCaching(chromePage: ChromePage, requests: any[], url: string) {
+  static async analyzeCaching(chromePage: ChromePage, requests: NetworkRequest[], url: string) {
     const cachingAnalysis = {
       hasCDN: false,
       cdnProvider: null as string | null,
@@ -55,7 +55,7 @@ class CachingAnalyzer {
     }
 
     // 2. Check HTML page caching
-    const pageResponse = (requests as any)[url];
+    const pageResponse = (requests as unknown as Record<string, Record<string, any>>)[url];
     if (pageResponse?.headers) {
       const cacheControl = pageResponse.headers['cache-control'] || '';
       const expires = pageResponse.headers['expires'];
@@ -104,7 +104,7 @@ class CachingAnalyzer {
       cachingAnalysis.hasServiceWorker = await chromePage.evaluate(() => {
         return 'serviceWorker' in navigator && navigator.serviceWorker.controller !== null;
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Service worker check failed, assume false
       cachingAnalysis.hasServiceWorker = false;
     }

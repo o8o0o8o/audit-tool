@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class UrlArchitectureAnalyzer {
   /**
@@ -14,8 +14,8 @@ class UrlArchitectureAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} Analysis results with issues array
    */
-  static analyze(url: string, pageData: any, origin: string) {
-    const issues: any[] = [];
+  static analyze(url: string, pageData: PageInfo, origin: string) {
+    const issues: Record<string, any>[] = [];
 
     try {
       const parsedUrl = new URL(url);
@@ -204,14 +204,20 @@ class UrlArchitectureAnalyzer {
         trackingParams: foundTracking,
         hasUppercase: parsedUrl.pathname !== parsedUrl.pathname.toLowerCase(),
         hasUnderscores: parsedUrl.pathname.includes('_'),
+        hasSpaces: parsedUrl.pathname.includes('%20') || parsedUrl.pathname.includes(' '),
+        hasSpecialChars: /[^a-zA-Z0-9\-_/.]/.test(parsedUrl.pathname),
+        hasQueryParams: parsedUrl.searchParams.toString().length > 0,
+        queryParamCount: Array.from(parsedUrl.searchParams.keys()).length,
         paramCount: Array.from(parsedUrl.searchParams.keys()).length,
+        isHttps: parsedUrl.protocol === 'https:',
+        issues: [],
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       issues.push({
         type: 'url_parse_error',
         message: 'Failed to parse URL',
-        detail: error.message,
+        detail: (error as Error).message,
         severity: SEVERITY.LOW,
       });
     }
@@ -225,7 +231,7 @@ class UrlArchitectureAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} Site-wide issues
    */
-  static analyzeSiteWide(pages: Record<string, any>, origin: string) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

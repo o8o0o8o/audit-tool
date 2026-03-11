@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 import { LinkDepthAnalyzer } from './link-depth-analyzer';
 
 class InternalPageRankAnalyzer {
@@ -16,7 +16,7 @@ class InternalPageRankAnalyzer {
    * @param {string} origin - Site origin URL
    * @returns {object} Analysis results with issues and page scores
    */
-  static analyze(allPages: Record<string, any>, incomingLinks: Record<string, any>, origin: string) {
+  static analyze(allPages: Record<string, PageInfo>, incomingLinks: Record<string, any>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.keys(allPages);

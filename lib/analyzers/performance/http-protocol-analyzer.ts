@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class HTTPProtocolAnalyzer {
   /**
@@ -13,7 +13,7 @@ class HTTPProtocolAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -22,7 +22,7 @@ class HTTPProtocolAnalyzer {
       supportsHttp2: false,
       supportsHttp3: false,
       resourceProtocols: {} as Record<string, number>,
-      multiplexingBenefit: null as any,
+      multiplexingBenefit: null as Record<string, any> | null,
       altSvc: null as string | null,
     };
 
@@ -113,7 +113,7 @@ class HTTPProtocolAnalyzer {
    * @param {object} pageData
    * @returns {string}
    */
-  static detectProtocol(pageData: any) {
+  static detectProtocol(pageData: PageInfo) {
     // Check various sources
     if (pageData.response?.protocol) return pageData.response.protocol;
     if (pageData.timing?.protocol) return pageData.timing.protocol;
@@ -149,7 +149,7 @@ class HTTPProtocolAnalyzer {
    * @param {Array} resources
    * @returns {number}
    */
-  static countUniqueOrigins(resources: any[]) {
+  static countUniqueOrigins(resources: Record<string, any>[]) {
     const origins = new Set();
     for (const resource of resources) {
       try {
@@ -166,7 +166,7 @@ class HTTPProtocolAnalyzer {
    * @param {boolean} supportsHttp2
    * @returns {object}
    */
-  static calculateMultiplexingBenefit(resources: any[], supportsHttp2: boolean) {
+  static calculateMultiplexingBenefit(resources: Record<string, any>[], supportsHttp2: boolean) {
     const totalResources = resources.length;
     const maxHttp1Connections = 6;
 
@@ -193,7 +193,7 @@ class HTTPProtocolAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { HistoryManager } from './historyManager';
 import { escapeHtml } from './lib/reports/html-utils';
+import type { AuditComparison, AuditSnapshot, InsightsSummary } from './lib/types';
 
 /**
  * Generate HTML comparison report between two audits
@@ -352,9 +353,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         <div class="section">
             <h2>Category Scores</h2>
             <div class="category-comparison">
-                ${Object.entries(comparison.categoryDeltas).map(([cat, delta]: [string, any]) => {
-                    const oldScore = oldAudit.summary.categoryScores[cat] || 0;
-                    const newScore = newAudit.summary.categoryScores[cat] || 0;
+                ${Object.entries(comparison.categoryDeltas).map(([cat, delta]: [string, number]) => {
+                    const oldScore = (oldAudit.summary.categoryScores as Record<string, number>)[cat] || 0;
+                    const newScore = (newAudit.summary.categoryScores as Record<string, number>)[cat] || 0;
                     return `
                         <div class="category-card">
                             <div class="category-name">${cat}</div>
@@ -377,7 +378,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         <div class="section">
             <h2>✅ Improvements (${comparison.improvements.length})</h2>
             <ul class="changes-list">
-                ${comparison.improvements.map((imp: any) => `<li class="improvement">${escapeHtml(imp)}</li>`).join('')}
+                ${comparison.improvements.map((imp: string) => `<li class="improvement">${escapeHtml(imp)}</li>`).join('')}
             </ul>
         </div>
         ` : ''}
@@ -386,7 +387,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         <div class="section">
             <h2>⚠️ Regressions (${comparison.regressions.length})</h2>
             <ul class="changes-list">
-                ${comparison.regressions.map((reg: any) => `<li class="regression">${escapeHtml(reg)}</li>`).join('')}
+                ${comparison.regressions.map((reg: string) => `<li class="regression">${escapeHtml(reg)}</li>`).join('')}
             </ul>
         </div>
         ` : ''}
@@ -395,8 +396,8 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             const oldIns = oldAudit.insights;
             const newIns = newAudit.insights;
             if (!oldIns && !newIns) return '';
-            const oi = oldIns || {};
-            const ni = newIns || {};
+            const oi: Partial<InsightsSummary> = oldIns || {};
+            const ni: Partial<InsightsSummary> = newIns || {};
             const insightMetrics = [
               { label: 'Language Mismatches', old: oi.languageMismatches ?? '-', new: ni.languageMismatches ?? '-', inverse: true },
               { label: 'Broken Outbound Links', old: oi.brokenOutboundLinks ?? '-', new: ni.brokenOutboundLinks ?? '-', inverse: true },
@@ -437,9 +438,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 <div class="metric-card">
                     <div class="metric-label">Average TTFB</div>
                     <div class="metric-comparison">
-                        <span class="old-value">${oldAudit.performance.avgTTFB}ms</span>
+                        <span class="old-value">${oldAudit.performance!.avgTTFB}ms</span>
                         <span class="arrow">→</span>
-                        <span class="new-value">${newAudit.performance.avgTTFB}ms</span>
+                        <span class="new-value">${newAudit.performance!.avgTTFB}ms</span>
                         <span class="delta ${deltaClass(-comparison.performanceDeltas.ttfb)}">
                             ${deltaSymbol(comparison.performanceDeltas.ttfb)}${comparison.performanceDeltas.ttfb.toFixed(0)}ms
                         </span>
@@ -449,9 +450,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 <div class="metric-card">
                     <div class="metric-label">Average LCP</div>
                     <div class="metric-comparison">
-                        <span class="old-value">${oldAudit.performance.avgLCP}ms</span>
+                        <span class="old-value">${oldAudit.performance!.avgLCP}ms</span>
                         <span class="arrow">→</span>
-                        <span class="new-value">${newAudit.performance.avgLCP}ms</span>
+                        <span class="new-value">${newAudit.performance!.avgLCP}ms</span>
                         <span class="delta ${deltaClass(-comparison.performanceDeltas.lcp)}">
                             ${deltaSymbol(comparison.performanceDeltas.lcp)}${comparison.performanceDeltas.lcp.toFixed(0)}ms
                         </span>
@@ -461,9 +462,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 <div class="metric-card">
                     <div class="metric-label">Average CLS</div>
                     <div class="metric-comparison">
-                        <span class="old-value">${oldAudit.performance.avgCLS}</span>
+                        <span class="old-value">${oldAudit.performance!.avgCLS}</span>
                         <span class="arrow">→</span>
-                        <span class="new-value">${newAudit.performance.avgCLS}</span>
+                        <span class="new-value">${newAudit.performance!.avgCLS}</span>
                         <span class="delta ${deltaClass(-comparison.performanceDeltas.cls)}">
                             ${deltaSymbol(comparison.performanceDeltas.cls)}${comparison.performanceDeltas.cls.toFixed(3)}
                         </span>
@@ -471,39 +472,39 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 </div>
             </div>
 
-            ${oldAudit.performance.p75TTFB && newAudit.performance.p75TTFB ? `
+            ${oldAudit.performance!.p75TTFB && newAudit.performance!.p75TTFB ? `
             <h3 style="margin-top: 25px; color: #374151;">P75 Percentiles (Core Web Vitals standard)</h3>
             <div class="comparison-grid">
                 <div class="metric-card" style="border-left-color: #8b5cf6;">
                     <div class="metric-label">P75 TTFB</div>
                     <div class="metric-comparison">
-                        <span class="old-value">${oldAudit.performance.p75TTFB}ms</span>
+                        <span class="old-value">${oldAudit.performance!.p75TTFB}ms</span>
                         <span class="arrow">→</span>
-                        <span class="new-value">${newAudit.performance.p75TTFB}ms</span>
-                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance.p75TTFB) - parseFloat(oldAudit.performance.p75TTFB)))}">
-                            ${deltaSymbol(parseFloat(newAudit.performance.p75TTFB) - parseFloat(oldAudit.performance.p75TTFB))}${(parseFloat(newAudit.performance.p75TTFB) - parseFloat(oldAudit.performance.p75TTFB)).toFixed(0)}ms
+                        <span class="new-value">${newAudit.performance!.p75TTFB}ms</span>
+                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance!.p75TTFB) - parseFloat(oldAudit.performance!.p75TTFB)))}">
+                            ${deltaSymbol(parseFloat(newAudit.performance!.p75TTFB) - parseFloat(oldAudit.performance!.p75TTFB))}${(parseFloat(newAudit.performance!.p75TTFB) - parseFloat(oldAudit.performance!.p75TTFB)).toFixed(0)}ms
                         </span>
                     </div>
                 </div>
                 <div class="metric-card" style="border-left-color: #ec4899;">
                     <div class="metric-label">P75 LCP</div>
                     <div class="metric-comparison">
-                        <span class="old-value">${oldAudit.performance.p75LCP}ms</span>
+                        <span class="old-value">${oldAudit.performance!.p75LCP}ms</span>
                         <span class="arrow">→</span>
-                        <span class="new-value">${newAudit.performance.p75LCP}ms</span>
-                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance.p75LCP) - parseFloat(oldAudit.performance.p75LCP)))}">
-                            ${deltaSymbol(parseFloat(newAudit.performance.p75LCP) - parseFloat(oldAudit.performance.p75LCP))}${(parseFloat(newAudit.performance.p75LCP) - parseFloat(oldAudit.performance.p75LCP)).toFixed(0)}ms
+                        <span class="new-value">${newAudit.performance!.p75LCP}ms</span>
+                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance!.p75LCP) - parseFloat(oldAudit.performance!.p75LCP)))}">
+                            ${deltaSymbol(parseFloat(newAudit.performance!.p75LCP) - parseFloat(oldAudit.performance!.p75LCP))}${(parseFloat(newAudit.performance!.p75LCP) - parseFloat(oldAudit.performance!.p75LCP)).toFixed(0)}ms
                         </span>
                     </div>
                 </div>
                 <div class="metric-card" style="border-left-color: #14b8a6;">
                     <div class="metric-label">P75 CLS</div>
                     <div class="metric-comparison">
-                        <span class="old-value">${oldAudit.performance.p75CLS}</span>
+                        <span class="old-value">${oldAudit.performance!.p75CLS}</span>
                         <span class="arrow">→</span>
-                        <span class="new-value">${newAudit.performance.p75CLS}</span>
-                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance.p75CLS) - parseFloat(oldAudit.performance.p75CLS)))}">
-                            ${deltaSymbol(parseFloat(newAudit.performance.p75CLS) - parseFloat(oldAudit.performance.p75CLS))}${(parseFloat(newAudit.performance.p75CLS) - parseFloat(oldAudit.performance.p75CLS)).toFixed(3)}
+                        <span class="new-value">${newAudit.performance!.p75CLS}</span>
+                        <span class="delta ${deltaClass(-(parseFloat(newAudit.performance!.p75CLS) - parseFloat(oldAudit.performance!.p75CLS)))}">
+                            ${deltaSymbol(parseFloat(newAudit.performance!.p75CLS) - parseFloat(oldAudit.performance!.p75CLS))}${(parseFloat(newAudit.performance!.p75CLS) - parseFloat(oldAudit.performance!.p75CLS)).toFixed(3)}
                         </span>
                     </div>
                 </div>
@@ -517,7 +518,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             <h2>🔧 Fixed Issues (${comparison.fixed.length})</h2>
             <p style="color: #6b7280; margin-bottom: 15px;">Issues present in the old audit but resolved in the new one.</p>
             <ul class="changes-list">
-                ${comparison.fixed.map((issue: any) => `<li class="improvement">✓ ${escapeHtml(issue)}</li>`).join('')}
+                ${comparison.fixed.map((issue: string) => `<li class="improvement">✓ ${escapeHtml(issue)}</li>`).join('')}
             </ul>
         </div>
         ` : ''}
@@ -527,7 +528,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             <h2>🆕 New Issues (${comparison.newIssues.length})</h2>
             <p style="color: #6b7280; margin-bottom: 15px;">Issues not present in the old audit that appeared in the new one.</p>
             <ul class="changes-list">
-                ${comparison.newIssues.map((issue: any) => `<li class="regression">✗ ${escapeHtml(issue)}</li>`).join('')}
+                ${comparison.newIssues.map((issue: string) => `<li class="regression">✗ ${escapeHtml(issue)}</li>`).join('')}
             </ul>
         </div>
         ` : ''}

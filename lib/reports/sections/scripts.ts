@@ -3,13 +3,15 @@
  * Provides interactive functionality: sorting, modals, charts, CSV export
  */
 
+import type { PageInfo, ReportSectionData, AnalysisDetail } from '../../types';
+
 /**
  * Safely stringify JSON for embedding in script tags
  * Escapes </script> and <!-- to prevent breaking out of script context
  * @param {*} data - Data to stringify
  * @returns {string} Safe JSON string
  */
-function safeJsonStringify(data: any) {
+function safeJsonStringify(data: unknown) {
   return JSON.stringify(data)
     .replace(/<\/script>/gi, '<\\/script>')
     .replace(/<!--/g, '<\\!--')
@@ -22,32 +24,37 @@ function safeJsonStringify(data: any) {
  * @param {Object} jsonData - Full audit data
  * @returns {Object} Minimal data needed for charts
  */
-function calculateChartData(jsonData: any) {
-  const summary = jsonData.analysis?.summary || {};
-  const details = jsonData.analysis?.details || {};
-  const pages = jsonData.pageData?.pages || {};
+function calculateChartData(jsonData: Record<string, unknown>) {
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const summary = (analysisObj.summary || {}) as Record<string, unknown>;
+  const details = (analysisObj.details || {}) as Record<string, unknown>;
+  const pages = ((jsonData.pageData as Record<string, unknown>)?.pages || {}) as Record<string, PageInfo>;
 
   // Pre-calculate top 10 issues for frequency chart
   const topIssues = Object.entries(details)
-    .map(([issue, data]: [string, any]) => ({ issue, count: data.count || data.examples?.length || 0, severity: data.severity || 'MEDIUM' }))
-    .sort((a: any, b: any) => b.count - a.count)
+    .map(([issue, data]: [string, unknown]) => {
+      const d = data as AnalysisDetail;
+      return { issue, count: d.count || d.examples?.length || 0, severity: d.severity || 'MEDIUM' };
+    })
+    .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
   // Pre-calculate performance averages
-  const pagesWithPerf = Object.values(pages).filter((p: any) => p.TTFB || p.LCP || p.CLS);
+  const pagesArray = Object.values(pages) as PageInfo[];
+  const pagesWithPerf = pagesArray.filter((p: PageInfo) => p.TTFB || p.LCP || p.CLS);
   const avgTTFB = pagesWithPerf.length > 0
-    ? Math.round(pagesWithPerf.reduce((sum: number, p: any) => sum + (p.TTFB || 0), 0) / pagesWithPerf.length)
+    ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.TTFB || 0), 0) / pagesWithPerf.length)
     : 0;
   const avgLCP = pagesWithPerf.length > 0
-    ? Math.round(pagesWithPerf.reduce((sum: number, p: any) => sum + (p.LCP || 0), 0) / pagesWithPerf.length)
+    ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.LCP || 0), 0) / pagesWithPerf.length)
     : 0;
   const avgCLS = pagesWithPerf.length > 0
-    ? (pagesWithPerf.reduce((sum: number, p: any) => sum + (p.CLS || 0), 0) / pagesWithPerf.length).toFixed(3)
+    ? (pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.CLS || 0), 0) / pagesWithPerf.length).toFixed(3)
     : 0;
 
   // Pre-calculate status code distribution
   const statusCodes: Record<string, number> = {};
-  Object.values(pages).forEach((page: any) => {
+  pagesArray.forEach((page: PageInfo) => {
     const code = page.status || page.statusCode;
     if (!code || isNaN(code)) return;
     const codeGroup = Math.floor(code / 100) * 100;
@@ -63,7 +70,7 @@ function calculateChartData(jsonData: any) {
     'Long (600-1000)': 0,
     'Comprehensive (1000+)': 0,
   };
-  Object.values(pages).forEach((page: any) => {
+  pagesArray.forEach((page: PageInfo) => {
     const wordCount = page.contentQuality?.wordCount || 0;
     if (wordCount < 100) wordCountBuckets['Thin (0-100)']++;
     else if (wordCount < 300) wordCountBuckets['Short (100-300)']++;
@@ -80,7 +87,7 @@ function calculateChartData(jsonData: any) {
     'Client Errors (4xx)': 0,
     'Server Errors (5xx)': 0,
   };
-  Object.values(pages).forEach((page: any) => {
+  pagesArray.forEach((page: PageInfo) => {
     const status = page.status || page.statusCode || 200;
     if (status >= 500) {
       indexability['Server Errors (5xx)']++;
@@ -97,20 +104,21 @@ function calculateChartData(jsonData: any) {
 
   // Pre-calculate code coverage data
   const coverageData: { labels: string[], jsUnused: number[], cssUnused: number[] } = { labels: [], jsUnused: [], cssUnused: [] };
-  const coveragePages = Object.entries(pages).filter(([, p]: [string, any]) => p.codeCoverage?.js?.ratio != null);
+  const coveragePages = Object.entries(pages).filter(([, p]: [string, unknown]) => (p as PageInfo).codeCoverage?.js?.ratio != null);
   if (coveragePages.length > 0) {
     // Show top 10 pages by unused JS
-    const sorted = coveragePages.sort(([, a]: [string, any], [, b]: [string, any]) => (b.codeCoverage.js.ratio || 0) - (a.codeCoverage.js.ratio || 0)).slice(0, 10);
-    sorted.forEach(([url, p]: [string, any]) => {
+    const sorted = coveragePages.sort(([, a]: [string, unknown], [, b]: [string, unknown]) => ((b as PageInfo).codeCoverage?.js?.ratio || 0) - ((a as PageInfo).codeCoverage?.js?.ratio || 0)).slice(0, 10);
+    sorted.forEach(([url, p]: [string, unknown]) => {
+      const pg = p as PageInfo;
       try { coverageData.labels.push(new URL(url).pathname); } catch { coverageData.labels.push(url); }
-      coverageData.jsUnused.push(p.codeCoverage.js.ratio || 0);
-      coverageData.cssUnused.push(p.codeCoverage.css?.ratio || 0);
+      coverageData.jsUnused.push(pg.codeCoverage?.js?.ratio || 0);
+      coverageData.cssUnused.push(pg.codeCoverage?.css?.ratio || 0);
     });
   }
 
   // Pre-calculate language distribution
   const languageDist: Record<string, number> = {};
-  Object.values(pages).forEach((page: any) => {
+  pagesArray.forEach((page: PageInfo) => {
     const lang = page.languageDetection?.detectedLanguage;
     if (lang) {
       languageDist[lang] = (languageDist[lang] || 0) + 1;
@@ -119,7 +127,7 @@ function calculateChartData(jsonData: any) {
 
   // Pre-calculate PageRank distribution
   const pageRankBuckets: Record<string, number> = { 'Very Low (0-10)': 0, 'Low (10-30)': 0, 'Medium (30-60)': 0, 'High (60-80)': 0, 'Very High (80-100)': 0 };
-  Object.values(pages).forEach((page: any) => {
+  pagesArray.forEach((page: PageInfo) => {
     const pr = page.internalPageRank;
     if (pr == null) return;
     const pct = pr * 100;
@@ -133,7 +141,7 @@ function calculateChartData(jsonData: any) {
 
   // Pre-calculate CTA distribution
   const ctaBuckets: Record<string, number> = { 'No CTAs': 0, '1 CTA': 0, '2-3 CTAs': 0, '4-5 CTAs': 0, '6+ CTAs': 0 };
-  Object.values(pages).forEach((page: any) => {
+  pagesArray.forEach((page: PageInfo) => {
     const total = page.ctaData?.summary?.total;
     if (total == null) return;
     if (total === 0) ctaBuckets['No CTAs']++;
@@ -178,35 +186,38 @@ function calculateChartData(jsonData: any) {
  * @param {Object} jsonData - Full audit data
  * @returns {Array} Array of minimal page data
  */
-function createPagesExportData(jsonData: any) {
-  const pages = jsonData.pageData?.pages || {};
-  return Object.entries(pages).map(([url, data]: [string, any]) => ({
+function createPagesExportData(jsonData: Record<string, unknown>) {
+  const pages = (jsonData.pageData as Record<string, unknown>)?.pages || {};
+  return Object.entries(pages).map(([url, data]: [string, unknown]) => {
+    const d = data as PageInfo;
+    return {
     url,
 
-    status: data.status || data.statusCode || '',
+    status: d.status || d.statusCode || '',
 
-    title: data.title || '',
+    title: d.title || '',
 
-    description: data.description || '',
+    description: d.description || '',
 
-    h1Count: data.headings?.h1?.length || (Array.isArray(data.headings) ? (data.headings.find(h => h.tag === 'h1')?.count || 0) : 0),
+    h1Count: d.headings?.h1?.length || (Array.isArray(d.headings) ? (d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count || 0) : 0),
 
-    canonical: data.canonical || '',
+    canonical: d.canonical || '',
 
-    TTFB: data.TTFB || '',
+    TTFB: d.TTFB || '',
 
-    LCP: data.LCP || '',
+    LCP: d.LCP || '',
 
-    CLS: data.CLS || '',
+    CLS: d.CLS || '',
 
-    pageSize: data.totalResponseSize ? (data.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
+    pageSize: d.totalResponseSize ? (d.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
 
-    requests: data.totalNumberOfRequests || data.numberOfRequests || '',
+    requests: d.totalNumberOfRequests || d.numberOfRequests || '',
 
-    hasErrors: (data.status >= 400 || data.errors?.length > 0) ? 'Yes' : 'No',
+    hasErrors: (d.status >= 400 || d.errors?.length > 0) ? 'Yes' : 'No',
 
-    loadTime: data.loadEvent || '',
-  }));
+    loadTime: d.loadEvent || '',
+  };
+  });
 }
 
 /**
@@ -218,7 +229,7 @@ function createPagesExportData(jsonData: any) {
  * @param {string} data.domainName - Domain name for file naming
  * @returns {string} HTML script tags with embedded JavaScript
  */
-function getScripts(data: any) {
+function getScripts(data: ReportSectionData) {
   const { pageData, jsonData, trendData, domainName } = data;
 
   // Pre-calculate chart data to avoid embedding full jsonData
@@ -228,18 +239,19 @@ function getScripts(data: any) {
   const pagesExportData = createPagesExportData(jsonData);
 
   // Extract details with limited examples for modal popups (max 100 per issue)
-  const detailsForModals: Record<string, any> = {};
-  const details = jsonData.analysis?.details || {};
-  for (const [issue, data] of Object.entries(details) as [string, any][]) {
+  const detailsForModals: Record<string, { severity: string; examples: string[] }> = {};
+  const details = (jsonData.analysis as Record<string, unknown>)?.details || {};
+  for (const [issue, data] of Object.entries(details as Record<string, unknown>)) {
+    const d = data as AnalysisDetail;
     detailsForModals[issue] = {
-      severity: data.severity || 'MEDIUM',
-      examples: (data.examples || []).slice(0, 100),
+      severity: d.severity || 'MEDIUM',
+      examples: (d.examples || []).slice(0, 100),
     };
   }
 
   // Limit incoming links data to first 10 per page
-  const limitedIncomingLinks: Record<string, any> = {};
-  for (const [url, links] of Object.entries(pageData.incomingLinks || {}) as [string, any][]) {
+  const limitedIncomingLinks: Record<string, string[]> = {};
+  for (const [url, links] of Object.entries(pageData.incomingLinks || {}) as [string, string[]][]) {
     limitedIncomingLinks[url] = (links || []).slice(0, 10);
   }
 

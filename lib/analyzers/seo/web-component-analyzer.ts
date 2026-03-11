@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ChromePage, ParsedPage, Issue } from '../../types';
+import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class WebComponentAnalyzer {
   /**
@@ -19,8 +19,8 @@ class WebComponentAnalyzer {
     const warnings: Issue[] = [];
 
     const webComponentData = {
-      customElements: [] as any[],
-      shadowRoots: [] as any[],
+      customElements: [] as Record<string, any>[],
+      shadowRoots: [] as Record<string, any>[],
       totalCustomElements: 0,
       totalShadowRoots: 0,
       contentInShadowDom: {
@@ -51,7 +51,7 @@ class WebComponentAnalyzer {
     webComponentData.framework = await this.#detectFramework(chromePage, parsedPage);
 
     // 4. Check for declarative shadow DOM
-    (webComponentData as any).hasDeclarativeShadowDom = this.#checkDeclarativeShadowDom(parsedPage);
+    (webComponentData as Record<string, any>).hasDeclarativeShadowDom = this.#checkDeclarativeShadowDom(parsedPage);
 
     // Generate issues
 
@@ -101,7 +101,7 @@ class WebComponentAnalyzer {
     }
 
     // Custom elements without declarative shadow DOM
-    if (webComponentData.totalShadowRoots > 0 && !(webComponentData as any).hasDeclarativeShadowDom) {
+    if (webComponentData.totalShadowRoots > 0 && !(webComponentData as Record<string, any>).hasDeclarativeShadowDom) {
       warnings.push({
         message: 'No declarative Shadow DOM fallback',
         detail: `<a href="${url}">${url}</a> uses Shadow DOM but lacks declarative shadow DOM (template with shadowrootmode). Content may not be visible without JavaScript.`,
@@ -128,7 +128,7 @@ class WebComponentAnalyzer {
   static async #detectCustomElements(chromePage: ChromePage) {
     try {
       return await chromePage.evaluate(() => {
-        const customElements: any[] = [];
+        const customElements: Record<string, any>[] = [];
         const allElements = document.querySelectorAll('*');
 
         for (const el of allElements) {
@@ -180,7 +180,7 @@ class WebComponentAnalyzer {
         result.lightDomTextLength = document.body?.innerText?.length || 0;
 
         // Find all shadow roots
-        const findShadowRoots = (root: any, depth = 0): void => {
+        const findShadowRoots = (root: Element | ShadowRoot | Document, depth = 0): void => {
           if (depth > 10) return; // Prevent infinite recursion
 
           const elements = root.querySelectorAll('*');
@@ -210,7 +210,7 @@ class WebComponentAnalyzer {
                 result.contentInShadow.images = true;
               }
 
-              (result.shadowRoots as any[]).push({
+              (result.shadowRoots as Record<string, any>[]).push({
                 hostTag: el.tagName.toLowerCase(),
                 mode: shadowRoot.mode,
                 childCount: shadowRoot.childElementCount,
@@ -269,9 +269,9 @@ class WebComponentAnalyzer {
     try {
       return await chromePage.evaluate(() => {
         // Check for framework-specific globals
-        if ((window as any).Lit) return 'Lit';
-        if ((window as any).Stencil) return 'Stencil';
-        if ((window as any).Polymer) return 'Polymer';
+        if ((window as Record<string, any>).Lit) return 'Lit';
+        if ((window as Record<string, any>).Stencil) return 'Stencil';
+        if ((window as Record<string, any>).Polymer) return 'Polymer';
         return null;
       });
     } catch (e) {
@@ -294,7 +294,7 @@ class WebComponentAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

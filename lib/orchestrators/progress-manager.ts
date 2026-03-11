@@ -7,22 +7,99 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ErrorAggregator } from '../utils/error-aggregator';
+import type { PageInfo } from '../types';
+import type { FileManager } from '../storage/file-manager';
+
+interface BatchInfo {
+  file: string;
+  count: number;
+  urls: string[];
+  stats?: { compressedSizeMB: number };
+}
+
+interface ManifestData {
+  version: number;
+  format: string;
+  domain: string;
+  created: string;
+  progress: {
+    processedPages: string[];
+    totalWithoutError: number;
+    totalWithError: number;
+    byError: Record<string, number>;
+    attempts: Record<string, number>;
+  };
+  files: {
+    metadata: string;
+    analysis: string;
+    incomingLinks: string;
+    pageBatches: Array<{ file: string; count: number; urls?: string[] }>;
+  };
+}
+
+interface MetadataData {
+  robots: Record<string, unknown>;
+  sitemaps: Record<string, unknown> & { total?: number };
+  isMultiLang: boolean;
+  timing: Record<string, unknown>;
+  cruxData?: unknown;
+}
+
+interface ProgressResults {
+  robots: Record<string, unknown>;
+  sitemaps: Record<string, unknown> & { total?: number };
+  isMultiLang?: boolean;
+  timing?: Record<string, unknown>;
+  cruxData?: unknown;
+  pageData: {
+    pages: Record<string, PageInfo>;
+    processedPages: Set<string> | string[];
+    totalWithoutError: number;
+    totalWithError: number;
+    byError: Record<string, number>;
+    attempts: Record<string, number>;
+    incomingLinks?: Record<string, string[]>;
+  };
+  analysis: {
+    overall: Set<string> | string[];
+    details: Record<string, unknown>;
+    bySeverity: Record<string, string[]>;
+    summary: Record<string, number>;
+  };
+}
+
+interface LinkData {
+  isInternal?: boolean;
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface ImageData {
+  alt?: string;
+  [key: string]: unknown;
+}
+
+interface RequestData {
+  resourceType?: string;
+  size?: number;
+  [key: string]: unknown;
+}
 
 class ProgressManager {
-  #pendingPages: Record<string, any> = {};
-  #writtenBatches: any[] = [];
+  #pendingPages: Record<string, PageInfo> = {};
+  #writtenBatches: BatchInfo[] = [];
   #isWriting = false;
-  #writeQueue: any[] = [];
+  #writeQueue: ProgressResults[] = [];
   #flushWaiters: Array<() => void> = [];
 
-  fileManager: any;
+  fileManager: FileManager;
   verbose: boolean;
 
   /**
    * Create a new ProgressManager
    * @param {FileManager} fileManager - FileManager instance for I/O operations
    */
-  constructor(fileManager: any, { verbose = false } = {}) {
+  constructor(fileManager: FileManager, { verbose = false } = {}) {
     this.fileManager = fileManager;
     this.verbose = verbose;
     this.#pendingPages = {};
@@ -68,16 +145,16 @@ class ProgressManager {
 
     // Load pages from batch files
     console.log(`  - Loading page batches...`);
-    const pages: Record<string, any> = {};
-    const batches = manifest.files?.pageBatches || [];
+    const pages: Record<string, PageInfo> = {};
+    const batches = (manifest as ManifestData).files?.pageBatches || [];
 
     for (const batchInfo of batches) {
       try {
         const batchData = this.fileManager.readBatchByPath(batchInfo.file);
         Object.assign(pages, batchData.pages);
         console.log(`    Loaded ${Object.keys(batchData.pages).length} pages from ${batchInfo.file}`);
-      } catch (error: any) {
-        console.warn(`    ⚠️  Could not load batch ${batchInfo.file}: ${error.message}`);
+      } catch (error: unknown) {
+        console.warn(`    ⚠️  Could not load batch ${batchInfo.file}: ${(error as Error).message}`);
       }
     }
 
@@ -92,30 +169,32 @@ class ProgressManager {
 
     // Build restored results
     // Ensure processedPages is converted to Set (defensive check for corrupted data)
-    const processedPagesArray = Array.isArray(manifest.progress.processedPages)
-      ? manifest.progress.processedPages
+    const manifestData = manifest as ManifestData;
+    const processedPagesArray = Array.isArray(manifestData.progress.processedPages)
+      ? manifestData.progress.processedPages
       : [];
     const processedPagesSet = new Set(processedPagesArray);
 
+    const metadataTyped = metadata as MetadataData;
     const restoredResults = {
-      robots: metadata.robots,
-      sitemaps: metadata.sitemaps,
-      isMultiLang: metadata.isMultiLang,
-      timing: metadata.timing,
+      robots: metadataTyped.robots,
+      sitemaps: metadataTyped.sitemaps,
+      isMultiLang: metadataTyped.isMultiLang,
+      timing: metadataTyped.timing,
       pageData: {
         pages,
         processedPages: processedPagesSet,
-        totalWithoutError: manifest.progress.totalWithoutError,
-        totalWithError: manifest.progress.totalWithError,
-        byError: manifest.progress.byError,
-        attempts: manifest.progress.attempts,
+        totalWithoutError: manifestData.progress.totalWithoutError,
+        totalWithError: manifestData.progress.totalWithError,
+        byError: manifestData.progress.byError,
+        attempts: manifestData.progress.attempts,
         incomingLinks: incomingLinksData.incomingLinks,
       },
       analysis: errorAggregator.getRawData(),
     };
 
     // Set written batches for resume
-    this.#writtenBatches = batches.map((b: any) => ({
+    this.#writtenBatches = batches.map((b) => ({
       file: b.file,
       count: b.count,
       urls: b.urls || [],
@@ -140,7 +219,7 @@ class ProgressManager {
    * @param {Object} pageData - Page data
    * @returns {boolean} True if auto-flush was triggered
    */
-  addPage(url: string, pageData: any) {
+  addPage(url: string, pageData: PageInfo) {
     // Validate and truncate oversized page data to prevent memory issues
     const MAX_PAGE_SIZE_BYTES = 500 * 1024; // 500KB per page max
     const MAX_ARRAY_LENGTH = 100; // Max items in arrays
@@ -153,7 +232,7 @@ class ProgressManager {
         console.warn(`⚠️  Page data for ${url} is large (${Math.round(estimatedSize / 1024)}KB), truncating...`);
 
         // Truncate large arrays to reduce size
-        const truncatedPage = this.#truncateLargeArrays(pageData, MAX_ARRAY_LENGTH);
+        const truncatedPage = this.#truncateLargeArrays(pageData, MAX_ARRAY_LENGTH) as PageInfo;
 
         // Re-check size after truncation
         const newSize = JSON.stringify(truncatedPage).length;
@@ -167,15 +246,15 @@ class ProgressManager {
       } else {
         this.#pendingPages[url] = pageData;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If JSON.stringify fails (circular refs, etc.), store minimal data
-      console.warn(`⚠️  Could not validate page size for ${url}: ${error.message}`);
+      console.warn(`⚠️  Could not validate page size for ${url}: ${(error as Error).message}`);
       this.#pendingPages[url] = {
         url: pageData.url,
-        status: pageData.status,
+        statusCode: pageData.statusCode,
         title: pageData.title,
         error: 'Page data could not be serialized',
-      };
+      } as PageInfo;
     }
 
     // Auto-flush if pending pages exceed memory threshold
@@ -196,7 +275,7 @@ class ProgressManager {
    * Truncate large arrays in an object recursively
    * @private
    */
-  #truncateLargeArrays(obj: any, maxLength: number, depth: number = 0): any {
+  #truncateLargeArrays(obj: unknown, maxLength: number, depth: number = 0): unknown {
     if (depth > 5) return obj; // Prevent infinite recursion
 
     if (Array.isArray(obj)) {
@@ -204,8 +283,8 @@ class ProgressManager {
     }
 
     if (obj && typeof obj === 'object') {
-      const result: Record<string, any> = {};
-      for (const [key, value] of Object.entries(obj)) {
+      const result: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
         if (Array.isArray(value) && value.length > maxLength) {
           result[key] = value.slice(0, maxLength);
         } else if (value && typeof value === 'object') {
@@ -270,7 +349,7 @@ class ProgressManager {
       // Notify any waiting flush calls
       if (this.#flushWaiters.length > 0) {
         const notify = this.#flushWaiters.shift();
-        notify();
+        notify!();
       }
     }
   }
@@ -286,7 +365,7 @@ class ProgressManager {
       return [];
     }
 
-    const newBatches: any[] = [];
+    const newBatches: BatchInfo[] = [];
 
     // Write complete batches
     for (let i = 0; i < pendingEntries.length; i += batchSize) {
@@ -297,10 +376,10 @@ class ProgressManager {
         break;
       }
 
-      const batchPages: Record<string, any> = {};
+      const batchPages: Record<string, PageInfo> = {};
       for (const [url, page] of batchEntries) {
         // Optimize page before writing
-        batchPages[url] = this.#optimizePageInMemory({ ...(page as any) });
+        batchPages[url] = this.#optimizePageInMemory({ ...page });
         delete this.#pendingPages[url];
       }
 
@@ -323,7 +402,7 @@ class ProgressManager {
    * @param {Object} results - Current results object
    * @returns {void}
    */
-  saveProgress(results: any) {
+  saveProgress(results: ProgressResults) {
     // Prevent concurrent writes - if already writing, queue this request
     if (this.#isWriting) {
       // Actually queue the request instead of dropping it
@@ -342,7 +421,7 @@ class ProgressManager {
 
       // Process queued save request if any
       if (this.#writeQueue.length > 0) {
-        const queuedResults = this.#writeQueue.pop();
+        const queuedResults = this.#writeQueue.pop()!;
         this.#writeQueue = []; // Clear queue
         console.log(`  📝 Processing queued save request...`);
         this.saveProgress(queuedResults);
@@ -354,9 +433,9 @@ class ProgressManager {
    * Internal method that performs the actual save
    * @private
    */
-  #doSaveProgress(results: any) {
+  #doSaveProgress(results: ProgressResults) {
     // Get URLs that have already been written to batches
-    const writtenUrls = new Set();
+    const writtenUrls = new Set<string>();
     for (const batch of this.#writtenBatches) {
       for (const url of (batch.urls || [])) {
         writtenUrls.add(url);
@@ -364,7 +443,7 @@ class ProgressManager {
     }
 
     // Find pages that need to be written (not yet in any batch)
-    const pagesToWrite: Record<string, any> = {};
+    const pagesToWrite: Record<string, PageInfo> = {};
     const allPages = results.pageData.pages || {};
     for (const url in allPages) {
       if (!writtenUrls.has(url)) {
@@ -380,10 +459,10 @@ class ProgressManager {
     if (pageEntries.length > 0) {
       for (let i = 0; i < pageEntries.length; i += batchSize) {
         const batchEntries = pageEntries.slice(i, i + batchSize);
-        const batchPages: Record<string, any> = {};
+        const batchPages: Record<string, PageInfo> = {};
 
         for (const [url, page] of batchEntries) {
-          batchPages[url] = this.#optimizePageInMemory({ ...(page as any) });
+          batchPages[url] = this.#optimizePageInMemory({ ...page });
           urlsWritten.push(url);
         }
 
@@ -469,7 +548,7 @@ class ProgressManager {
    * @param {Object} pages - Current pages object (will be mutated with reloaded pages)
    * @returns {number} Number of pages reloaded
    */
-  reloadEvictedPages(pages: Record<string, any>) {
+  reloadEvictedPages(pages: Record<string, PageInfo>) {
     let reloaded = 0;
 
     for (const batch of this.#writtenBatches) {
@@ -481,8 +560,8 @@ class ProgressManager {
             reloaded++;
           }
         }
-      } catch (error: any) {
-        console.warn(`  ⚠️  Could not reload batch ${batch.file}: ${error.message}`);
+      } catch (error: unknown) {
+        console.warn(`  ⚠️  Could not reload batch ${batch.file}: ${(error as Error).message}`);
       }
     }
 
@@ -513,9 +592,9 @@ class ProgressManager {
    * Process incoming links format
    * @private
    */
-  #processIncomingLinks(incomingLinks: Record<string, any>) {
-    const tracking = new Map();
-    const processed: Record<string, any> = {};
+  #processIncomingLinks(incomingLinks: Record<string, string[] | number>) {
+    const tracking = new Map<string, Set<string>>();
+    const processed: Record<string, string[]> = {};
 
     for (const target in incomingLinks) {
       if (Array.isArray(incomingLinks[target])) {
@@ -534,7 +613,8 @@ class ProgressManager {
    * Optimize page data in memory to reduce footprint
    * @private
    */
-  #optimizePageInMemory(page: any) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Page data has dynamic analyzer properties beyond typed interface
+  #optimizePageInMemory(page: Record<string, any>): PageInfo {
     // Strip raw schema data but preserve key fields needed by site-wide validators
     if (page.structuredData?.jsonLdSchemas) {
       for (const schema of page.structuredData.jsonLdSchemas) {
@@ -551,10 +631,10 @@ class ProgressManager {
 
     // Reduce requests to summary
     if (page.requests && typeof page.requests === 'object' && !page.requests.totalRequests) {
-      const entries = Object.entries(page.requests);
+      const entries = Object.entries(page.requests as Record<string, RequestData>);
       const byType: Record<string, number> = {};
       let totalSize = 0;
-      for (const [, req] of entries as Array<[string, any]>) {
+      for (const [, req] of entries) {
         byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] || 0) + 1;
         if (req.size) totalSize += req.size;
       }
@@ -564,16 +644,16 @@ class ProgressManager {
     // Reduce links to only problematic ones
     if (Array.isArray(page.links) && page.links.length > 0) {
       page.linksCount = page.linksCount || page.links.length;
-      page.internalLinksCount = page.internalLinksCount || page.links.filter((l: any) => l.isInternal).length;
-      page.externalLinksCount = page.externalLinksCount || page.links.filter((l: any) => !l.isInternal).length;
-      page.links = page.links.filter((l: any) => !l.text || l.text.trim() === '').slice(0, 20);
+      page.internalLinksCount = page.internalLinksCount || page.links.filter((l: LinkData) => l.isInternal).length;
+      page.externalLinksCount = page.externalLinksCount || page.links.filter((l: LinkData) => !l.isInternal).length;
+      page.links = page.links.filter((l: LinkData) => !l.text || l.text.trim() === '').slice(0, 20);
     }
 
     // Reduce images to only problematic ones
     if (Array.isArray(page.images) && page.images.length > 0) {
       page.imagesCount = page.imagesCount || page.images.length;
-      page.imagesWithoutAltCount = page.imagesWithoutAltCount || page.images.filter((i: any) => !i.alt || i.alt.trim() === '').length;
-      page.images = page.images.filter((i: any) => !i.alt || i.alt.trim() === '').slice(0, 10);
+      page.imagesWithoutAltCount = page.imagesWithoutAltCount || page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').length;
+      page.images = page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').slice(0, 10);
     }
 
     // Strip vitals detail
@@ -711,7 +791,7 @@ class ProgressManager {
         h4Count: page.headings.h4?.length || 0,
         h5Count: page.headings.h5?.length || 0,
         h6Count: page.headings.h6?.length || 0,
-        h1: page.headings.h1.map((h: any) => (typeof h === 'string' ? h.substring(0, 100) : h)),
+        h1: page.headings.h1.map((h: string) => (typeof h === 'string' ? h.substring(0, 100) : h)),
         issues: page.headings.issues,
         warnings: page.headings.warnings,
       };
@@ -832,11 +912,11 @@ class ProgressManager {
     }
 
     // Limit issues/warnings arrays on all analyzers
-    const limitIssuesWarnings = (obj: any) => {
-      if (obj?.issues && Array.isArray(obj.issues)) {
+    const limitIssuesWarnings = (obj: { issues?: unknown[]; warnings?: unknown[]; [key: string]: unknown }) => {
+      if (obj.issues && Array.isArray(obj.issues)) {
         obj.issues = obj.issues.slice(0, 20);
       }
-      if (obj?.warnings && Array.isArray(obj.warnings)) {
+      if (obj.warnings && Array.isArray(obj.warnings)) {
         obj.warnings = obj.warnings.slice(0, 20);
       }
     };
@@ -852,7 +932,7 @@ class ProgressManager {
       }
     });
 
-    return page;
+    return page as PageInfo;
   }
 }
 

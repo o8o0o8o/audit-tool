@@ -59,7 +59,7 @@ class SecurityAnalyzer {
         securityIssues.insecureCookies++;
         // Store first 10 details for reporting
         if (securityIssues.insecureCookieDetails.length < 10) {
-          (securityIssues.insecureCookieDetails as any[]).push({
+          (securityIssues.insecureCookieDetails as Record<string, any>[]).push({
             name: cookie.name,
             domain: cookie.domain,
             issues: issues,

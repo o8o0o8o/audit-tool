@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide Social Media Validator
@@ -12,7 +12,7 @@ class SocialMediaValidator {
    * @param {Object} allPages - Object containing all page data { url: pageData }
    * @returns {Object} { issues: [], warnings: [], coverageStats: {} }
    */
-  static validateSocialMediaImplementation(allPages: Record<string, any>) {
+  static validateSocialMediaImplementation(allPages: Record<string, PageInfo>) {
     console.log('\nAnalyzing social media tag implementation across pages...');
 
     const socialStats = {
@@ -22,8 +22,8 @@ class SocialMediaValidator {
       socialImages: new Map(), // image URL -> count
       missingOgImage: [] as string[],
       missingTwitterCard: [] as string[],
-      relativeImageUrls: [] as any[],
-      imageDimensionIssues: [] as any[],
+      relativeImageUrls: [] as Record<string, any>[],
+      imageDimensionIssues: [] as Record<string, any>[],
       totalIssues: 0,
       totalWarnings: 0,
     };

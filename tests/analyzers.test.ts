@@ -24,7 +24,7 @@ describe('ResponseHeaderAnalyzer', () => {
     const pageData = {
       responseHeaders: { 'x-robots-tag': 'noindex', 'content-type': 'text/html' },
     };
-    const result = ResponseHeaderAnalyzer.analyze(pageData, 'https://example.com/');
+    const result = ResponseHeaderAnalyzer.analyze(pageData as any, 'https://example.com/');
     assert.ok(result.info);
     assert.strictEqual(result.info.noindexViaHeader, true);
     assert.strictEqual(result.info.xRobotsTag, 'noindex');
@@ -36,7 +36,7 @@ describe('ResponseHeaderAnalyzer', () => {
         responseHeaderAnalysis: { noindexViaHeader: true },
       },
     };
-    const result = ResponseHeaderAnalyzer.analyzeSiteWide(allPages);
+    const result = ResponseHeaderAnalyzer.analyzeSiteWide(allPages as any);
     assert.ok(result.issues.some(i => (i.title || '').toLowerCase().includes('x-robots-tag')));
   });
 
@@ -44,7 +44,7 @@ describe('ResponseHeaderAnalyzer', () => {
     const pageData = {
       responseHeaders: { 'content-type': 'text/html' },
     };
-    const result = ResponseHeaderAnalyzer.analyze(pageData, 'https://example.com/');
+    const result = ResponseHeaderAnalyzer.analyze(pageData as any, 'https://example.com/');
     assert.strictEqual(result.issues.length, 0);
   });
 });
@@ -121,7 +121,7 @@ describe('ContentSimilarityAnalyzer', () => {
       },
     };
 
-    const result = ContentSimilarityAnalyzer.analyze(allPages);
+    const result = ContentSimilarityAnalyzer.analyze(allPages as any);
     // Pages A and B should be detected as similar
     const pageA = allPages['https://example.com/a'] as any;
     assert.ok(pageA.contentSimilarity);
@@ -136,7 +136,7 @@ describe('ContentSimilarityAnalyzer', () => {
       'https://example.com/a': { contentQuality: { wordCount: 10 } },
       'https://example.com/b': {},
     };
-    const result = ContentSimilarityAnalyzer.analyze(allPages);
+    const result = ContentSimilarityAnalyzer.analyze(allPages as any);
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
   });
@@ -160,7 +160,7 @@ describe('InternalPageRankAnalyzer', () => {
       'https://example.com/': ['https://example.com/about'],
       'https://example.com/about': ['https://example.com/'],
     };
-    const result = InternalPageRankAnalyzer.analyze(allPages, incomingLinks, 'https://example.com');
+    const result = InternalPageRankAnalyzer.analyze(allPages as any, incomingLinks, 'https://example.com');
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
     // Both pages should have PageRank assigned
@@ -206,7 +206,7 @@ describe('OutboundLinkChecker', () => {
 describe('ScoreCalculator - new patterns', () => {
 
   // Need at least one page to avoid early return
-  const dummyPages = { 'https://example.com/': {} };
+  const dummyPages: Record<string, any> = { 'https://example.com/': {} };
 
   it('categorizes language-related issues to SEO', () => {
     const analysisData = {
@@ -253,19 +253,19 @@ describe('ScoreCalculator - new patterns', () => {
 
   it('scales penalty by affected page count from details', () => {
     // 2% affected vs 80% affected on same total should differ
-    const pages100 = {};
+    const pages100: Record<string, any> = {};
     for (let i = 0; i < 100; i++) pages100[`https://example.com/${i}`] = {};
 
     const fewAffected = {
       bySeverity: { critical: [], high: [], medium: [], low: [] },
       details: {
-        'Some pages have missing or empty title': { severity: 'high', count: 2, examples: ['a', 'b'] },
+        'Some pages have missing or empty title': { severity: 'high' as const, count: 2, examples: ['a', 'b'] },
       },
     };
     const manyAffected = {
       bySeverity: { critical: [], high: [], medium: [], low: [] },
       details: {
-        'Some pages have missing or empty title': { severity: 'high', count: 80, examples: ['a', 'b', 'c'] },
+        'Some pages have missing or empty title': { severity: 'high' as const, count: 80, examples: ['a', 'b', 'c'] },
       },
     };
 
@@ -283,7 +283,7 @@ describe('ScoreCalculator - new patterns', () => {
       bySeverity: { critical: [], high: [], medium: [], low: [] },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as any);
     assert.strictEqual(scores.security, 50, `Expected security=50 (avg of 60,40), got ${scores.security}`);
   });
 
@@ -298,7 +298,7 @@ describe('ScoreCalculator - new patterns', () => {
       bySeverity: { critical: [], high: [], medium: [], low: [] },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as any);
     // Average of 80 (formData) and 80 (violations) = 80
     assert.strictEqual(scores.accessibility, 80, `Expected accessibility=80, got ${scores.accessibility}`);
   });
@@ -306,12 +306,12 @@ describe('ScoreCalculator - new patterns', () => {
   it('identifies structural issues as quick wins', () => {
     const details = {
       'Some pages have redirect chains or loops': {
-        severity: 'critical',
+        severity: 'critical' as const,
         count: 10,
         examples: ['https://example.com/a', 'https://example.com/b'],
       },
       'Some pages have very thin content': {
-        severity: 'high',
+        severity: 'high' as const,
         count: 20,
         examples: ['https://example.com/c'],
       },
@@ -380,7 +380,7 @@ describe('CLI Summary', () => {
         totalWithError: 0,
       },
     };
-    const json = getJsonSummary(results, 'example.com', '/tmp/report.html');
+    const json = getJsonSummary(results as any, 'example.com', '/tmp/report.html');
     assert.ok(json.insights);
     assert.strictEqual(json.insights.languageMismatches, 1);
     assert.strictEqual(json.insights.brokenOutboundLinks, 1);
@@ -411,13 +411,14 @@ describe('HistoryManager - insights', () => {
         },
       },
     };
-    const insights = mgr.extractInsightsSummary(auditData);
-    assert.strictEqual(insights.languageMismatches, 1);
-    assert.strictEqual(insights.brokenOutboundLinks, 1);
-    assert.strictEqual(insights.nearDuplicatePages, 1);
-    assert.strictEqual(insights.pagesWithoutCTAs, 1);
-    assert.strictEqual(insights.avgJsUnused, 45);
-    assert.strictEqual(insights.avgCssUnused, 30);
+    const insights = mgr.extractInsightsSummary(auditData as any);
+    assert.ok(insights);
+    assert.strictEqual(insights!.languageMismatches, 1);
+    assert.strictEqual(insights!.brokenOutboundLinks, 1);
+    assert.strictEqual(insights!.nearDuplicatePages, 1);
+    assert.strictEqual(insights!.pagesWithoutCTAs, 1);
+    assert.strictEqual(insights!.avgJsUnused, 45);
+    assert.strictEqual(insights!.avgCssUnused, 30);
   });
 });
 
@@ -427,7 +428,7 @@ describe('HistoryManager - insights', () => {
 describe('Content Insights Report', () => {
 
   it('generates HTML string', () => {
-    const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } });
+    const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } } as any);
     assert.strictEqual(typeof html, 'string');
     assert.ok(html.includes('content-insights') || html.length === 0 || html.includes('section'));
   });

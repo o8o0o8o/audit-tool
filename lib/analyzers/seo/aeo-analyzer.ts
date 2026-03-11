@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ParsedPage, ChromePage, Issue } from '../../types';
+import type { ParsedPage, ChromePage, Issue, PageInfo } from '../../types';
 
 // AI crawler user-agents to check in robots.txt
 const AI_CRAWLERS = [
@@ -93,7 +93,7 @@ class AEOAnalyzer {
    * Analyze semantic HTML usage
    * @private
    */
-  static #analyzeSemanticHTML(parsedPage: ParsedPage, info: any, issues: Issue[], warnings: Issue[], url: string) {
+  static #analyzeSemanticHTML(parsedPage: ParsedPage, info: Record<string, any>, issues: Issue[], warnings: Issue[], url: string) {
     let semanticCount = 0;
     let genericCount = 0;
 
@@ -145,7 +145,7 @@ class AEOAnalyzer {
    * Analyze content structure for AI extraction
    * @private
    */
-  static #analyzeContentStructure(parsedPage: ParsedPage, info: any, warnings: Issue[], url: string) {
+  static #analyzeContentStructure(parsedPage: ParsedPage, info: Record<string, any>, warnings: Issue[], url: string) {
     // Check heading hierarchy
     const headings: { level: number; text: string }[] = [];
     for (let i = 1; i <= 6; i++) {
@@ -193,7 +193,7 @@ class AEOAnalyzer {
    * Analyze FAQ and Q&A content patterns
    * @private
    */
-  static #analyzeFAQContent(parsedPage: ParsedPage, info: any) {
+  static #analyzeFAQContent(parsedPage: ParsedPage, info: Record<string, any>) {
     const html = parsedPage.toString();
 
     // Check for FAQ schema
@@ -214,7 +214,7 @@ class AEOAnalyzer {
    * Analyze citation-friendly signals
    * @private
    */
-  static #analyzeCitationSignals(parsedPage: ParsedPage, info: any, warnings: Issue[], url: string) {
+  static #analyzeCitationSignals(parsedPage: ParsedPage, info: Record<string, any>, warnings: Issue[], url: string) {
     // Check for author info
     const authorMeta = parsedPage.querySelector('meta[name="author"]');
     const authorSchema = parsedPage.toString().includes('"author"');
@@ -238,7 +238,7 @@ class AEOAnalyzer {
    * Analyze datetime markup
    * @private
    */
-  static #analyzeDatetimeMarkup(parsedPage: ParsedPage, info: any) {
+  static #analyzeDatetimeMarkup(parsedPage: ParsedPage, info: Record<string, any>) {
     const timeElements = parsedPage.querySelectorAll('time[datetime]');
     const dateMeta = parsedPage.querySelector(
       'meta[property="article:published_time"], meta[property="article:modified_time"]'
@@ -251,7 +251,7 @@ class AEOAnalyzer {
    * Calculate overall content structure score (0-100)
    * @private
    */
-  static #calculateContentScore(info: any) {
+  static #calculateContentScore(info: Record<string, any>) {
     let score = 0;
 
     // Semantic HTML (up to 20 points)
@@ -289,7 +289,7 @@ class AEOAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} AI crawler analysis
    */
-  static analyzeRobotsTxt(robotsData: any, origin: string) {
+  static analyzeRobotsTxt(robotsData: Record<string, any>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -457,7 +457,7 @@ class AEOAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

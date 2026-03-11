@@ -6,7 +6,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class ContentSimilarityAnalyzer {
   /**
@@ -14,7 +14,7 @@ class ContentSimilarityAnalyzer {
    * @param {object} allPages - All page data { url: pageData }
    * @returns {object} Analysis results
    */
-  static analyze(allPages: Record<string, any>, config: any = {}) {
+  static analyze(allPages: Record<string, PageInfo>, config: Record<string, any> = {}) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.entries(allPages);
@@ -121,7 +121,7 @@ class ContentSimilarityAnalyzer {
    * @returns {Set<string>} Fingerprint set
    * @private
    */
-  static #buildFingerprint(keywords: any[], wordCount: number) {
+  static #buildFingerprint(keywords: Record<string, any>[], wordCount: number) {
     const fingerprint = new Set();
 
     for (const kw of keywords) {

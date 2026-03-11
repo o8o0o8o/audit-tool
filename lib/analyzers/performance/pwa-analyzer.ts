@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 // Required manifest fields for installability
 const REQUIRED_MANIFEST_FIELDS = ['name', 'icons', 'start_url', 'display'];
@@ -26,14 +26,14 @@ class PWAAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
       hasManifest: false,
       manifestUrl: null as string | null,
       manifestValid: false,
-      manifestFields: {} as any,
+      manifestFields: {} as Record<string, any>,
       hasServiceWorker: false,
       serviceWorkerScope: null as string | null,
       isInstallable: false,
@@ -149,15 +149,15 @@ class PWAAnalyzer {
    * @param {Array} issues - Issues array
    * @param {Array} warnings - Warnings array
    */
-  static analyzeManifest(manifest: any, info: any, issues: Issue[], warnings: Issue[]) {
+  static analyzeManifest(manifest: Record<string, any>, info: Record<string, any>, issues: Issue[], warnings: Issue[]) {
     let manifestData;
 
     try {
       manifestData = typeof manifest === 'string' ? JSON.parse(manifest) : manifest;
-    } catch (error: any) {
+    } catch (error: unknown) {
       issues.push({
         message: 'Invalid manifest JSON',
-        detail: `Manifest could not be parsed: ${error.message}`,
+        detail: `Manifest could not be parsed: ${(error as Error).message}`,
         severity: SEVERITY.MEDIUM,
       });
       info.installabilityIssues.push('Invalid manifest JSON');
@@ -216,7 +216,7 @@ class PWAAnalyzer {
 
       // Check for maskable icon
       const hasMaskable = manifestData.icons.some(
-        (icon: any) => icon.purpose?.includes('maskable')
+        (icon: Record<string, string>) => icon.purpose?.includes('maskable')
       );
       if (!hasMaskable) {
         warnings.push({
@@ -289,7 +289,7 @@ class PWAAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

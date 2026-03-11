@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ParsedPage, Issue } from '../../types';
+import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class EEATAnalyzer {
   /**
@@ -14,7 +14,7 @@ class EEATAnalyzer {
    * @param {Object} pageData - Page data object
    * @returns {Object} Analysis results
    */
-  static analyze(parsedPage: ParsedPage, url: string, pageData: any) {
+  static analyze(parsedPage: ParsedPage, url: string, pageData: PageInfo) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const signals = {
@@ -69,7 +69,7 @@ class EEATAnalyzer {
     // 6. YMYL Detection (Your Money Your Life)
     const isYMYL = this.detectYMYL(url, parsedPage);
     if (isYMYL) {
-      (signals as any).isYMYL = true;
+      (signals as Record<string, any>).isYMYL = true;
 
       // YMYL pages need stronger E-E-A-T signals
       if (!signals.author) {
@@ -188,7 +188,7 @@ class EEATAnalyzer {
   /**
    * Detect publish and update dates
    */
-  static detectDates(parsedPage: ParsedPage, pageData: any) {
+  static detectDates(parsedPage: ParsedPage, pageData: PageInfo) {
     const result = { publishDate: null as string | null, updateDate: null as string | null };
 
     // Check if already in pageData from freshness analyzer
@@ -398,7 +398,7 @@ class EEATAnalyzer {
   /**
    * Calculate E-E-A-T score (0-100)
    */
-  static calculateScore(signals: any) {
+  static calculateScore(signals: Record<string, any>) {
     let score = 30; // Base score
 
     // Author (+20)
@@ -431,7 +431,7 @@ class EEATAnalyzer {
   /**
    * Site-wide E-E-A-T analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

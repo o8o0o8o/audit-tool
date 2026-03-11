@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ChromePage, Issue } from '../../types';
+import type { ChromePage, Issue, PageInfo } from '../../types';
 
 class ConsoleErrorAnalyzer {
   // Patterns to categorize console errors
@@ -48,12 +48,12 @@ class ConsoleErrorAnalyzer {
    * @returns {Object} Console tracking object with methods
    */
   static createConsoleTracker(chromePage: ChromePage) {
-    const errors: any[] = [];
-    const warnings: any[] = [];
-    const pageerrors: any[] = [];
+    const errors: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
+    const pageerrors: Record<string, any>[] = [];
 
     // Console message handler
-    const consoleHandler = (msg: any) => {
+    const consoleHandler = (msg: import("playwright").ConsoleMessage) => {
       const type = msg.type();
       const text = msg.text();
       const location = msg.location();
@@ -82,7 +82,7 @@ class ConsoleErrorAnalyzer {
     };
 
     // Page error handler (uncaught exceptions)
-    const pageerrorHandler = (error: any) => {
+    const pageerrorHandler = (error: Error) => {
       const text = error.message || error.toString();
 
       // Skip ignored patterns
@@ -129,7 +129,7 @@ class ConsoleErrorAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static analyze(consoleData: any, url: string) {
+  static analyze(consoleData: Record<string, any>, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -139,8 +139,8 @@ class ConsoleErrorAnalyzer {
     const allErrors = [...errors, ...pageerrors];
 
     // Categorize errors
-    const criticalErrors: any[] = [];
-    const otherErrors: any[] = [];
+    const criticalErrors: Record<string, any>[] = [];
+    const otherErrors: Record<string, any>[] = [];
 
     for (const error of allErrors) {
       let isCritical = false;
@@ -218,7 +218,7 @@ class ConsoleErrorAnalyzer {
    * @param {Object} pages - All pages object
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

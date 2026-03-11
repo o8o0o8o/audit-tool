@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 // Known spam/low-quality domains (simplified list)
 const SUSPICIOUS_PATTERNS = [
@@ -36,7 +36,7 @@ class ExternalLinksAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -46,10 +46,10 @@ class ExternalLinksAnalyzer {
       ugcLinks: 0,
       sponsoredLinks: 0,
       newTabLinks: 0,
-      brokenLinks: [] as any[],
-      suspiciousLinks: [] as any[],
+      brokenLinks: [] as Record<string, any>[],
+      suspiciousLinks: [] as Record<string, any>[],
       linksByDomain: {} as Record<string, any>,
-      affiliateLinks: [] as any[],
+      affiliateLinks: [] as Record<string, any>[],
       socialLinks: [] as string[],
     };
 
@@ -169,12 +169,12 @@ class ExternalLinksAnalyzer {
 
     // Link equity concentration
     const topDomains = Object.entries(info.linksByDomain)
-      .sort((a, b) => (b[1] as any).followed - (a[1] as any).followed)
+      .sort((a, b) => (b[1] as Record<string, any>).followed - (a[1] as Record<string, any>).followed)
       .slice(0, 3);
 
-    const topDomainFollowed = topDomains.reduce((sum, [_, data]) => sum + (data as any).followed, 0);
+    const topDomainFollowed = topDomains.reduce((sum, [_, data]) => sum + (data as Record<string, any>).followed, 0);
     if (topDomainFollowed > info.followedLinks * 0.5 && info.followedLinks > 10) {
-      const domainList = topDomains.map(([domain, data]) => `${domain} (${(data as any).followed})`).join(', ');
+      const domainList = topDomains.map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed})`).join(', ');
       warnings.push({
         message: 'Link equity concentrated to few domains',
         detail: `Most followed links go to: ${domainList}. Diversify external linking.`,
@@ -261,7 +261,7 @@ class ExternalLinksAnalyzer {
    * @param {object} options - { concurrency, timeout, maxUrls }
    * @returns {Promise<object>} Verification results
    */
-  static async verifyExternalLinks(pages: any, origin: string, options: any = {}) {
+  static async verifyExternalLinks(pages: any, origin: string, options: Record<string, any> = {}) {
     const { concurrency = 5, timeout = 10000, maxUrls = 500 } = options;
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
@@ -303,10 +303,10 @@ class ExternalLinksAnalyzer {
     const results = {
       checked: 0,
       ok: 0,
-      broken: [] as any[],
-      redirected: [] as any[],
+      broken: [] as Record<string, any>[],
+      redirected: [] as Record<string, any>[],
       timeout: [] as string[],
-      errors: [] as any[],
+      errors: [] as Record<string, any>[],
     };
 
     // Process in batches
@@ -336,11 +336,11 @@ class ExternalLinksAnalyzer {
               redirected: response.redirected,
               finalUrl: response.url,
             };
-          } catch (error: any) {
-            if (error.name === 'AbortError') {
+          } catch (error: unknown) {
+            if ((error as Error).name === 'AbortError') {
               return { url, status: 0, error: 'timeout' };
             }
-            return { url, status: 0, error: error.message };
+            return { url, status: 0, error: (error as Error).message };
           }
         })
       );
@@ -420,7 +420,7 @@ class ExternalLinksAnalyzer {
    * @param {string} origin - Site origin
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>, origin: string) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats: Record<string, any> = {
@@ -500,12 +500,12 @@ class ExternalLinksAnalyzer {
 
     // Top linked domains
     const topDomains = Object.entries(stats.domainLinkCounts)
-      .sort((a, b) => (b[1] as any).followed - (a[1] as any).followed)
+      .sort((a, b) => (b[1] as Record<string, any>).followed - (a[1] as Record<string, any>).followed)
       .slice(0, 10);
 
     if (topDomains.length > 0) {
       const domainSummary = topDomains.slice(0, 5)
-        .map(([domain, data]) => `${domain} (${(data as any).followed} followed)`)
+        .map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed} followed)`)
         .join(', ');
 
       warnings.push({

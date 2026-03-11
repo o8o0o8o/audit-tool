@@ -7,13 +7,134 @@
 import { THRESHOLDS } from '../constants';
 import type { ChromePage } from '../types';
 
+// ─── Vitals-specific interfaces ─────────────────────────────────────────────
+
+interface LCPSubParts {
+  ttfb: number;
+  resourceLoad: number;
+  resourceDelay: number;
+  renderDelay: number;
+}
+
+interface CLSEntrySource {
+  node: string | null;
+  currentRect: { x: number; y: number; width: number; height: number } | null;
+}
+
+interface CLSEntry {
+  value: number;
+  startTime: number;
+  sources: CLSEntrySource[];
+}
+
+interface LongTaskEntry {
+  startTime: number;
+  duration: number;
+  blockingTime: number;
+  name: string;
+  attribution: Array<{ name: string; containerType: string; containerSrc: string }>;
+}
+
+interface CollectedVitals {
+  TTFB: number;
+  FCP: number;
+  LCP: number;
+  CLS: number;
+  INP: number;
+
+  // LCP sub-parts
+  lcpSubParts: LCPSubParts;
+
+  // Attribution
+  lcpElement: string | null;
+  lcpUrl: string | null;
+  lcpSize: { width: number; height: number } | null;
+  clsEntries: CLSEntry[];
+  clsLargestShift: number | null;
+  clsShiftCount: number;
+  inpEvent: string | null;
+
+  // Advanced metrics
+  TBT: number;
+  TTI: number;
+  speedIndex: number;
+  longTasks: LongTaskEntry[];
+
+  // Navigation timing
+  domContentLoaded: number;
+  domComplete: number;
+  loadEvent: number;
+}
+
+interface VitalsThresholdResult {
+  ttfbPass: boolean;
+  fcpPass: boolean;
+  lcpPass: boolean;
+  clsPass: boolean;
+  inpPass: boolean;
+  allPass: boolean;
+}
+
+interface MetricThreshold {
+  good: number;
+  poor: number;
+}
+
+interface FormattedMetric {
+  value: number;
+  formatted: string;
+  rating: string;
+  element?: string | null;
+  url?: string | null;
+  subParts?: LCPSubParts;
+  shiftCount?: number;
+  largestShift?: number | null;
+  entries?: CLSEntry[];
+  event?: string | null;
+  longTaskCount?: number;
+}
+
+interface LCPAnalysis {
+  bottleneck: string;
+  bottleneckValue?: number;
+  percentages?: {
+    ttfb: number;
+    resourceDelay: number;
+    resourceLoad: number;
+    renderDelay: number;
+  };
+  recommendations: string[];
+}
+
+interface CLSSourceElement {
+  node: string;
+  count: number;
+}
+
+interface CLSAnalysis {
+  elements: CLSSourceElement[];
+  recommendations: string[];
+}
+
+interface LongTaskScript {
+  script: string;
+  blockingTime: number;
+}
+
+interface LongTaskAnalysis {
+  tasks: LongTaskEntry[];
+  scripts?: LongTaskScript[];
+  totalBlockingTime: number;
+  recommendations: string[];
+}
+
 class VitalsCollector {
   /**
    * Collect all performance metrics from a page
    * @param {object} page - Playwright page object
    * @returns {Promise<object>} Collected vitals and advanced metrics
    */
-  static async collectVitals(page: ChromePage) {
+  static async collectVitals(page: ChromePage): Promise<CollectedVitals> {
     const vitals = await page.evaluate((clsWaitTime) => {
       return new Promise((resolve) => {
         const metrics = {
@@ -31,18 +152,18 @@ class VitalsCollector {
           lcpRenderDelay: 0,
 
           // Attribution data
-          lcpElement: null,
-          lcpUrl: null,
-          lcpSize: null,
-          clsEntries: [],
-          clsLargestShift: null,
+          lcpElement: null as string | null,
+          lcpUrl: null as string | null,
+          lcpSize: null as { width: number; height: number } | null,
+          clsEntries: [] as Array<{ value: number; startTime: number; sources: Array<{ node: string | null; currentRect: { x: number; y: number; width: number; height: number } | null }> }>,
+          clsLargestShift: null as number | null,
           clsShiftCount: 0,
-          inpEvent: null,
+          inpEvent: null as string | null,
 
           // Advanced metrics
           TBT: 0,         // Total Blocking Time
           TTI: 0,         // Time to Interactive
-          longTasks: [],  // Long Animation Frames / Long Tasks
+          longTasks: [] as Array<{ startTime: number; duration: number; blockingTime: number; name: string; attribution: Array<{ name: string; containerType: string; containerSrc: string }> }>,
           speedIndex: 0,  // Speed Index (estimated)
 
           // Additional timing
@@ -52,19 +173,19 @@ class VitalsCollector {
         };
 
         let lcpFired = false;
-        let clsObserver: any, lcpObserver: any, inpObserver: any, longTaskObserver: any;
+        let clsObserver: PerformanceObserver | undefined, lcpObserver: PerformanceObserver | undefined, inpObserver: PerformanceObserver | undefined, longTaskObserver: PerformanceObserver | undefined;
 
         // CLS Session Window tracking
         let clsSessionValue = 0;
-        let clsSessionEntries: any[] = [];
+        let clsSessionEntries: PerformanceEntry[] = [];
         let clsMaxSessionValue = 0;
-        let clsMaxSessionEntries: any[] = [];
+        let clsMaxSessionEntries: PerformanceEntry[] = [];
 
         // INP tracking
-        const inpEntries: any[] = [];
+        const inpEntries: Array<{ name: string; duration: number; interactionId: number; startTime: number }> = [];
 
         // Long tasks for TBT calculation
-        const longTasks: any[] = [];
+        const longTasks: Array<{ startTime: number; duration: number; blockingTime: number; name: string; attribution: Array<{ name: string; containerType: string; containerSrc: string }> }> = [];
         let tbtTotal = 0;
 
         // Helper to finalize
@@ -86,24 +207,30 @@ class VitalsCollector {
 
           // Use max session window for CLS
           metrics.CLS = clsMaxSessionValue;
-          metrics.clsEntries = clsMaxSessionEntries.map(e => ({
-            value: e.value,
-            startTime: e.startTime,
-            sources: e.sources?.map((s: any) => ({
-              node: s.node?.nodeName || null,
-              currentRect: s.currentRect ? {
-                x: Math.round(s.currentRect.x),
-                y: Math.round(s.currentRect.y),
-                width: Math.round(s.currentRect.width),
-                height: Math.round(s.currentRect.height),
-              } : null,
-            })) || [],
-          }));
+          metrics.clsEntries = clsMaxSessionEntries.map(e => {
+            const entry = e as PerformanceEntry & { value: number; sources?: Array<{ node?: { nodeName?: string }; currentRect?: DOMRectReadOnly }> };
+            return {
+              value: entry.value,
+              startTime: entry.startTime,
+              sources: (entry.sources || []).map((s) => ({
+                node: s.node?.nodeName || null,
+                currentRect: s.currentRect ? {
+                  x: Math.round(s.currentRect.x),
+                  y: Math.round(s.currentRect.y),
+                  width: Math.round(s.currentRect.width),
+                  height: Math.round(s.currentRect.height),
+                } : null,
+              })),
+            };
+          });
 
           if (clsMaxSessionEntries.length > 0) {
-            const largest = clsMaxSessionEntries.reduce((max, e) =>
-              e.value > max.value ? e : max, clsMaxSessionEntries[0]);
-            metrics.clsLargestShift = largest.value;
+            const largest = clsMaxSessionEntries.reduce((max, e) => {
+              const maxEntry = max as PerformanceEntry & { value: number };
+              const curEntry = e as PerformanceEntry & { value: number };
+              return curEntry.value > maxEntry.value ? e : max;
+            }, clsMaxSessionEntries[0]);
+            metrics.clsLargestShift = (largest as PerformanceEntry & { value: number }).value;
           }
           metrics.clsShiftCount = clsMaxSessionEntries.length;
 
@@ -156,7 +283,7 @@ class VitalsCollector {
 
         // Calculate TTI (Time to Interactive)
         // Simplified: FCP + time until 5s window with no long tasks
-        const calculateTTI = (tasks: any, fcp: any) => {
+        const calculateTTI = (tasks: Array<{ startTime: number; duration: number }>, fcp: number): number => {
           if (tasks.length === 0) return fcp;
 
           // Sort tasks by start time
@@ -178,7 +305,7 @@ class VitalsCollector {
 
         // Calculate Speed Index estimate
         // Simplified: weighted average of FCP and LCP
-        const calculateSpeedIndex = (fcp: any, lcp: any) => {
+        const calculateSpeedIndex = (fcp: number, lcp: number): number => {
           if (!fcp || !lcp) return 0;
           // Rough approximation: SI is typically between FCP and LCP
           // Real SI requires video capture, this is an estimate
@@ -189,8 +316,8 @@ class VitalsCollector {
         const navObserver = new PerformanceObserver((list) => {
           const entries = list.getEntries();
           if (entries.length > 0) {
-            const nav = entries[0] as any;
-            const activationStart = nav.activationStart || 0;
+            const nav = entries[0] as PerformanceNavigationTiming;
+            const activationStart = (nav as PerformanceNavigationTiming & { activationStart?: number }).activationStart || 0;
             metrics.TTFB = Math.max(nav.responseStart - activationStart, 0);
             metrics.domContentLoaded = nav.domContentLoadedEventEnd - activationStart;
             metrics.domComplete = nav.domComplete - activationStart;
@@ -217,7 +344,12 @@ class VitalsCollector {
         // 3. LCP with sub-parts
         lcpObserver = new PerformanceObserver((list) => {
           const entries = list.getEntries();
-          const lastLCP = entries.at(-1) as any;
+          const lastLCP = entries.at(-1) as PerformanceEntry & {
+            element?: HTMLElement;
+            url?: string;
+            loadTime?: number;
+            startTime: number;
+          } | undefined;
           if (lastLCP) {
             metrics.LCP = lastLCP.startTime;
 
@@ -225,10 +357,10 @@ class VitalsCollector {
             if (lastLCP.element) {
               metrics.lcpElement = lastLCP.element.tagName?.toLowerCase() || null;
               if (lastLCP.element.tagName === 'IMG') {
-                metrics.lcpUrl = lastLCP.element.src?.substring(0, 150) || null;
+                metrics.lcpUrl = (lastLCP.element as HTMLImageElement).src?.substring(0, 150) || null;
                 metrics.lcpSize = {
-                  width: lastLCP.element.naturalWidth,
-                  height: lastLCP.element.naturalHeight,
+                  width: (lastLCP.element as HTMLImageElement).naturalWidth,
+                  height: (lastLCP.element as HTMLImageElement).naturalHeight,
                 };
               }
             }
@@ -238,7 +370,6 @@ class VitalsCollector {
 
             // LCP Sub-parts calculation
             // LCP = TTFB + Resource Load Delay + Resource Load Time + Element Render Delay
-            const lcpResourceStart = lastLCP.loadTime ? lastLCP.loadTime - lastLCP.startTime : 0;
 
             if (lastLCP.url) {
               // For resource-based LCP (images, videos)
@@ -247,8 +378,8 @@ class VitalsCollector {
 
               if (lcpResource) {
                 metrics.lcpResourceDelay = Math.max(lcpResource.startTime - metrics.TTFB, 0);
-                metrics.lcpResourceLoad = (lcpResource as any).responseEnd - lcpResource.startTime;
-                metrics.lcpRenderDelay = lastLCP.startTime - (lcpResource as any).responseEnd;
+                metrics.lcpResourceLoad = (lcpResource as PerformanceResourceTiming).responseEnd - lcpResource.startTime;
+                metrics.lcpRenderDelay = lastLCP.startTime - (lcpResource as PerformanceResourceTiming).responseEnd;
               }
             } else {
               // For text-based LCP
@@ -267,20 +398,21 @@ class VitalsCollector {
 
         // 4. CLS with element attribution
         clsObserver = new PerformanceObserver((list) => {
-          for (const entry of list.getEntries() as any[]) {
-            if (entry.hadRecentInput) continue;
+          for (const entry of list.getEntries()) {
+            const clsEntry = entry as PerformanceEntry & { hadRecentInput?: boolean; value: number };
+            if (clsEntry.hadRecentInput) continue;
 
             // Session window logic
             const firstEntry = clsSessionEntries[0];
             const lastEntry = clsSessionEntries[clsSessionEntries.length - 1];
 
             if (clsSessionEntries.length > 0 &&
-                entry.startTime - lastEntry.startTime < 1000 &&
-                entry.startTime - firstEntry.startTime < 5000) {
-              clsSessionValue += entry.value;
+                clsEntry.startTime - lastEntry.startTime < 1000 &&
+                clsEntry.startTime - firstEntry.startTime < 5000) {
+              clsSessionValue += clsEntry.value;
               clsSessionEntries.push(entry);
             } else {
-              clsSessionValue = entry.value;
+              clsSessionValue = clsEntry.value;
               clsSessionEntries = [entry];
             }
 
@@ -295,18 +427,19 @@ class VitalsCollector {
         // 5. INP
         try {
           inpObserver = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries() as any[]) {
-              if (entry.interactionId && entry.interactionId > 0) {
+            for (const entry of list.getEntries()) {
+              const eventEntry = entry as PerformanceEntry & { interactionId?: number };
+              if (eventEntry.interactionId && eventEntry.interactionId > 0) {
                 inpEntries.push({
-                  name: entry.name,
-                  duration: entry.duration,
-                  interactionId: entry.interactionId,
-                  startTime: entry.startTime,
+                  name: eventEntry.name,
+                  duration: eventEntry.duration,
+                  interactionId: eventEntry.interactionId,
+                  startTime: eventEntry.startTime,
                 });
               }
             }
           });
-          inpObserver.observe({ type: "event", buffered: true, durationThreshold: 16 });
+          inpObserver.observe({ type: "event", buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
         } catch (e) {
           // INP not supported
         }
@@ -315,20 +448,21 @@ class VitalsCollector {
         try {
           // Try Long Animation Frames first (newer, more accurate)
           longTaskObserver = new PerformanceObserver((list) => {
-            for (const entry of list.getEntries() as any[]) {
-              const blockingTime = Math.max(entry.duration - 50, 0);
+            for (const entry of list.getEntries()) {
+              const taskEntry = entry as PerformanceEntry & { attribution?: Array<{ name: string; containerType: string; containerSrc?: string }> };
+              const blockingTime = Math.max(taskEntry.duration - 50, 0);
               tbtTotal += blockingTime;
 
               longTasks.push({
-                startTime: entry.startTime,
-                duration: entry.duration,
+                startTime: taskEntry.startTime,
+                duration: taskEntry.duration,
                 blockingTime,
-                name: entry.name || 'long-task',
+                name: taskEntry.name || 'long-task',
                 // Attribution if available
-                attribution: entry.attribution?.map((a: any) => ({
+                attribution: taskEntry.attribution?.map((a) => ({
                   name: a.name,
                   containerType: a.containerType,
-                  containerSrc: a.containerSrc?.substring(0, 100),
+                  containerSrc: a.containerSrc?.substring(0, 100) || '',
                 })) || [],
               });
             }
@@ -353,7 +487,7 @@ class VitalsCollector {
       });
     }, THRESHOLDS.CLS_COLLECTION_TIME);
 
-    return vitals;
+    return vitals as CollectedVitals;
   }
 
   /**
@@ -361,7 +495,7 @@ class VitalsCollector {
    * @param {object} vitals - Collected vitals
    * @returns {object} Passing status for each metric
    */
-  static checkThresholds(vitals: any) {
+  static checkThresholds(vitals: CollectedVitals): VitalsThresholdResult {
     return {
       ttfbPass: vitals.TTFB <= THRESHOLDS.TTFB,
       fcpPass: vitals.FCP <= THRESHOLDS.FCP,
@@ -382,8 +516,8 @@ class VitalsCollector {
    * @param {number} value - Metric value
    * @returns {string} Rating: 'good', 'needs-improvement', or 'poor'
    */
-  static getRating(metric: string, value: number) {
-    const thresholds = {
+  static getRating(metric: string, value: number): string {
+    const thresholds: Record<string, MetricThreshold> = {
       TTFB: { good: 800, poor: 1800 },
       FCP: { good: 1800, poor: 3000 },
       LCP: { good: 2500, poor: 4000 },
@@ -394,7 +528,7 @@ class VitalsCollector {
       speedIndex: { good: 3400, poor: 5800 },
     };
 
-    const t = (thresholds as Record<string, any>)[metric];
+    const t = thresholds[metric];
     if (!t) return 'unknown';
 
     if (value <= t.good) return 'good';
@@ -407,7 +541,7 @@ class VitalsCollector {
    * @param {object} vitals - Collected vitals
    * @returns {object} Formatted vitals with ratings
    */
-  static formatVitals(vitals: any) {
+  static formatVitals(vitals: CollectedVitals): Record<string, FormattedMetric> {
     return {
       TTFB: {
         value: vitals.TTFB,
@@ -466,7 +600,7 @@ class VitalsCollector {
    * @param {number} lcp - Total LCP value
    * @returns {object} Analysis with bottleneck identification
    */
-  static analyzeLCPSubParts(lcpSubParts: any, lcp: number) {
+  static analyzeLCPSubParts(lcpSubParts: LCPSubParts | null | undefined, lcp: number): LCPAnalysis {
     if (!lcpSubParts || lcp === 0) {
       return { bottleneck: 'unknown', recommendations: [] };
     }
@@ -526,7 +660,7 @@ class VitalsCollector {
    * @param {Array} clsEntries - CLS entry data
    * @returns {object} Analysis with element identification
    */
-  static analyzeCLSSources(clsEntries: any[]) {
+  static analyzeCLSSources(clsEntries: CLSEntry[]): CLSAnalysis {
     if (!clsEntries || clsEntries.length === 0) {
       return { elements: [], recommendations: [] };
     }
@@ -567,7 +701,7 @@ class VitalsCollector {
    * @param {Array} longTasks - Long task entries
    * @returns {object} Analysis with script identification
    */
-  static analyzeLongTasks(longTasks: any[]) {
+  static analyzeLongTasks(longTasks: LongTaskEntry[]): LongTaskAnalysis {
     if (!longTasks || longTasks.length === 0) {
       return { tasks: [], recommendations: [], totalBlockingTime: 0 };
     }
@@ -610,3 +744,4 @@ class VitalsCollector {
 }
 
 export { VitalsCollector };
+export type { CollectedVitals, LCPSubParts, CLSEntry, LongTaskEntry, VitalsThresholdResult, FormattedMetric, LCPAnalysis, CLSAnalysis, LongTaskAnalysis };

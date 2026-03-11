@@ -8,7 +8,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class ResponseHeaderAnalyzer {
   /**
@@ -17,7 +17,7 @@ class ResponseHeaderAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const headers = pageData.response?.headers || pageData.responseHeaders || {};
@@ -59,19 +59,19 @@ class ResponseHeaderAnalyzer {
       info.parsedLinks = ResponseHeaderAnalyzer.#parseLinkHeader(linkHeader);
 
       // Check for preload hints
-      const preloads = info.parsedLinks.filter((l: any) => l.rel === 'preload');
+      const preloads = info.parsedLinks.filter((l: Record<string, any>) => l.rel === 'preload');
       if (preloads.length > 0) {
         info.preloadHints = preloads.map((p: any) => ({ url: p.url, as: p.as }));
       }
 
       // Check for canonical via Link header
-      const canonical = info.parsedLinks.find((l: any) => l.rel === 'canonical');
+      const canonical = info.parsedLinks.find((l: Record<string, any>) => l.rel === 'canonical');
       if (canonical) {
         info.httpCanonical = canonical.url;
       }
 
       // Check for alternate language links via Link header
-      const alternates = info.parsedLinks.filter((l: any) => l.rel === 'alternate' && l.hreflang);
+      const alternates = info.parsedLinks.filter((l: Record<string, any>) => l.rel === 'alternate' && l.hreflang);
       if (alternates.length > 0) {
         info.httpAlternates = alternates.map((a: any) => ({ url: a.url, hreflang: a.hreflang }));
       }
@@ -146,10 +146,10 @@ class ResponseHeaderAnalyzer {
    * @param {object} allPages - All page data
    * @returns {object} Site-wide analysis results
    */
-  static analyzeSiteWide(allPages: Record<string, any>) {
+  static analyzeSiteWide(allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const pages = Object.values(allPages) as any[];
+    const pages = Object.values(allPages) as PageInfo[];
 
     let pagesWithXRobotsNoindex = 0;
     let pagesWithDynamicServing = 0;

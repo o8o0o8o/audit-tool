@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import type { ReportSectionData } from '../../types';
 
 /**
  * Educational context for common SEO issues
@@ -176,16 +177,17 @@ function isCrawlerError(issue: string) {
  * @param {Object} data.jsonData - Full audit JSON data
  * @returns {string} HTML string for the top issues section
  */
-function getTopIssues(data: any) {
+function getTopIssues(data: ReportSectionData) {
   const { jsonData } = data;
-  const bySeverity = jsonData.analysis?.bySeverity || {};
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const bySeverity = (analysisObj.bySeverity || {}) as Record<string, string[]>;
 
   const allIssues = [
     ...(bySeverity.critical || []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
     ...(bySeverity.high || []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
     ...(bySeverity.medium || []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
     ...(bySeverity.low || []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' }))
-  ].filter((item: any) => !isCrawlerError(item.issue)); // Filter out crawler errors
+  ].filter((item: { issue: string; severity: string; severityLabel: string }) => !isCrawlerError(item.issue)); // Filter out crawler errors
 
   const topIssues = allIssues.slice(0, 10);
 
@@ -202,7 +204,7 @@ function getTopIssues(data: any) {
         Prioritized by severity - fix these first
       </p>
 
-      ${topIssues.map((item: any, index: number) => getIssueCard(item, index, jsonData)).join('')}
+      ${topIssues.map((item: { issue: string; severity: string; severityLabel: string }, index: number) => getIssueCard(item, index, jsonData)).join('')}
     </div>
   `;
 }
@@ -214,26 +216,29 @@ function getTopIssues(data: any) {
  * @param {Object} jsonData - Full JSON data for accessing details
  * @returns {string} HTML string for the issue card
  */
-function getIssueCard(item: any, index: number, jsonData: any) {
+function getIssueCard(item: { issue: string; severity: string; severityLabel: string }, index: number, jsonData: Record<string, unknown>) {
   // Strip severity suffix from issue key (format: "Error message [severity]")
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
-  const details = jsonData.analysis?.details?.[issueKey] || {};
-  const affectedCount = details.examples?.length || 0;
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const detailsMap = (analysisObj.details || {}) as Record<string, Record<string, unknown>>;
+  const details = detailsMap[issueKey] || {} as Record<string, unknown>;
+  const examples = (details.examples || []) as string[];
+  const affectedCount = examples.length;
 
-  const totalCount = details.count || affectedCount;
+  const totalCount = (details.count as number) || affectedCount;
   const VISIBLE_COUNT = 5;
-  const examplesHtml = details.examples && details.examples.length > 0 ? `
+  const examplesHtml = examples.length > 0 ? `
     <div class="affected-pages">
       <strong>Affected locations (${totalCount}):</strong>
       <div class="issue-examples-list" style="margin-top: 5px;">
-        ${details.examples.slice(0, VISIBLE_COUNT).map((ex: any) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`).join('')}
-        ${details.examples.length > VISIBLE_COUNT ? `
+        ${examples.slice(0, VISIBLE_COUNT).map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`).join('')}
+        ${examples.length > VISIBLE_COUNT ? `
           <div class="issue-examples-hidden" id="issue-more-${index}" style="display:none;">
-            ${details.examples.slice(VISIBLE_COUNT).map((ex: any) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`).join('')}
+            ${examples.slice(VISIBLE_COUNT).map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`).join('')}
           </div>
-          <button class="issue-toggle-btn" onclick="var el=document.getElementById('issue-more-${index}');var showing=el.style.display!=='none';el.style.display=showing?'none':'block';this.textContent=showing?'Show all ${details.examples.length} examples...':'Show less';">Show all ${details.examples.length} examples...</button>
-          ${totalCount > details.examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${details.examples.length} examples)</div>` : ''}
-        ` : totalCount > details.examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${details.examples.length} examples)</div>` : ''}
+          <button class="issue-toggle-btn" onclick="var el=document.getElementById('issue-more-${index}');var showing=el.style.display!=='none';el.style.display=showing?'none':'block';this.textContent=showing?'Show all ${examples.length} examples...':'Show less';">Show all ${examples.length} examples...</button>
+          ${totalCount > examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>` : ''}
+        ` : totalCount > examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>` : ''}
       </div>
     </div>
   ` : '';

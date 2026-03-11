@@ -6,6 +6,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+/** Dynamic config object with known section types */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ConfigRecord = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
 const CONFIG_FILE_NAMES = [
   ".seoauditrc",
   ".seoauditrc.json",
@@ -91,7 +95,7 @@ const DEFAULT_CONFIG = {
  * @returns {Object} Merged configuration
  */
 function loadConfig(configPath: string | null = null) {
-  let userConfig: Record<string, any> = {};
+  let userConfig: ConfigRecord = {};
 
   // Try explicit path first
   if (configPath) {
@@ -155,8 +159,8 @@ function loadConfigFile(filePath: string) {
 
     // Validate and sanitize config
     return validateConfig(config);
-  } catch (error: any) {
-    console.error(`❌ Error parsing config file ${filePath}: ${error.message}`);
+  } catch (error: unknown) {
+    console.error(`❌ Error parsing config file ${filePath}: ${(error as Error).message}`);
     return {};
   }
 }
@@ -249,7 +253,7 @@ const CONFIG_SCHEMA = {
  * @param {Object} config - Raw config object
  * @returns {Object} Validated config with invalid values removed
  */
-function validateConfig(config: Record<string, any>) {
+function validateConfig(config: ConfigRecord) {
   // Deep-clone nested objects to avoid mutating the caller's config
   const validated = { ...config };
   if (validated.thresholds) validated.thresholds = { ...validated.thresholds };
@@ -355,7 +359,7 @@ function validateConfig(config: Record<string, any>) {
 
   // Validate excludeUrls patterns (limit complexity to prevent ReDoS)
   if (validated.excludeUrls && Array.isArray(validated.excludeUrls)) {
-    validated.excludeUrls = validated.excludeUrls.filter((pattern, index) => {
+    validated.excludeUrls = validated.excludeUrls.filter((pattern: unknown, index: number) => {
       if (typeof pattern !== "string") {
         warnings.push(`Invalid excludeUrls[${index}]: must be a string`);
         return false;
@@ -478,7 +482,7 @@ function validateConfig(config: Record<string, any>) {
  * @param {Object} config - Merged configuration
  * @returns {Object} Validated config
  */
-function validateMergedConfig(config: Record<string, any>) {
+function validateMergedConfig(config: ConfigRecord) {
   const validated = { ...config };
   const errors: string[] = [];
 
@@ -504,7 +508,7 @@ function validateMergedConfig(config: Record<string, any>) {
     const val = validated.thresholds[key];
     if (typeof val !== "number" || !Number.isFinite(val) || val < 0) {
       errors.push(`Invalid merged threshold ${key}: ${val}`);
-      validated.thresholds[key] = (DEFAULT_CONFIG.thresholds as Record<string, any>)[key];
+      validated.thresholds[key] = (DEFAULT_CONFIG.thresholds as Record<string, number>)[key];
     }
   }
 
@@ -544,8 +548,8 @@ function validateMergedConfig(config: Record<string, any>) {
  * @param {Array<string>} options.replaceArrays - Array keys to replace instead of merge
  * @returns {Object} Merged object
  */
-function deepMerge(target: Record<string, any>, source: Record<string, any>, options: Record<string, any> = {}) {
-  const result: Record<string, any> = { ...target };
+function deepMerge(target: ConfigRecord, source: ConfigRecord, options: ConfigRecord = {}) {
+  const result: ConfigRecord = { ...target };
   const replaceArrays = options.replaceArrays || ["whitelist"]; // These arrays replace, not merge
 
   for (const key of Object.keys(source)) {
@@ -588,7 +592,7 @@ function deepMerge(target: Record<string, any>, source: Record<string, any>, opt
  * @param {Object} config - Configuration object
  * @param {Object} constants - Constants module to update
  */
-function applyConfigToConstants(config: Record<string, any>, constants: Record<string, any>) {
+function applyConfigToConstants(config: ConfigRecord, constants: ConfigRecord) {
   if (config.thresholds) {
     for (const [key, value] of Object.entries(config.thresholds)) {
       if (constants.THRESHOLDS && key in constants.THRESHOLDS) {
@@ -604,7 +608,7 @@ function applyConfigToConstants(config: Record<string, any>, constants: Record<s
  * @param {Object} config - Configuration object
  * @returns {boolean} True if URL should be excluded
  */
-function shouldExcludeUrl(url: string, config: Record<string, any>) {
+function shouldExcludeUrl(url: string, config: ConfigRecord) {
   if (!config.excludeUrls || config.excludeUrls.length === 0) {
     return false;
   }
@@ -746,7 +750,7 @@ function generateSampleConfig() {
  * @param {Object} config - Merged config
  * @returns {string} Human-readable config summary
  */
-function getConfigSummary(config: Record<string, any>) {
+function getConfigSummary(config: ConfigRecord) {
   const lines: string[] = [];
   lines.push('Active Configuration:');
 
@@ -782,7 +786,7 @@ function getConfigSummary(config: Record<string, any>) {
  * @returns {Object} { valid: boolean, errors: string[], warnings: string[], config: Object }
  */
 function validateConfigFile(configPath: string | null) {
-  const result: Record<string, any> = { valid: true, errors: [] as string[], warnings: [] as string[], config: null };
+  const result: { valid: boolean; errors: string[]; warnings: string[]; config: Record<string, unknown> | null } = { valid: true, errors: [], warnings: [], config: null };
 
   if (!configPath) {
     // Find config automatically
@@ -837,9 +841,9 @@ function validateConfigFile(configPath: string | null) {
     }
 
     result.config = parsed;
-  } catch (e: any) {
+  } catch (e: unknown) {
     result.valid = false;
-    result.errors.push(`JSON parse error: ${e.message}`);
+    result.errors.push(`JSON parse error: ${(e as Error).message}`);
   }
 
   return result;

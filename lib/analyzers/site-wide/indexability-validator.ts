@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide Indexability Validator
@@ -13,20 +13,20 @@ class IndexabilityValidator {
    * @param {Object} sitemapUrls - Object with URLs from sitemap { url: true }
    * @returns {Object} { issues: [], noindexPages: [], redirectPages: [], slowPages: [] }
    */
-  static validateIndexabilityCrawlability(allPages: Record<string, any>, sitemapUrls: Record<string, any> = {}) {
+  static validateIndexabilityCrawlability(allPages: Record<string, PageInfo>, sitemapUrls: Record<string, any> = {}) {
     console.log('\nChecking indexability and crawlability across pages...');
 
     const stats = {
       indexable: 0,
       nonIndexable: 0,
-      noindexPages: [] as any[],
+      noindexPages: [] as Record<string, any>[],
       nofollowPages: [] as string[],
-      redirectChains: [] as any[],
+      redirectChains: [] as Record<string, any>[],
       authRequired: [] as string[],
       statusErrors: new Map<number, string[]>(),
-      canonicalConflicts: [] as any[],
-      crawlabilityWarnings: [] as any[],
-      indexabilityWarnings: [] as any[],
+      canonicalConflicts: [] as Record<string, any>[],
+      crawlabilityWarnings: [] as Record<string, any>[],
+      indexabilityWarnings: [] as Record<string, any>[],
     };
 
     const issues: Issue[] = [];

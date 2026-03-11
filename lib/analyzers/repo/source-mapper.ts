@@ -15,7 +15,7 @@ class SourceMapper {
    * @returns {Object<string, Array<{ file: string, line: number, context: string, suggestion: string }>>}
    *   Keyed by issue message, each value is an array of source locations
    */
-  static map(analysisDetails: Record<string, any>, repoPath: string, frameworkInfo: any) {
+  static map(analysisDetails: Record<string, any>, repoPath: string, frameworkInfo: Record<string, any>) {
     if (!analysisDetails || !repoPath || !frameworkInfo) return {};
 
     const mapping: Record<string, any> = {};
@@ -318,8 +318,8 @@ class SourceMapper {
    * @param {number} [criteria.minCount] - Minimum count to flag
    * @returns {Array<{ file: string, line: number, context: string, suggestion: string }>}
    */
-  static #findInFiles(repoPath: string, dirs: string[], filePattern: RegExp, criteria: any) {
-    const results: any[] = [];
+  static #findInFiles(repoPath: string, dirs: string[], filePattern: RegExp, criteria: Record<string, any>) {
+    const results: Record<string, any>[] = [];
     const seen = new Set();
     const maxResults = 20;
 
@@ -386,8 +386,8 @@ class SourceMapper {
   /**
    * Find files with specific line-level pattern matches (e.g., img without alt)
    */
-  static #findInFilesWithLineSearch(repoPath: string, dirs: string[], filePattern: RegExp, criteria: any) {
-    const results: any[] = [];
+  static #findInFilesWithLineSearch(repoPath: string, dirs: string[], filePattern: RegExp, criteria: Record<string, any>) {
+    const results: Record<string, any>[] = [];
     const seen = new Set();
     const maxResults = 20;
 

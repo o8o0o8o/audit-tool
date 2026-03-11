@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class CookieConsentAnalyzer {
   // Common cookie consent platforms
@@ -44,7 +44,7 @@ class CookieConsentAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: any, url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -140,7 +140,7 @@ class CookieConsentAnalyzer {
    * Detect consent banner
    * @private
    */
-  static async #detectConsentBanner(chromePage: any, parsedPage: any, requests: any) {
+  static async #detectConsentBanner(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>) {
     const result: Record<string, any> = {
       detected: false,
       platform: null,
@@ -228,7 +228,7 @@ class CookieConsentAnalyzer {
    * Find privacy/cookie policy links
    * @private
    */
-  static #findPolicyLinks(parsedPage: any) {
+  static #findPolicyLinks(parsedPage: ParsedPage) {
     const result: Record<string, any> = {
       hasPrivacyPolicy: false,
       hasCookiePolicy: false,
@@ -259,7 +259,7 @@ class CookieConsentAnalyzer {
    * Analyze cookies
    * @private
    */
-  static async #analyzeCookies(chromePage: any) {
+  static async #analyzeCookies(chromePage: ChromePage) {
     try {
       const cookies = await chromePage.context().cookies();
 
@@ -296,7 +296,7 @@ class CookieConsentAnalyzer {
    * Check for tracking cookies
    * @private
    */
-  static #checkTrackingCookies(cookies: any[]) {
+  static #checkTrackingCookies(cookies: Record<string, any>[]) {
     const trackingCookies = [];
 
     for (const cookie of cookies) {
@@ -315,7 +315,7 @@ class CookieConsentAnalyzer {
    * Analyze tracking before consent
    * @private
    */
-  static #analyzeTrackingBeforeConsent(requests: any, hasConsent: boolean) {
+  static #analyzeTrackingBeforeConsent(requests: Record<string, any>, hasConsent: boolean) {
     const trackingScripts = [];
 
     const trackingDomains = [
@@ -345,7 +345,7 @@ class CookieConsentAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

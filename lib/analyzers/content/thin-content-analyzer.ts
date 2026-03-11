@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class ThinContentAnalyzer {
   // Minimum thresholds
@@ -22,7 +22,7 @@ class ThinContentAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const metrics = {
@@ -34,7 +34,7 @@ class ThinContentAnalyzer {
     };
 
     // Get content quality data if available
-    const cq = pageData.contentQuality || {};
+    const cq = pageData.contentQuality || ({} as Record<string, any>);
 
     metrics.wordCount = cq.wordCount || 0;
     metrics.paragraphCount = cq.paragraphCount || 0;
@@ -42,7 +42,7 @@ class ThinContentAnalyzer {
 
     // Skip non-content pages
     if (this.isNonContentPage(url)) {
-      (metrics as any).isNonContentPage = true;
+      (metrics as Record<string, any>).isNonContentPage = true;
       return { issues, warnings, metrics };
     }
 
@@ -118,7 +118,7 @@ class ThinContentAnalyzer {
   /**
    * Calculate content quality score (0-100)
    */
-  static calculateContentScore(metrics: any) {
+  static calculateContentScore(metrics: Record<string, any>) {
     let score = 0;
 
     // Word count scoring (0-50 points)
@@ -172,7 +172,7 @@ class ThinContentAnalyzer {
   /**
    * Site-wide thin content analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

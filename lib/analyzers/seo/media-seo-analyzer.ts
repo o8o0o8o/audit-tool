@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ChromePage, ParsedPage, Issue } from '../../types';
+import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class MediaSEOAnalyzer {
   /**
@@ -15,19 +15,19 @@ class MediaSEOAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, pageData: any, url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
     const mediaData = {
-      videos: [] as any[],
-      audios: [] as any[],
+      videos: [] as Record<string, any>[],
+      audios: [] as Record<string, any>[],
       hasVideoSchema: false,
       videoSchemaValid: false,
       totalVideos: 0,
       totalAudios: 0,
-      embeddedVideos: [] as any[],
-      nativeVideos: [] as any[],
+      embeddedVideos: [] as Record<string, any>[],
+      nativeVideos: [] as Record<string, any>[],
       videosWithoutCaptions: 0,
       videosWithoutPoster: 0,
       videosWithoutTitle: 0,
@@ -52,7 +52,7 @@ class MediaSEOAnalyzer {
     const videoSchema = this.#checkVideoSchema(pageData);
     mediaData.hasVideoSchema = videoSchema.hasSchema;
     mediaData.videoSchemaValid = videoSchema.isValid;
-    (mediaData as any).videoSchemaIssues = videoSchema.issues;
+    (mediaData as Record<string, any>).videoSchemaIssues = videoSchema.issues;
 
     // 5. Count issues
     for (const video of [...nativeVideos, ...embeddedVideos]) {
@@ -76,7 +76,7 @@ class MediaSEOAnalyzer {
     if (mediaData.hasVideoSchema && !mediaData.videoSchemaValid) {
       issues.push({
         message: 'Invalid VideoObject schema',
-        detail: `<a href="${url}">${url}</a> has VideoObject schema with issues: ${(mediaData as any).videoSchemaIssues.join(', ')}`,
+        detail: `<a href="${url}">${url}</a> has VideoObject schema with issues: ${(mediaData as Record<string, any>).videoSchemaIssues.join(', ')}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -126,7 +126,7 @@ class MediaSEOAnalyzer {
    * @private
    */
   static async #analyzeNativeVideos(chromePage: ChromePage, parsedPage: ParsedPage) {
-    const videos: any[] = [];
+    const videos: Record<string, any>[] = [];
     const videoElements = parsedPage.querySelectorAll('video');
 
     for (const video of videoElements) {
@@ -155,7 +155,7 @@ class MediaSEOAnalyzer {
         hasTitle: !!title,
         title,
         hasCaption: !!captionTrack,
-        captionKind: (captionTrack as any)?.getAttribute('kind'),
+        captionKind: (captionTrack as unknown as Element | null)?.getAttribute('kind'),
         autoplay,
         muted,
       });
@@ -169,7 +169,7 @@ class MediaSEOAnalyzer {
    * @private
    */
   static #findEmbeddedVideos(parsedPage: ParsedPage) {
-    const videos: any[] = [];
+    const videos: Record<string, any>[] = [];
     const iframes = parsedPage.querySelectorAll('iframe');
 
     const videoPatterns = [
@@ -213,7 +213,7 @@ class MediaSEOAnalyzer {
    * @private
    */
   static #findAudioElements(parsedPage: ParsedPage) {
-    const audios: any[] = [];
+    const audios: Record<string, any>[] = [];
     const audioElements = parsedPage.querySelectorAll('audio');
 
     for (const audio of audioElements) {
@@ -238,7 +238,7 @@ class MediaSEOAnalyzer {
    * Check for VideoObject schema
    * @private
    */
-  static #checkVideoSchema(pageData: any) {
+  static #checkVideoSchema(pageData: PageInfo) {
     const result: { hasSchema: boolean; isValid: boolean; issues: string[] } = {
       hasSchema: false,
       isValid: false,
@@ -289,7 +289,7 @@ class MediaSEOAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

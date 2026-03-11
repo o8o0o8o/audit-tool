@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../constants';
+import type { PageInfo, PageData, AnalysisDetail, FixRecommendation } from '../types';
 
 class ScoreCalculator {
   /**
@@ -13,8 +14,8 @@ class ScoreCalculator {
    * @param {object} pages - All page objects
    * @returns {object} Summary statistics
    */
-  static calculateSummary(analysisData: any, pageData: any, pages: any) {
-    const summary: Record<string, any> = {
+  static calculateSummary(analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> }, pageData: PageData, pages: Record<string, PageInfo>) {
+    const summary: Record<string, unknown> = {
       totalIssues: 0,
       criticalCount: 0,
       highCount: 0,
@@ -27,13 +28,13 @@ class ScoreCalculator {
     summary.highCount = analysisData.bySeverity.high.length;
     summary.mediumCount = analysisData.bySeverity.medium.length;
     summary.lowCount = analysisData.bySeverity.low.length;
-    summary.totalIssues = summary.criticalCount + summary.highCount + summary.mediumCount + summary.lowCount;
+    summary.totalIssues = (summary.criticalCount as number) + (summary.highCount as number) + (summary.mediumCount as number) + (summary.lowCount as number);
 
     // Calculate category scores first (overall depends on them)
     summary.categoryScores = this.calculateCategoryScores(analysisData, pages);
 
     // Calculate overall SEO score as weighted average of categories
-    summary.overallScore = this.calculateOverallScore(analysisData, pages, summary.categoryScores);
+    summary.overallScore = this.calculateOverallScore(analysisData, pages, summary.categoryScores as Record<string, number>);
 
     // Calculate pass rate
     const totalPages = pageData.totalWithoutError + pageData.totalWithError;
@@ -55,7 +56,7 @@ class ScoreCalculator {
    * @param {object} categoryScores - Pre-calculated category scores
    * @returns {number} Overall score (0-100)
    */
-  static calculateOverallScore(analysisData: any, pages: any, categoryScores: Record<string, number>) {
+  static calculateOverallScore(_analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> }, _pages: Record<string, PageInfo>, categoryScores: Record<string, number>) {
     const weights = {
       seo: 0.30,
       performance: 0.25,
@@ -78,8 +79,8 @@ class ScoreCalculator {
    * @param {object} pages - All page objects
    * @returns {object} Category scores
    */
-  static calculateCategoryScores(analysisData: any, pages: any) {
-    const pagesArray = Object.values(pages || {}) as any[];
+  static calculateCategoryScores(analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> }, pages: Record<string, PageInfo>) {
+    const pagesArray = Object.values(pages || {}) as PageInfo[];
 
     const scores: Record<string, number> = {
       seo: 100,
@@ -136,7 +137,7 @@ class ScoreCalculator {
 
     // First pass: score using details (has severity + affected page count)
     for (const [issue, _data] of Object.entries(details)) {
-      const data = _data as any;
+      const data = _data as AnalysisDetail;
       const lowerIssue = issue.toLowerCase();
       const severity = data.severity || 'medium';
       const weight = severityWeight[severity] || 1;
@@ -189,7 +190,7 @@ class ScoreCalculator {
 
     // Convert weighted counts to scores using logarithmic curve
     // log curve: moderate issues cause noticeable drop, many issues hit diminishing returns
-    const logPenalty = (weightedCount, scale) => {
+    const logPenalty = (weightedCount: number, scale: number) => {
       if (weightedCount <= 0) return 0;
       return Math.min(Math.log2(1 + weightedCount) * scale, 90);
     };
@@ -241,14 +242,14 @@ class ScoreCalculator {
    * @param {object} issueDetails - Issue details from analysis
    * @returns {Array} Quick wins sorted by impact
    */
-  static identifyQuickWins(issueDetails: Record<string, any>) {
-    const quickWins = [];
+  static identifyQuickWins(issueDetails: Record<string, AnalysisDetail>) {
+    const quickWins: Array<{ issue: string; severity: string; affectedPages: number; impact: string; effort: string; effortMinutes: number; fix: string; example?: string; resources: Array<{ text: string; url: string }>; impactScore: number; examples: string[] }> = [];
     const fixRecommendations = this.getFixRecommendations();
 
     // Analyze each issue for quick win potential
     Object.entries(issueDetails).forEach(([issue, _data]) => {
-      const data = _data as any;
-      const recommendation = fixRecommendations[issue] || {} as any;
+      const data = _data as AnalysisDetail;
+      const recommendation = fixRecommendations[issue] || {} as Partial<FixRecommendation>;
       const affectedCount = data.count || data.examples?.length || 0;
 
       // Quick win criteria: high/critical severity, multiple pages, easy fix
@@ -326,7 +327,7 @@ class ScoreCalculator {
    * Get fix recommendations for common issues
    * @returns {object} Fix recommendations by issue
    */
-  static getFixRecommendations(): Record<string, any> {
+  static getFixRecommendations(): Record<string, FixRecommendation> {
     return {
       'Some pages are missing alt attribute on images': {
         effort: '5 minutes',

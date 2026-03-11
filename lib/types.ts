@@ -35,7 +35,7 @@ export interface PageInfo {
   title?: string;
   description?: string;
   canonical?: string;
-  redirectChain?: string[];
+  redirectChain?: Array<{url: string; status: number | string; timing?: number}>;
   error?: string;
   issues?: Issue[];
   // Performance metrics
@@ -112,9 +112,19 @@ export interface AlternateLink {
   href: string;
 }
 
+export interface AnalysisDetail {
+  severity: SeverityLevel;
+  count: number;
+  examples: string[];
+  truncated?: boolean;
+  countTruncated?: boolean;
+}
+
 export interface AnalysisData {
-  overall: Issue[];
-  details: Record<string, any>;
+  overall: Issue[] | Set<string>;
+  details: Record<string, AnalysisDetail>;
+  bySeverity?: Record<SeverityLevel, string[]>;
+  summary?: AuditSummary;
 }
 
 export interface AuditMetadata {
@@ -135,6 +145,7 @@ export interface HeadingAnalysis {
   h5: string[];
   h6: string[];
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface ImageAnalysis {
@@ -143,6 +154,7 @@ export interface ImageAnalysis {
   withEmptyAlt: number;
   decorativeImages: number;
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface AccessibilityAnalysis {
@@ -156,11 +168,13 @@ export interface SecurityAnalysis {
   isHttps: boolean;
   headers: Record<string, string | undefined>;
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface StructuredDataAnalysis {
   schemas: SchemaItem[];
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface SchemaItem {
@@ -172,6 +186,7 @@ export interface SocialMediaAnalysis {
   og: Record<string, string>;
   twitter: Record<string, string>;
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface PerformanceAnalysis {
@@ -179,6 +194,7 @@ export interface PerformanceAnalysis {
   requestCount?: number;
   renderBlockingResources?: number;
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface ContentQualityAnalysis {
@@ -187,6 +203,7 @@ export interface ContentQualityAnalysis {
   textToHtmlRatio?: number;
   keywordDensity?: Record<string, number>;
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface IndexabilityAnalysis {
@@ -200,11 +217,13 @@ export interface IndexabilityAnalysis {
   hasNoindexTag: boolean;
   hasNofollowTag: boolean;
   blockedByRobotsTxt: boolean;
+  [key: string]: any;
 }
 
 export interface InternationalAnalysis {
   hreflangTags: AlternateLink[];
   issues: Issue[];
+  [key: string]: any;
 }
 
 export interface UrlAnalysis {
@@ -218,6 +237,7 @@ export interface UrlAnalysis {
   queryParamCount: number;
   isHttps: boolean;
   issues: Issue[];
+  [key: string]: any;
 }
 
 // ─── Scoring ─────────────────────────────────────────────────────────────────
@@ -346,6 +366,129 @@ export interface NetworkRequest {
   [key: string]: any;
 }
 
+// ─── Metrics Metadata ────────────────────────────────────────────────────────
+
+export interface MetricInfoEntry {
+  name: string;
+  fullName?: string;
+  description: string;
+  unit?: string;
+  type?: string;
+  threshold?: number;
+  min?: number;
+  max?: number;
+  recommended?: number;
+  isInverse?: boolean;
+  goodLabel?: string;
+  badLabel?: string;
+  learnMore?: string;
+  note?: string;
+}
+
+export interface SignalCategory {
+  name: string;
+  description: string;
+  signals: string[];
+}
+
+export interface SeverityColorConfig {
+  bg: string;
+  text: string;
+  border: string;
+}
+
+// ─── Report Section Data ────────────────────────────────────────────────────
+
+export interface ReportSectionData {
+  jsonData: Record<string, unknown>;
+  pages: PageInfo[];
+  pageData: PageData & { incomingLinks?: Record<string, string[]> };
+  timing?: Record<string, unknown>;
+  analysis?: AnalysisData;
+  metrics?: Record<string, unknown>;
+  pageCounts?: Record<string, number>;
+  topIssues?: TopIssue[];
+  trendData?: TrendDataCompat | null;
+  previousAudit?: AuditSnapshot | null;
+  sitemaps?: Record<string, unknown>;
+  robots?: Record<string, unknown>;
+  isMultiLang?: boolean;
+  hasPerformanceMetrics?: boolean;
+  domainName?: string;
+}
+
+export interface TopIssue {
+  issue: string;
+  severity: string;
+  count: number;
+  examples: string[];
+}
+
+export interface TrendDataCompat {
+  labels: string[];
+  scores: number[];
+  issues: number[];
+  critical: number[];
+  high: number[];
+  categoryScores: Record<string, number[]>;
+  performance: {
+    ttfb: (string | null)[];
+    lcp: (string | null)[];
+    cls: (string | null)[];
+  };
+  issueTrends: Record<string, IssueTrend> | null;
+  insights?: Record<string, (number | null)[]>;
+}
+
+export interface QuickWinFull extends QuickWin {
+  severity?: string;
+  effortMinutes?: number;
+  impactScore?: number;
+  fix?: string;
+  example?: string;
+  examples?: string[];
+  resources?: Array<{ text: string; url: string }>;
+}
+
+export interface HeadingCount {
+  tag: string;
+  count: number;
+}
+
+export interface FailedBatch {
+  file: string;
+  error: string;
+  expectedCount: number;
+}
+
+export interface ManifestData {
+  files: {
+    metadata: string;
+    analysis: string;
+    incomingLinks: string;
+    pageBatches?: Array<{ file: string; count?: number }>;
+  };
+  progress: {
+    processedPages: string[];
+    totalWithoutError: number;
+    totalWithError: number;
+    byError: Record<string, number>;
+  };
+}
+
+export interface TimingPhase {
+  name: string;
+  duration: string;
+  durationMs?: number;
+}
+
+export interface FixRecommendation {
+  effort: string;
+  fix: string;
+  example?: string;
+  resources?: Array<{ text: string; url: string }>;
+}
+
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
 export interface ReportData {
@@ -362,4 +505,195 @@ export interface HistoryEntry {
   categoryScores: CategoryScores;
   totalPages: number;
   totalIssues: number;
+}
+
+// ─── CLI Arguments ──────────────────────────────────────────────────────────
+
+export interface ParsedArgs {
+  origin: string | null;
+  compare: string | null;
+  sitemap: string | null;
+  compareSitemap: string | null;
+  proceed: boolean;
+  perf: boolean;
+  saveHtml: boolean;
+  screenshots: boolean;
+  concurrency: number;
+  concurrencyExplicit: boolean;
+  heapSize: number | null;
+  config: string | null;
+  initConfig: boolean;
+  repo: string | null;
+  exclude: string[];
+  limit: number | null;
+  onlyErrors: boolean;
+  dryRun: boolean;
+  generateCi: boolean;
+  validateConfig: boolean;
+  webhook: string | null;
+  version: boolean;
+  help: boolean;
+  open: boolean;
+  verbose: boolean;
+  quiet: boolean;
+  preset: 'quick' | 'standard' | 'deep' | null;
+  sites: string | null;
+  slack: string | null;
+  watch: number | null;
+  brandLogo: string | null;
+  brandName: string | null;
+  ci: number | null;
+  json: boolean;
+  warnings: string[];
+}
+
+// ─── SEOData Options ────────────────────────────────────────────────────────
+
+export interface SEODataOptions {
+  verbose?: boolean;
+  open?: boolean;
+  exclude?: string[];
+  limit?: number | null;
+  dryRun?: boolean;
+  cruxApiKey?: string | null;
+  screenshots?: boolean;
+}
+
+// ─── History Types ──────────────────────────────────────────────────────────
+
+export interface AuditSnapshotSummary {
+  overallScore: number;
+  totalIssues: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  passRate: number;
+  categoryScores: Partial<CategoryScores>;
+  totalPages: number;
+  pagesWithErrors: number;
+  sitemapUrls: number;
+}
+
+export interface IssueSummary {
+  severity: SeverityLevel;
+  count: number;
+}
+
+export interface PerformanceSummary {
+  avgTTFB: string;
+  avgLCP: string;
+  avgCLS: string;
+  p75TTFB: string;
+  p75LCP: string;
+  p75CLS: string;
+  pagesWithMetrics: number;
+}
+
+export interface InsightsSummary {
+  languageMismatches: number;
+  brokenOutboundLinks: number;
+  nearDuplicatePages: number;
+  pagesWithoutCTAs: number;
+  avgJsUnused: number | null;
+  avgCssUnused: number | null;
+}
+
+export interface AuditSnapshot {
+  timestamp: string;
+  date: string;
+  runTimestamp: string | null;
+  summary: AuditSnapshotSummary;
+  issues: Record<string, IssueSummary>;
+  performance: PerformanceSummary | null;
+  technologies: string[];
+  insights: InsightsSummary | null;
+  quickWins: Array<{ issue: string; affectedPages: number; severity: SeverityLevel }>;
+}
+
+export interface AuditHistory {
+  domain: string;
+  audits: AuditSnapshot[];
+}
+
+export interface AuditComparison {
+  timestamp: string;
+  oldDate: string;
+  newDate: string;
+  scoreChange: number;
+  improvements: string[];
+  regressions: string[];
+  fixed: string[];
+  newIssues: string[];
+  deltaMetrics: {
+    totalIssues: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    passRate: number;
+  };
+  categoryDeltas?: Record<string, number>;
+  performanceDeltas?: {
+    ttfb: number;
+    lcp: number;
+    cls: number;
+  };
+  insightDeltas?: Record<string, number>;
+}
+
+export interface IssueTrend {
+  labels: string[];
+  counts: number[];
+  severity: SeverityLevel;
+  trend: 'stable' | 'new' | 'fixed' | 'improving' | 'worsening';
+  latestCount: number;
+  change: number;
+  changePercent: number | string;
+}
+
+export interface TrendData {
+  labels: string[];
+  overallScores: number[];
+  totalIssues: number[];
+  criticalIssues: number[];
+  highIssues: number[];
+  categoryScores: Record<string, number[]>;
+  performance: {
+    ttfb: (string | null)[];
+    lcp: (string | null)[];
+    cls: (string | null)[];
+  };
+  issueTrends: Record<string, IssueTrend> | null;
+  insights: Record<string, (number | null)[]>;
+}
+
+// ─── Sitemap Parser Result ──────────────────────────────────────────────────
+
+export interface SitemapParseResult {
+  sitemaps: Record<string, unknown>;
+  urls: Record<string, SitemapUrl>;
+  total: number;
+  errors: Array<{ message: string; detail: string; severity: SeverityLevel }>;
+}
+
+// ─── Crawler Engine ─────────────────────────────────────────────────────────
+
+export interface CrawlerEngineOptions {
+  concurrency: number;
+  saveHtml: boolean;
+  screenshots: boolean;
+  perf: boolean;
+  origin: string | null;
+  networkConditions: Record<string, NetworkCondition>;
+  cpuConditions: Record<string, CpuCondition>;
+  verbose: boolean;
+  cruxApiKey: string | null;
+}
+
+export interface CrawlerCallbacks {
+  saveError: (generalError: string, detailedError: string, severity?: string) => void;
+  saveData: () => void;
+  checkAttempts: (url: string) => void;
+  saveAttempt: (url: string) => void;
 }

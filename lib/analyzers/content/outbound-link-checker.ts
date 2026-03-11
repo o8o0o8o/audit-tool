@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 import * as https from 'https';
 import * as http from 'http';
 
@@ -25,13 +25,13 @@ class OutboundLinkChecker {
    * @param {object} config - Analysis config (maxOutboundChecks, outboundTimeout)
    * @returns {object} Analysis results
    */
-  static async analyze(pageData: any, url: string, origin: string, config: any = {}) {
+  static async analyze(pageData: PageInfo, url: string, origin: string, config: Record<string, any> = {}) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
       totalChecked: 0,
-      broken: [] as any[],
-      redirected: [] as any[],
+      broken: [] as Record<string, any>[],
+      redirected: [] as Record<string, any>[],
       timeouts: [] as string[],
       healthy: 0,
     };
@@ -123,7 +123,7 @@ class OutboundLinkChecker {
    * @param {object} allPages - All page data
    * @returns {object} Site-wide analysis results
    */
-  static analyzeSiteWide(allPages: Record<string, any>) {
+  static analyzeSiteWide(allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.values(allPages);

@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo, NetworkRequest } from '../../types';
 
 class CriticalPathAnalyzer {
   /**
@@ -16,7 +16,7 @@ class CriticalPathAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: any[], metrics: any, url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: NetworkRequest[], metrics: Record<string, any>, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -52,7 +52,7 @@ class CriticalPathAnalyzer {
       reqUrl === url || reqUrl === url + '/'
     );
     if (docRequest) {
-      criticalPathData.documentSize = (docRequest[1] as any).size || 0;
+      criticalPathData.documentSize = (docRequest[1] as Record<string, any>).size || 0;
     }
 
     // 5. Analyze inline styles/scripts
@@ -132,8 +132,8 @@ class CriticalPathAnalyzer {
    * Find render-blocking CSS
    * @private
    */
-  static #findBlockingCSS(parsedPage: ParsedPage, requests: any[]) {
-    const blocking: any[] = [];
+  static #findBlockingCSS(parsedPage: ParsedPage, requests: NetworkRequest[]) {
+    const blocking: Record<string, any>[] = [];
 
     // External stylesheets without media="print" or disabled
     const stylesheets = parsedPage.querySelectorAll('link[rel="stylesheet"]');
@@ -154,7 +154,7 @@ class CriticalPathAnalyzer {
         continue;
       }
 
-      const size = href ? ((requests as any)[href]?.size || 0) : 0;
+      const size = href ? ((requests as unknown as Record<string, Record<string, any>>)[href]?.size || 0) : 0;
 
       blocking.push({
         href,
@@ -171,8 +171,8 @@ class CriticalPathAnalyzer {
    * Find render-blocking JavaScript
    * @private
    */
-  static #findBlockingJS(parsedPage: ParsedPage, requests: any[]) {
-    const blocking: any[] = [];
+  static #findBlockingJS(parsedPage: ParsedPage, requests: NetworkRequest[]) {
+    const blocking: Record<string, any>[] = [];
 
     const scripts = parsedPage.querySelectorAll('script');
     const head = parsedPage.querySelector('head');
@@ -195,8 +195,8 @@ class CriticalPathAnalyzer {
         continue;
       }
 
-      const inHead = (head as any)?.contains(script) || false;
-      const size = src ? ((requests as any)[src]?.size || 0) : (script.textContent?.length || 0);
+      const inHead = (head as unknown as Element | null)?.contains(script as unknown as Node) || false;
+      const size = src ? ((requests as unknown as Record<string, Record<string, any>>)[src]?.size || 0) : (script.textContent?.length || 0);
 
       blocking.push({
         src: src || '(inline)',
@@ -239,8 +239,8 @@ class CriticalPathAnalyzer {
   static #analyzeInlineResources(parsedPage: ParsedPage) {
     let inlineCSSSize = 0;
     let inlineJSSize = 0;
-    const inlineCSS: any[] = [];
-    const inlineJS: any[] = [];
+    const inlineCSS: Record<string, any>[] = [];
+    const inlineJS: Record<string, any>[] = [];
 
     // Inline styles
     const styles = parsedPage.querySelectorAll('style');
@@ -297,7 +297,7 @@ class CriticalPathAnalyzer {
    * Generate recommendations
    * @private
    */
-  static #generateRecommendations(data: any) {
+  static #generateRecommendations(data: Record<string, any>) {
     const recommendations: string[] = [];
 
     if (data.blockingCSS.length > 2) {
@@ -324,9 +324,9 @@ class CriticalPathAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
 
     let pagesWithBlockingCSS = 0;
     let pagesWithBlockingJS = 0;

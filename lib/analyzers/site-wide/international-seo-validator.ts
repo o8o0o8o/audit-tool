@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide International SEO Validator
@@ -13,7 +13,7 @@ class InternationalSEOValidator {
    * @param {boolean} isMultiLang - Whether the site is multilanguage
    * @returns {Object} { issues: [], warnings: [], stats: {} }
    */
-  static validateInternationalSEOConsistency(allPages: Record<string, any>, isMultiLang: boolean) {
+  static validateInternationalSEOConsistency(allPages: Record<string, PageInfo>, isMultiLang: boolean) {
     if (!isMultiLang) {
       console.log('\nSite is not multilanguage, skipping international SEO analysis');
       return { issues: [], warnings: [], stats: {} };
@@ -237,7 +237,7 @@ class InternationalSEOValidator {
    * @param {boolean} isMultiLang - Whether the site is multilanguage
    * @returns {Object} { issues: [], warnings: [], stats: {} }
    */
-  static validateHreflangConsistency(allPages: Record<string, any>, isMultiLang: boolean) {
+  static validateHreflangConsistency(allPages: Record<string, PageInfo>, isMultiLang: boolean) {
     // Only run this check if the site is multilanguage
     if (!isMultiLang) {
       return { issues: [], warnings: [], stats: {} };

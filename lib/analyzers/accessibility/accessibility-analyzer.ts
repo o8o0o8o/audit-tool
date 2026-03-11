@@ -133,7 +133,7 @@ class AccessibilityAnalyzer {
           analysis.forms.inputsWithLabels++;
         } else {
           analysis.forms.inputsWithoutLabels++;
-          analysis.forms.issues.push(`Input without associated label: type="${(input as any).type || 'text'}"`);
+          analysis.forms.issues.push(`Input without associated label: type="${(input as HTMLInputElement).type || 'text'}"`);
           analysis.a11yScore -= 3;
         }
       }
@@ -162,7 +162,7 @@ class AccessibilityAnalyzer {
         const outlineStyle = styles.outlineStyle;
 
         if (outlineWidth === '0px' || outlineStyle === 'none') {
-          const hasCustomFocus = styles.boxShadow !== 'none' || styles.border !== (el as any).style.border;
+          const hasCustomFocus = styles.boxShadow !== 'none' || styles.border !== (el as HTMLElement).style.border;
           if (!hasCustomFocus) {
             analysis.keyboard.elementsWithoutFocus++;
           }

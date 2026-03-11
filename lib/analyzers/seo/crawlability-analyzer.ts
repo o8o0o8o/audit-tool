@@ -1,7 +1,7 @@
-import type { ChromePage, ParsedPage } from '../../types';
+import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class CrawlabilityAnalyzer {
-  static async analyzeCrawlability(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: any = {}) {
+  static async analyzeCrawlability(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: PageInfo = { url: '' }) {
     const crawlabilityData = {
       isCrawlable: true,
       blockingFactors: [] as string[],

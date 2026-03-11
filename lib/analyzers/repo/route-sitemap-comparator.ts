@@ -14,7 +14,7 @@ class RouteSitemapComparator {
    * @param {string} origin - Site origin (e.g., https://example.com)
    * @returns {{ issues: Array, warnings: Array, stats: object, details: object }}
    */
-  static compare(routes: any[], sitemapUrls: Record<string, any>, origin: string) {
+  static compare(routes: Record<string, any>[], sitemapUrls: Record<string, any>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -59,7 +59,7 @@ class RouteSitemapComparator {
     }
 
     // Check dynamic routes - see how many sitemap URLs match each pattern
-    const dynamicRouteStats = [];
+    const dynamicRouteStats: Array<Record<string, any> & { matchCount: number }> = [];
     const matchedByDynamic = new Set();
 
     for (const route of dynamicRoutes) {

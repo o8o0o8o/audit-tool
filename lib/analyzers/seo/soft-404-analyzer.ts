@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ChromePage, ParsedPage, Issue } from '../../types';
+import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class Soft404Analyzer {
   // Common patterns indicating a soft 404
@@ -81,7 +81,7 @@ class Soft404Analyzer {
    * @param {Object} pageData - Page data object
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: any) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: PageInfo) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const soft404Data = {
@@ -197,7 +197,7 @@ class Soft404Analyzer {
         // Get text from main content areas, excluding nav/footer
         const main = document.querySelector('main, article, .content, #content, .main');
         if (main) {
-          return (main as any).innerText.substring(0, 5000); // Limit for performance
+          return (main as Record<string, any>).innerText.substring(0, 5000); // Limit for performance
         }
         return document.body?.innerText?.substring(0, 5000) || '';
       });
@@ -243,7 +243,7 @@ class Soft404Analyzer {
    * @param {Object} pages - All pages object
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

@@ -5,8 +5,8 @@ class StructuredDataAnalyzer {
     return await page.evaluate(() => {
       const result = {
         hasStructuredData: false,
-        jsonLdSchemas: [] as any[],
-        microdataItems: [] as any[],
+        jsonLdSchemas: [] as Record<string, any>[],
+        microdataItems: [] as Record<string, any>[],
         total: 0,
         validationErrors: [] as string[],
         validationWarnings: [] as string[],
@@ -81,7 +81,7 @@ class StructuredDataAnalyzer {
       };
 
       // Helper function to validate a schema object
-      const validateSchema = (schema: any, type: any) => {
+      const validateSchema = (schema: Record<string, any>, type: string) => {
         const rules = schemaRules[type];
         if (!rules) return; // No validation rules for this type
 
@@ -106,7 +106,7 @@ class StructuredDataAnalyzer {
       };
 
       // Helper to get nested @type (handles array or string)
-      const getSchemaType = (schema: any) => {
+      const getSchemaType = (schema: Record<string, any>) => {
         if (!schema['@type']) return null;
         return Array.isArray(schema['@type']) ? schema['@type'][0] : schema['@type'];
       };
@@ -180,7 +180,7 @@ class StructuredDataAnalyzer {
         } catch (e) {
           result.jsonLdSchemas.push({
             type: 'invalid',
-            error: 'Failed to parse JSON-LD: ' + (e as any).message,
+            error: 'Failed to parse JSON-LD: ' + (e as Record<string, any>).message,
           });
           result.validationErrors.push('Invalid JSON-LD syntax');
         }

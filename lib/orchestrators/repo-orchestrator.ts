@@ -8,6 +8,36 @@ import { FrameworkConfigValidator } from '../analyzers/repo/framework-config-val
 import { RouteExtractor } from '../analyzers/repo/route-extractor';
 import { RouteSitemapComparator } from '../analyzers/repo/route-sitemap-comparator';
 import { SourceMapper } from '../analyzers/repo/source-mapper';
+import type { Issue, SitemapUrl } from '../types';
+
+interface FrameworkInfo {
+  framework: string | null;
+  version: string | null;
+  packageJson: Record<string, unknown>;
+  srcDirs: string[];
+  configFile: string | null;
+  router: string | null;
+}
+
+interface AuditDataForRepo {
+  sitemaps?: { urls?: Record<string, SitemapUrl> };
+  origin?: string;
+  analysis?: { details?: Record<string, unknown> };
+}
+
+interface RepoAnalysisResult {
+  framework: string | null;
+  version: string | null;
+  router: string | null;
+  configFile: string | null;
+  configIssues: Issue[];
+  configWarnings: Issue[];
+  routeCoverage: Record<string, unknown> | null;
+  sourceMapping: Record<string, unknown>;
+  issues: Issue[];
+  warnings: Issue[];
+  routeDetails?: unknown;
+}
 
 class RepoOrchestrator {
   /**
@@ -16,30 +46,30 @@ class RepoOrchestrator {
    * @param {object} auditData - The audit results object (seo.data / #results)
    * @returns {object} repoAnalysis result
    */
-  static analyze(repoPath: string, auditData: any) {
-    const result: Record<string, any> = {
+  static analyze(repoPath: string, auditData: AuditDataForRepo | null): RepoAnalysisResult {
+    const result: RepoAnalysisResult = {
       framework: null,
       version: null,
       router: null,
       configFile: null,
-      configIssues: [] as any[],
-      configWarnings: [] as any[],
+      configIssues: [],
+      configWarnings: [],
       routeCoverage: null,
       sourceMapping: {},
-      issues: [] as any[],
-      warnings: [] as any[],
+      issues: [],
+      warnings: [],
     };
 
     // 1. Detect framework
-    let frameworkInfo;
+    let frameworkInfo: FrameworkInfo;
     try {
-      frameworkInfo = RepoFrameworkDetector.detect(repoPath);
+      frameworkInfo = RepoFrameworkDetector.detect(repoPath) as FrameworkInfo;
       result.framework = frameworkInfo.framework;
       result.version = frameworkInfo.version;
       result.router = frameworkInfo.router;
       result.configFile = frameworkInfo.configFile;
-    } catch (err: any) {
-      console.error('Repo analysis: framework detection failed:', err.message);
+    } catch (err: unknown) {
+      console.error('Repo analysis: framework detection failed:', (err as Error).message);
       return result;
     }
 
@@ -57,23 +87,23 @@ class RepoOrchestrator {
     // 2. Validate framework config
     try {
       const configResult = FrameworkConfigValidator.validate(repoPath, frameworkInfo);
-      result.configIssues = configResult.issues || [];
-      result.configWarnings = configResult.warnings || [];
+      result.configIssues = (configResult.issues || []) as Issue[];
+      result.configWarnings = (configResult.warnings || []) as Issue[];
       result.issues.push(...result.configIssues);
       result.warnings.push(...result.configWarnings);
-    } catch (err: any) {
-      console.error('Repo analysis: config validation failed:', err.message);
+    } catch (err: unknown) {
+      console.error('Repo analysis: config validation failed:', (err as Error).message);
     }
 
     // 3. Extract routes
-    let routes: any[] = [];
+    let routes: Array<{ path: string; [key: string]: unknown }> = [];
     try {
-      routes = RouteExtractor.extract(repoPath, frameworkInfo);
+      routes = RouteExtractor.extract(repoPath, frameworkInfo) as Array<{ path: string; [key: string]: unknown }>;
       if (routes.length > 0) {
         console.log(`Extracted ${routes.length} route(s) from source code`);
       }
-    } catch (err: any) {
-      console.error('Repo analysis: route extraction failed:', err.message);
+    } catch (err: unknown) {
+      console.error('Repo analysis: route extraction failed:', (err as Error).message);
     }
 
     // 4. Compare routes to sitemap
@@ -86,8 +116,8 @@ class RepoOrchestrator {
         result.issues.push(...comparison.issues);
         result.warnings.push(...comparison.warnings);
         result.routeDetails = comparison.details;
-      } catch (err: any) {
-        console.error('Repo analysis: route-sitemap comparison failed:', err.message);
+      } catch (err: unknown) {
+        console.error('Repo analysis: route-sitemap comparison failed:', (err as Error).message);
       }
     }
 
@@ -103,8 +133,8 @@ class RepoOrchestrator {
         if (mappedCount > 0) {
           console.log(`Mapped ${mappedCount} issue type(s) to source locations`);
         }
-      } catch (err: any) {
-        console.error('Repo analysis: source mapping failed:', err.message);
+      } catch (err: unknown) {
+        console.error('Repo analysis: source mapping failed:', (err as Error).message);
       }
     }
 

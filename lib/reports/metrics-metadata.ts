@@ -10,7 +10,9 @@ import { THRESHOLDS, SEVERITY } from '../constants';
  * Metric information for display in reports
  * Includes name, description, unit, and threshold info
  */
-export const METRIC_INFO: Record<string, any> = {
+import type { MetricInfoEntry, SignalCategory } from '../types';
+
+export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   ttfb: {
     name: 'TTFB',
     fullName: 'Time to First Byte',
@@ -819,7 +821,7 @@ export const CATEGORY_CONFIG = {
 /**
  * Signal categories for grouping in reports
  */
-export const SIGNAL_CATEGORIES: Record<string, any> = {
+export const SIGNAL_CATEGORIES: Record<string, SignalCategory> = {
   coreWebVitals: {
     name: 'Core Web Vitals',
     description: 'Google\'s metrics for user experience',
@@ -945,10 +947,10 @@ export function getSignalsByCategory(categoryKey: string) {
   const category = SIGNAL_CATEGORIES[categoryKey];
   if (!category) return [];
 
-  return category.signals.map(signalKey => ({
+  return category.signals.map((signalKey: string) => ({
     key: signalKey,
     ...METRIC_INFO[signalKey],
-  })).filter(s => s.name); // Filter out any missing signals
+  })).filter((s: { key: string; name?: string }) => s.name); // Filter out any missing signals
 }
 
 /**
@@ -970,10 +972,10 @@ export function getSignalTooltip(key: string) {
 /**
  * Format signal value for display
  * @param {string} key - Signal key
- * @param {any} value - Signal value
+ * @param {unknown} value - Signal value
  * @returns {string} Formatted value
  */
-export function formatSignalValue(key: string, value: any) {
+export function formatSignalValue(key: string, value: unknown): string {
   const info = METRIC_INFO[key];
   if (!info) return String(value);
 
@@ -981,18 +983,20 @@ export function formatSignalValue(key: string, value: any) {
     return value ? (info.goodLabel || 'Yes') : (info.badLabel || 'No');
   }
 
+  const numValue = typeof value === 'number' ? value : Number(value);
+
   if (info.unit === 'ms') {
-    return `${Math.round(value)}ms`;
+    return `${Math.round(numValue)}ms`;
   }
 
   if (info.unit === 'bytes') {
-    if (value > 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1)}MB`;
+    if (numValue > 1_000_000) {
+      return `${(numValue / 1_000_000).toFixed(1)}MB`;
     }
-    if (value > 1_000) {
-      return `${(value / 1_000).toFixed(1)}KB`;
+    if (numValue > 1_000) {
+      return `${(numValue / 1_000).toFixed(1)}KB`;
     }
-    return `${value}B`;
+    return `${numValue}B`;
   }
 
   if (info.unit === '%') {
@@ -1009,37 +1013,39 @@ export function formatSignalValue(key: string, value: any) {
 /**
  * Check if signal value is good/acceptable
  * @param {string} key - Signal key
- * @param {any} value - Signal value
+ * @param {unknown} value - Signal value
  * @returns {boolean|null} true=good, false=bad, null=neutral
  */
-export function isSignalGood(key: string, value: any) {
+export function isSignalGood(key: string, value: unknown): boolean | null {
   const info = METRIC_INFO[key];
   if (!info) return null;
 
   // Boolean signals
   if (info.type === 'boolean') {
-    return info.isInverse ? !value : value;
+    return info.isInverse ? !value : !!value;
   }
+
+  const numVal = typeof value === 'number' ? value : Number(value);
 
   // Threshold-based signals (lower is better when isInverse)
   if (info.threshold !== undefined) {
     if (info.isInverse) {
-      return value <= info.threshold;
+      return numVal <= info.threshold;
     }
-    return value >= info.threshold;
+    return numVal >= info.threshold;
   }
 
   // Range-based signals (min/max)
   if (info.min !== undefined && info.max !== undefined) {
-    return value >= info.min && value <= info.max;
+    return numVal >= info.min && numVal <= info.max;
   }
 
   if (info.min !== undefined) {
-    return value >= info.min;
+    return numVal >= info.min;
   }
 
   if (info.max !== undefined) {
-    return value <= info.max;
+    return numVal <= info.max;
   }
 
   return null;

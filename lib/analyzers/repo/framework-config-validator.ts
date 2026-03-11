@@ -14,7 +14,7 @@ class FrameworkConfigValidator {
    * @param {object} frameworkInfo - Output from RepoFrameworkDetector.detect()
    * @returns {{ issues: Array, warnings: Array }}
    */
-  static validate(repoPath: string, frameworkInfo: any) {
+  static validate(repoPath: string, frameworkInfo: Record<string, any>) {
     const { framework } = frameworkInfo;
 
     switch (framework) {
@@ -34,9 +34,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Next.js SEO configuration
    */
-  static #validateNextJs(repoPath: string, frameworkInfo: any) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static #validateNextJs(repoPath: string, frameworkInfo: Record<string, any>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
     const { router, configFile } = frameworkInfo;
 
     // Check next.config
@@ -146,9 +146,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Nuxt SEO configuration
    */
-  static #validateNuxt(repoPath: string, frameworkInfo: any) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static #validateNuxt(repoPath: string, frameworkInfo: Record<string, any>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
     const { configFile } = frameworkInfo;
 
     if (configFile) {
@@ -210,9 +210,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Gatsby SEO configuration
    */
-  static #validateGatsby(repoPath: string, frameworkInfo: any) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static #validateGatsby(repoPath: string, frameworkInfo: Record<string, any>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
     const { configFile } = frameworkInfo;
 
     if (configFile) {
@@ -267,9 +267,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Astro SEO configuration
    */
-  static #validateAstro(repoPath: string, frameworkInfo: any) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static #validateAstro(repoPath: string, frameworkInfo: Record<string, any>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
     const { configFile } = frameworkInfo;
 
     if (configFile) {
@@ -318,8 +318,8 @@ class FrameworkConfigValidator {
    * Generic validation for unrecognized frameworks
    */
   static #validateGeneric(repoPath: string) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
 
     // Check for robots.txt
     if (!fs.existsSync(path.join(repoPath, 'public/robots.txt')) &&
@@ -409,7 +409,7 @@ class FrameworkConfigValidator {
    * @returns {string[]} Relative file paths
    */
   static #findFilesRecursive(repoPath: string, dir: string, pattern: RegExp, maxDepth = 10) {
-    const results: any[] = [];
+    const results: string[] = [];
     const absDir = path.join(repoPath, dir);
 
     if (!fs.existsSync(absDir)) return results;

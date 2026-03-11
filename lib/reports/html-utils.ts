@@ -11,13 +11,14 @@ import {
   formatSignalValue,
   isSignalGood,
 } from './metrics-metadata';
+import type { PageInfo, SeverityColorConfig, HeadingCount } from '../types';
 
 /**
  * Escape HTML to prevent XSS
  * @param {*} unsafe - Value to escape
  * @returns {string} Escaped HTML string
  */
-function escapeHtml(unsafe: any) {
+function escapeHtml(unsafe: unknown): string {
   if (unsafe === null || unsafe === undefined) return '';
   return String(unsafe)
     .replace(/&/g, "&amp;")
@@ -59,10 +60,10 @@ function getStatusColor(status: number) {
  * @param {boolean} isInverse - If true, lower values are better
  * @returns {string} Color hex code
  */
-function getMetricColor(value: any, threshold: number, isInverse: boolean = false) {
+function getMetricColor(value: unknown, threshold: number, isInverse: boolean = false): string {
   if (value === null || value === undefined || value === 'N/A') return '#9ca3af';
 
-  const numValue = parseFloat(value);
+  const numValue = parseFloat(String(value));
   if (isNaN(numValue)) return '#9ca3af';
 
   if (isInverse) {
@@ -98,9 +99,9 @@ function getTextLengthColor(length: number, min: number, max: number) {
  * @param {string} tagName - Meta tag name to check
  * @returns {boolean} True if tag exists
  */
-function hasMetaTag(page: any, tagName: string) {
+function hasMetaTag(page: PageInfo, tagName: string): boolean {
   if (!page.meta || !Array.isArray(page.meta)) return false;
-  return page.meta.some(metaObj => metaObj[tagName] !== undefined);
+  return page.meta.some((metaObj: Record<string, unknown>) => metaObj[tagName] !== undefined);
 }
 
 /**
@@ -108,7 +109,7 @@ function hasMetaTag(page: any, tagName: string) {
  * @param {Object} page - Page data object
  * @returns {string[]} Array of missing tag names
  */
-function getMissingMetaTags(page: any) {
+function getMissingMetaTags(page: PageInfo): string[] {
   // Check critical (description) and essential social tags only
   // Viewport is checked separately by MobileFriendlyAnalyzer
   const importantTags = ['description', 'og:title', 'og:image', 'twitter:card'];
@@ -130,7 +131,7 @@ function makeUrlClickable(url: string) {
  * @param {Array} headings - Array of heading objects with count property
  * @returns {boolean} True if there are structural issues
  */
-function hasHeadingStructureIssue(headings: any[]) {
+function hasHeadingStructureIssue(headings: HeadingCount[] | null): boolean {
   if (!headings || !Array.isArray(headings)) return false;
 
   // Check for skipped levels (e.g., h1 -> h3 with no h2)
@@ -159,10 +160,10 @@ function hasHeadingStructureIssue(headings: any[]) {
  * @param {boolean} isInverse - If true, lower values are better
  * @returns {string} Tooltip text or empty string
  */
-function getMetricTooltip(value: any, threshold: number, metricName: string, unit: string = '', isInverse: boolean = false) {
+function getMetricTooltip(value: unknown, threshold: number, metricName: string, unit: string = '', isInverse: boolean = false): string {
   if (value === null || value === undefined || value === 'N/A') return '';
 
-  const numValue = parseFloat(value);
+  const numValue = parseFloat(String(value));
   if (isNaN(numValue)) return '';
 
   if (isInverse) {
@@ -208,7 +209,7 @@ function getSeverityBadge(severity: string) {
     LOW: { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
   };
 
-  const color = (colors as Record<string, any>)[severity] || colors.MEDIUM;
+  const color = (colors as Record<string, SeverityColorConfig>)[severity] || colors.MEDIUM;
   return `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${color.bg}; color: ${color.text}; border: 1px solid ${color.border};">${severity}</span>`;
 }
 
@@ -251,7 +252,7 @@ function getTrendIndicator(current: number, previous: number, higherIsBetter: bo
  * @param {*} value - Current value
  * @returns {string} HTML tooltip content
  */
-function getSignalTooltipHtml(signalKey: string, value: any) {
+function getSignalTooltipHtml(signalKey: string, value: unknown): string {
   const info = METRIC_INFO[signalKey];
   if (!info) return '';
 
@@ -288,7 +289,7 @@ function getSignalTooltipHtml(signalKey: string, value: any) {
  * @param {*} value - Current value
  * @returns {string} HTML status indicator
  */
-function getSignalStatusIndicator(signalKey: string, value: any) {
+function getSignalStatusIndicator(signalKey: string, value: unknown): string {
   const isGood = isSignalGood(signalKey, value);
 
   if (isGood === true) {
@@ -306,7 +307,7 @@ function getSignalStatusIndicator(signalKey: string, value: any) {
  * @param {Object} options - Additional options
  * @returns {string} HTML for signal card
  */
-function getSignalCard(signalKey: string, value: any, options: any = {}) {
+function getSignalCard(signalKey: string, value: unknown, _options: Record<string, unknown> = {}): string {
   const info = METRIC_INFO[signalKey];
   if (!info) return '';
 
@@ -336,7 +337,7 @@ function getSignalCard(signalKey: string, value: any, options: any = {}) {
  * @param {Object} pageData - Page data with signal values
  * @returns {string} HTML for category section
  */
-function getSignalCategorySection(categoryKey: string, pageData: any) {
+function getSignalCategorySection(categoryKey: string, pageData: PageInfo): string {
   const category = SIGNAL_CATEGORIES[categoryKey];
   if (!category) return '';
 
@@ -362,7 +363,7 @@ function getSignalCategorySection(categoryKey: string, pageData: any) {
  * @param {string} key - Key (may be nested like 'technical.cms')
  * @returns {*} Value or undefined
  */
-function getNestedValue(obj: any, key: string) {
+function getNestedValue(obj: Record<string, unknown>, key: string): unknown {
   if (!obj) return undefined;
 
   // Direct match
@@ -398,10 +399,10 @@ function getNestedValue(obj: any, key: string) {
 
   const paths = pathMappings[key];
   if (paths) {
-    let value = obj;
+    let value: unknown = obj;
     for (const p of paths) {
-      if (value && value[p] !== undefined) {
-        value = value[p];
+      if (value && typeof value === 'object' && (value as Record<string, unknown>)[p] !== undefined) {
+        value = (value as Record<string, unknown>)[p];
       } else {
         return undefined;
       }

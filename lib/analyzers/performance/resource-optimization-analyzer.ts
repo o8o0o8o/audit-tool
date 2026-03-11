@@ -1,8 +1,8 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
-import type { ChromePage } from '../../types';
+import type { ChromePage, NetworkRequest } from '../../types';
 
 class ResourceOptimizationAnalyzer {
-  static async analyzeResourceOptimization(chromePage: ChromePage, requests: any[], url: string) {
+  static async analyzeResourceOptimization(chromePage: ChromePage, requests: NetworkRequest[], url: string) {
     const resourceAnalysis = {
       compression: {
         gzipCompressed: 0,
@@ -10,20 +10,20 @@ class ResourceOptimizationAnalyzer {
         uncompressed: 0,
         totalSize: 0,
         compressedSize: 0,
-        issues: [] as any[],
+        issues: [] as Record<string, any>[],
       },
       minification: {
         minifiedJS: 0,
         unminifiedJS: 0,
         minifiedCSS: 0,
         unminifiedCSS: 0,
-        issues: [] as any[],
+        issues: [] as Record<string, any>[],
       },
       renderBlocking: {
         blockingScripts: 0,
         blockingStyles: 0,
         totalBlocking: 0,
-        issues: [] as any[],
+        issues: [] as Record<string, any>[],
       },
       protocol: {
         http1: 0,
@@ -131,7 +131,7 @@ class ResourceOptimizationAnalyzer {
     }
 
     // Collect all issues at the top level for reportIssues()
-    (resourceAnalysis as any).issues = [
+    (resourceAnalysis as Record<string, any>).issues = [
       ...resourceAnalysis.renderBlocking.issues,
     ];
 

@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage } from '../../types';
+import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
 class ThirdPartyAnalyzer {
   // Known third-party categories
@@ -55,17 +55,17 @@ class ThirdPartyAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, requests: any[], url: string, origin: string) {
+  static async analyze(chromePage: ChromePage, requests: NetworkRequest[], url: string, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
     const originHost = new URL(origin).hostname;
     const thirdPartyData: Record<string, any> = {
-      scripts: [] as any[],
+      scripts: [] as Record<string, any>[],
       totalSize: 0,
       totalTime: 0,
       byCategory: {} as Record<string, any>,
-      blockingScripts: [] as any[],
+      blockingScripts: [] as Record<string, any>[],
       count: 0,
     };
 
@@ -253,9 +253,9 @@ class ThirdPartyAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
 
     let totalThirdPartySize = 0;
     let pagesWithBlockingScripts = 0;

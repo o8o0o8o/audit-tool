@@ -5,6 +5,7 @@
 
 import { METRIC_INFO, THRESHOLDS } from '../metrics-metadata';
 import { escapeHtml } from '../html-utils';
+import type { PageInfo, ReportSectionData, MetricInfoEntry } from '../../types';
 
 /**
  * Generate the performance statistics section
@@ -12,11 +13,12 @@ import { escapeHtml } from '../html-utils';
  * @param {Object} data.jsonData - Full audit JSON data
  * @returns {string} HTML string for the performance stats section
  */
-function getPerformanceStats(data: any) {
+function getPerformanceStats(data: ReportSectionData) {
   const { jsonData } = data;
-  const pages = jsonData.pageData?.pages || {};
-  const pagesArray: any[] = Object.values(pages);
-  const cruxData = jsonData.cruxData || null;
+  const pageData = jsonData.pageData as Record<string, unknown> | undefined;
+  const pages = (pageData?.pages || {}) as Record<string, PageInfo>;
+  const pagesArray: PageInfo[] = Object.values(pages);
+  const cruxData = (jsonData.cruxData || null) as Record<string, unknown> | null;
   // Check for pages with Core Web Vitals (stored at top level as TTFB, LCP, CLS, INP)
   const pagesWithPerf = pagesArray.filter(p => p.TTFB || p.LCP || p.CLS || p.INP);
 
@@ -29,7 +31,7 @@ function getPerformanceStats(data: any) {
   const inpValues = pagesWithPerf.map(p => p.INP || 0).filter(v => v > 0).sort((a, b) => a - b);
   const pageSizes = pagesArray.map(p => p.totalResponseSize || 0).filter(v => v > 0).sort((a, b) => a - b);
 
-  const avg = (arr: number[]) => arr.length > 0 ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(0) : 0;
+  const avg = (arr: number[]): string | number => arr.length > 0 ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(0) : 0;
   const p50 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.5)] : 0;
   const median = p50;
   const p75 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0;
@@ -64,7 +66,7 @@ function getPerformanceStats(data: any) {
 /**
  * Generate CrUX comparison section
  */
-function getCrUXSection(cruxData: any, labMetrics: any, p75Fn: (arr: number[]) => number) {
+function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbValues: number[]; lcpValues: number[]; clsValues: number[] }, p75Fn: (arr: number[]) => number) {
   if (!cruxData || !cruxData.metrics) return '';
 
   const labP75 = {
@@ -73,15 +75,17 @@ function getCrUXSection(cruxData: any, labMetrics: any, p75Fn: (arr: number[]) =
     TTFB: labMetrics.ttfbValues.length > 0 ? p75Fn(labMetrics.ttfbValues) : null,
   };
 
+  const metrics = cruxData.metrics as Record<string, Record<string, unknown>> | undefined;
   const metricsHtml = ['LCP', 'CLS', 'INP', 'TTFB', 'FCP'].map(metric => {
-    const fieldData = cruxData.metrics[metric];
+    const fieldData = metrics?.[metric] as Record<string, unknown> | undefined;
     if (!fieldData) return '';
 
-    const fieldP75 = Number(fieldData.percentiles?.p75);
+    const percentiles = fieldData.percentiles as Record<string, unknown> | undefined;
+    const fieldP75 = Number(percentiles?.p75);
     if (isNaN(fieldP75)) return '';
 
-    const dist = fieldData.distribution || {};
-    const labValue = (labP75 as Record<string, any>)[metric];
+    const dist = (fieldData.distribution || {}) as Record<string, number>;
+    const labValue = (labP75 as Record<string, number | null>)[metric];
 
     // Format values
     const fieldDisplay = metric === 'CLS' ? fieldP75.toFixed(2) : `${Math.round(fieldP75)}ms`;
@@ -144,7 +148,7 @@ function getCrUXSection(cruxData: any, labMetrics: any, p75Fn: (arr: number[]) =
   if (!metricsHtml) return '';
 
   // Collection period info
-  const period = cruxData.collectionPeriod;
+  const period = cruxData.collectionPeriod as Record<string, Record<string, unknown>> | undefined;
   const periodText = period
     ? `Data from ${period.firstDate?.year || ''}/${period.firstDate?.month || ''}/${period.firstDate?.day || ''} to ${period.lastDate?.year || ''}/${period.lastDate?.month || ''}/${period.lastDate?.day || ''}`
     : 'Last 28 days';
@@ -179,7 +183,7 @@ function getCrUXSection(cruxData: any, labMetrics: any, p75Fn: (arr: number[]) =
 /**
  * Generate a stat card with description from METRIC_INFO
  */
-function getStatCard(metricKey: string, icon: string, gradientStart: string, gradientEnd: string, values: number[], unit: string, avg: (arr: number[]) => any, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
+function getStatCard(metricKey: string, icon: string, gradientStart: string, gradientEnd: string, values: number[], unit: string, avg: (arr: number[]) => string | number, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
   const info = METRIC_INFO[metricKey] || {};
   const fullName = info.fullName || metricKey.toUpperCase();
   const description = info.description || '';
@@ -204,8 +208,8 @@ function getStatCard(metricKey: string, icon: string, gradientStart: string, gra
 /**
  * Generate CLS stat card (special formatting)
  */
-function getClsCard(clsValues: number[], avg: (arr: number[]) => any, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
-  const info: any = METRIC_INFO.cls || {};
+function getClsCard(clsValues: number[], avg: (arr: number[]) => string | number, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
+  const info = METRIC_INFO.cls || {} as MetricInfoEntry;
   const description = info.description || 'Measures visual stability by tracking unexpected layout shifts';
   const threshold = THRESHOLDS.CLS || 0.1;
   const learnMore = info.learnMore || '';
@@ -215,7 +219,7 @@ function getClsCard(clsValues: number[], avg: (arr: number[]) => any, p50: (arr:
       <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">📐 Cumulative Layout Shift</div>
       <div style="font-size: 11px; opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
-        <div><strong>Average:</strong> ${parseFloat(avg(clsValues)).toFixed(3)}</div>
+        <div><strong>Average:</strong> ${parseFloat(String(avg(clsValues))).toFixed(3)}</div>
         <div><strong>P50:</strong> ${p50(clsValues).toFixed(3)}</div>
         <div><strong>P75:</strong> ${p75(clsValues).toFixed(3)}</div>
         <div><strong>P95:</strong> ${p95(clsValues).toFixed(3)}</div>
@@ -228,8 +232,8 @@ function getClsCard(clsValues: number[], avg: (arr: number[]) => any, p50: (arr:
 /**
  * Generate page size stat card (special formatting)
  */
-function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => any, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
-  const info = METRIC_INFO.pageSize || {} as any;
+function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => string | number, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
+  const info = METRIC_INFO.pageSize || {} as MetricInfoEntry;
   const description = info.description || 'Total size of all resources loaded by the page';
   const threshold = (THRESHOLDS.PAGE_SIZE / (1024 * 1024)).toFixed(1);
 
@@ -238,7 +242,7 @@ function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => any, p50: 
       <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">📦 Total Page Size</div>
       <div style="font-size: 11px; opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}MB • Smaller pages load faster</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
-        <div><strong>Average:</strong> ${(parseFloat(avg(pageSizes)) / (1024 * 1024)).toFixed(2)}MB</div>
+        <div><strong>Average:</strong> ${(parseFloat(String(avg(pageSizes))) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P50:</strong> ${(p50(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P75:</strong> ${(p75(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P95:</strong> ${(p95(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
@@ -251,17 +255,17 @@ function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => any, p50: 
 /**
  * Generate code coverage summary cards
  */
-function getCodeCoverageStats(pagesArray: any[]) {
-  const jsPages = pagesArray.filter((p: any) => p.codeCoverage?.js?.ratio != null);
-  const cssPages = pagesArray.filter((p: any) => p.codeCoverage?.css?.ratio != null);
+function getCodeCoverageStats(pagesArray: PageInfo[]) {
+  const jsPages = pagesArray.filter((p: PageInfo) => p.codeCoverage?.js?.ratio != null);
+  const cssPages = pagesArray.filter((p: PageInfo) => p.codeCoverage?.css?.ratio != null);
 
   if (jsPages.length === 0 && cssPages.length === 0) return '';
 
   const avgJsUnused = jsPages.length > 0
-    ? (jsPages.reduce((s: number, p: any) => s + p.codeCoverage.js.ratio, 0) / jsPages.length).toFixed(1)
+    ? (jsPages.reduce((s: number, p: PageInfo) => s + p.codeCoverage.js.ratio, 0) / jsPages.length).toFixed(1)
     : null;
   const avgCssUnused = cssPages.length > 0
-    ? (cssPages.reduce((s: number, p: any) => s + p.codeCoverage.css.ratio, 0) / cssPages.length).toFixed(1)
+    ? (cssPages.reduce((s: number, p: PageInfo) => s + p.codeCoverage.css.ratio, 0) / cssPages.length).toFixed(1)
     : null;
 
   const jsColor = Number(avgJsUnused) > 60 ? '#ef4444' : Number(avgJsUnused) > 40 ? '#f59e0b' : '#10b981';
@@ -300,7 +304,7 @@ function getCodeCoverageStats(pagesArray: any[]) {
 /**
  * Generate slowest pages table
  */
-function getSlowestPagesSection(pagesArray: any[]) {
+function getSlowestPagesSection(pagesArray: PageInfo[]) {
   const slowest = pagesArray
     .filter(p => p.TTFB && p.TTFB > 0)
     .sort((a, b) => (b.TTFB || 0) - (a.TTFB || 0))
@@ -352,7 +356,7 @@ function getSlowestPagesSection(pagesArray: any[]) {
 /**
  * Generate vitals attribution section (LCP bottleneck + CLS sources)
  */
-function getVitalsAttributionSection(pagesArray: any[]) {
+function getVitalsAttributionSection(pagesArray: PageInfo[]) {
   const pagesWithAttribution = pagesArray.filter(p => p.vitals?.lcpAnalysis?.bottleneck);
   if (pagesWithAttribution.length === 0) return '';
 

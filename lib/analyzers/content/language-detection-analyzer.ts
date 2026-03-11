@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 // Trigram language profiles - top trigrams for common languages
 // Based on frequency analysis of large text corpora
@@ -31,7 +31,7 @@ class LanguageDetectionAnalyzer {
    * @param {object} pageData - Page data (for accessing intl SEO results)
    * @returns {object} Analysis results
    */
-  static async analyzeLanguage(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: any) {
+  static async analyzeLanguage(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: PageInfo) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -39,7 +39,7 @@ class LanguageDetectionAnalyzer {
     const textContent = await chromePage.evaluate(() => {
       const mainContent = document.querySelector('main, article, [role="main"]') || document.body;
       const clone = mainContent.cloneNode(true);
-      (clone as any).querySelectorAll('script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], code, pre').forEach((el: any) => el.remove());
+      (clone as Element).querySelectorAll('script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], code, pre').forEach((el: any) => el.remove());
       const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
       return text.substring(0, 5000); // Limit for performance
     });
@@ -159,7 +159,7 @@ class LanguageDetectionAnalyzer {
    * @param {object} allPages - All page data
    * @returns {object} Site-wide analysis results
    */
-  static analyzeSiteWide(allPages: Record<string, any>) {
+  static analyzeSiteWide(allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.values(allPages);

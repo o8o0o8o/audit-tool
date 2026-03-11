@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReportDataProcessor } from './lib/reports/data-processor';
+import type { PageInfo, AnalysisDetail, QuickWin, AuditSummary, PageData, SitemapData, AnalysisData } from './lib/types';
 
 /**
  * Converts audit data to CSV format for data analysis
@@ -11,7 +12,14 @@ import { ReportDataProcessor } from './lib/reports/data-processor';
  * - Quick wins list
  */
 
-function escapeCSV(value: any) {
+interface AuditJsonData {
+  pageData?: PageData;
+  analysis?: AnalysisData & { summary?: AuditSummary };
+  sitemaps?: SitemapData;
+  isMultiLang?: boolean;
+}
+
+function escapeCSV(value: string | number | boolean | null | undefined) {
   if (value === null || value === undefined) return '';
   let str = String(value);
   // Prevent CSV formula injection (Excel/Sheets interpret =, +, -, @ as formulas)
@@ -25,7 +33,7 @@ function escapeCSV(value: any) {
   return str;
 }
 
-function generatePagesCSV(jsonData: any) {
+function generatePagesCSV(jsonData: AuditJsonData) {
   const pages = jsonData.pageData?.pages || {};
   const rows = [
     ['URL', 'Status Code', 'Source', 'Segment', 'Title', 'Title Length', 'Description', 'Desc Length',
@@ -44,12 +52,13 @@ function generatePagesCSV(jsonData: any) {
   ];
 
   Object.entries(pages).forEach(([url, _data]) => {
-    const data = _data as any;
+    // CSV export reads many dynamic analyzer-added properties on PageInfo
+    const data = _data as PageInfo;
     const h1Count = Array.isArray(data.headings)
-      ? (data.headings.find((h: any) => h.tag === 'h1')?.count || 0)
+      ? ((data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h1')?.count || 0)
       : (data.headings?.h1?.length || 0);
     const h2Count = Array.isArray(data.headings)
-      ? (data.headings.find((h: any) => h.tag === 'h2')?.count || 0)
+      ? ((data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h2')?.count || 0)
       : (data.headings?.h2?.length || 0);
 
     rows.push([
@@ -77,16 +86,16 @@ function generatePagesCSV(jsonData: any) {
       data.contentQuality?.wordCount || '',
       data.contentQuality?.textToHtmlRatio || '',
       data.contentQuality?.readabilityScore || '',
-      data.security?.securityScore ?? '',
-      data.caching?.cacheScore ?? '',
-      data.accessibility?.a11yScore ?? '',
-      data.contentQuality?.contentScore ?? '',
+      (data.security as unknown as Record<string, unknown> | undefined)?.securityScore ?? '',
+      (data.caching as unknown as Record<string, unknown> | undefined)?.cacheScore ?? '',
+      (data.accessibility as unknown as Record<string, unknown> | undefined)?.a11yScore ?? '',
+      (data.contentQuality as unknown as Record<string, unknown> | undefined)?.contentScore ?? '',
       data.imageOptimization?.totalImages || '',
       data.imageOptimization?.withLazyLoading || '',
       data.incomingLinksCount || 0,
       data.missingMetaTags?.length || 0,
       data.resourceOptimization?.renderBlocking?.totalBlocking || '',
-      (data.status >= 400 || data.statusCode >= 400) ? 'Yes' : 'No',
+      ((data.status || 0) >= 400 || (data.statusCode || 0) >= 400) ? 'Yes' : 'No',
       data.languageDetection?.detectedLanguage || '',
       data.languageDetection?.match != null ? (data.languageDetection.match ? 'Yes' : 'No') : '',
       data.internalPageRank != null ? data.internalPageRank.toFixed(6) : '',
@@ -96,8 +105,8 @@ function generatePagesCSV(jsonData: any) {
       data.codeCoverage?.js?.ratio ?? '',
       data.codeCoverage?.css?.ratio ?? '',
       data.outboundLinkHealth?.broken?.length ?? '',
-      data.contentQuality?.wordCountBySection?.main ?? '',
-      data.contentQuality?.wordCountBySection?.boilerplateRatio ?? '',
+      (data.contentQuality as unknown as Record<string, Record<string, unknown>> | undefined)?.wordCountBySection?.main ?? '',
+      (data.contentQuality as unknown as Record<string, Record<string, unknown>> | undefined)?.wordCountBySection?.boilerplateRatio ?? '',
       data.eeat?.score ?? '',
       data.eeat?.hasAuthor ? 'Yes' : 'No',
       data.eeat?.hasCitations ? 'Yes' : 'No',
@@ -107,14 +116,14 @@ function generatePagesCSV(jsonData: any) {
   return rows.map(row => row.join(',')).join('\n');
 }
 
-function generateIssuesCSV(jsonData: any) {
+function generateIssuesCSV(jsonData: AuditJsonData) {
   const details = jsonData.analysis?.details || {};
   const rows = [
     ['Issue', 'Severity', 'Affected Pages', 'Example URLs']
   ];
 
   Object.entries(details).forEach(([issue, _data]) => {
-    const data = _data as any;
+    const data = _data as AnalysisDetail;
     const examples = (data.examples || []).slice(0, 5).join('; ');
     rows.push([
       issue,
@@ -127,7 +136,7 @@ function generateIssuesCSV(jsonData: any) {
   return rows.map(row => row.join(',')).join('\n');
 }
 
-function generatePerformanceCSV(jsonData: any) {
+function generatePerformanceCSV(jsonData: AuditJsonData) {
   const pages = jsonData.pageData?.pages || {};
   const rows = [
     ['URL', 'TTFB (ms)', 'FCP (ms)', 'LCP (ms)', 'CLS', 'INP (ms)', 'TBT (ms)', 'TTI (ms)',
@@ -136,7 +145,7 @@ function generatePerformanceCSV(jsonData: any) {
   ];
 
   Object.entries(pages).forEach(([url, _data]) => {
-    const data = _data as any;
+    const data = _data as PageInfo;
     if (data.TTFB || data.LCP || data.CLS !== undefined) {
       rows.push([
         url,
@@ -160,13 +169,13 @@ function generatePerformanceCSV(jsonData: any) {
   return rows.map(row => row.join(',')).join('\n');
 }
 
-function generateQuickWinsCSV(jsonData: any) {
+function generateQuickWinsCSV(jsonData: AuditJsonData) {
   const quickWins = jsonData.analysis?.summary?.quickWins || [];
   const rows = [
     ['Priority', 'Issue', 'Severity', 'Impact', 'Effort', 'Affected Pages', 'How to Fix', 'Example URLs']
   ];
 
-  quickWins.forEach((win: any, index: number) => {
+  quickWins.forEach((win: QuickWin & { examples?: string[]; severity?: string; fix?: string }, index: number) => {
     const examples = (win.examples || []).slice(0, 3).join('; ');
     rows.push([
       index + 1,
@@ -183,8 +192,8 @@ function generateQuickWinsCSV(jsonData: any) {
   return rows.map(row => row.join(',')).join('\n');
 }
 
-function generateSummaryCSV(jsonData: any) {
-  const summary = jsonData.analysis?.summary || {};
+function generateSummaryCSV(jsonData: AuditJsonData) {
+  const summary: Partial<AuditSummary> = jsonData.analysis?.summary || {};
   const score = summary.overallScore || 0;
   const grade = score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
   const rows = [

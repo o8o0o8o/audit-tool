@@ -3,6 +3,43 @@
  * Utility for matching pages between two sites by URL path
  */
 
+import type { PageInfo } from '../types';
+
+interface PageEntry {
+  url: string;
+  page: PageInfo;
+  path: string;
+}
+
+interface MatchedPage {
+  path: string;
+  originUrl: string;
+  compareUrl: string;
+  originPage: PageInfo;
+  comparePage: PageInfo;
+}
+
+interface UnmatchedPage {
+  path: string;
+  url: string;
+  page: PageInfo;
+}
+
+interface MatchResult {
+  matched: MatchedPage[];
+  originOnly: UnmatchedPage[];
+  compareOnly: UnmatchedPage[];
+}
+
+interface MatchStats {
+  totalOrigin: number;
+  totalCompare: number;
+  matchedCount: number;
+  originOnlyCount: number;
+  compareOnlyCount: number;
+  matchPercentage: number;
+}
+
 class PageMatcher {
   /**
    * Extract and normalize URL path from full URL
@@ -41,16 +78,16 @@ class PageMatcher {
    * @param {Object} comparePages - Pages from compare site { url: pageData }
    * @returns {Object} { matched: [], originOnly: [], compareOnly: [] }
    */
-  static matchPages(originPages: Record<string, any>, comparePages: Record<string, any>) {
-    const result = {
-      matched: [] as any[],
-      originOnly: [] as any[],
-      compareOnly: [] as any[],
+  static matchPages(originPages: Record<string, PageInfo>, comparePages: Record<string, PageInfo>): MatchResult {
+    const result: MatchResult = {
+      matched: [],
+      originOnly: [],
+      compareOnly: [],
     };
 
     // Build path maps for efficient lookup
-    const originByPath = new Map();
-    const compareByPath = new Map();
+    const originByPath = new Map<string, PageEntry>();
+    const compareByPath = new Map<string, PageEntry>();
 
     // Index origin pages by path
     for (const [url, page] of Object.entries(originPages)) {
@@ -114,7 +151,7 @@ class PageMatcher {
    * @param {Object} matchResult - Result from matchPages()
    * @returns {Object} Statistics about the match
    */
-  static getMatchStats(matchResult: any) {
+  static getMatchStats(matchResult: MatchResult): MatchStats {
     const totalOrigin = matchResult.matched.length + matchResult.originOnly.length;
     const totalCompare = matchResult.matched.length + matchResult.compareOnly.length;
     const matchedCount = matchResult.matched.length;

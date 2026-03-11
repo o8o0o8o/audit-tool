@@ -22,7 +22,7 @@ import { generateBadgeSVG } from './lib/utils/badge-generator';
 import { SEOData } from './lib/seo-data';
 
 // Graceful Ctrl+C handler - save progress before exiting
-let _seoInstance = null;
+let _seoInstance: SEOData | null = null;
 process.on('SIGINT', () => {
   console.log('\n\n⚠️  Audit interrupted (Ctrl+C)');
   if (_seoInstance) {
@@ -30,8 +30,8 @@ process.on('SIGINT', () => {
       console.log('Saving progress before exit...');
       _seoInstance.saveData();
       console.log('Progress saved. Resume with --proceed flag.');
-    } catch (e: any) {
-      console.error('Could not save progress:', e.message);
+    } catch (e: unknown) {
+      console.error('Could not save progress:', (e as Error).message);
     }
   }
   process.exit(130);
@@ -78,7 +78,7 @@ async function audit() {
       for (let i = 0; i < urls.length; i++) {
         console.log(`\n[${ i + 1}/${urls.length}] Auditing: ${urls[i]}\n`);
         try {
-          const batchSeo: any = new SEOData(urls[i], false, args.perf, false, args.concurrency, null, {
+          const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, {
             verbose: args.verbose,
             limit: args.limit || 20, // Default limit for batch mode
           });
@@ -91,10 +91,11 @@ async function audit() {
 
           batchSeo.saveData();
           const batchHtmlPath = batchSeo.fileManager.getHtmlFilePath();
-          generateHTML(batchSeo.file, batchSeo.domainName, batchHtmlPath);
-        } catch (e: any) {
-          results.push({ url: urls[i], score: 0, issues: 0, status: `error: ${e.message}` });
-          console.error(`  Failed: ${e.message}`);
+          generateHTML(batchSeo.file, batchSeo.domainName!, batchHtmlPath);
+        } catch (e: unknown) {
+          const err = e as Error;
+          results.push({ url: urls[i], score: 0, issues: 0, status: `error: ${err.message}` });
+          console.error(`  Failed: ${err.message}`);
         }
       }
 
@@ -122,8 +123,8 @@ async function audit() {
         console.log(`  Crawl concurrency: ${config.crawl?.concurrency || 5}`);
         console.log(`  Query param mode: ${config.queryParams?.mode || 'strip_tracking'}`);
         process.exit(0);
-      } catch (e: any) {
-        console.error(`Config validation failed: ${e.message}`);
+      } catch (e: unknown) {
+        console.error(`Config validation failed: ${(e as Error).message}`);
         process.exit(1);
       }
     }
@@ -309,7 +310,7 @@ async function audit() {
       return;
     }
 
-    const seo: any = new SEOData(args.origin, args.proceed, args.perf, args.saveHtml, args.concurrency, args.sitemap, {
+    const seo = new SEOData(args.origin, args.proceed, args.perf, args.saveHtml, args.concurrency, args.sitemap, {
       verbose: args.verbose,
       open: args.open,
       exclude: args.exclude,
@@ -351,22 +352,22 @@ async function audit() {
       } else {
         console.log(`\n📂 Running source code analysis on: ${repoValidation.resolvedPath}`);
         try {
-          const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath, seo.data);
+          const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath!, seo.data);
           seo.data.repoAnalysis = repoAnalysis;
           seo.fileManager.writeRepoAnalysis(repoAnalysis);
 
           // Merge repo issues into the main error aggregator
           for (const issue of repoAnalysis.issues || []) {
-            seo.saveError(issue.message, issue.detail, issue.severity);
+            seo.saveError(issue.message || '', issue.detail || '', issue.severity);
           }
           for (const warning of repoAnalysis.warnings || []) {
-            seo.saveError(warning.message, warning.detail, warning.severity);
+            seo.saveError(warning.message || '', warning.detail || '', warning.severity);
           }
 
           const issueCount = (repoAnalysis.issues?.length || 0) + (repoAnalysis.warnings?.length || 0);
           console.log(`✅ Repo analysis complete: ${issueCount} finding(s)`);
-        } catch (error: any) {
-          console.error('⚠️  Repo analysis failed:', error.message);
+        } catch (error: unknown) {
+          console.error('⚠️  Repo analysis failed:', (error as Error).message);
         }
       }
     }
@@ -374,7 +375,7 @@ async function audit() {
     // Save to history for tracking and get previous score for diff
     try {
       if (seo.data && seo.fileManager?.timestamp) {
-        const manager = new HistoryManager(seo.domainName);
+        const manager = new HistoryManager(seo.domainName!);
 
         // Get previous score before adding new snapshot
         try {
@@ -389,8 +390,8 @@ async function audit() {
       } else {
         console.log('⚠️  Could not save audit history: missing audit data or timestamp');
       }
-    } catch (error: any) {
-      console.log('⚠️  Could not save audit history:', error.message);
+    } catch (error: unknown) {
+      console.log('⚠️  Could not save audit history:', (error as Error).message);
     }
 
     // Store branding info if provided (must be set before HTML generation)
@@ -400,13 +401,13 @@ async function audit() {
 
     // Generate HTML report in the same directory as the JSON file
     const htmlOutputPath = seo.fileManager.getHtmlFilePath();
-    generateHTML(seo.file, seo.domainName, htmlOutputPath);
+    generateHTML(seo.file, seo.domainName!, htmlOutputPath);
 
     // Generate SVG score badge
     try {
       const badgePath = path.join(seo.fileManager.resultsDir, 'badge.svg');
       const score = seo.data.analysis?.summary?.overallScore || 0;
-      fs.writeFileSync(badgePath, generateBadgeSVG(score, seo.domainName));
+      fs.writeFileSync(badgePath, generateBadgeSVG(score, seo.domainName!));
     } catch (_) { /* badge generation is optional */ }
 
     // Print CLI summary (use file:// URL for clickable path in terminal)
@@ -415,10 +416,10 @@ async function audit() {
 
     if (args.json) {
       // JSON mode: output machine-readable summary to stdout
-      const jsonSummary = getJsonSummary(seo.data, seo.domainName, clickableReportPath);
+      const jsonSummary = getJsonSummary(seo.data as any, seo.domainName!, clickableReportPath);
       console.log(JSON.stringify(jsonSummary, null, 2));
     } else {
-      printAuditSummary(seo.data, seo.domainName, clickableReportPath);
+      printAuditSummary(seo.data as any, seo.domainName!, clickableReportPath);
     }
 
     // CI mode: exit with code 1 if score is below threshold
@@ -449,15 +450,15 @@ async function audit() {
         req.write(slackPayload);
         req.end();
         console.log('Slack notification sent');
-      } catch (e: any) {
-        console.log(`Slack error: ${e.message}`);
+      } catch (e: unknown) {
+        console.log(`Slack error: ${(e as Error).message}`);
       }
     }
 
     // Send webhook notification if configured
     if (args.webhook) {
       try {
-        const jsonSummary = getJsonSummary(seo.data, seo.domainName, clickableReportPath);
+        const jsonSummary = getJsonSummary(seo.data as any, seo.domainName!, clickableReportPath);
         const payload = JSON.stringify(jsonSummary);
         const webhookUrl = new URL(args.webhook);
         const transport = webhookUrl.protocol === 'https:' ? https : http;
@@ -469,8 +470,8 @@ async function audit() {
         req.write(payload);
         req.end();
         console.log(`Webhook sent to ${args.webhook}`);
-      } catch (e: any) {
-        console.log(`Webhook error: ${e.message}`);
+      } catch (e: unknown) {
+        console.log(`Webhook error: ${(e as Error).message}`);
       }
     }
 
@@ -498,22 +499,23 @@ async function audit() {
         if (err) console.log('Could not auto-open report:', err.message);
       });
     }
-  } catch (error: any) {
-    console.error('\n❌ Audit failed: ' + error.message);
-    if (error.stack) console.error('\n' + error.stack);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('\n❌ Audit failed: ' + err.message);
+    if (err.stack) console.error('\n' + err.stack);
 
     // Provide actionable hints based on common errors
-    if (error.message.includes('ENOTFOUND') || error.message.includes('getaddrinfo')) {
+    if (err.message.includes('ENOTFOUND') || err.message.includes('getaddrinfo')) {
       console.error('\n💡 Hint: The domain could not be resolved. Check that the URL is correct and the site is online.');
-    } else if (error.message.includes('ECONNREFUSED')) {
+    } else if (err.message.includes('ECONNREFUSED')) {
       console.error('\n💡 Hint: Connection refused. The server may be down or blocking requests.');
-    } else if (error.message.includes('ETIMEDOUT') || error.message.includes('timeout')) {
+    } else if (err.message.includes('ETIMEDOUT') || err.message.includes('timeout')) {
       console.error('\n💡 Hint: Request timed out. Try increasing timeout with --config or reducing --concurrency.');
-    } else if (error.message.includes('ERR_CERT') || error.message.includes('certificate')) {
+    } else if (err.message.includes('ERR_CERT') || err.message.includes('certificate')) {
       console.error('\n💡 Hint: SSL certificate error. The site may have an expired or invalid certificate.');
-    } else if (error.message.includes('ENOMEM') || error.message.includes('heap')) {
+    } else if (err.message.includes('ENOMEM') || err.message.includes('heap')) {
       console.error('\n💡 Hint: Out of memory. Try reducing --concurrency or increasing --heap-size.');
-    } else if (error.message.includes('sitemap')) {
+    } else if (err.message.includes('sitemap')) {
       console.error('\n💡 Hint: Sitemap issue. Verify the sitemap URL in robots.txt or use --sitemap=<file>.');
     }
 

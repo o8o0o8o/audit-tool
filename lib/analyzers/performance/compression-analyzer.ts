@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 // File types that should be compressed
 const COMPRESSIBLE_TYPES = [
@@ -36,7 +36,7 @@ class CompressionAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -45,7 +45,7 @@ class CompressionAnalyzer {
       uncompressedResources: 0,
       potentialSavings: 0,
       compressionTypes: { gzip: 0, br: 0, deflate: 0, none: 0 },
-      resources: [] as any[],
+      resources: [] as Record<string, any>[],
     };
 
     // Check HTML compression
@@ -136,7 +136,7 @@ class CompressionAnalyzer {
    * @param {object} resource - Resource data
    * @returns {object} Resource analysis
    */
-  static analyzeResource(resource: any) {
+  static analyzeResource(resource: Record<string, any>) {
     const url = resource.url || '';
     const contentType = resource.contentType || resource.mimeType || '';
     const encoding = resource.contentEncoding || '';
@@ -199,7 +199,7 @@ class CompressionAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {
@@ -211,7 +211,7 @@ class CompressionAnalyzer {
       compressionTypes: { gzip: 0, br: 0, deflate: 0, none: 0 },
     };
 
-    const uncompressedPages: any[] = [];
+    const uncompressedPages: Record<string, any>[] = [];
 
     for (const [url, pageData] of Object.entries(pages)) {
       const htmlEncoding = pageData.contentEncoding || pageData.headers?.['content-encoding'];

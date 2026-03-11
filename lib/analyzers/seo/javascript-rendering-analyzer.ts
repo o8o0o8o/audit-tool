@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class JavaScriptRenderingAnalyzer {
   /**
@@ -13,7 +13,7 @@ class JavaScriptRenderingAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -223,7 +223,7 @@ class JavaScriptRenderingAnalyzer {
    * @param {object} pageData - Page data
    * @returns {string|null}
    */
-  static detectFramework(html: string, pageData: any) {
+  static detectFramework(html: string, pageData: PageInfo) {
     // Check for framework markers
     if (html.includes('__NEXT_DATA__') || html.includes('_next/static')) {
       return 'Next.js';
@@ -342,7 +342,7 @@ class JavaScriptRenderingAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

@@ -8,6 +8,25 @@ import * as path from 'path';
 import * as zlib from 'zlib';
 import { CRAWL_SETTINGS } from '../constants';
 import { generateTimestamp } from '../utils';
+import type { PageInfo } from '../types';
+
+interface FileManagerOptions {
+  batchSize?: number;
+}
+
+interface SizeStats {
+  uncompressedSizeMB: number;
+  compressedSizeMB: number;
+  compressionRatio: string;
+}
+
+interface BatchWriteResult {
+  file: string;
+  batchIndex: number;
+  count: number;
+  urls: string[];
+  stats: SizeStats;
+}
 
 class FileManager {
   domainName: string;
@@ -36,7 +55,7 @@ class FileManager {
    * @param {Object} options - Optional configuration
    * @param {number} options.batchSize - Pages per batch file (default from CRAWL_SETTINGS)
    */
-  constructor(domainName: string, resultsDir = 'audit-results', timestamp: string | null = null, options: any = {}) {
+  constructor(domainName: string, resultsDir = 'audit-results', timestamp: string | null = null, options: FileManagerOptions = {}) {
     this.domainName = domainName;
     this.baseResultsDir = resultsDir;
     this.archivePartNumber = 0;
@@ -124,8 +143,8 @@ class FileManager {
     let fileContent;
     try {
       fileContent = fs.readFileSync(actualPath);
-    } catch (readError: any) {
-      throw new Error(`Failed to read file "${actualPath}": ${readError.message}`);
+    } catch (readError: unknown) {
+      throw new Error(`Failed to read file "${actualPath}": ${(readError as Error).message}`);
     }
 
     // Validate file is not empty
@@ -138,8 +157,8 @@ class FileManager {
         let decompressed;
         try {
           decompressed = zlib.gunzipSync(fileContent);
-        } catch (decompressError: any) {
-          throw new Error(`Failed to decompress gzip file "${actualPath}": ${decompressError.message}. File may be corrupted or not gzip compressed.`);
+        } catch (decompressError: unknown) {
+          throw new Error(`Failed to decompress gzip file "${actualPath}": ${(decompressError as Error).message}. File may be corrupted or not gzip compressed.`);
         }
 
         if (!decompressed || decompressed.length === 0) {
@@ -148,26 +167,26 @@ class FileManager {
 
         try {
           return JSON.parse(decompressed.toString('utf-8'));
-        } catch (jsonError: any) {
+        } catch (jsonError: unknown) {
           // Provide helpful context about where parsing failed
           const preview = decompressed.toString('utf-8').substring(0, 100);
-          throw new Error(`Failed to parse JSON from "${actualPath}" after decompression: ${jsonError.message}. Content preview: "${preview}..."`);
+          throw new Error(`Failed to parse JSON from "${actualPath}" after decompression: ${(jsonError as Error).message}. Content preview: "${preview}..."`);
         }
       } else {
         try {
           return JSON.parse(fileContent.toString('utf-8'));
-        } catch (jsonError: any) {
+        } catch (jsonError: unknown) {
           const preview = fileContent.toString('utf-8').substring(0, 100);
-          throw new Error(`Failed to parse JSON from "${actualPath}": ${jsonError.message}. Content preview: "${preview}..."`);
+          throw new Error(`Failed to parse JSON from "${actualPath}": ${(jsonError as Error).message}. Content preview: "${preview}..."`);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Re-throw errors that already have context
-      if (error.message.includes(actualPath)) {
+      if ((error as Error).message.includes(actualPath!)) {
         throw error;
       }
       // Add context to unexpected errors
-      throw new Error(`Error processing file "${actualPath}": ${error.message}`);
+      throw new Error(`Error processing file "${actualPath}": ${(error as Error).message}`);
     }
   }
 
@@ -177,7 +196,7 @@ class FileManager {
    * @param {object} data - Data to write
    * @returns {object} Size statistics
    */
-  writeJsonFile(filePath: string, data: any) {
+  writeJsonFile(filePath: string, data: unknown): SizeStats {
     const jsonString = JSON.stringify(data);
     const compressedData = zlib.gzipSync(jsonString);
 
@@ -199,7 +218,7 @@ class FileManager {
    * @param {object} pagesToArchive - Pages to archive
    * @returns {string} Archive file path
    */
-  archiveProcessedPages(pagesToArchive: Record<string, any>) {
+  archiveProcessedPages(pagesToArchive: Record<string, PageInfo>) {
     this.archivePartNumber++;
     const archiveFile = path.join(
       this.resultsDir,
@@ -225,8 +244,8 @@ class FileManager {
    * @param {number} lastArchivePart - Number of archive parts to load
    * @returns {object} Merged pages from all archives
    */
-  loadArchives(lastArchivePart: number) {
-    const mergedPages = {};
+  loadArchives(lastArchivePart: number): Record<string, PageInfo> {
+    const mergedPages: Record<string, PageInfo> = {};
 
     if (!lastArchivePart || lastArchivePart === 0) {
       return mergedPages;
@@ -246,8 +265,8 @@ class FileManager {
 
         Object.assign(mergedPages, archiveData.pages);
         console.log(`    Loaded ${Object.keys(archiveData.pages).length} pages from archive part ${i}`);
-      } catch (error: any) {
-        console.warn(`  ⚠️  Could not load archive part ${i}: ${error.message}`);
+      } catch (error: unknown) {
+        console.warn(`  ⚠️  Could not load archive part ${i}: ${(error as Error).message}`);
       }
     }
 
@@ -371,7 +390,7 @@ class FileManager {
    * @param {object} data - Manifest data
    * @returns {object} Size statistics
    */
-  writeManifest(data: any) {
+  writeManifest(data: unknown): SizeStats {
     return this.writeJsonFile(this.manifestFile, data);
   }
 
@@ -396,7 +415,7 @@ class FileManager {
    * @param {object} data - Metadata
    * @returns {object} Size statistics
    */
-  writeMetadata(data: any) {
+  writeMetadata(data: unknown): SizeStats {
     return this.writeJsonFile(this.metadataFile, data);
   }
 
@@ -413,7 +432,7 @@ class FileManager {
    * @param {object} data - Analysis data
    * @returns {object} Size statistics
    */
-  writeAnalysis(data: any) {
+  writeAnalysis(data: unknown): SizeStats {
     return this.writeJsonFile(this.analysisFile, data);
   }
 
@@ -430,7 +449,7 @@ class FileManager {
    * @param {object} data - Incoming links data
    * @returns {object} Size statistics
    */
-  writeIncomingLinks(data: any) {
+  writeIncomingLinks(data: unknown): SizeStats {
     return this.writeJsonFile(this.incomingLinksFile, data);
   }
 
@@ -442,7 +461,7 @@ class FileManager {
     return this.readJsonFile(this.incomingLinksFile);
   }
 
-  writeRepoAnalysis(data: any) {
+  writeRepoAnalysis(data: unknown): SizeStats {
     return this.writeJsonFile(this.repoAnalysisFile, data);
   }
 
@@ -456,7 +475,7 @@ class FileManager {
    * @param {object} pages - Pages object { url: pageData }
    * @returns {object} Batch info with file path and stats
    */
-  writeBatch(batchNum: number, pages: Record<string, any>) {
+  writeBatch(batchNum: number, pages: Record<string, PageInfo>): BatchWriteResult {
     this.ensurePagesDir();
 
     const batchFileName = `batch_${String(batchNum).padStart(4, '0')}.json.gz`;

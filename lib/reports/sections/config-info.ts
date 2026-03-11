@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml, makeUrlClickable } from '../html-utils';
+import type { PageInfo, ReportSectionData } from '../../types';
 
 /**
  * Generate the configuration info section
@@ -12,7 +13,7 @@ import { escapeHtml, makeUrlClickable } from '../html-utils';
  * @param {Array} data.pages - Array of page data
  * @returns {string} HTML string for the config info section
  */
-function getConfigInfo(data: any) {
+function getConfigInfo(data: ReportSectionData) {
   const { jsonData, pages } = data;
 
   return `
@@ -33,11 +34,13 @@ function getConfigInfo(data: any) {
 /**
  * Generate the robots.txt info card
  */
-function getRobotsCard(jsonData: any) {
-  const robots = jsonData.robots || {};
-  const robotsSitemaps = robots.sitemaps || [];
-  const userAgents = robots['user-agent'] || {};
-  const hasRobotsErrors = jsonData.analysis?.overall?.some((err: any) =>
+function getRobotsCard(jsonData: Record<string, unknown>) {
+  const robots = (jsonData.robots || {}) as Record<string, unknown>;
+  const robotsSitemaps = (robots.sitemaps || []) as unknown[];
+  const userAgents = (robots['user-agent'] || {}) as Record<string, unknown>;
+  const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
+  const overallIssues = (analysis.overall || []) as unknown[];
+  const hasRobotsErrors = overallIssues.some((err: unknown) =>
     err && typeof err === 'string' && err.toLowerCase().includes('robots')
   ) || false;
 
@@ -45,7 +48,7 @@ function getRobotsCard(jsonData: any) {
   let robotsStatusText = 'Found';
 
   if (hasRobotsErrors) {
-    const errors = Array.from(jsonData.analysis?.overall || []).filter((err: any) =>
+    const errors = Array.from(overallIssues).filter((err: unknown) =>
       err && typeof err === 'string' && err.toLowerCase().includes('robots')
     ) as string[];
     if (errors.some((e: string) => e.includes('Error fetching'))) {
@@ -59,7 +62,7 @@ function getRobotsCard(jsonData: any) {
 
   const sitemapsList = robotsSitemaps.length > 0 ? `
     <ul>
-      ${robotsSitemaps.slice(0, 3).map((sm: any) => `<li>${escapeHtml(sm)}</li>`).join('')}
+      ${robotsSitemaps.slice(0, 3).map((sm: unknown) => `<li>${escapeHtml(sm)}</li>`).join('')}
       ${robotsSitemaps.length > 3 ? `<li>... and ${robotsSitemaps.length - 3} more</li>` : ''}
     </ul>
   ` : '<p style="color: #f59e0b;">⚠ No sitemaps listed in robots.txt</p>';
@@ -78,16 +81,18 @@ function getRobotsCard(jsonData: any) {
 /**
  * Generate the sitemaps info card
  */
-function getSitemapsCard(jsonData: any) {
-  const sitemaps = jsonData.sitemaps || {};
-  const totalUrls = sitemaps.total || 0;
+function getSitemapsCard(jsonData: Record<string, unknown>) {
+  const sitemaps = (jsonData.sitemaps || {}) as Record<string, unknown>;
+  const totalUrls = (sitemaps.total || 0) as number;
 
   // Get list of individual sitemaps (not the aggregated data)
   const individualSitemaps = Object.keys(sitemaps).filter(key =>
     key !== 'urls' && key !== 'total' && typeof sitemaps[key] === 'object'
   );
 
-  const hasSitemapErrors = jsonData.analysis?.overall?.some((err: any) =>
+  const analysisData = (jsonData.analysis || {}) as Record<string, unknown>;
+  const overallIssues = (analysisData.overall || []) as unknown[];
+  const hasSitemapErrors = overallIssues.some((err: unknown) =>
     err && typeof err === 'string' && err.toLowerCase().includes('sitemap')
   ) || false;
 
@@ -96,7 +101,7 @@ function getSitemapsCard(jsonData: any) {
   const sitemapsList = individualSitemaps.length > 0 ? `
     <ul>
       ${individualSitemaps.slice(0, 3).map(sm => {
-        const smData = sitemaps[sm];
+        const smData = (sitemaps[sm] || {}) as Record<string, unknown>;
         return `<li>${escapeHtml(sm)} <span style="color: #9ca3af;">(${smData.total || 0} URLs)</span></li>`;
       }).join('')}
       ${individualSitemaps.length > 3 ? `<li>... and ${individualSitemaps.length - 3} more</li>` : ''}
@@ -121,36 +126,23 @@ function getSitemapsCard(jsonData: any) {
 /**
  * Generate the related issues card
  */
-function getIssuesCard(jsonData: any) {
-  const analysis = jsonData.analysis || {};
-  const bySeverity = analysis.bySeverity || {};
+function getIssuesCard(jsonData: Record<string, unknown>) {
+  const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
+  const bySeverity = (analysis.bySeverity || {}) as Record<string, unknown[]>;
 
   // Filter for robots.txt and sitemap related issues
+  const filterRobotsSitemap = (issues: unknown[]) =>
+    issues.filter((issue: unknown): issue is string =>
+      typeof issue === 'string' && (
+        issue.toLowerCase().includes('robots') ||
+        issue.toLowerCase().includes('sitemap')
+      )
+    );
   const robotsSitemapIssues = {
-    critical: (bySeverity.critical || []).filter((issue: any) =>
-      issue && typeof issue === 'string' && (
-        issue.toLowerCase().includes('robots') ||
-        issue.toLowerCase().includes('sitemap')
-      )
-    ),
-    high: (bySeverity.high || []).filter((issue: any) =>
-      issue && typeof issue === 'string' && (
-        issue.toLowerCase().includes('robots') ||
-        issue.toLowerCase().includes('sitemap')
-      )
-    ),
-    medium: (bySeverity.medium || []).filter((issue: any) =>
-      issue && typeof issue === 'string' && (
-        issue.toLowerCase().includes('robots') ||
-        issue.toLowerCase().includes('sitemap')
-      )
-    ),
-    low: (bySeverity.low || []).filter((issue: any) =>
-      issue && typeof issue === 'string' && (
-        issue.toLowerCase().includes('robots') ||
-        issue.toLowerCase().includes('sitemap')
-      )
-    ),
+    critical: filterRobotsSitemap(bySeverity.critical || []),
+    high: filterRobotsSitemap(bySeverity.high || []),
+    medium: filterRobotsSitemap(bySeverity.medium || []),
+    low: filterRobotsSitemap(bySeverity.low || []),
   };
 
   const totalRobotsSitemapIssues =
@@ -207,8 +199,9 @@ function getIssuesCard(jsonData: any) {
 /**
  * Generate the crawl coverage card
  */
-function getCoverageCard(jsonData: any, pages: any[]) {
-  const sitemapTotal = jsonData.sitemaps?.total || 0;
+function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
+  const sitemapData = (jsonData.sitemaps || {}) as Record<string, unknown>;
+  const sitemapTotal = (sitemapData.total || 0) as number;
   const pagesCrawled = pages.length;
   const notCrawled = sitemapTotal - pagesCrawled;
 
@@ -227,7 +220,7 @@ function getCoverageCard(jsonData: any, pages: any[]) {
   const cardClass = notCrawled > (sitemapTotal * 0.1) ? 'error' : 'warning';
 
   // Find URLs in sitemap but not in crawled pages
-  const sitemapUrls = new Set(Object.keys(jsonData.sitemaps?.urls || {}));
+  const sitemapUrls = new Set(Object.keys((sitemapData.urls || {}) as Record<string, unknown>));
   const crawledUrls = new Set(pages.map(p => p.url));
   const missingUrls = Array.from(sitemapUrls).filter(url => !crawledUrls.has(url));
   const showUrls = missingUrls.slice(0, 10);
@@ -263,13 +256,13 @@ function getCoverageCard(jsonData: any, pages: any[]) {
 /**
  * Generate the audit configuration card
  */
-function getAuditConfigCard(jsonData: any) {
-  const timing = jsonData.timing || {};
-  const phases = timing.phases || [];
+function getAuditConfigCard(jsonData: Record<string, unknown>) {
+  const timing = (jsonData.timing || {}) as Record<string, unknown>;
+  const phases = (timing.phases || []) as Array<Record<string, unknown>>;
 
   if (phases.length === 0 && !timing.elapsedTimeFormatted) return '';
 
-  const phaseRows = phases.map((p: any) =>
+  const phaseRows = phases.map((p: Record<string, unknown>) =>
     `<div class="perf-budget-row" data-phase-ms="${p.durationMs || 0}">
       <span class="perf-budget-label">${escapeHtml(p.name)}</span>
       <span class="perf-budget-value">${escapeHtml(p.duration)}</span>
@@ -290,9 +283,9 @@ function getAuditConfigCard(jsonData: any) {
 /**
  * Generate analysis configuration card
  */
-function getAnalysisConfigCard(jsonData: any) {
-  const config = jsonData.config || {};
-  const analysis = config.analysis || {};
+function getAnalysisConfigCard(jsonData: Record<string, unknown>) {
+  const config = (jsonData.config || {}) as Record<string, unknown>;
+  const analysis = (config.analysis || {}) as Record<string, unknown>;
   const flags = [];
 
   if (config.perf) flags.push('Performance metrics');

@@ -1,3 +1,4 @@
+import type { PageInfo } from '../../types';
 import { SEVERITY } from '../../constants';
 
 /**
@@ -28,7 +29,7 @@ class PageSegmentAnalyzer {
    * @param {Object} allPages - Object containing all page data { url: pageData }
    * @returns {Object} { segments: {}, issues: [], stats: {} }
    */
-  static analyzeSegments(allPages: Record<string, any>) {
+  static analyzeSegments(allPages: Record<string, PageInfo>) {
     console.log('\nAnalyzing page segments...');
 
     const segments: Record<string, any> = {};
@@ -176,7 +177,7 @@ class PageSegmentAnalyzer {
    * @param {Object} page - Page data
    * @returns {number} Number of issues
    */
-  static countPageIssues(page: any) {
+  static countPageIssues(page: PageInfo) {
     let count = 0;
 
     // Count from various sources
@@ -196,7 +197,7 @@ class PageSegmentAnalyzer {
   static findLargestSegment(segments: Record<string, any>) {
     let largest = { type: 'other', label: 'Other', count: 0 };
 
-    Object.values(segments).forEach((segment: any) => {
+    Object.values(segments).forEach((segment: Record<string, any>) => {
       if (segment.count > largest.count) {
         largest = { type: segment.type, label: segment.label, count: segment.count };
       }
@@ -231,8 +232,8 @@ class PageSegmentAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Array} Issues array
    */
-  static generateSegmentIssues(segments: Record<string, any>, allPages: Record<string, any>) {
-    const issues: any[] = [];
+  static generateSegmentIssues(segments: Record<string, any>, allPages: Record<string, PageInfo>) {
+    const issues: Record<string, any>[] = [];
     const totalPages = Object.keys(allPages).length;
 
     // Issue 1: Search pages being indexed (potential duplicate content)
@@ -249,7 +250,7 @@ class PageSegmentAnalyzer {
     }
 
     // Issue 2: Thin content in specific segments
-    Object.values(segments).forEach((segment: any) => {
+    Object.values(segments).forEach((segment: Record<string, any>) => {
       if (segment.count > 5 && segment.avgWordCount < 100 && segment.type !== 'search' && segment.type !== 'api' && segment.type !== 'account' && segment.type !== 'checkout') {
         issues.push({
           message: `${segment.label} have thin content`,
@@ -261,7 +262,7 @@ class PageSegmentAnalyzer {
     });
 
     // Issue 3: High error rate in segment
-    Object.values(segments).forEach((segment: any) => {
+    Object.values(segments).forEach((segment: Record<string, any>) => {
       const errorRate = segment.count > 0
         ? ((segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']) / segment.count) * 100
         : 0;

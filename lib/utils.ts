@@ -140,7 +140,7 @@ function validateUrl(urlString: string): string {
     throw new Error(coreResult.error);
   }
 
-  const url: URL = coreResult.url;
+  const url: URL = coreResult.url!;
   const hostname = url.hostname;
 
   if (hostname.length === 0 || hostname.length > 253) {

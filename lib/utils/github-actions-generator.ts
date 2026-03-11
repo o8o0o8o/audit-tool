@@ -3,7 +3,13 @@
  * Generates a CI/CD workflow for automated SEO audits
  */
 
-function generateWorkflow(origin: string, options: any = {}) {
+interface WorkflowOptions {
+  schedule?: string;
+  threshold?: number;
+  nodeVersion?: string;
+}
+
+function generateWorkflow(origin: string, options: WorkflowOptions = {}) {
   const schedule = options.schedule || '0 6 * * 1'; // Default: Monday 6am
   const threshold = options.threshold || 70;
   const nodeVersion = options.nodeVersion || '18';

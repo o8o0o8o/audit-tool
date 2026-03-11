@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 // Default viewport dimensions (mobile-first)
 const DEFAULT_VIEWPORT = {
@@ -19,19 +19,19 @@ class AboveFoldAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
       viewport: pageData.viewport || DEFAULT_VIEWPORT,
       hasContentAboveFold: false,
       aboveFoldElements: {
-        headings: [] as any[],
-        images: [] as any[],
-        text: [] as any[],
-        cta: [] as any[],
+        headings: [] as Record<string, any>[],
+        images: [] as Record<string, any>[],
+        text: [] as Record<string, any>[],
+        cta: [] as Record<string, any>[],
       },
-      criticalResources: [] as any[],
+      criticalResources: [] as Record<string, any>[],
       lcpInViewport: false,
       renderBlockingResources: 0,
       aboveFoldImageSize: 0,
@@ -55,7 +55,7 @@ class AboveFoldAnalyzer {
     }
 
     // Analyze above-fold images
-    const images = pageData.images || [];
+    const images = (pageData.images as Record<string, any>[] | undefined) || [];
     let aboveFoldImageCount = 0;
     let lazyLoadedAboveFold = 0;
 
@@ -105,7 +105,7 @@ class AboveFoldAnalyzer {
     // Analyze headings presence
     // Note: headings structure is {h1: ["text", ...], h2: [...], ...} from HeadingAnalyzer
     // We don't have bounding rect data, so we can only note their existence
-    const headings = pageData.headings || {};
+    const headings = pageData.headings || ({} as Record<string, any>);
     const hasH1 = headings.h1 && headings.h1.length > 0;
 
     if (hasH1) {
@@ -189,7 +189,7 @@ class AboveFoldAnalyzer {
    * @param {object} viewport - Viewport dimensions
    * @returns {boolean}
    */
-  static isInViewport(rect: any, viewport: any) {
+  static isInViewport(rect: {top: number; bottom: number; left: number; right: number}, viewport: {width: number; height: number}) {
     if (!rect) return false;
 
     // Element is in viewport if any part of it is visible
@@ -217,7 +217,7 @@ class AboveFoldAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

@@ -15,6 +15,7 @@ import {
   getMetricTooltip,
   getTextLengthTooltip,
 } from '../html-utils';
+import type { PageInfo, ReportSectionData, HeadingCount, AccessibilityAnalysis, ContentQualityAnalysis } from '../../types';
 
 /**
  * Get column header with description tooltip from METRIC_INFO
@@ -45,8 +46,8 @@ function getColumnHeader(signalKey: string, displayName: string | null = null, t
  * @param {boolean} data.hasPerformanceMetrics - Whether performance metrics are available
  * @returns {string} HTML string for the pages table
  */
-function getPagesTable(data: any) {
-  const { pages, hasPerformanceMetrics } = data;
+function getPagesTable(data: ReportSectionData) {
+  const { pages, hasPerformanceMetrics = false } = data;
 
   return `
     <div class="table-filters" style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
@@ -87,7 +88,7 @@ function getPagesTable(data: any) {
                 ${getTableHeader(hasPerformanceMetrics)}
             </thead>
             <tbody>
-                ${pages.map((page: any, index: number) => getTableRow(page, index, hasPerformanceMetrics)).join('')}
+                ${pages.map((page: PageInfo, index: number) => getTableRow(page, index, hasPerformanceMetrics)).join('')}
             </tbody>
         </table>
     </div>
@@ -265,7 +266,7 @@ function getTableHeader(hasPerformanceMetrics: boolean) {
 /**
  * Generate a single table row for a page
  */
-function getTableRow(page: any, index: number, hasPerformanceMetrics: boolean) {
+function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boolean) {
   const titleLength = page.title?.length || 0;
   const descLength = page.description?.length || 0;
   const titleColor = getTextLengthColor(titleLength, THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX);
@@ -275,14 +276,14 @@ function getTableRow(page: any, index: number, hasPerformanceMetrics: boolean) {
 
   // Handle both old array format and new object format
   const h1Count = Array.isArray(page.headings)
-    ? (page.headings.filter((h: any) => h.tag === 'h1')[0]?.count || 0)
+    ? (page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count || 0)
     : (page.headings?.h1?.length || 0);
   const h2Count = Array.isArray(page.headings)
-    ? (page.headings.filter((h: any) => h.tag === 'h2')[0]?.count || 0)
+    ? (page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count || 0)
     : (page.headings?.h2?.length || 0);
 
   // Convert object format to array format for structure check
-  const headingsArray: any[] | null = Array.isArray(page.headings)
+  const headingsArray: HeadingCount[] | null = Array.isArray(page.headings)
     ? page.headings
     : page.headings ? [
         { tag: 'h1', count: page.headings.h1?.length || page.headings.h1Count || 0 },
@@ -295,7 +296,7 @@ function getTableRow(page: any, index: number, hasPerformanceMetrics: boolean) {
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!)
   const missingMeta = getMissingMetaTags(page);
   const alternatesCount = page.alternates?.length || 0;
-  const linksWithoutText = page.links?.filter((link: any) => !link.text || link.text.trim() === '').length || 0;
+  const linksWithoutText = page.links?.filter((link: { text?: string }) => !link.text || link.text.trim() === '').length || 0;
 
   // Security metrics
   const securityScore = page.security?.securityScore ?? null;
@@ -316,7 +317,7 @@ function getTableRow(page: any, index: number, hasPerformanceMetrics: boolean) {
   const cachingTooltip = buildCachingTooltip(page, cacheScore, hasCDN, cdnProvider, cachedStatic, uncachedStatic, hasServiceWorker);
 
   // Keywords for filtering
-  const keywords = (page.contentQuality?.topKeywords || []).map((k: any) => k.word.toLowerCase()).join(',');
+  const keywords = (page.contentQuality?.topKeywords || []).map((k: { word: string }) => k.word.toLowerCase()).join(',');
   const titleWords = (page.title || '').toLowerCase();
 
   return `
@@ -340,13 +341,13 @@ function getTableRow(page: any, index: number, hasPerformanceMetrics: boolean) {
             title="${page.incomingLinksCount > 0 ? 'Click to see ' + page.incomingLinksCount + ' incoming link(s)' : 'No incoming links - page is orphaned (only accessible via sitemap)'}">
             ${page.incomingLinksCount || 0}${page.incomingLinksCount > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.length || 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : (page.urlAnalysis?.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal')}">
+        <td style="color: ${getMetricColor(page.urlAnalysis?.length || 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : (page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal')}">
             ${page.urlAnalysis?.length || 0}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.depth || 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
+        <td style="color: ${getMetricColor(page.urlAnalysis?.depth || 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
             ${page.urlAnalysis?.depth || 0}
         </td>
-        <td style="color: ${page.redirectCount > 2 ? '#ef4444' : (page.redirectCount > 0 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="${page.redirectCount > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + page.redirectChain.map((r: any) => r.url).join(' → ') : '') : 'Good: No redirects'}">
+        <td style="color: ${page.redirectCount > 2 ? '#ef4444' : (page.redirectCount > 0 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="${page.redirectCount > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
             ${page.redirectCount || 0}
         </td>
         <td style="color: ${page.httpLinksCount > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${page.httpLinksCount > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
@@ -458,7 +459,7 @@ function getTableRow(page: any, index: number, hasPerformanceMetrics: boolean) {
 /**
  * Build the security tooltip
  */
-function buildSecurityTooltip(page: any, securityScore: number | null, missingSecHeaders: number, mixedContent: number, insecureCookies: number, formsWithoutCSRF: number, inlineScripts: number) {
+function buildSecurityTooltip(page: PageInfo, securityScore: number | null, missingSecHeaders: number, mixedContent: number, insecureCookies: number, formsWithoutCSRF: number, inlineScripts: number) {
   if (securityScore === null) {
     return 'Security analysis not available';
   }
@@ -512,7 +513,7 @@ function buildSecurityTooltip(page: any, securityScore: number | null, missingSe
 /**
  * Build the caching tooltip
  */
-function buildCachingTooltip(page: any, cacheScore: number | null, hasCDN: boolean, cdnProvider: string | null, cachedStatic: number, uncachedStatic: number, hasServiceWorker: boolean) {
+function buildCachingTooltip(page: PageInfo, cacheScore: number | null, hasCDN: boolean, cdnProvider: string | null, cachedStatic: number, uncachedStatic: number, hasServiceWorker: boolean) {
   if (cacheScore === null) {
     return 'Caching analysis not available';
   }
@@ -585,7 +586,7 @@ function buildCachingTooltip(page: any, cacheScore: number | null, hasCDN: boole
 /**
  * Generate image optimization cells
  */
-function getImageOptimizationCells(page: any) {
+function getImageOptimizationCells(page: PageInfo) {
   const imgOpt = page.imageOptimization || {};
   const resOpt = page.resourceOptimization || {};
 
@@ -627,8 +628,8 @@ function getImageOptimizationCells(page: any) {
 /**
  * Generate accessibility cells
  */
-function getAccessibilityCells(page: any) {
-  const a11y = page.accessibility || {};
+function getAccessibilityCells(page: PageInfo) {
+  const a11y = page.accessibility ?? ({} as AccessibilityAnalysis);
 
   const a11yScore = a11y.a11yScore ?? 'N/A';
   const ariaValid = a11y.aria?.valid || 0;
@@ -712,15 +713,15 @@ function getSegmentLabel(segment: string) {
 /**
  * Generate content quality cells
  */
-function getContentQualityCells(page: any) {
-  const content = page.contentQuality || {};
+function getContentQualityCells(page: PageInfo) {
+  const content = page.contentQuality ?? ({} as ContentQualityAnalysis);
 
   const contentScore = content.contentScore ?? 'N/A';
   const wordCount = content.wordCount || 0;
   const textToHtmlRatio = content.textToHtmlRatio || 0;
   const readability = content.readabilityScore || 0;
   const topKeywords = content.topKeywords || [];
-  const topKeywordsStr = topKeywords.slice(0, 3).map((k: any) => `${k.word}(${k.density}%)`).join(', ');
+  const topKeywordsStr = topKeywords.slice(0, 3).map((k: { word: string; density: number }) => `${k.word}(${k.density}%)`).join(', ');
 
   return `
     <td style="color: ${contentScore >= 70 ? '#10b981' : (contentScore >= 50 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="Content Quality Score: ${contentScore}/100">
@@ -735,7 +736,7 @@ function getContentQualityCells(page: any) {
     <td style="color: ${readability >= 60 ? '#10b981' : (readability >= 50 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="Flesch Reading Ease: ${readability}/100 (60-70 is standard)">
         ${readability}
     </td>
-    <td style="font-size: 11px; text-align: left;" title="Top keywords: ${topKeywords.map((k: any) => `${k.word}: ${k.count} times (${k.density}%)`).join(', ')}">
+    <td style="font-size: 11px; text-align: left;" title="Top keywords: ${topKeywords.map((k: { word: string; count: number; density: number }) => `${k.word}: ${k.count} times (${k.density}%)`).join(', ')}">
         ${topKeywordsStr || '—'}
     </td>
     ${getNewInsightCells(page)}
@@ -745,7 +746,7 @@ function getContentQualityCells(page: any) {
 /**
  * Generate table cells for new insight data (Phase 1-3 features)
  */
-function getNewInsightCells(page: any) {
+function getNewInsightCells(page: PageInfo) {
   // Language
   const lang = page.languageDetection;
   const langDisplay = lang?.detectedLanguage?.toUpperCase() || '—';

@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ChromePage, ParsedPage, Issue } from '../../types';
+import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class PaginationAnalyzer {
   /**
@@ -26,12 +26,12 @@ class PaginationAnalyzer {
       relNext: null as string | null,
       hasCanonical: false,
       canonicalPointsToSelf: false,
-      paginationLinks: [] as any[],
+      paginationLinks: [] as Record<string, any>[],
       currentPage: null as number | null,
       totalPages: null as number | null,
       infiniteScrollDetected: false,
       loadMoreDetected: false,
-      issues: [] as any[],
+      issues: [] as Record<string, any>[],
     };
 
     // 1. Check for rel="prev" and rel="next" (deprecated but still used)
@@ -200,10 +200,10 @@ class PaginationAnalyzer {
       return await chromePage.evaluate(() => {
         const result = {
           detected: false,
-          type: null,
-          links: [],
-          currentPage: null,
-          totalPages: null,
+          type: null as string | null,
+          links: [] as Record<string, any>[],
+          currentPage: null as number | null,
+          totalPages: null as number | null,
         };
 
         // Common pagination selectors
@@ -242,7 +242,7 @@ class PaginationAnalyzer {
 
           if (!isNaN(pageNum)) {
             pageNumbers.push(pageNum);
-            (result.links as any[]).push({ page: pageNum, href });
+            (result.links as Record<string, any>[]).push({ page: pageNum, href });
           }
         }
 
@@ -266,7 +266,7 @@ class PaginationAnalyzer {
         return result;
       });
     } catch (e) {
-      return { detected: false, type: null, links: [] as any[], currentPage: null, totalPages: null };
+      return { detected: false, type: null, links: [] as Record<string, any>[], currentPage: null, totalPages: null };
     }
   }
 
@@ -393,7 +393,7 @@ class PaginationAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

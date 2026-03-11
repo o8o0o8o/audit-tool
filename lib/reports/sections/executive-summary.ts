@@ -4,6 +4,7 @@
  */
 
 import { CATEGORY_CONFIG } from '../metrics-metadata';
+import type { PageInfo, ReportSectionData, CategoryScores } from '../../types';
 
 /**
  * Generate the executive summary section
@@ -11,11 +12,12 @@ import { CATEGORY_CONFIG } from '../metrics-metadata';
  * @param {Object} data.jsonData - Full audit JSON data
  * @returns {string} HTML string for the executive summary section
  */
-function getExecutiveSummary(data: any) {
+function getExecutiveSummary(data: ReportSectionData) {
   const { jsonData } = data;
-  const summary = jsonData.analysis?.summary || {};
-  const overallScore = summary.overallScore || 0;
-  const categoryScores = summary.categoryScores || {};
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const summary = (analysisObj.summary || {}) as Record<string, unknown>;
+  const overallScore = (summary.overallScore || 0) as number;
+  const categoryScores = (summary.categoryScores || {}) as Record<string, number>;
 
   // Determine score color and letter grade
   let scoreClass = 'bad';
@@ -51,12 +53,12 @@ function getExecutiveSummary(data: any) {
         <div class="summary-card">
           <div class="summary-card-value" style="color: #fca5a5;">${summary.criticalCount || 0}</div>
           <div class="summary-card-label">Critical</div>
-          ${(summary.criticalCount || 0) > 0 ? '<div class="summary-card-hint">Fix immediately</div>' : ''}
+          ${(summary.criticalCount as number || 0) > 0 ? '<div class="summary-card-hint">Fix immediately</div>' : ''}
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: #fdba74;">${summary.highCount || 0}</div>
           <div class="summary-card-label">High</div>
-          ${(summary.highCount || 0) > 0 ? '<div class="summary-card-hint">Fix this week</div>' : ''}
+          ${(summary.highCount as number || 0) > 0 ? '<div class="summary-card-hint">Fix this week</div>' : ''}
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: #fde047;">${summary.mediumCount || 0}</div>
@@ -72,9 +74,9 @@ function getExecutiveSummary(data: any) {
         </div>
       </div>
 
-      ${(summary.criticalCount || 0) + (summary.highCount || 0) > 0 ? (() => {
+      ${((summary.criticalCount as number || 0) + (summary.highCount as number || 0)) > 0 ? (() => {
         // Estimate score gain based on category headroom (categories farthest from 100 gain most)
-        const cats = summary.categoryScores || {};
+        const cats = (summary.categoryScores || {}) as Record<string, number>;
         const weights = { seo: 0.30, performance: 0.25, technical: 0.20, accessibility: 0.15, security: 0.10 };
         let potentialGain = 0;
         for (const [cat, w] of Object.entries(weights)) {
@@ -101,36 +103,37 @@ function getExecutiveSummary(data: any) {
 /**
  * Generate insight highlight badges for executive summary
  */
-function getInsightHighlights(jsonData: any) {
-  const pages = Object.values(jsonData.pageData?.pages || {}) as any[];
+function getInsightHighlights(jsonData: Record<string, unknown>) {
+  const pageData = jsonData.pageData as Record<string, unknown> | undefined;
+  const pages = Object.values((pageData?.pages as Record<string, PageInfo>) || {});
   if (pages.length === 0) return '';
 
   const badges: string[] = [];
 
-  const langMismatches = pages.filter((p: any) => p.languageDetection?.match === false).length;
+  const langMismatches = pages.filter((p: PageInfo) => p.languageDetection?.match === false).length;
   if (langMismatches > 0) {
     badges.push(`<span class="insight-badge warn">🌐 ${langMismatches} language mismatch${langMismatches > 1 ? 'es' : ''}</span>`);
   }
 
-  const brokenOutbound = pages.reduce((s: number, p: any) => s + (p.outboundLinkHealth?.broken?.length || 0), 0);
+  const brokenOutbound = pages.reduce((s: number, p: PageInfo) => s + (p.outboundLinkHealth?.broken?.length || 0), 0);
   if (brokenOutbound > 0) {
     badges.push(`<span class="insight-badge warn">🔗 ${brokenOutbound} broken outbound link${brokenOutbound > 1 ? 's' : ''}</span>`);
   }
 
-  const similarPages = pages.filter((p: any) => p.contentSimilarity?.similarPages?.length > 0).length;
+  const similarPages = pages.filter((p: PageInfo) => p.contentSimilarity?.similarPages?.length > 0).length;
   if (similarPages > 0) {
     badges.push(`<span class="insight-badge info">📄 ${similarPages} near-duplicate page${similarPages > 1 ? 's' : ''}</span>`);
   }
 
-  const coveragePages = pages.filter((p: any) => p.codeCoverage?.js?.ratio != null);
+  const coveragePages = pages.filter((p: PageInfo) => p.codeCoverage?.js?.ratio != null);
   if (coveragePages.length > 0) {
-    const avgUnused = coveragePages.reduce((s: number, p: any) => s + p.codeCoverage.js.ratio, 0) / coveragePages.length;
+    const avgUnused = coveragePages.reduce((s: number, p: PageInfo) => s + p.codeCoverage.js.ratio, 0) / coveragePages.length;
     if (avgUnused > 50) {
       badges.push(`<span class="insight-badge warn">📦 ${avgUnused.toFixed(0)}% avg unused JS</span>`);
     }
   }
 
-  const noCta = pages.filter((p: any) => p.ctaData?.summary?.total === 0).length;
+  const noCta = pages.filter((p: PageInfo) => p.ctaData?.summary?.total === 0).length;
   if (noCta > pages.length * 0.3) {
     badges.push(`<span class="insight-badge info">🎯 ${noCta} page${noCta > 1 ? 's' : ''} without CTAs</span>`);
   }
@@ -163,7 +166,7 @@ const CATEGORY_DESCRIPTIONS = {
  * @param {Object} categoryScores - Category scores object
  * @returns {string} HTML string for category bars
  */
-function getCategoryBars(categoryScores: any) {
+function getCategoryBars(categoryScores: Partial<CategoryScores>) {
   const categories = [
     { key: 'seo', name: 'SEO', score: categoryScores.seo || 0 },
     { key: 'performance', name: 'Performance', score: categoryScores.performance || 0 },
@@ -172,12 +175,12 @@ function getCategoryBars(categoryScores: any) {
     { key: 'technical', name: 'Technical', score: categoryScores.technical || 0 }
   ];
 
-  return categories.map((cat: any) => {
+  return categories.map((cat) => {
     let progressClass = 'progress-bad';
     if (cat.score >= 80) progressClass = 'progress-good';
     else if (cat.score >= 60) progressClass = 'progress-warning';
 
-    const config = (CATEGORY_CONFIG as Record<string, any>)[cat.key] || {};
+    const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[cat.key] || {};
     const icon = config.icon || '';
     const description = (CATEGORY_DESCRIPTIONS as Record<string, string>)[cat.key] || '';
 

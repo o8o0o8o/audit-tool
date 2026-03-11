@@ -1,18 +1,18 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
-import type { ChromePage } from '../../types';
+import type { ChromePage, NetworkRequest } from '../../types';
 
 class ImageOptimizationAnalyzer {
-  static async analyzeImageOptimization(chromePage: ChromePage, requests: any[], url: string) {
+  static async analyzeImageOptimization(chromePage: ChromePage, requests: NetworkRequest[], url: string) {
     const imageAnalysis = {
       totalImages: 0,
       totalImageSize: 0,
-      oversizedImages: [] as any[],
+      oversizedImages: [] as Record<string, any>[],
       modernFormats: 0,
       legacyFormats: 0,
       withLazyLoading: 0,
       withoutLazyLoading: 0,
       withoutAlt: 0,
-      issues: [] as any[],
+      issues: [] as Record<string, any>[],
     };
 
     // Get all images with their properties
@@ -47,8 +47,8 @@ class ImageOptimizationAnalyzer {
       }
 
       // Analyze image from requests
-      if (img.src && (requests as any)[img.src]) {
-        const imgRequest = (requests as any)[img.src];
+      if (img.src && (requests as unknown as Record<string, Record<string, any>>)[img.src]) {
+        const imgRequest = (requests as unknown as Record<string, Record<string, any>>)[img.src];
         const size = imgRequest.size || 0;
 
         imageAnalysis.totalImageSize += size;

@@ -8,6 +8,7 @@ import * as path from 'path';
 import { FileManager } from '../storage/file-manager';
 import { HistoryManager } from '../../historyManager';
 import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyzer';
+import type { PageInfo, PageData, AnalysisDetail, FailedBatch, ManifestData } from '../types';
 
 class ReportDataProcessor {
   /**
@@ -81,7 +82,7 @@ class ReportDataProcessor {
     // Load all page batches
     const pages = {};
     const batches = manifest.files.pageBatches || [];
-    const failedBatches: any[] = [];
+    const failedBatches: FailedBatch[] = [];
     let loadedBatchCount = 0;
 
     console.log(`  - Loading ${batches.length} page batches...`);
@@ -101,22 +102,23 @@ class ReportDataProcessor {
 
         Object.assign(pages, batchData.pages);
         loadedBatchCount++;
-      } catch (error: any) {
-        console.warn(`    ⚠️  Could not load ${batchInfo.file}: ${error.message}`);
+      } catch (error: unknown) {
+        const errMsg = (error as Error).message;
+        console.warn(`    ⚠️  Could not load ${batchInfo.file}: ${errMsg}`);
         failedBatches.push({
           file: batchInfo.file,
-          error: error.message,
+          error: errMsg,
           expectedCount: batchInfo.count || 0,
         });
       }
     }
 
     // Report batch loading summary
-    const totalExpectedFromFailed = failedBatches.reduce((sum: number, b: any) => sum + b.expectedCount, 0);
+    const totalExpectedFromFailed = failedBatches.reduce((sum: number, b: FailedBatch) => sum + b.expectedCount, 0);
     if (failedBatches.length > 0) {
       console.warn(`\n⚠️  WARNING: ${failedBatches.length} batch file(s) could not be loaded`);
       console.warn(`   Approximately ${totalExpectedFromFailed} pages may be missing from the report`);
-      failedBatches.forEach((b: any) => console.warn(`   - ${b.file}: ${b.error}`));
+      failedBatches.forEach((b: FailedBatch) => console.warn(`   - ${b.file}: ${b.error}`));
       console.warn('');
     }
 
@@ -190,8 +192,8 @@ class ReportDataProcessor {
           };
 
           console.log(`    Loaded ${Object.keys(archiveData.pages).length} pages from archive part ${i}`);
-        } catch (error: any) {
-          console.warn(`  ⚠️  Could not load archive part ${i}: ${error.message}`);
+        } catch (error: unknown) {
+          console.warn(`  ⚠️  Could not load archive part ${i}: ${(error as Error).message}`);
         }
       }
 
@@ -235,8 +237,8 @@ class ReportDataProcessor {
         : null;
 
       return { trendData, previousAudit, audits };
-    } catch (e: any) {
-      console.log('Could not load history data:', e.message);
+    } catch (e: unknown) {
+      console.log('Could not load history data:', (e as Error).message);
       return null;
     }
   }
@@ -270,8 +272,8 @@ class ReportDataProcessor {
    * @param {Object[]} pages - Array of page data objects
    * @returns {Object} Aggregated metrics
    */
-  static aggregateMetrics(pages: any[]) {
-    const pagesWithMetrics = pages.filter((p: any) => p.TTFB !== undefined);
+  static aggregateMetrics(pages: PageInfo[]) {
+    const pagesWithMetrics = pages.filter((p: PageInfo) => p.TTFB !== undefined);
 
     if (pagesWithMetrics.length === 0) {
       return {
@@ -285,12 +287,12 @@ class ReportDataProcessor {
       };
     }
 
-    const ttfbValues = pagesWithMetrics.map((p: any) => p.TTFB).filter((v: any) => v !== undefined && v !== null);
-    const fcpValues = pagesWithMetrics.map((p: any) => p.FCP).filter((v: any) => v !== undefined && v !== null);
-    const lcpValues = pagesWithMetrics.map((p: any) => p.LCP).filter((v: any) => v !== undefined && v !== null);
-    const clsValues = pagesWithMetrics.map((p: any) => p.CLS).filter((v: any) => v !== undefined && v !== null);
-    const pageSizeValues = pagesWithMetrics.map((p: any) => p.totalResponseSize).filter((v: any) => v !== undefined && v !== null);
-    const requestCountValues = pagesWithMetrics.map((p: any) => p.totalNumberOfRequests || Object.keys(p.requests || {}).length).filter((v: any) => v !== undefined && v !== null);
+    const ttfbValues = pagesWithMetrics.map((p: PageInfo) => p.TTFB).filter((v): v is number => v !== undefined && v !== null);
+    const fcpValues = pagesWithMetrics.map((p: PageInfo) => p.FCP).filter((v): v is number => v !== undefined && v !== null);
+    const lcpValues = pagesWithMetrics.map((p: PageInfo) => p.LCP).filter((v): v is number => v !== undefined && v !== null);
+    const clsValues = pagesWithMetrics.map((p: PageInfo) => p.CLS).filter((v): v is number => v !== undefined && v !== null);
+    const pageSizeValues = pagesWithMetrics.map((p: PageInfo) => p.totalResponseSize as number | undefined).filter((v): v is number => v !== undefined && v !== null);
+    const requestCountValues = pagesWithMetrics.map((p: PageInfo) => (p.totalNumberOfRequests as number) || Object.keys((p.requests as Record<string, unknown>) || {}).length).filter((v): v is number => v !== undefined && v !== null);
 
     return {
       ttfb: this.calculateStats(ttfbValues),
@@ -308,14 +310,14 @@ class ReportDataProcessor {
    * @param {Object[]} pages - Array of page data objects
    * @returns {Object} Page counts
    */
-  static countPages(pages: any[]) {
+  static countPages(pages: PageInfo[]) {
     return {
       total: pages.length,
-      fromSitemap: pages.filter((p: any) => p.foundIn === 'sitemap').length,
-      discovered: pages.filter((p: any) => p.foundIn === 'discovered').length,
-      withMetrics: pages.filter((p: any) => p.TTFB !== undefined).length,
-      withErrors: pages.filter((p: any) => p.status >= 400).length,
-      redirected: pages.filter((p: any) => p.hasRedirects).length,
+      fromSitemap: pages.filter((p: PageInfo) => p.foundIn === 'sitemap').length,
+      discovered: pages.filter((p: PageInfo) => p.foundIn === 'discovered').length,
+      withMetrics: pages.filter((p: PageInfo) => p.TTFB !== undefined).length,
+      withErrors: pages.filter((p: PageInfo) => (p.status as number) >= 400).length,
+      redirected: pages.filter((p: PageInfo) => p.hasRedirects).length,
     };
   }
 
@@ -325,11 +327,11 @@ class ReportDataProcessor {
    * @param {number} limit - Maximum number of issues to return
    * @returns {Array} Sorted array of issues
    */
-  static getTopIssues(analysisDetails: any, limit: number = 10) {
+  static getTopIssues(analysisDetails: Record<string, AnalysisDetail> | undefined, limit: number = 10) {
     if (!analysisDetails) return [];
 
     return Object.entries(analysisDetails)
-      .map(([issue, data]: [string, any]) => ({
+      .map(([issue, data]: [string, AnalysisDetail]) => ({
         issue,
         severity: data.severity,
         count: data.count || data.examples?.length || 0,
@@ -355,10 +357,10 @@ class ReportDataProcessor {
     const jsonData = this.loadAuditData(file, domainName);
     const historyData = this.loadHistory(domainName);
 
-    const pageData = jsonData.pageData || { pages: {}, totalWithoutError: 0, totalWithError: 0 };
-    const pages = Object.values(pageData.pages || {});
-    const timing = jsonData.timing || {};
-    const analysis = jsonData.analysis || {};
+    const pageData = (jsonData.pageData || { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & { incomingLinks?: Record<string, string[]> };
+    const pages: PageInfo[] = Object.values(pageData.pages || {});
+    const timing = (jsonData.timing || {}) as Record<string, unknown>;
+    const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
 
     // Assign segments to pages if not already set (handles multi-file format)
     this.#assignSegments(pageData.pages || {});
@@ -371,7 +373,7 @@ class ReportDataProcessor {
       analysis,
       metrics: this.aggregateMetrics(pages),
       pageCounts: this.countPages(pages),
-      topIssues: this.getTopIssues(analysis.details),
+      topIssues: this.getTopIssues(analysis.details as Record<string, AnalysisDetail> | undefined),
       trendData: historyData?.trendData || null,
       previousAudit: historyData?.previousAudit || null,
       sitemaps: jsonData.sitemaps || {},
@@ -384,7 +386,7 @@ class ReportDataProcessor {
    * Assign URL segments to pages if not already set
    * @private
    */
-  static #assignSegments(pages: Record<string, any>) {
+  static #assignSegments(pages: Record<string, PageInfo>) {
     for (const url in pages) {
       if (!pages[url].segment) {
         pages[url].segment = PageSegmentAnalyzer.classifyUrl(url);

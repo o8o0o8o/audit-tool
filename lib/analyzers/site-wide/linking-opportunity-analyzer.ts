@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Internal Linking Opportunity Analyzer
@@ -13,7 +13,7 @@ class LinkingOpportunityAnalyzer {
    * @param {string} origin - Site origin URL
    * @returns {Object} { opportunities: [], stats: {}, issues: [] }
    */
-  static analyze(allPages: Record<string, any>, origin: string) {
+  static analyze(allPages: Record<string, PageInfo>, origin: string) {
     console.log('\nAnalyzing internal linking opportunities...');
 
     // Step 1: Build keyword-to-pages index
@@ -53,7 +53,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Map} Keyword index
    */
-  static buildKeywordIndex(allPages: Record<string, any>) {
+  static buildKeywordIndex(allPages: Record<string, PageInfo>) {
     const keywordIndex = new Map();
 
     for (const url in allPages) {
@@ -103,7 +103,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Map} Existing links index
    */
-  static buildExistingLinksIndex(allPages: Record<string, any>) {
+  static buildExistingLinksIndex(allPages: Record<string, PageInfo>) {
     const existingLinks = new Map();
 
     for (const url in allPages) {
@@ -155,7 +155,7 @@ class LinkingOpportunityAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Array} Linking opportunities
    */
-  static findOpportunities(allPages: Record<string, any>, keywordIndex: Map<string, any>, existingLinks: Map<string, Set<string>>, origin: string) {
+  static findOpportunities(allPages: Record<string, PageInfo>, keywordIndex: Map<string, any>, existingLinks: Map<string, Set<string>>, origin: string) {
     const opportunities = [];
     const urlList = Object.keys(allPages);
 
@@ -180,7 +180,7 @@ class LinkingOpportunityAnalyzer {
         const pagesWithKeyword = keywordIndex.get(keyword as string);
         if (!pagesWithKeyword) return;
 
-        pagesWithKeyword.forEach((keywordData: any, targetUrl: string) => {
+        pagesWithKeyword.forEach((keywordData: Record<string, any>, targetUrl: string) => {
           // Skip same page and pages we already link to
           if (targetUrl === sourceUrl) return;
           const targetNormalized = this.normalizeUrl(targetUrl);
@@ -211,7 +211,7 @@ class LinkingOpportunityAnalyzer {
       });
 
       // Calculate relevance scores and filter
-      const suggestedLinks: any[] = [];
+      const suggestedLinks: Record<string, any>[] = [];
 
       relatedPages.forEach((data, targetUrl) => {
         if (data.sharedKeywords.length < 2) return; // Require at least 2 shared keywords
@@ -272,7 +272,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} targetPage - Target page data
    * @returns {string} Suggested anchor text
    */
-  static suggestAnchorText(sharedKeywords: any[], targetPage: any) {
+  static suggestAnchorText(sharedKeywords: Record<string, any>[], targetPage: PageInfo) {
     // Prefer keyword that's in target title
     const titleKeyword = sharedKeywords.find(k => k.inTargetTitle);
     if (titleKeyword) {
@@ -295,7 +295,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Array} Issues array
    */
-  static generateIssues(opportunities: any[], allPages: Record<string, any>) {
+  static generateIssues(opportunities: Record<string, any>[], allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const totalPages = Object.keys(allPages).length;
 

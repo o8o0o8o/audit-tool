@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ParsedPage, Issue } from '../../types';
+import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class TechnicalSEOAnalyzer {
   /**
@@ -14,20 +14,20 @@ class TechnicalSEOAnalyzer {
    * @param {Object} pageData - Page data object
    * @returns {Object} Analysis results
    */
-  static analyze(parsedPage: ParsedPage, url: string, pageData: any) {
+  static analyze(parsedPage: ParsedPage, url: string, pageData: PageInfo) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const technicalData = {
-      metaRefresh: null as any,
+      metaRefresh: null as Record<string, any> | null,
       jsFramework: null as string | null,
       cms: null as string | null,
       generator: null as string | null | undefined,
       amp: false,
       pwa: false,
-      lazyLoading: false,
-      preload: [] as any[],
-      prefetch: [] as any[],
-      dns_prefetch: [] as any[],
+      lazyLoading: false as boolean | { type: string; count?: number; pattern?: string } | null,
+      preload: [] as Record<string, any>[],
+      prefetch: [] as string[],
+      dns_prefetch: [] as string[],
     };
 
     if (!parsedPage) {
@@ -99,7 +99,7 @@ class TechnicalSEOAnalyzer {
     }
 
     // 7. Check for lazy loading implementation
-    technicalData.lazyLoading = this.detectLazyLoading(parsedPage) as any;
+    technicalData.lazyLoading = this.detectLazyLoading(parsedPage);
 
     // 8. Check for inline CSS/JS that could be external
     const inlineAnalysis = this.analyzeInlineResources(parsedPage);
@@ -332,7 +332,7 @@ class TechnicalSEOAnalyzer {
    * Analyze resource hints (preload, prefetch, dns-prefetch)
    */
   static analyzeResourceHints(parsedPage: ParsedPage) {
-    const preload: any[] = [];
+    const preload: Record<string, any>[] = [];
     const prefetch: string[] = [];
     const dnsPrefetch: string[] = [];
 
@@ -489,7 +489,7 @@ class TechnicalSEOAnalyzer {
   /**
    * Check HTML document size
    */
-  static checkHTMLSize(pageData: any, url: string, issues: Issue[], warnings: Issue[]) {
+  static checkHTMLSize(pageData: PageInfo, url: string, issues: Issue[], warnings: Issue[]) {
     const htmlSize = pageData.htmlSize || pageData.responseSize || pageData.totalResponseSize;
     if (!htmlSize) return;
 
@@ -512,7 +512,7 @@ class TechnicalSEOAnalyzer {
   /**
    * Check for robots tag conflicts
    */
-  static checkRobotsTagConflicts(pageData: any, issues: Issue[]) {
+  static checkRobotsTagConflicts(pageData: PageInfo, issues: Issue[]) {
     const metaRobots = pageData.meta?.find((m: any) => m.robots)?.robots || '';
     const xRobotsTag = pageData.response?.headers?.['x-robots-tag'] || '';
 
@@ -536,7 +536,7 @@ class TechnicalSEOAnalyzer {
   /**
    * Site-wide technical analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

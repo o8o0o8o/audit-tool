@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class FormAccessibilityAnalyzer {
   /**
@@ -19,7 +19,7 @@ class FormAccessibilityAnalyzer {
     const warnings: Issue[] = [];
 
     const formData = {
-      forms: [] as any[],
+      forms: [] as Record<string, any>[],
       totalForms: 0,
       totalInputs: 0,
       inputsWithoutLabels: 0,
@@ -40,7 +40,7 @@ class FormAccessibilityAnalyzer {
     for (let i = 0; i < forms.length; i++) {
       const form = forms[i];
       const formAnalysis = await this.#analyzeForm(form, i, chromePage);
-      (formData.forms as any[]).push(formAnalysis);
+      (formData.forms as Record<string, any>[]).push(formAnalysis);
 
       formData.totalInputs += formAnalysis.inputs.length;
       formData.inputsWithoutLabels += formAnalysis.inputsWithoutLabels;
@@ -63,8 +63,8 @@ class FormAccessibilityAnalyzer {
     }
 
     // Missing autocomplete (UX and accessibility)
-    const autocompleteInputCount = formData.forms.reduce((sum, f) =>
-      sum + f.inputs.filter(i => i.shouldHaveAutocomplete).length, 0
+    const autocompleteInputCount = formData.forms.reduce((sum: number, f: Record<string, any>) =>
+      sum + f.inputs.filter((i: Record<string, any>) => i.shouldHaveAutocomplete).length, 0
     );
     if (formData.inputsWithoutAutocomplete > 0 && autocompleteInputCount > 0) {
       warnings.push({
@@ -145,7 +145,7 @@ class FormAccessibilityAnalyzer {
       hasFieldset: form.querySelectorAll('fieldset').length > 0,
       hasRadioGroups: false,
       hasPositiveTabindex: false,
-      inputs: [] as any[],
+      inputs: [] as Record<string, any>[],
       inputsWithoutLabels: 0,
       inputsWithoutAutocomplete: 0,
       requiredWithoutAria: 0,
@@ -299,7 +299,7 @@ class FormAccessibilityAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class RedirectChainAnalyzer {
   /**
@@ -13,12 +13,12 @@ class RedirectChainAnalyzer {
    * @param {string} url - Original URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
       redirectCount: 0,
-      redirectChain: [] as any[],
+      redirectChain: [] as Record<string, any>[],
       finalUrl: url,
       hasHttpToHttps: false,
       hasWwwRedirect: false,
@@ -149,7 +149,7 @@ class RedirectChainAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {
@@ -162,7 +162,7 @@ class RedirectChainAnalyzer {
       wwwRedirects: 0,
     };
 
-    const pagesWithLongChains: any[] = [];
+    const pagesWithLongChains: Record<string, any>[] = [];
 
     for (const [url, pageData] of Object.entries(pages)) {
       const chain = pageData.redirectChain || [];

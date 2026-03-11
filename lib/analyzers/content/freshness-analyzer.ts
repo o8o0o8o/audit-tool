@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ParsedPage } from '../../types';
+import type { Issue, ParsedPage, PageInfo } from '../../types';
 
 class FreshnessAnalyzer {
   /**
@@ -14,8 +14,8 @@ class FreshnessAnalyzer {
    * @param {Object} parsedPage - Parsed HTML page
    * @returns {Object} Analysis results with freshness data and issues
    */
-  static analyze(pageData: any, response: any, parsedPage: ParsedPage) {
-    const issues: any[] = [];
+  static analyze(pageData: PageInfo, response: Record<string, any> | null, parsedPage: ParsedPage) {
+    const issues: Record<string, any>[] = [];
     const freshnessData = {
       lastModified: null as string | null,
       datePublished: null as string | null,
@@ -207,7 +207,7 @@ class FreshnessAnalyzer {
    * @param {Date} now - Current date
    * @returns {number} Freshness score
    */
-  static calculateFreshnessScore(freshnessData: any, now: Date) {
+  static calculateFreshnessScore(freshnessData: Record<string, any>, now: Date) {
     let score = 50; // Start neutral
 
     // Get the most recent date we have
@@ -254,7 +254,7 @@ class FreshnessAnalyzer {
    * @param {Object} pages - All pages data
    * @returns {Object} Site-wide freshness analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

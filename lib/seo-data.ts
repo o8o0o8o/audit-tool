@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Import modularized components
+import type { NetworkCondition, CpuCondition, SEODataOptions } from './types';
 import { SEVERITY, THRESHOLDS, NETWORK_CONDITIONS, CPU_CONDITIONS } from './constants';
 import { validateUrl, formatElapsedTime } from './utils';
 import { sanitizeDomainName } from '../validators';
@@ -23,7 +24,8 @@ import { parse } from 'node-html-parser';
 
 
 class SEOData {
-  #results: any;
+  // Internal results state - uses index signature because analyzers add dynamic keys
+  #results: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   #proceed: boolean;
   #perf: boolean;
   #saveHtml: boolean;
@@ -43,14 +45,14 @@ class SEOData {
 
   origin: string | null;
   domainName: string | null;
-  networkConditions: any;
-  cpuConditions: any;
+  networkConditions: Record<string, NetworkCondition>;
+  cpuConditions: Record<string, CpuCondition>;
   fileManager!: FileManager;
   resultsDir!: string;
   file!: string;
   _currentPhase: { label: string; startMs: number } | null = null;
 
-  constructor(origin: string | null, proceed = false, perf = false, saveHtml = false, concurrency = 5, sitemapFile: string | null = null, options: any = {}) {
+  constructor(origin: string | null, proceed = false, perf = false, saveHtml = false, concurrency = 5, sitemapFile: string | null = null, options: SEODataOptions = {}) {
     this.#sitemapFile = sitemapFile;
 
     // When sitemap file is provided, origin may be null (derived later)
@@ -188,7 +190,7 @@ class SEOData {
   }
 
   saveError(generalError: string, detailedError: string, severity: string = SEVERITY.MEDIUM) {
-    this.#errorAggregator.addError(generalError, detailedError, severity as any);
+    this.#errorAggregator.addError(generalError, detailedError, severity);
   }
 
   #checkAttempts(url: string) {
@@ -284,11 +286,12 @@ class SEOData {
 
       this.#errorAggregator = restored.errorAggregator;
       this.#incomingLinksTracking = restored.incomingLinksTracking;
-    } catch (error: any) {
-      console.error(`\n❌ ERROR restoring progress:`, error.message);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error(`\n❌ ERROR restoring progress:`, err.message);
       console.error(`File: ${this.file}`);
 
-      if (error.message.includes('JSON') || error.message.includes('parse')) {
+      if (err.message.includes('JSON') || err.message.includes('parse')) {
         console.error(`\nThe progress file appears to be corrupted.`);
         console.error(`Consider removing it and starting fresh:\n`);
         console.error(`  mv "${this.file}" "${this.file}.backup"`);
@@ -300,7 +303,7 @@ class SEOData {
   }
 
   saveData() {
-    this.#progressManager.saveProgress(this.#results);
+    this.#progressManager.saveProgress(this.#results as any);
   }
 
   async #analyzeRobotsTxt() {
@@ -312,8 +315,8 @@ class SEOData {
     this.#results.robots["user-agent"] = result.userAgents;
 
     // Register any errors found during parsing
-    result.errors.forEach((error: any) => {
-      this.saveError(error.message, error.detail, error.severity);
+    result.errors.forEach((error: { message: string; detail: string | null; severity: string }) => {
+      this.saveError(error.message, error.detail || '', error.severity);
     });
 
     // Analyze AI crawler rules in robots.txt
@@ -328,8 +331,8 @@ class SEOData {
       llmsResult.issues.forEach(i => this.saveError(i.message!, i.detail!, i.severity));
       llmsResult.warnings.forEach(w => this.saveError(w.message!, w.detail!, w.severity));
       this.#results.aeo.llmsTxt = llmsResult.info;
-    } catch (e) {
-      console.log('llms.txt check skipped:', e.message);
+    } catch (e: unknown) {
+      console.log('llms.txt check skipped:', (e as Error).message);
     }
   }
 
@@ -340,7 +343,7 @@ class SEOData {
   #parseSitemapFile() {
     console.log(`📄 Parsing local sitemap file: ${this.#sitemapFile}`);
 
-    const xml = fs.readFileSync(this.#sitemapFile, 'utf-8');
+    const xml = fs.readFileSync(this.#sitemapFile!, 'utf-8');
     const parsed = parse(xml);
     const urls = parsed.querySelectorAll('url');
 
@@ -364,14 +367,14 @@ class SEOData {
     this.#initializeManagers();
 
     // Use SitemapParser.processSitemap to parse URLs with full validation
-    const result: any = {
+    const result: Record<string, any> = {
       sitemaps: {},
       urls: {},
       total: 0,
       errors: [],
     };
 
-    SitemapParser.processSitemap(urls, this.origin!, this.#sitemapFile!, result);
+    SitemapParser.processSitemap(urls as any, this.origin!, this.#sitemapFile!, result as any);
 
     // Store sitemap data
     Object.assign(this.#results.sitemaps, result.sitemaps);
@@ -379,7 +382,7 @@ class SEOData {
     this.#results.sitemaps.total = result.total;
 
     // Register any errors
-    result.errors.forEach(error => {
+    result.errors.forEach((error: { message: string; detail: string; severity: string }) => {
       this.saveError(error.message, error.detail, error.severity);
     });
 
@@ -399,7 +402,7 @@ class SEOData {
     this.#results.sitemaps.total = result.total;
 
     // Register all errors
-    result.errors.forEach(error => {
+    result.errors.forEach((error: { message: string; detail: string; severity: string }) => {
       this.saveError(error.message, error.detail, error.severity);
     });
   }
@@ -423,7 +426,7 @@ class SEOData {
       }
 
       // Rebuild sitemaps.urls with only filtered URLs
-      const newUrls: Record<string, any> = {};
+      const newUrls: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
       for (const url of filtered) {
         newUrls[url] = this.#results.sitemaps.urls[url];
       }
@@ -432,10 +435,10 @@ class SEOData {
     }
 
     await AuditOrchestrator.analyzePages({
-      results: this.#results,
-      crawlerEngine: this.#crawlerEngine,
+      results: this.#results as any,
+      crawlerEngine: this.#crawlerEngine as any,
       incomingLinksTracking: this.#incomingLinksTracking,
-      saveError: this.saveError.bind(this),
+      saveError: this.saveError.bind(this) as any,
       resultsDir: this.resultsDir,
     });
   }
@@ -537,10 +540,11 @@ class SEOData {
 
         this.#printPhase(4, 4, 'Running site-wide validation...');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error;
       // Save error with full details including stack trace
-      const errorMessage = error.message || String(error);
-      const errorDetail = error.stack || errorMessage;
+      const errorMessage = err.message || String(error);
+      const errorDetail = err.stack || errorMessage;
       this.saveError(`Audit failed: ${errorMessage}`, errorDetail, SEVERITY.HIGH);
 
       // Stop timing before exit
@@ -552,7 +556,7 @@ class SEOData {
       // Save data before exiting
       this.saveData();
 
-      console.error('Audit failed with error:', error.message);
+      console.error('Audit failed with error:', err.message);
       // Re-throw to let the error propagate and trigger restart via start.js
       throw error;
     }
@@ -565,10 +569,10 @@ class SEOData {
 
     // Run all site-wide validations
     await AuditOrchestrator.runSiteWideValidation(
-      this.#results.pageData,
+      this.#results.pageData as any,
       this.origin!,
       this.#results.isMultiLang,
-      this.saveError.bind(this)
+      this.saveError.bind(this) as any
     );
 
     // Stop timing

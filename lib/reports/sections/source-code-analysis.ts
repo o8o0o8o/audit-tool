@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import type { ReportSectionData, SeverityColorConfig } from '../../types';
 
 /**
  * Get severity badge HTML
@@ -16,7 +17,7 @@ function getSeverityBadge(severity: string) {
     medium: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
     low: { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534' },
   };
-  const c = (colors as Record<string, any>)[severity] || colors.medium;
+  const c = (colors as Record<string, SeverityColorConfig>)[severity] || colors.medium;
   return `<span style="display: inline-block; padding: 2px 8px; background: ${c.bg}; border: 1px solid ${c.border}; border-radius: 4px; color: ${c.text}; font-size: 11px; font-weight: 600; text-transform: uppercase;">${escapeHtml(severity)}</span>`;
 }
 
@@ -26,9 +27,9 @@ function getSeverityBadge(severity: string) {
  * @param {Object} data.jsonData - Full JSON audit data
  * @returns {string} HTML string
  */
-function getSourceCodeAnalysis(data: any) {
+function getSourceCodeAnalysis(data: ReportSectionData) {
   const { jsonData } = data;
-  const repo = jsonData?.repoAnalysis;
+  const repo = jsonData?.repoAnalysis as Record<string, unknown> | undefined;
 
   if (!repo) return '';
 
@@ -52,7 +53,7 @@ function getSourceCodeAnalysis(data: any) {
 /**
  * Framework detection info
  */
-function getFrameworkInfo(repo: any) {
+function getFrameworkInfo(repo: Record<string, unknown>) {
   if (!repo.framework) {
     return `
       <div style="padding: 15px; background: #fffbeb; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 20px;">
@@ -85,9 +86,9 @@ function getFrameworkInfo(repo: any) {
 /**
  * Config validation results
  */
-function getConfigValidation(repo: any) {
-  const issues = repo.configIssues || [];
-  const warnings = repo.configWarnings || [];
+function getConfigValidation(repo: Record<string, unknown>) {
+  const issues = (repo.configIssues || []) as Array<Record<string, unknown>>;
+  const warnings = (repo.configWarnings || []) as Array<Record<string, unknown>>;
 
   if (issues.length === 0 && warnings.length === 0) {
     return `
@@ -97,16 +98,16 @@ function getConfigValidation(repo: any) {
     `;
   }
 
-  const allFindings = [
-    ...issues.map(i => ({ ...i, type: 'issue' })),
-    ...warnings.map(w => ({ ...w, type: 'warning' })),
+  const allFindings: Array<Record<string, unknown>> = [
+    ...issues.map((i) => ({ ...i, type: 'issue' })),
+    ...warnings.map((w) => ({ ...w, type: 'warning' })),
   ];
 
   const rows = allFindings.map(f => `
     <tr>
-      <td style="padding: 10px 12px;">${getSeverityBadge(f.severity)}</td>
+      <td style="padding: 10px 12px;">${getSeverityBadge(f.severity as string)}</td>
       <td style="padding: 10px 12px; font-weight: 500;">${escapeHtml(f.message)}</td>
-      <td style="padding: 10px 12px; font-size: 13px; color: #4b5563;">${escapeHtml(f.detail || '')}</td>
+      <td style="padding: 10px 12px; font-size: 13px; color: #4b5563;">${escapeHtml((f.detail as string) || '')}</td>
     </tr>
   `).join('');
 
@@ -134,11 +135,11 @@ function getConfigValidation(repo: any) {
 /**
  * Route coverage comparison
  */
-function getRouteCoverage(repo: any) {
-  const stats = repo.routeCoverage;
+function getRouteCoverage(repo: Record<string, unknown>) {
+  const stats = repo.routeCoverage as Record<string, number> | undefined;
   if (!stats) return '';
 
-  const details = repo.routeDetails || {};
+  const details = (repo.routeDetails || {}) as Record<string, unknown>;
   const coveragePercent = stats.totalRoutes > 0
     ? Math.round((stats.coveredRoutes / stats.totalRoutes) * 100)
     : 0;
@@ -148,9 +149,9 @@ function getRouteCoverage(repo: any) {
 
   // Uncovered routes table
   let uncoveredHtml = '';
-  const uncovered = details.uncoveredRoutes || [];
+  const uncovered = (details.uncoveredRoutes || []) as Array<Record<string, unknown>>;
   if (uncovered.length > 0) {
-    const uncoveredRows = uncovered.slice(0, 20).map(r => `
+    const uncoveredRows = uncovered.slice(0, 20).map((r: Record<string, unknown>) => `
       <tr>
         <td style="padding: 8px 12px;"><code>${escapeHtml(r.pattern)}</code></td>
         <td style="padding: 8px 12px; font-size: 13px; color: #6b7280;"><code>${escapeHtml(r.file)}</code></td>
@@ -216,15 +217,16 @@ function getRouteCoverage(repo: any) {
 /**
  * Source mapping (issue -> source file locations)
  */
-function getSourceMapping(repo: any) {
-  const mapping = repo.sourceMapping;
+function getSourceMapping(repo: Record<string, unknown>) {
+  const mapping = repo.sourceMapping as Record<string, unknown> | undefined;
   if (!mapping || Object.keys(mapping).length === 0) return '';
 
   const entries = Object.entries(mapping);
 
-  const rows = entries.map(([issueKey, locations]: [string, any]) => {
-    const locationHtml = locations.slice(0, 5).map((loc: any) => {
-      const fileRef = loc.line > 1
+  const rows = entries.map(([issueKey, locations]: [string, unknown]) => {
+    const locs = locations as Array<Record<string, unknown>>;
+    const locationHtml = locs.slice(0, 5).map((loc: Record<string, unknown>) => {
+      const fileRef = (loc.line as number) > 1
         ? `<code>${escapeHtml(loc.file)}:${loc.line}</code>`
         : `<code>${escapeHtml(loc.file)}</code>`;
       return `
@@ -235,7 +237,7 @@ function getSourceMapping(repo: any) {
       `;
     }).join('');
 
-    const moreCount = locations.length > 5 ? locations.length - 5 : 0;
+    const moreCount = locs.length > 5 ? locs.length - 5 : 0;
 
     return `
       <tr style="border-bottom: 1px solid #e5e7eb;">

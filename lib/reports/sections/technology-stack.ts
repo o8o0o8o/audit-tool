@@ -4,13 +4,14 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import type { PageInfo, ReportSectionData, AuditSnapshot } from '../../types';
 
 /**
  * Format detection method for display
  * @param {Object} method - Detection method object
  * @returns {string} Formatted detection method
  */
-function formatDetectionMethod(method: any) {
+function formatDetectionMethod(method: Record<string, string>) {
   switch (method.type) {
     case 'html':
       return `HTML pattern: ${method.pattern}`;
@@ -34,9 +35,24 @@ function formatDetectionMethod(method: any) {
  * @param {Array} pages - Array of page data
  * @returns {Object} Aggregated technology data
  */
-function aggregateTechnologies(pages: any[]) {
-  const allTechs = new Map(); // name -> { category, count, pages, detectedBy }
-  const byCategory: Record<string, any> = {};
+interface TechEntry {
+  name: string;
+  category: string;
+  count: number;
+  pages: string[];
+  detectedBy: Set<string> | string[];
+  detectedByDetails: Array<Record<string, string>>;
+}
+
+interface AggregatedTech {
+  technologies: TechEntry[];
+  byCategory: Record<string, string[]>;
+  totalUnique: number;
+}
+
+function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
+  const allTechs = new Map<string, TechEntry>();
+  const byCategory: Record<string, Set<string>> = {};
 
   for (const page of pages) {
     const tech = page.technologies || {};
@@ -53,7 +69,7 @@ function aggregateTechnologies(pages: any[]) {
           detectedByDetails: [], // Store detailed method info
         });
       }
-      const entry = allTechs.get(t.name);
+      const entry = allTechs.get(t.name)!;
       entry.count++;
       if (entry.pages.length < 3) {
         entry.pages.push(page.url);
@@ -63,8 +79,8 @@ function aggregateTechnologies(pages: any[]) {
       if (t.detectedBy && Array.isArray(t.detectedBy)) {
         for (const method of t.detectedBy) {
           const methodKey = method.type;
-          if (!entry.detectedBy.has(methodKey)) {
-            entry.detectedBy.add(methodKey);
+          if (!(entry.detectedBy as Set<string>).has(methodKey)) {
+            (entry.detectedBy as Set<string>).add(methodKey);
             entry.detectedByDetails.push(method);
           }
         }
@@ -87,9 +103,9 @@ function aggregateTechnologies(pages: any[]) {
     .sort((a, b) => b.count - a.count);
 
   // Convert sets to arrays
-  const categories: Record<string, any> = {};
+  const categories: Record<string, string[]> = {};
   for (const [cat, techs] of Object.entries(byCategory)) {
-    categories[cat] = Array.from(techs as any);
+    categories[cat] = Array.from(techs);
   }
 
   return {
@@ -147,13 +163,13 @@ function getCategoryColor(category: string) {
  * @param {Object} previousAudit - Previous audit snapshot
  * @returns {Object} Comparison data
  */
-function compareTechnologies(current: any, previousAudit: any) {
+function compareTechnologies(current: AggregatedTech, previousAudit: AuditSnapshot | null) {
   if (!previousAudit || !previousAudit.technologies) {
-    return { newTechs: [], removedTechs: [], unchanged: current.technologies.map((t: any) => t.name) };
+    return { newTechs: [] as string[], removedTechs: [] as string[], unchanged: current.technologies.map((t) => t.name) };
   }
 
-  const currentNames = new Set<string>(current.technologies.map((t: any) => t.name));
-  const previousNames = new Set<string>(previousAudit.technologies.map((t: any) => t.name || t));
+  const currentNames = new Set<string>(current.technologies.map((t) => t.name));
+  const previousNames = new Set<string>(previousAudit.technologies.map((t: string) => t));
 
   const newTechs = [...currentNames].filter(t => !previousNames.has(t));
   const removedTechs = [...previousNames].filter(t => !currentNames.has(t));
@@ -169,12 +185,12 @@ function compareTechnologies(current: any, previousAudit: any) {
  * @param {Object} data.previousAudit - Previous audit for comparison (optional)
  * @returns {string} HTML string for the technology stack section
  */
-function getTechnologyStack(data: any) {
+function getTechnologyStack(data: ReportSectionData) {
   const { pages, previousAudit } = data;
   const aggregated = aggregateTechnologies(pages);
 
   // Compare with previous audit if available
-  const comparison = compareTechnologies(aggregated, previousAudit);
+  const comparison = compareTechnologies(aggregated, previousAudit ?? null);
 
   if (aggregated.totalUnique === 0) {
     return `
@@ -188,15 +204,15 @@ function getTechnologyStack(data: any) {
   }
 
   // Helper: check if a technology has meaningful presence (>0% of pages)
-  const hasPresence = (name: any) => {
+  const hasPresence = (name: string) => {
     const tech = aggregated.technologies.find(t => t.name === name);
     return tech && pages.length > 0 && Math.round((tech.count / pages.length) * 100) > 0;
   };
 
   // Group technologies by category
   const categoryHtml = Object.entries(aggregated.byCategory)
-    .sort((a: [string, any], b: [string, any]) => b[1].length - a[1].length)
-    .map(([category, techs]: [string, any]) => {
+    .sort((a: [string, string[]], b: [string, string[]]) => b[1].length - a[1].length)
+    .map(([category, techs]: [string, string[]]) => {
       const color = getCategoryColor(category);
       const icon = getCategoryIcon(category);
 
@@ -213,7 +229,7 @@ function getTechnologyStack(data: any) {
           for (const method of tech.detectedByDetails) {
             detectionHtml += `<div>&bull; ${escapeHtml(formatDetectionMethod(method))}</div>`;
           }
-        } else if (tech && tech.detectedBy && tech.detectedBy.length > 0) {
+        } else if (tech && tech.detectedBy && (tech.detectedBy as string[]).length > 0) {
           const methodLabels: Record<string, string> = {
             html: 'HTML content pattern',
             script: 'Script source URL',
@@ -233,7 +249,7 @@ function getTechnologyStack(data: any) {
         const tooltipContent = `<strong>${escapeHtml(name)}</strong><br><span class="tt-label">${count} pages (${percentage}%)</span><br><br><span class="tt-label">Detected by:</span>${detectionHtml}`;
 
         // Get detection type icons
-        const detectionIcons = (tech?.detectedBy || []).map((type: any) => {
+        const detectionIcons = ((tech?.detectedBy || []) as string[]).map((type: string) => {
           const icons: Record<string, string> = {
             html: '📄',
             script: '📜',
@@ -280,7 +296,7 @@ function getTechnologyStack(data: any) {
 
   // Summary stats — only count techs/categories with meaningful presence (>0% of pages)
   const detectedTechs = aggregated.technologies.filter(t => hasPresence(t.name));
-  const detectedCategories = Object.entries(aggregated.byCategory).filter(([, techs]: [string, any]) =>
+  const detectedCategories = Object.entries(aggregated.byCategory).filter(([, techs]: [string, string[]]) =>
     techs.some((name: string) => hasPresence(name))
   );
   const totalCategories = detectedCategories.length;

@@ -7,7 +7,202 @@ import { parse } from 'node-html-parser';
 import * as fs from 'fs';
 import * as path from 'path';
 import { chromium } from 'playwright';
-import type { ParsedPage, ChromePage } from '../types';
+import type { Request as PlaywrightRequest, Response as PlaywrightResponse, BrowserContext } from 'playwright';
+import type { ParsedPage, ChromePage, PageInfo, NetworkCondition, CpuCondition, CrawlerEngineOptions, CrawlerCallbacks, SitemapUrl, Issue } from '../types';
+import type { CollectedVitals } from './vitals-collector';
+import type { CrUXFieldData } from './crux-api';
+
+// ─── Crawler Engine internal interfaces ─────────────────────────────────────
+
+interface CrawlerInternalOptions {
+  concurrency: number;
+  saveHtml: boolean;
+  screenshots: boolean;
+  analysis: Record<string, unknown>;
+  perf: boolean;
+  origin: string;
+  networkConditions: Record<string, NetworkCondition>;
+  cpuConditions: Record<string, CpuCondition>;
+  verbose: boolean;
+  userAgent: string | null;
+  queryParams: QueryParamConfig;
+  cruxApiKey?: string | null;
+  config?: Record<string, unknown>;
+}
+
+interface QueryParamConfig {
+  mode?: 'strip_all' | 'strip_tracking' | 'keep_all' | 'whitelist';
+  whitelist?: string[];
+  blacklist?: string[];
+}
+
+interface FailureTracker {
+  consecutiveFailures: number;
+  lastFailureTime: number;
+  circuitOpen: boolean;
+  circuitOpenTime: number;
+}
+
+interface BackoffState {
+  attempts: number;
+  lastAttempt: number;
+}
+
+interface RequestInfo {
+  resourceType?: string;
+  method?: string;
+  startTime?: number;
+  status?: number;
+  endTime?: number;
+  duration?: number;
+  size?: number | null;
+}
+
+interface RedirectEntry {
+  url: string;
+  status: number | string;
+}
+
+interface BasicTestResult {
+  TTFB?: number;
+  FCP?: number;
+  LCP?: number;
+  CLS?: number;
+  INP?: number;
+  TBT?: number;
+  TTI?: number;
+  speedIndex?: number;
+  lcpElement?: string | null;
+  lcpUrl?: string | null;
+  lcpSize?: { width: number; height: number } | null;
+  lcpSubParts?: { ttfb: number; resourceLoad: number; resourceDelay: number; renderDelay: number };
+  clsEntries?: unknown[];
+  clsLargestShift?: number | null;
+  clsShiftCount?: number;
+  inpEvent?: string | null;
+  longTasks?: unknown[];
+  domContentLoaded?: number;
+  domComplete?: number;
+  loadEvent?: number;
+  status: number | undefined;
+  requests: Record<string, RequestInfo>;
+  totalResponseSize: number;
+  metrics: PerformanceMetrics;
+  redirectChain: RedirectEntry[];
+  responseHeaders: Record<string, string | undefined>;
+  consoleData: unknown;
+  url?: string;
+  blockers?: unknown;
+}
+
+interface PerformanceMetrics {
+  nav: PerformanceEntryList;
+  resources: PerformanceEntryList;
+  paint: PerformanceEntryList;
+}
+
+interface CrawlPagesParams {
+  pagesToCrawl: string[];
+  collectedURLs: Set<string>;
+  uniquePages: Set<string>;
+  addMissing: boolean;
+  results: CrawlResults;
+  incomingLinksTracking: Map<string, Set<string>>;
+  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
+}
+
+interface CrawlResults {
+  pageData: {
+    pages: Record<string, PageInfo>;
+    processedPages: Set<string>;
+    totalWithoutError: number;
+    totalWithError: number;
+    byError: Record<string, string[] | number>;
+    attempts: Record<string, number>;
+    incomingLinks?: Record<string, string[]>;
+  };
+  cruxData?: CrUXFieldData | null;
+}
+
+interface CrawlSinglePageParams {
+  url: string;
+  context: BrowserContext;
+  results: CrawlResults;
+  incomingLinksTracking: Map<string, Set<string>>;
+  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
+  collectedURLs: Set<string>;
+  uniquePages: Set<string>;
+  pagesToCrawl: string[];
+  addMissing: boolean;
+  discoveredLinksSource: Map<string, string>;
+  uniqueTitles: Set<string>;
+  uniqueDescriptions: Set<string>;
+}
+
+interface ProcessPageDataParams {
+  page: BasicTestResult;
+  chromePage: ChromePage;
+  url: string;
+  results: CrawlResults;
+  incomingLinksTracking: Map<string, Set<string>>;
+  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
+  collectedURLs: Set<string>;
+  uniquePages: Set<string>;
+  pagesToCrawl: string[];
+  addMissing: boolean;
+  discoveredLinksSource: Map<string, string>;
+  uniqueTitles: Set<string>;
+  uniqueDescriptions: Set<string>;
+}
+
+interface CollectLinksParams {
+  parsedPage: ParsedPage;
+  url: string;
+  results: CrawlResults;
+  incomingLinksTracking: Map<string, Set<string>>;
+  collectedURLs: Set<string>;
+  uniquePages: Set<string>;
+  pagesToCrawl: string[];
+  addMissing: boolean;
+  discoveredLinksSource: Map<string, string>;
+  sitemapUrls: Record<string, SitemapUrl>;
+}
+
+interface LinkEntry {
+  text: string | undefined;
+  href: string;
+  isInternal: boolean;
+}
+
+interface MetaTag {
+  name: string | null;
+  content: string;
+}
+
+interface LinkTag {
+  rel: string;
+  hrefLang: string;
+  href: string;
+}
+
+interface AlternateEntry {
+  hreflang: string;
+  href: string;
+}
+
+interface AnalyzerResult {
+  issues?: Issue[];
+  warnings?: Issue[];
+  [key: string]: unknown;
+}
+
+interface CrawlPageResult {
+  isMultiLang?: boolean;
+  failed: boolean;
+  errorType?: string;
+}
+
+type PerformanceEntryList = unknown[];
 
 import { KNOWN_ERRORS, SEVERITY, THRESHOLDS, META_TAGS, META_TAGS_CONFIG, getMetaTagSeverity, VIEWPORT, normalizeTextForComparison, CRAWL_SETTINGS } from '../constants';
 import { normalizeUrl, stripHashFragment, createSafeFilename, analyzeUrlStructure } from '../utils';
@@ -80,10 +275,10 @@ import { CodeCoverageAnalyzer } from '../analyzers/performance/code-coverage-ana
 import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
 
 class CrawlerEngine {
-  #options;
-  #callbacks;
-  #failureTracker; // Track consecutive failures for circuit breaker
-  #backoffState;   // Track backoff state per domain/error type
+  #options: CrawlerInternalOptions;
+  #callbacks: CrawlerCallbacks;
+  #failureTracker: FailureTracker;
+  #backoffState: Map<string, BackoffState>;
 
   /**
    * Create a CrawlerEngine
@@ -100,22 +295,23 @@ class CrawlerEngine {
    * @param {Function} callbacks.checkAttempts - Function to check retry attempts
    * @param {Function} callbacks.saveAttempt - Function to save retry attempt
    */
-  constructor(options: any, callbacks: any) {
+  constructor(options: CrawlerEngineOptions & { config?: Record<string, unknown>; queryParams?: QueryParamConfig; cruxApiKey?: string | null }, callbacks: CrawlerCallbacks) {
     // Use config from options if provided, otherwise load fresh (for backward compat)
-    const config = options.config || loadConfig();
+    const config = (options.config || loadConfig()) as Record<string, Record<string, unknown>>;
 
     this.#options = {
       concurrency: options.concurrency || 5,
       saveHtml: options.saveHtml || false,
       screenshots: options.screenshots || false,
-      analysis: config.analysis || {},
+      analysis: (config.analysis || {}) as Record<string, unknown>,
       perf: options.perf || false,
-      origin: options.origin,
+      origin: options.origin || '',
       networkConditions: options.networkConditions,
       cpuConditions: options.cpuConditions,
       verbose: options.verbose || false,
-      userAgent: config.crawl?.userAgent || null,
-      queryParams: options.queryParams || config.queryParams || {
+      userAgent: (config.crawl as Record<string, unknown> | undefined)?.userAgent as string | null ?? null,
+      cruxApiKey: options.cruxApiKey || null,
+      queryParams: options.queryParams || (config.queryParams as unknown as QueryParamConfig | undefined) || {
         mode: 'strip_tracking',
         whitelist: [],
         blacklist: [
@@ -145,18 +341,18 @@ class CrawlerEngine {
     };
 
     // Initialize backoff state per error type
-    this.#backoffState = new Map();
+    this.#backoffState = new Map<string, BackoffState>();
   }
 
   /**
    * Extract values from Promise.allSettled results with fallback for rejected promises
    * @private
-   * @param {Array<{status: string, value?: any, reason?: any}>} results - Promise.allSettled results
-   * @param {Array<any>} fallbacks - Fallback values for rejected promises (same length as results)
+   * @param results - Promise.allSettled results
+   * @param fallbacks - Fallback values for rejected promises (same length as results)
    * @param {string} url - URL being processed (for logging)
-   * @returns {Array<any>} Extracted values
+   * @returns Extracted values
    */
-  #extractSettledResults(results: PromiseSettledResult<any>[], fallbacks: any[], url: string) {
+  #extractSettledResults(results: PromiseSettledResult<unknown>[], fallbacks: unknown[], url: string): unknown[] {
     return results.map((result, index) => {
       if (result.status === 'fulfilled') {
         return result.value;
@@ -257,12 +453,12 @@ class CrawlerEngine {
    * @param {string} message - Error message on timeout
    * @returns {Promise} Result of promise or timeout error
    */
-  async #withTimeout(promise: Promise<any>, timeoutMs: number, message: string = "Observer timeout") {
-    let timeoutId;
+  async #withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string = "Observer timeout"): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
     let timedOut = false;
 
-    const timeoutPromise = new Promise((_, reject) => {
+    const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
         if (!settled) {
           timedOut = true;
@@ -275,7 +471,7 @@ class CrawlerEngine {
       const result = await Promise.race([promise, timeoutPromise]);
       settled = true;
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       settled = true;
       throw error;
     } finally {
@@ -301,15 +497,15 @@ class CrawlerEngine {
    * Perform basic page test - navigate and collect metrics
    * @private
    */
-  async #basicTest(page: ChromePage, network: any, cpu: any, url: string) {
-    const requests: Record<string, any> = {};
+  async #basicTest(page: ChromePage, network: NetworkCondition, cpu: CpuCondition, url: string): Promise<BasicTestResult> {
+    const requests: Record<string, RequestInfo> = {};
     let totalResponseSize = 0;
 
     // Set up console error tracking
     const consoleTracker = ConsoleErrorAnalyzer.createConsoleTracker(page);
 
     // Define handlers so we can remove them later
-    const requestHandler = async (request: any) => {
+    const requestHandler = async (request: PlaywrightRequest) => {
       requests[request.url()] = {
         resourceType: request.resourceType(),
         method: request.method(),
@@ -317,14 +513,14 @@ class CrawlerEngine {
       };
     };
 
-    const responseHandler = async (response: any) => {
-      let size = null;
+    const responseHandler = async (response: PlaywrightResponse) => {
+      let size: number | null = null;
 
       try {
         const body = await response.body();
         size = body.length;
         totalResponseSize += size;
-      } catch (e: any) {
+      } catch (e: unknown) {
         // Body read failed - ignore
       }
 
@@ -345,7 +541,7 @@ class CrawlerEngine {
     page.on("request", requestHandler);
     page.on("response", responseHandler);
 
-    let response: any, status: any, redirectChain: any[], vitals: any, metrics: any;
+    let response: PlaywrightResponse | null | undefined, status: number | undefined, redirectChain: RedirectEntry[], vitals: Partial<CollectedVitals>, metrics: PerformanceMetrics;
 
     try {
       if (this.#options.perf) {
@@ -367,9 +563,9 @@ class CrawlerEngine {
 
           await session.send("Network.emulateNetworkConditions", {
             offline: false,
-            downloadThroughput: network.download,
-            uploadThroughput: network.upload,
-            latency: network.latency,
+            downloadThroughput: network.download ?? -1,
+            uploadThroughput: network.upload ?? -1,
+            latency: network.latency ?? 0,
           });
         }
       }
@@ -409,7 +605,7 @@ class CrawlerEngine {
       if (redirectChain.length > 0) {
         redirectChain.push({
           url: response?.url() || url,
-          status: status,
+          status: status ?? 0,
         });
       }
 
@@ -422,8 +618,8 @@ class CrawlerEngine {
           // Collect performance metrics with error handling
           try {
             vitals = await VitalsCollector.collectVitals(page);
-          } catch (vitalsError: any) {
-            console.log(`⚠️  Vitals collection failed for ${url}: ${vitalsError.message}`);
+          } catch (vitalsError: unknown) {
+            console.log(`⚠️  Vitals collection failed for ${url}: ${(vitalsError as Error).message}`);
             vitals = {};
           }
         } else {
@@ -449,7 +645,7 @@ class CrawlerEngine {
     consoleTracker.cleanup();
 
     // Capture response headers for freshness analysis
-    const responseHeaders: Record<string, any> = {};
+    const responseHeaders: Record<string, string | undefined> = {};
     if (response) {
       const headers = response.headers();
       responseHeaders['last-modified'] = headers['last-modified'];
@@ -484,40 +680,40 @@ class CrawlerEngine {
    * @param {Object} params.sitemapUrls - Sitemap URLs reference
    * @returns {Object} Crawl results { alternatesErrors, isMultiLang, failedPages }
    */
-  async crawlPages({ pagesToCrawl, collectedURLs, uniquePages, addMissing, results, incomingLinksTracking, sitemapUrls }: any) {
+  async crawlPages({ pagesToCrawl, collectedURLs, uniquePages, addMissing, results, incomingLinksTracking, sitemapUrls }: CrawlPagesParams) {
     let browser;
-    let sigintHandler;
+    let sigintHandler: (() => void) | undefined;
     try {
       browser = await chromium.launch();
-      const contextOptions: any = {
+      const contextOptions: Record<string, unknown> = {
         viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
       };
       if (this.#options.userAgent) {
         contextOptions.userAgent = this.#options.userAgent;
       }
-      const context = await browser.newContext(contextOptions);
+      const context = await browser.newContext(contextOptions as { viewport: { width: number; height: number }; userAgent?: string });
 
       // Inject __name polyfill for tsx/esbuild compatibility.
       // tsx compiles with keepNames:true, injecting __name() calls into serialized
       // page.evaluate() callbacks. This polyfill ensures __name exists in the browser.
       await context.addInitScript(() => {
-        if (typeof (globalThis as any).__name === 'undefined') {
-          (globalThis as any).__name = (target: any, _value: any) => target;
+        if (typeof (globalThis as unknown as Record<string, unknown>).__name === 'undefined') {
+          (globalThis as unknown as Record<string, unknown>).__name = (target: unknown, _value: unknown) => target;
         }
       });
 
-      const alternatesErrors: any[] = [];
-      const uniqueTitles = new Set();
-      const uniqueDescriptions = new Set();
-      const failedPages = [];
-      const discoveredLinksSource = new Map();
+      const alternatesErrors: Issue[] = [];
+      const uniqueTitles = new Set<string>();
+      const uniqueDescriptions = new Set<string>();
+      const failedPages: string[] = [];
+      const discoveredLinksSource = new Map<string, string>();
 
       let isMultiLang = false;
       let saveCounter = 0; // Track saves to reduce frequency
 
       // Fetch CrUX data for the origin (only once at start)
       if (this.#options.perf && !results.cruxData) {
-        const cruxApiKey = process.env.CRUX_API_KEY || (this.#options as any).cruxApiKey || null;
+        const cruxApiKey = process.env.CRUX_API_KEY || this.#options.cruxApiKey || null;
         console.log(`\n📊 Fetching Chrome UX Report (CrUX) field data...${cruxApiKey ? ' (API key found)' : ''}`);
         try {
           results.cruxData = await CrUXAPI.fetchCrUXData(this.#options.origin, cruxApiKey);
@@ -540,14 +736,14 @@ class CrawlerEngine {
           } else {
             console.log('   ⚠️  No CrUX data available (origin may lack sufficient Chrome traffic)');
           }
-        } catch (e: any) {
-          console.log(`   ⚠️  Could not fetch CrUX data: ${e.message}`);
+        } catch (e: unknown) {
+          console.log(`   ⚠️  Could not fetch CrUX data: ${(e as Error).message}`);
         }
       }
 
       // Track pages already processed at start (for resume) to avoid double-counting in progress
       // Only count pages that are BOTH processed AND in the current crawl list
-      const alreadyProcessedAtStart = new Set();
+      const alreadyProcessedAtStart = new Set<string>();
       const pagesToCrawlSet = new Set(pagesToCrawl);
       for (const url of results.pageData.processedPages) {
         if (pagesToCrawlSet.has(url)) {
@@ -601,7 +797,7 @@ class CrawlerEngine {
         // Process batch in parallel using Promise.allSettled to isolate failures
         // Add overall batch timeout to prevent indefinite hangs (5 minutes per batch)
         const BATCH_TIMEOUT = (CRAWL_SETTINGS.BATCH_TIMEOUT || 300000);
-        const batchPromise = Promise.allSettled(batch.map(async (url: any) => {
+        const batchPromise = Promise.allSettled(batch.map(async (url: string) => {
           if (results.pageData.processedPages.has(url)) {
             // Only count as skip if it wasn't already counted at start (prevents double-counting on resume)
             if (!alreadyProcessedAtStart.has(url)) {
@@ -661,8 +857,8 @@ class CrawlerEngine {
             BATCH_TIMEOUT,
             `Batch timeout after ${BATCH_TIMEOUT / 1000}s for ${batch.length} URLs`
           );
-        } catch (timeoutError: any) {
-          console.warn(`⚠️  ${timeoutError.message}`);
+        } catch (timeoutError: unknown) {
+          console.warn(`⚠️  ${(timeoutError as Error).message}`);
           // On timeout, mark remaining URLs as failed and continue
           for (const url of batch) {
             if (!results.pageData.processedPages.has(url)) {
@@ -783,8 +979,8 @@ class CrawlerEngine {
       this.#populateIncomingLinksCount(results);
 
       return { alternatesErrors, isMultiLang, failedPages };
-    } catch (error: any) {
-      console.error('Crawl error:', error.message);
+    } catch (error: unknown) {
+      console.error('Crawl error:', (error as Error).message);
       throw error;
     } finally {
       // Remove SIGINT handler to prevent leaks across retries
@@ -792,7 +988,7 @@ class CrawlerEngine {
       if (browser) {
         try {
           await browser.close();
-        } catch (closeError: any) {
+        } catch (closeError: unknown) {
           console.error("Failed to close browser:", closeError);
         }
       }
@@ -803,7 +999,7 @@ class CrawlerEngine {
    * Crawl a single page
    * @private
    */
-  async #crawlSinglePage(params: any) {
+  async #crawlSinglePage(params: CrawlSinglePageParams): Promise<CrawlPageResult> {
     const {
       url, context, results, incomingLinksTracking, sitemapUrls,
       collectedURLs, uniquePages, pagesToCrawl, addMissing,
@@ -816,15 +1012,15 @@ class CrawlerEngine {
     let failed = false;
 
     try {
-      const page = await this.#withTimeout(
+      const page = await this.#withTimeout<BasicTestResult | null>(
         this.#basicTest(
           chromePage,
           this.#options.networkConditions.slow4g,
           this.#options.cpuConditions.normal,
           url
         )
-          .then(async (data) => ({ ...data, url }))
-          .catch((error) => {
+          .then(async (data): Promise<BasicTestResult> => ({ ...data, url }))
+          .catch((error: Error): null => {
             this.#handlePageError(error, url, results);
             return null;
           }),
@@ -857,9 +1053,9 @@ class CrawlerEngine {
       isMultiLang = processResult.isMultiLang;
       failed = processResult.failed;
 
-    } catch (error: any) {
-      const errorType = this.#categorizeError(error);
-      console.error(`Error processing page ${url} [${errorType}]:`, error.message);
+    } catch (error: unknown) {
+      const errorType = this.#categorizeError(error as Error);
+      console.error(`Error processing page ${url} [${errorType}]:`, (error as Error).message);
       this.#callbacks.saveAttempt(url);
       this.#callbacks.checkAttempts(url);
       failed = true;
@@ -875,7 +1071,7 @@ class CrawlerEngine {
    * Categorize error type for better debugging and reporting
    * @private
    */
-  #categorizeError(error: any): string {
+  #categorizeError(error: Error): string {
     const message = (error.message || '').toLowerCase();
     const name = (error.name || '').toLowerCase();
 
@@ -938,9 +1134,9 @@ class CrawlerEngine {
    * Handle page load error with categorization
    * @private
    */
-  #handlePageError(error: any, url: string, results: any) {
+  #handlePageError(error: Error, url: string, results: CrawlResults) {
     const errorType = this.#categorizeError(error);
-    const messageOverall = `${error.name} ${error.message} ${error.cause || ''}`.trim();
+    const messageOverall = `${error.name} ${error.message} ${(error as Error & { cause?: string }).cause || ''}`.trim();
     const friendlyMessage = this.#getFriendlyErrorMessage(errorType, url);
 
     // Log user-friendly message, with raw error in verbose or non-TTY mode
@@ -958,8 +1154,8 @@ class CrawlerEngine {
       results.pageData.byError[`total_${errorType}`] = 0;
     }
 
-    results.pageData.byError[errorType].push(url);
-    results.pageData.byError[`total_${errorType}`] += 1;
+    (results.pageData.byError[errorType] as string[]).push(url);
+    results.pageData.byError[`total_${errorType}`] = (results.pageData.byError[`total_${errorType}`] as number) + 1;
 
     // Also track in legacy "crashed" category for backwards compatibility
     if (errorType !== 'crashed') {
@@ -967,8 +1163,8 @@ class CrawlerEngine {
         results.pageData.byError.crashed = [];
         results.pageData.byError.totalCrashed = 0;
       }
-      results.pageData.byError.crashed.push(url);
-      results.pageData.byError.totalCrashed += 1;
+      (results.pageData.byError.crashed as string[]).push(url);
+      results.pageData.byError.totalCrashed = (results.pageData.byError.totalCrashed as number) + 1;
     }
 
     this.#callbacks.saveAttempt(url);
@@ -979,7 +1175,7 @@ class CrawlerEngine {
    * Process page data after successful load
    * @private
    */
-  async #processPageData(params: any) {
+  async #processPageData(params: ProcessPageDataParams) {
     const {
       page, chromePage, url, results, incomingLinksTracking, sitemapUrls,
       collectedURLs, uniquePages, pagesToCrawl, addMissing,
@@ -1022,7 +1218,7 @@ class CrawlerEngine {
       throw new Error(`Corrupted results state: pageData or pages is undefined for URL ${url}`);
     }
 
-    results.pageData.pages[url] = {};
+    results.pageData.pages[url] = { url } as PageInfo;
     const pageData = results.pageData.pages[url];
 
     // Store redirect chain info
@@ -1039,9 +1235,10 @@ class CrawlerEngine {
     pageData.urlAnalysis = analyzeUrlStructure(url, this.#options.origin);
     for (const issue of pageData.urlAnalysis.issues) {
       const escapedUrl = escapeHtml(url);
+      const msg = issue.message || '';
       this.#callbacks.saveError(
-        issue.message.split('(')[0].trim(),
-        `<a href="${escapedUrl}">${escapedUrl}</a>: ${escapeHtml(issue.message)}`,
+        msg.split('(')[0].trim(),
+        `<a href="${escapedUrl}">${escapedUrl}</a>: ${escapeHtml(msg)}`,
         issue.severity
       );
     }
@@ -1077,20 +1274,20 @@ class CrawlerEngine {
     };
 
     // Analyze LCP sub-parts if available
-    if (lcpSubParts && LCP > THRESHOLDS.LCP) {
+    if (lcpSubParts && LCP != null && LCP > THRESHOLDS.LCP) {
       const lcpAnalysis = VitalsCollector.analyzeLCPSubParts(lcpSubParts, LCP);
       pageData.vitals.lcpAnalysis = lcpAnalysis;
     }
 
     // Analyze CLS sources if available
-    if (clsEntries && CLS > THRESHOLDS.CLS) {
-      const clsAnalysis = VitalsCollector.analyzeCLSSources(clsEntries);
+    if (clsEntries && CLS != null && CLS > THRESHOLDS.CLS) {
+      const clsAnalysis = VitalsCollector.analyzeCLSSources(clsEntries as import('./vitals-collector').CLSEntry[]);
       pageData.vitals.clsAnalysis = clsAnalysis;
     }
 
     // Analyze long tasks if TBT is high
-    if (longTasks && TBT > THRESHOLDS.TBT) {
-      const tbtAnalysis = VitalsCollector.analyzeLongTasks(longTasks);
+    if (longTasks && TBT != null && TBT > THRESHOLDS.TBT) {
+      const tbtAnalysis = VitalsCollector.analyzeLongTasks(longTasks as import('./vitals-collector').LongTaskEntry[]);
       pageData.vitals.tbtAnalysis = tbtAnalysis;
     }
 
@@ -1127,13 +1324,14 @@ class CrawlerEngine {
     if (status !== 200) {
       results.pageData.totalWithError += 1;
 
-      if (!results.pageData.byError[status]) {
-        results.pageData.byError[status] = [];
-        results.pageData.byError[`total${status}`] = 0;
+      const statusKey = String(status ?? 'unknown');
+      if (!results.pageData.byError[statusKey]) {
+        results.pageData.byError[statusKey] = [];
+        results.pageData.byError[`total${statusKey}`] = 0;
       }
 
-      results.pageData.byError[status].push(url);
-      results.pageData.byError[`total${status}`] += 1;
+      (results.pageData.byError[statusKey] as string[]).push(url);
+      results.pageData.byError[`total${statusKey}`] = (results.pageData.byError[`total${statusKey}`] as number) + 1;
 
       results.pageData.processedPages.add(url);
 
@@ -1164,22 +1362,23 @@ class CrawlerEngine {
     // Wrap in try-catch to prevent analyzer failures from losing all page data
     try {
       await this.#runAnalyzers(chromePage, parsedPage, url, pageData, pageContent, requests, consoleData);
-    } catch (analyzerError: any) {
+    } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page
-      console.error(`Analyzer error for ${url}: ${analyzerError.message}`);
+      const err = analyzerError as Error;
+      console.error(`Analyzer error for ${url}: ${err.message}`);
       pageData.analyzerError = {
-        message: analyzerError.message,
-        stack: analyzerError.stack?.split('\n').slice(0, 3).join('\n'),
+        message: err.message,
+        stack: err.stack?.split('\n').slice(0, 3).join('\n'),
       };
       this.#callbacks.saveError(
         'Analyzer error occurred',
-        `Some analyzers failed for <a href="${escapeHtml(url)}">${escapeHtml(url)}</a>: ${escapeHtml(analyzerError.message)}`,
+        `Some analyzers failed for <a href="${escapeHtml(url)}">${escapeHtml(url)}</a>: ${escapeHtml(err.message)}`,
         SEVERITY.MEDIUM
       );
     }
 
     // Check Core Web Vitals thresholds
-    this.#checkVitalsThresholds(pageData, url, TTFB, FCP, LCP, CLS);
+    this.#checkVitalsThresholds(pageData, url, TTFB ?? 0, FCP ?? 0, LCP ?? 0, CLS ?? 0);
 
     // Process title
     const title = await chromePage.evaluate(
@@ -1204,7 +1403,7 @@ class CrawlerEngine {
     const linkTags = await chromePage.evaluate(() =>
       Array.from(document.querySelectorAll("link")).map((link) => ({
         rel: link.rel,
-        hrefLang: (link as any).hrefLang,
+        hrefLang: (link as unknown as { hrefLang: string }).hrefLang,
         href: link.href,
       }))
     );
@@ -1224,17 +1423,21 @@ class CrawlerEngine {
    * Converts detailed arrays to summaries while preserving all issues/warnings for the report
    * @private
    */
-  #optimizePageDataMemory(pageData: any) {
+  #optimizePageDataMemory(pageData: PageInfo) {
+    // PageInfo has [key: string]: any index signature, allowing dynamic property access
+    // Analyzer results often have more fields than the strict type definitions
+
     // 1. Strip raw schema data (can be huge for e-commerce Product schemas)
-    if (pageData.structuredData?.jsonLdSchemas) {
-      for (const schema of pageData.structuredData.jsonLdSchemas) {
+    const sd = pageData.structuredData as Record<string, unknown> | undefined;
+    if (sd?.jsonLdSchemas) {
+      for (const schema of sd.jsonLdSchemas as Array<Record<string, unknown>>) {
         delete schema.raw;
       }
     }
 
     // 2. Reduce requests object to summary (keeps type breakdown for report)
     if (pageData.requests && typeof pageData.requests === 'object' && !pageData.requests.totalRequests) {
-      const entries = Object.entries(pageData.requests) as Array<[string, any]>;
+      const entries = Object.entries(pageData.requests) as Array<[string, RequestInfo]>;
       const byType: Record<string, number> = {};
       let totalSize = 0;
       for (const [, req] of entries) {
@@ -1247,16 +1450,17 @@ class CrawlerEngine {
     // 3. Keep only problematic links (links without text)
     if (Array.isArray(pageData.links)) {
       pageData.linksCount = pageData.links.length;
-      pageData.internalLinksCount = pageData.links.filter((l: any) => l.isInternal).length;
-      pageData.externalLinksCount = pageData.links.filter((l: any) => !l.isInternal).length;
-      pageData.links = pageData.links.filter((l: any) => !l.text || l.text.trim() === '').slice(0, 20);
+      pageData.internalLinksCount = pageData.links.filter((l: LinkEntry) => l.isInternal).length;
+      pageData.externalLinksCount = pageData.links.filter((l: LinkEntry) => !l.isInternal).length;
+      pageData.links = pageData.links.filter((l: LinkEntry) => !l.text || l.text.trim() === '').slice(0, 20);
     }
 
     // 4. Reduce images array (keep problematic ones)
-    if (Array.isArray(pageData.images)) {
-      pageData.imagesCount = pageData.images.length;
-      pageData.imagesWithoutAltCount = pageData.images.filter((i: any) => !i.alt || i.alt.trim() === '').length;
-      pageData.images = pageData.images.filter((i: any) => !i.alt || i.alt.trim() === '').slice(0, 10);
+    const imagesArr = pageData.images as unknown;
+    if (Array.isArray(imagesArr)) {
+      pageData.imagesCount = imagesArr.length;
+      pageData.imagesWithoutAltCount = imagesArr.filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '').length;
+      (pageData as Record<string, unknown>).images = imagesArr.filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '').slice(0, 10);
     }
 
     // 5. Strip vitals detail arrays (keep analysis summaries)
@@ -1293,9 +1497,10 @@ class CrawlerEngine {
 
     // 8. Strip contentQuality (keep scores and top keywords)
     if (pageData.contentQuality) {
-      delete pageData.contentQuality.keywords;
-      if (pageData.contentQuality.topKeywords) {
-        pageData.contentQuality.topKeywords = pageData.contentQuality.topKeywords.slice(0, 5);
+      const cq = pageData.contentQuality as unknown as Record<string, unknown>;
+      delete cq.keywords;
+      if (Array.isArray(cq.topKeywords)) {
+        cq.topKeywords = (cq.topKeywords as unknown[]).slice(0, 5);
       }
     }
 
@@ -1398,18 +1603,25 @@ class CrawlerEngine {
     }
 
     // 18. Strip headings (keep counts for all levels and first h1)
-    if (pageData.headings?.h1 && Array.isArray(pageData.headings.h1)) {
+    const hdg = pageData.headings as Record<string, unknown> | undefined;
+    if (hdg?.h1 && Array.isArray(hdg.h1)) {
+      const h1Arr = hdg.h1 as string[];
+      const h2Arr = hdg.h2 as string[] | undefined;
+      const h3Arr = hdg.h3 as string[] | undefined;
+      const h4Arr = hdg.h4 as string[] | undefined;
+      const h5Arr = hdg.h5 as string[] | undefined;
+      const h6Arr = hdg.h6 as string[] | undefined;
       pageData.headings = {
-        h1Count: pageData.headings.h1.length,
-        h2Count: pageData.headings.h2?.length || 0,
-        h3Count: pageData.headings.h3?.length || 0,
-        h4Count: pageData.headings.h4?.length || 0,
-        h5Count: pageData.headings.h5?.length || 0,
-        h6Count: pageData.headings.h6?.length || 0,
-        h1: pageData.headings.h1.map((h: any) => typeof h === 'string' ? h.substring(0, 100) : h),
-        issues: pageData.headings.issues,
-        warnings: pageData.headings.warnings,
-      };
+        h1Count: h1Arr.length,
+        h2Count: h2Arr?.length || 0,
+        h3Count: h3Arr?.length || 0,
+        h4Count: h4Arr?.length || 0,
+        h5Count: h5Arr?.length || 0,
+        h6Count: h6Arr?.length || 0,
+        h1: h1Arr.map((h: string) => typeof h === 'string' ? h.substring(0, 100) : h),
+        issues: hdg.issues,
+        warnings: hdg.warnings,
+      } as unknown as import('../types').HeadingAnalysis;
     }
 
     // 19. Strip accessibility data (keep scores and summary counts for report)
@@ -1514,13 +1726,14 @@ class CrawlerEngine {
     }
 
     // 27. Strip URL analysis (keep issues only)
-    if (pageData.urlAnalysis?.components) {
+    const urlA = pageData.urlAnalysis as Record<string, unknown> | undefined;
+    if (urlA?.components) {
       pageData.urlAnalysis = {
-        depth: pageData.urlAnalysis.depth,
-        length: pageData.urlAnalysis.length,
-        hasParameters: pageData.urlAnalysis.hasParameters,
-        issues: pageData.urlAnalysis.issues,
-      };
+        depth: urlA.depth as number,
+        length: urlA.length as number,
+        hasParameters: urlA.hasParameters as boolean,
+        issues: urlA.issues as Issue[],
+      } as unknown as import('../types').UrlAnalysis;
     }
 
     // 28. Strip response object (headers are large and rarely needed after analysis)
@@ -1529,13 +1742,14 @@ class CrawlerEngine {
     }
 
     // 29. Strip redirect chain (keep URLs for tooltip, limit to 10)
-    if (pageData.redirectChain && Array.isArray(pageData.redirectChain) && pageData.redirectChain.length > 0) {
-      pageData.redirectCount = pageData.redirectChain.length;
-      pageData.redirectChain = pageData.redirectChain.slice(0, 10).map((r: any) => ({ url: r.url, status: r.status }));
+    const rc = pageData.redirectChain;
+    if (rc && Array.isArray(rc) && rc.length > 0) {
+      pageData.redirectCount = rc.length;
+      pageData.redirectChain = rc.slice(0, 10).map((r: RedirectEntry) => ({ url: r.url, status: r.status }));
     }
 
     // 30. Limit issues/warnings arrays on all analyzers to 20 each
-    const limitArrays = (obj: any) => {
+    const limitArrays = (obj: Record<string, unknown>) => {
       if (obj?.issues && Array.isArray(obj.issues)) {
         obj.issues = obj.issues.slice(0, 20);
       }
@@ -1560,7 +1774,7 @@ class CrawlerEngine {
    * Process redirect chain
    * @private
    */
-  #processRedirects(pageData: any, redirectChain: any[], url: string) {
+  #processRedirects(pageData: PageInfo, redirectChain: RedirectEntry[], url: string) {
     pageData.redirectChain = redirectChain;
     pageData.hasRedirects = redirectChain.length > 0;
     // Chain includes final URL, so actual redirect count is length - 1
@@ -1590,13 +1804,13 @@ class CrawlerEngine {
    * Collect links from page
    * @private
    */
-  async #collectLinks(params: any) {
+  async #collectLinks(params: CollectLinksParams) {
     const {
       parsedPage, url, results, incomingLinksTracking,
       collectedURLs, uniquePages, pagesToCrawl, addMissing, discoveredLinksSource, sitemapUrls
     } = params;
 
-    const links: any[] = [];
+    const links: LinkEntry[] = [];
     let httpLinksCount = 0;
 
     for (const link of parsedPage.querySelectorAll("a")) {
@@ -1619,7 +1833,7 @@ class CrawlerEngine {
           try {
             const baseUrl = new URL(url);
             fullHref = `${baseUrl.protocol}//${baseUrl.host}${href}`;
-          } catch (e: any) {
+          } catch (e: unknown) {
             continue;
           }
         }
@@ -1636,7 +1850,7 @@ class CrawlerEngine {
         if (!incomingLinksTracking.has(normalizedHref)) {
           incomingLinksTracking.set(normalizedHref, new Set());
         }
-        incomingLinksTracking.get(normalizedHref).add(url);
+        incomingLinksTracking.get(normalizedHref)!.add(url);
 
         // Handle URL discovery with limit to prevent unbounded growth
         const maxDiscoveredUrls = CRAWL_SETTINGS.MAX_DISCOVERED_URLS || 100000;
@@ -1698,8 +1912,10 @@ class CrawlerEngine {
    * Each analyzer group has a timeout to prevent hung analyzers from freezing the crawl
    * @private
    */
-  async #runAnalyzers(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: any, pageContent: string, requests: any, consoleData: any) {
+  async #runAnalyzers(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: PageInfo, pageContent: string, requests: Record<string, RequestInfo>, consoleData: unknown) {
     const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
+    // Cast requests for analyzer compatibility (analyzers use broader parameter types)
+    const analyzerRequests = requests as unknown as import('../types').NetworkRequest[];
 
     // ============================================================
     // GROUP 1: Browser-based analyzers (can run in parallel)
@@ -1773,16 +1989,16 @@ class CrawlerEngine {
 
       // Security
       SecurityAnalyzer.analyzeSecurity(chromePage, parsedPage, url, pageData.responseHeaders),
-      CookieConsentAnalyzer.analyze(chromePage, parsedPage, requests, url),
+      CookieConsentAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
 
       // Performance
-      CachingAnalyzer.analyzeCaching(chromePage, requests, url),
-      ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, requests, url),
-      ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, requests, url),
-      FontLoadingAnalyzer.analyze(chromePage, parsedPage, requests, url),
-      ThirdPartyAnalyzer.analyze(chromePage, requests, url, this.#options.origin),
-      CriticalPathAnalyzer.analyze(chromePage, parsedPage, requests, pageData.metrics, url),
-      ConnectionTimingAnalyzer.analyze(chromePage, requests, url),
+      CachingAnalyzer.analyzeCaching(chromePage, analyzerRequests, url),
+      ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, analyzerRequests, url),
+      ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
+      FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
+      ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, this.#options.origin),
+      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics, url),
+      ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
 
       // Advanced
       PaginationAnalyzer.analyze(chromePage, parsedPage, url),
@@ -1793,7 +2009,7 @@ class CrawlerEngine {
       AEOAnalyzer.analyze(chromePage, parsedPage, url),
 
       // Technology detection (with error handling)
-      TechnologyDetector.detect(chromePage, parsedPage, pageContent, pageData.responseHeaders || {}, requests)
+      TechnologyDetector.detect(chromePage, parsedPage, pageContent, pageData.responseHeaders || {}, analyzerRequests)
         .catch(() => {
           const scriptSrcs = Object.keys(requests || {}).filter(u => u.endsWith('.js'));
           return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders || {}, scriptSrcs);
@@ -1813,6 +2029,7 @@ class CrawlerEngine {
     const browserAnalyzers = this.#extractSettledResults(browserAnalyzersSettled, group1Fallbacks, url);
 
     // Assign results from Group 1
+    // Results come from Promise.allSettled extraction, cast to AnalyzerResult for typed access
     const [
       headingResult, images, linkQualityResult, structuredDataResult,
       indexabilityResult, crawlabilityResult, internationalSEOResult,
@@ -1826,39 +2043,42 @@ class CrawlerEngine {
       technologies,
       ctaResult,
       langDetectionResult,
-    ] = browserAnalyzers;
+    ] = browserAnalyzers as AnalyzerResult[];
 
     // Apply results to pageData
-    pageData.headings = headingResult;
-    pageData.images = images;
-    pageData.linkAnalysis = linkQualityResult;
-    pageData.structuredData = structuredDataResult;
-    pageData.indexability = indexabilityResult;
-    pageData.crawlability = crawlabilityResult;
-    pageData.internationalSEO = internationalSEOResult;
-    pageData.mobileFriendly = mobileFriendlyResult;
-    pageData.accessibility = accessibilityResult;
-    pageData.contentQuality = contentQualityResult;
-    pageData.formData = formResult.formData;
-    pageData.socialMedia = socialMediaResult;
-    pageData.analytics = analyticsResult;
-    pageData.security = securityResult;
-    pageData.consentData = consentResult.consentData;
-    pageData.caching = cachingResult;
-    pageData.imageOptimization = imageOptimizationResult;
-    pageData.resourceOptimization = resourceOptimizationResult;
-    pageData.fontData = fontResult.fontData;
-    pageData.thirdPartyData = thirdPartyResult.thirdPartyData;
-    pageData.criticalPathData = criticalPathResult.criticalPathData;
-    pageData.timingData = connectionResult.timingData;
-    pageData.paginationData = paginationResult.paginationData;
-    pageData.mediaData = mediaResult.mediaData;
-    pageData.webComponentData = webComponentResult.webComponentData;
-    pageData.aeo = aeoResult.info;
-    pageData.technologies = technologies;
-    pageData.ctas = ctaResult.ctas;
-    pageData.ctaData = { ctas: ctaResult.ctas, summary: ctaResult.summary };
-    pageData.languageDetection = langDetectionResult.info;
+    // Using PageInfo's [key: string]: any index signature for analyzer-specific properties
+    // that may not match the strict typed fields exactly
+    const pd = pageData as Record<string, unknown>;
+    pd.headings = headingResult;
+    pd.images = images;
+    pd.linkAnalysis = linkQualityResult;
+    pd.structuredData = structuredDataResult;
+    pd.indexability = indexabilityResult;
+    pd.crawlability = crawlabilityResult;
+    pd.internationalSEO = internationalSEOResult;
+    pd.mobileFriendly = mobileFriendlyResult;
+    pd.accessibility = accessibilityResult;
+    pd.contentQuality = contentQualityResult;
+    pd.formData = (formResult as AnalyzerResult & { formData: unknown }).formData;
+    pd.socialMedia = socialMediaResult;
+    pd.analytics = analyticsResult;
+    pd.security = securityResult;
+    pd.consentData = (consentResult as AnalyzerResult & { consentData: unknown }).consentData;
+    pd.caching = cachingResult;
+    pd.imageOptimization = imageOptimizationResult;
+    pd.resourceOptimization = resourceOptimizationResult;
+    pd.fontData = (fontResult as AnalyzerResult & { fontData: unknown }).fontData;
+    pd.thirdPartyData = (thirdPartyResult as AnalyzerResult & { thirdPartyData: unknown }).thirdPartyData;
+    pd.criticalPathData = (criticalPathResult as AnalyzerResult & { criticalPathData: unknown }).criticalPathData;
+    pd.timingData = (connectionResult as AnalyzerResult & { timingData: unknown }).timingData;
+    pd.paginationData = (paginationResult as AnalyzerResult & { paginationData: unknown }).paginationData;
+    pd.mediaData = (mediaResult as AnalyzerResult & { mediaData: unknown }).mediaData;
+    pd.webComponentData = (webComponentResult as AnalyzerResult & { webComponentData: unknown }).webComponentData;
+    pd.aeo = (aeoResult as AnalyzerResult & { info: unknown }).info;
+    pd.technologies = technologies;
+    pd.ctas = (ctaResult as AnalyzerResult & { ctas: unknown }).ctas;
+    pd.ctaData = { ctas: (ctaResult as AnalyzerResult & { ctas: unknown }).ctas, summary: (ctaResult as AnalyzerResult & { summary: unknown }).summary };
+    pd.languageDetection = (langDetectionResult as AnalyzerResult & { info: unknown }).info;
 
     // Report issues from Group 1
     [
@@ -1873,7 +2093,7 @@ class CrawlerEngine {
       aeoResult,
       ctaResult,
       langDetectionResult,
-    ].forEach(result => this.#reportIssues(result));
+    ].forEach(result => this.#reportIssues(result as AnalyzerResult));
 
     // ============================================================
     // GROUP 2: Data-based analyzers (depend on Group 1 results)
@@ -1941,7 +2161,7 @@ class CrawlerEngine {
       thinContentResult, redirectResult, compressionResult, hintsResult,
       mixedResult, protocolResult, pwaResult, aboveFoldResult,
       anchorResult, externalLinksResult, responseHeaderResult,
-    ] = syncResults;
+    ] = syncResults as Array<AnalyzerResult & { freshnessData?: unknown; info?: unknown }>;
 
     // Apply data results
     pageData.freshnessData = freshnessResult.freshnessData;
@@ -1957,7 +2177,7 @@ class CrawlerEngine {
     pageData.responseHeaderAnalysis = responseHeaderResult.info;
 
     // Report issues from Group 2
-    syncResults.forEach(result => this.#reportIssues(result));
+    syncResults.forEach(result => this.#reportIssues(result as AnalyzerResult));
 
     // Console error analysis (independent)
     if (consoleData) {
@@ -1977,7 +2197,7 @@ class CrawlerEngine {
     if (this.#options.perf) {
       try {
         const coverageResult = await this.#withTimeout(
-          CodeCoverageAnalyzer.analyze(chromePage, requests, url),
+          CodeCoverageAnalyzer.analyze(chromePage, analyzerRequests, url),
           analyzerTimeout,
           `Coverage analyzer timeout for ${url}`
         );
@@ -2006,12 +2226,12 @@ class CrawlerEngine {
    * Report issues and warnings from analyzer result
    * @private
    */
-  #reportIssues(result: any) {
+  #reportIssues(result: AnalyzerResult) {
     for (const issue of result.issues || []) {
-      this.#callbacks.saveError(issue.message, issue.detail, issue.severity);
+      this.#callbacks.saveError(issue.message || '', issue.detail || '', issue.severity);
     }
     for (const warning of result.warnings || []) {
-      this.#callbacks.saveError(warning.message, warning.detail, warning.severity);
+      this.#callbacks.saveError(warning.message || '', warning.detail || '', warning.severity);
     }
   }
 
@@ -2019,7 +2239,7 @@ class CrawlerEngine {
    * Check Core Web Vitals thresholds
    * @private
    */
-  #checkVitalsThresholds(pageData: any, url: string, TTFB: number, FCP: number, LCP: number, CLS: number) {
+  #checkVitalsThresholds(pageData: PageInfo, url: string, TTFB: number, FCP: number, LCP: number, CLS: number) {
     const vitals = pageData.vitals || {};
 
     const escapedUrlForVitals = escapeHtml(url);
@@ -2121,7 +2341,7 @@ class CrawlerEngine {
    * Process title
    * @private
    */
-  #processTitle(title: string | null, url: string, uniqueTitles: Set<string>) {
+  #processTitle(title: string | null | undefined, url: string, uniqueTitles: Set<string>) {
     const escapedUrl = escapeHtml(url);
     const maxTitleLength = CRAWL_SETTINGS.MAX_TITLE_LENGTH || 500;
 
@@ -2175,7 +2395,7 @@ class CrawlerEngine {
    * Process meta tags
    * @private
    */
-  #processMetaTags(metaTags: any[], pageData: any, url: string, uniqueDescriptions: Set<string>) {
+  #processMetaTags(metaTags: MetaTag[], pageData: PageInfo, url: string, uniqueDescriptions: Set<string>) {
     const escapedUrl = escapeHtml(url);
 
     // Store meta tags as both array (backwards compatible) and object (easier access)
@@ -2192,7 +2412,7 @@ class CrawlerEngine {
       pageData.metaMap[name] = content;
 
       // Store in meta array for backwards compatibility
-      if (META_TAGS.includes(name) || META_TAGS_CONFIG.optional.includes(name)) {
+      if (META_TAGS.includes(name) || (META_TAGS_CONFIG.optional as readonly string[]).includes(name)) {
         pageData.meta.push({ [name]: content });
       }
 
@@ -2251,7 +2471,7 @@ class CrawlerEngine {
    * Check for missing meta tags with appropriate severity levels
    * @private
    */
-  #checkMissingMetaTags(pageData: any, url: string) {
+  #checkMissingMetaTags(pageData: PageInfo, url: string) {
     const escapedUrl = escapeHtml(url);
     const presentTags = new Set(Object.keys(pageData.metaMap));
 
@@ -2278,7 +2498,7 @@ class CrawlerEngine {
    * Process link tags (canonical, alternates)
    * @private
    */
-  #processLinkTags(linkTags: any[], pageData: any, url: string, sitemapUrls: Record<string, any>) {
+  #processLinkTags(linkTags: LinkTag[], pageData: PageInfo, url: string, sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>) {
     const escapedUrl = escapeHtml(url);
     let isMultiLang = false;
 
@@ -2335,7 +2555,7 @@ class CrawlerEngine {
    * Check for duplicate alternates
    * @private
    */
-  #checkAlternateDuplicates(alternates: any[], url: string) {
+  #checkAlternateDuplicates(alternates: AlternateEntry[], url: string) {
     const escapedUrl = escapeHtml(url);
     for (const alternate of alternates) {
       const count = alternates.reduce((acc, cur) => {
@@ -2359,12 +2579,13 @@ class CrawlerEngine {
    * Validate canonical matches sitemap
    * @private
    */
-  #validateCanonicalMatchesSitemap(pageData: any, url: string, sitemapUrls: Record<string, any>) {
+  #validateCanonicalMatchesSitemap(pageData: PageInfo, url: string, sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>) {
     const escapedUrl = escapeHtml(url);
-    const escapedCanonical = escapeHtml(pageData.canonical);
+    const canonical = pageData.canonical || '';
+    const escapedCanonical = escapeHtml(canonical);
     const matchingCanonical =
-      sitemapUrls[pageData.canonical] ||
-      sitemapUrls[`${this.#options.origin}/${pageData.canonical}`];
+      sitemapUrls[canonical] ||
+      sitemapUrls[`${this.#options.origin}/${canonical}`];
 
     if (matchingCanonical) {
       if (matchingCanonical.alternates) {
@@ -2419,8 +2640,8 @@ class CrawlerEngine {
 
     try {
       fs.mkdirSync(folder, { recursive: true });
-    } catch (error: any) {
-      console.error(`Failed to create directory ${folder}:`, error.message);
+    } catch (error: unknown) {
+      console.error(`Failed to create directory ${folder}:`, (error as Error).message);
       return;
     }
 
@@ -2429,8 +2650,8 @@ class CrawlerEngine {
 
     try {
       fs.writeFileSync(filePath, pageContent);
-    } catch (error: any) {
-      console.error(`Failed to write file ${filePath}:`, error.message);
+    } catch (error: unknown) {
+      console.error(`Failed to write file ${filePath}:`, (error as Error).message);
     }
   }
 
@@ -2448,8 +2669,8 @@ class CrawlerEngine {
 
     try {
       fs.mkdirSync(folder, { recursive: true });
-    } catch (error: any) {
-      console.error(`Failed to create screenshots directory ${folder}:`, error.message);
+    } catch (error: unknown) {
+      console.error(`Failed to create screenshots directory ${folder}:`, (error as Error).message);
       return;
     }
 
@@ -2458,10 +2679,10 @@ class CrawlerEngine {
 
     try {
       await chromePage.screenshot({ path: filePath, fullPage: false });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Screenshot failures are non-critical
       if (this.#options.verbose) {
-        console.error(`Failed to capture screenshot for ${url}:`, error.message);
+        console.error(`Failed to capture screenshot for ${url}:`, (error as Error).message);
       }
     }
   }
@@ -2470,9 +2691,9 @@ class CrawlerEngine {
    * Populate incoming links count for each page
    * @private
    */
-  #populateIncomingLinksCount(results: any) {
+  #populateIncomingLinksCount(results: CrawlResults) {
     for (const url in results.pageData.pages) {
-      const incomingLinksArray = results.pageData.incomingLinks[url] || [];
+      const incomingLinksArray = results.pageData.incomingLinks?.[url] || [];
       const incomingLinksCount = Array.isArray(incomingLinksArray) ? incomingLinksArray.length : 0;
       results.pageData.pages[url].incomingLinksCount = incomingLinksCount;
       results.pageData.pages[url].hasIncomingLinks = incomingLinksCount > 0;

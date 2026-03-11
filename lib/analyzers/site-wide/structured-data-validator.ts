@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide Structured Data Validator
@@ -12,15 +12,15 @@ class StructuredDataValidator {
    * @param {Object} allPages - Object containing all page data { url: pageData }
    * @returns {Object} { issues: [], stats: {}, organizationSchemas: [], websiteSchemas: [], ... }
    */
-  static validateStructuredDataConsistency(allPages: Record<string, any>) {
+  static validateStructuredDataConsistency(allPages: Record<string, PageInfo>) {
     console.log('\nChecking structured data consistency across pages...');
 
     const schemaStats = {
       pagesWithSchema: 0,
       pagesWithoutSchema: 0,
       schemaTypes: new Map(), // type -> count
-      organizationSchemas: [] as any[],
-      websiteSchemas: [] as any[],
+      organizationSchemas: [] as Record<string, any>[],
+      websiteSchemas: [] as Record<string, any>[],
       articlePages: [] as string[],
       productPages: [] as string[],
       duplicateArticles: new Map(), // headline -> URLs

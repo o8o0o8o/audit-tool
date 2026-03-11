@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 // Resource types and their security impact
 const RESOURCE_SEVERITY = {
@@ -35,13 +35,13 @@ class MixedContentAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
       isHttps: false,
-      activeMixedContent: [] as any[],
-      passiveMixedContent: [] as any[],
+      activeMixedContent: [] as Record<string, any>[],
+      passiveMixedContent: [] as Record<string, any>[],
       totalMixedResources: 0,
       blockedResources: 0,
     };
@@ -70,7 +70,7 @@ class MixedContentAnalyzer {
     // Check for mixed content in HTML (links, forms, etc.)
     const htmlMixed = this.detectHtmlMixedContent(pageData);
     if (htmlMixed.length > 0) {
-      (info as any).htmlMixedContent = htmlMixed;
+      (info as Record<string, any>).htmlMixedContent = htmlMixed;
     }
 
     // Report active mixed content (critical - blocked by browsers)
@@ -128,7 +128,7 @@ class MixedContentAnalyzer {
    * @param {Array} resources - Resource list
    * @returns {object} Active and passive mixed content
    */
-  static detectMixedContent(resources: any[]) {
+  static detectMixedContent(resources: Record<string, any>[]) {
     const active = [];
     const passive = [];
 
@@ -164,7 +164,7 @@ class MixedContentAnalyzer {
    * @param {object} pageData - Page data
    * @returns {Array} Mixed content items
    */
-  static detectHtmlMixedContent(pageData: any) {
+  static detectHtmlMixedContent(pageData: PageInfo) {
     const mixed = [];
 
     // Check form actions
@@ -225,7 +225,7 @@ class MixedContentAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

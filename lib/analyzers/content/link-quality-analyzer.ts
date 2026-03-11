@@ -1,23 +1,23 @@
-import type { ChromePage, ParsedPage } from '../../types';
+import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class LinkQualityAnalyzer {
-  static async analyzeLinkQuality(chromePage: ChromePage, parsedPage: ParsedPage, url: string, origin: string, allPages: Record<string, any>) {
+  static async analyzeLinkQuality(chromePage: ChromePage, parsedPage: ParsedPage, url: string, origin: string, allPages: Record<string, PageInfo>) {
     const linkAnalysis = {
       totalLinks: 0,
       internalLinks: 0,
       externalLinks: 0,
       nofollowLinks: 0,
       followLinks: 0,
-      brokenLinks: [] as any[],
-      redirectLinks: [] as any[],
-      emptyAnchorLinks: [] as any[],
-      genericAnchorLinks: [] as any[],
+      brokenLinks: [] as Record<string, any>[],
+      redirectLinks: [] as Record<string, any>[],
+      emptyAnchorLinks: [] as Record<string, any>[],
+      genericAnchorLinks: [] as Record<string, any>[],
       anchorTextMap: {} as Record<string, number>, // anchor text -> count
       externalDomains: {} as Record<string, number>, // domain -> count
-      linksToNonIndexable: [] as any[],
+      linksToNonIndexable: [] as Record<string, any>[],
       linkDepth: null as number | null,
-      issues: [] as any[],
-      warnings: [] as any[],
+      issues: [] as Record<string, any>[],
+      warnings: [] as Record<string, any>[],
       internalLinkRatio: 0,
       externalLinkRatio: 0,
       nofollowRatio: 0,
@@ -27,9 +27,9 @@ class LinkQualityAnalyzer {
     const linkElements = await chromePage.evaluate(({ currentUrl, origin }) => {
       const links = Array.from(document.querySelectorAll('a[href]'));
       return links.map(link => {
-        const href = (link as any).href;
+        const href = (link as HTMLAnchorElement).href;
         const anchorText = link.textContent?.trim() || link.getAttribute('aria-label') || '';
-        const rel = (link as any).rel || '';
+        const rel = (link as HTMLAnchorElement).rel || '';
         const isNofollow = rel.includes('nofollow');
         const isExternal = href && !href.startsWith(origin) && !href.startsWith('/') && !href.startsWith('#');
         const isInternal = href && (href.startsWith(origin) || href.startsWith('/')) && !href.startsWith('#');
@@ -41,7 +41,7 @@ class LinkQualityAnalyzer {
           isNofollow,
           isExternal,
           isInternal,
-          target: (link as any).target,
+          target: (link as HTMLAnchorElement).target,
           classList: Array.from(link.classList),
         };
       });
@@ -192,7 +192,7 @@ class LinkQualityAnalyzer {
 
     // Check for nofollow on internal links
     const internalNofollowLinks = linkElements.filter(l => l.isInternal && l.isNofollow);
-    (linkAnalysis as any).internalNofollowLinks = internalNofollowLinks.map(l => ({
+    (linkAnalysis as Record<string, any>).internalNofollowLinks = internalNofollowLinks.map(l => ({
       href: l.href,
       anchorText: l.anchorText,
     }));

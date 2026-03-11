@@ -13,13 +13,13 @@ class ContentQualityAnalyzer {
         textToHtmlRatio: 0,
         readabilityScore: 0,
         keywords: {} as Record<string, number>,
-        topKeywords: [] as any[],
+        topKeywords: [] as Record<string, any>[],
         contentScore: 100,
         issues: [] as string[],
       };
 
       // Helper: Count syllables in a word (approximation)
-      const countSyllables = (word: any) => {
+      const countSyllables = (word: string) => {
         word = word.toLowerCase().replace(/[^a-z]/g, '');
         if (word.length <= 3) return 1;
 
@@ -37,7 +37,7 @@ class ContentQualityAnalyzer {
       }
 
       // Helper: Calculate Flesch Reading Ease
-      const calculateReadability = (text: any, wordCount: any, sentenceCount: any) => {
+      const calculateReadability = (text: string, wordCount: number, sentenceCount: number) => {
         if (wordCount === 0 || sentenceCount === 0) return 0;
 
         const syllables = text.split(/\s+/).reduce((count: any, word: any) => {
@@ -57,7 +57,7 @@ class ContentQualityAnalyzer {
 
       // Remove script, style, nav, header, footer from analysis
       const contentClone = mainContent.cloneNode(true);
-      const elementsToRemove = (contentClone as any).querySelectorAll('script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"]');
+      const elementsToRemove = (contentClone as Element).querySelectorAll('script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"]');
       elementsToRemove.forEach((el: any) => el.remove());
 
       let textContent = contentClone.textContent || '';
@@ -67,7 +67,7 @@ class ContentQualityAnalyzer {
       let activeClone = contentClone;
       if (cleanText.length === 0) {
         const bodyClone = document.body.cloneNode(true);
-        (bodyClone as any).querySelectorAll('script, style').forEach((el: any) => el.remove());
+        (bodyClone as Element).querySelectorAll('script, style').forEach((el: any) => el.remove());
         textContent = bodyClone.textContent || '';
         cleanText = textContent.replace(/\s+/g, ' ').trim();
         activeClone = bodyClone;
@@ -79,7 +79,7 @@ class ContentQualityAnalyzer {
       analysis.characterCount = cleanText.length;
 
       // Paragraph count
-      const paragraphs = (activeClone as any).querySelectorAll('p');
+      const paragraphs = (activeClone as Element).querySelectorAll('p');
       analysis.paragraphCount = paragraphs.length;
 
       // Sentence count
@@ -164,10 +164,10 @@ class ContentQualityAnalyzer {
       // Word count by content section
       const sections = { main: 0, nav: 0, header: 0, footer: 0, sidebar: 0, other: 0 };
 
-      const countWords = (el: any) => {
+      const countWords = (el: Element | null) => {
         if (!el) return 0;
-        const clone = el.cloneNode(true);
-        clone.querySelectorAll('script, style').forEach((s: any) => s.remove());
+        const clone = el.cloneNode(true) as Element;
+        clone.querySelectorAll('script, style').forEach(s => s.remove());
         const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
         return text.split(/\s+/).filter((w: any) => w.length > 0).length;
       }
@@ -197,12 +197,12 @@ class ContentQualityAnalyzer {
       // Calculate boilerplate
       const totalSectionWords = Object.values(sections).reduce((a, b) => a + b, 0);
       const boilerplate = sections.nav + sections.header + sections.footer;
-      (sections as any).boilerplate = boilerplate;
-      (sections as any).boilerplateRatio = totalSectionWords > 0
+      (sections as Record<string, any>).boilerplate = boilerplate;
+      (sections as Record<string, any>).boilerplateRatio = totalSectionWords > 0
         ? Math.round((boilerplate / totalSectionWords) * 100)
         : 0;
 
-      (analysis as any).wordCountBySection = sections;
+      (analysis as Record<string, any>).wordCountBySection = sections;
 
       return analysis;
     }, {thresholds: THRESHOLDS, htmlContent: pageHtml});

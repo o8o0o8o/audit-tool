@@ -4,6 +4,104 @@
  */
 
 import * as https from 'https';
+import type { IncomingMessage } from 'http';
+
+// ─── CrUX-specific interfaces ───────────────────────────────────────────────
+
+interface CrUXHistogramBucket {
+  start: number;
+  end?: number;
+  density: number;
+}
+
+interface CrUXDistribution {
+  good: number;
+  needsImprovement: number;
+  poor: number;
+}
+
+interface CrUXMetricData {
+  percentiles: { p75?: number };
+  histogram: CrUXHistogramBucket[];
+  distribution?: CrUXDistribution;
+}
+
+interface CrUXFieldData {
+  target: string;
+  targetType: string;
+  collectionPeriod: unknown;
+  metrics: Record<string, CrUXMetricData>;
+}
+
+interface CrUXComparisonMetric {
+  lab: number;
+  fieldP75: number;
+  difference: number;
+  percentDiff: number;
+  labVsField: 'worse' | 'better' | 'same';
+  distribution?: CrUXDistribution;
+}
+
+interface CrUXComparison {
+  available: boolean;
+  metrics?: Record<string, CrUXComparisonMetric>;
+}
+
+interface CrUXInsight {
+  metric: string;
+  type: 'warning' | 'info' | 'critical';
+  message: string;
+}
+
+interface CrUXCoreWebVitalEntry {
+  p75: string;
+  passing: boolean;
+  distribution?: CrUXDistribution;
+}
+
+interface CrUXFieldSummary {
+  target: string;
+  targetType: string;
+  collectionPeriod: unknown;
+  coreWebVitals: Record<string, CrUXCoreWebVitalEntry>;
+  passingCWV: boolean;
+}
+
+interface LabMetrics {
+  TTFB?: number;
+  FCP?: number;
+  LCP?: number;
+  CLS?: number;
+  INP?: number;
+  [key: string]: number | undefined;
+}
+
+// Raw CrUX API response shapes (loosely typed since they come from external API)
+interface CrUXRawMetric {
+  percentiles?: { p75?: number | string };
+  histogram?: CrUXHistogramBucket[];
+}
+
+interface CrUXRawResponse {
+  record?: {
+    metrics?: Record<string, CrUXRawMetric>;
+    collectionPeriod?: unknown;
+  };
+}
+
+interface PSIRawMetric {
+  percentile?: number;
+  distributions?: Array<{ proportion?: number }>;
+}
+
+interface PSIRawResponse {
+  originLoadingExperience?: {
+    metrics?: Record<string, PSIRawMetric>;
+  };
+  loadingExperience?: {
+    metrics?: Record<string, PSIRawMetric>;
+  };
+}
 
 class CrUXAPI {
   static #API_ENDPOINT = 'https://chromeuxreport.googleapis.com/v1/records:queryRecord';
@@ -16,7 +114,7 @@ class CrUXAPI {
    * @param {string} formFactor - 'PHONE', 'DESKTOP', or 'ALL_FORM_FACTORS'
    * @returns {Promise<object|null>} CrUX data or null if not available
    */
-  static async fetchCrUXData(urlOrOrigin: string, apiKey: string | null = null, formFactor: string = 'ALL_FORM_FACTORS') {
+  static async fetchCrUXData(urlOrOrigin: string, apiKey: string | null = null, formFactor: string = 'ALL_FORM_FACTORS'): Promise<CrUXFieldData | null> {
     // Both CrUX and PSI APIs require an API key
     const key = apiKey || process.env.CRUX_API_KEY || null;
 
@@ -44,7 +142,7 @@ class CrUXAPI {
    * Query CrUX API
    * @private
    */
-  static async #queryCrUX(target: string, targetType: string, apiKey: string, formFactor: string) {
+  static async #queryCrUX(target: string, targetType: string, apiKey: string, formFactor: string): Promise<CrUXFieldData | null> {
     return new Promise((resolve) => {
       const requestBody = JSON.stringify({
         [targetType]: target,
@@ -70,36 +168,36 @@ class CrUXAPI {
         timeout: 10000,
       };
 
-      const req = https.request(url, options, (res) => {
+      const req = https.request(url, options, (res: IncomingMessage) => {
         let data = '';
 
-        res.on('data', (chunk) => {
+        res.on('data', (chunk: Buffer | string) => {
           data += chunk;
         });
 
         res.on('end', () => {
           try {
             if (res.statusCode === 200) {
-              const parsed = JSON.parse(data);
+              const parsed = JSON.parse(data) as CrUXRawResponse;
               resolve(this.#parseCrUXResponse(parsed, target, targetType));
             } else {
               // Log the actual error for debugging
               let errorMsg = `HTTP ${res.statusCode}`;
               try {
-                const errBody = JSON.parse(data);
+                const errBody = JSON.parse(data) as { error?: { message?: string }; message?: string };
                 errorMsg += `: ${errBody.error?.message || errBody.message || data.slice(0, 200)}`;
               } catch { errorMsg += `: ${data.slice(0, 200)}`; }
               console.error(`   CrUX API error (${targetType}=${target}): ${errorMsg}`);
               resolve(null);
             }
-          } catch (e: any) {
-            console.error(`   CrUX API parse error: ${e.message}`);
+          } catch (e: unknown) {
+            console.error(`   CrUX API parse error: ${(e as Error).message}`);
             resolve(null);
           }
         });
       });
 
-      req.on('error', (e: any) => {
+      req.on('error', (e: Error) => {
         console.error(`   CrUX API request error: ${e.message}`);
         resolve(null);
       });
@@ -118,21 +216,21 @@ class CrUXAPI {
    * Parse CrUX API response
    * @private
    */
-  static #parseCrUXResponse(response: any, target: string, targetType: string) {
+  static #parseCrUXResponse(response: CrUXRawResponse, target: string, targetType: string): CrUXFieldData | null {
     if (!response.record || !response.record.metrics) {
       return null;
     }
 
     const metrics = response.record.metrics;
-    const result = {
+    const result: CrUXFieldData = {
       target,
       targetType,
       collectionPeriod: response.record.collectionPeriod,
-      metrics: {} as Record<string, any>,
+      metrics: {},
     };
 
     // Parse each metric
-    const metricMappings = {
+    const metricMappings: Record<string, string> = {
       largest_contentful_paint: 'LCP',
       cumulative_layout_shift: 'CLS',
       interaction_to_next_paint: 'INP',
@@ -143,7 +241,7 @@ class CrUXAPI {
     for (const [apiName, shortName] of Object.entries(metricMappings)) {
       const metric = metrics[apiName];
       if (metric) {
-        result.metrics[shortName] = this.#parseMetricData(metric, shortName);
+        result.metrics[shortName] = this.#parseMetricData(metric);
       }
     }
 
@@ -154,10 +252,10 @@ class CrUXAPI {
    * Parse individual metric data
    * @private
    */
-  static #parseMetricData(metric: any, metricName: string) {
-    const data: Record<string, any> = {
+  static #parseMetricData(metric: CrUXRawMetric): CrUXMetricData {
+    const data: CrUXMetricData = {
       percentiles: {},
-      histogram: [] as any[],
+      histogram: [],
     };
 
     // Parse percentiles
@@ -169,7 +267,7 @@ class CrUXAPI {
 
     // Parse histogram (good/needs-improvement/poor distribution)
     if (metric.histogram) {
-      data.histogram = metric.histogram.map((bucket: any) => ({
+      data.histogram = metric.histogram.map((bucket: CrUXHistogramBucket) => ({
         start: bucket.start,
         end: bucket.end,
         density: bucket.density,
@@ -191,9 +289,9 @@ class CrUXAPI {
    * Fetch CrUX data via PageSpeed Insights API (no API key required)
    * @private
    */
-  static async #fetchViaPSI(urlOrOrigin: string, apiKey: string | null = null) {
+  static async #fetchViaPSI(urlOrOrigin: string, apiKey: string | null = null): Promise<CrUXFieldData | null> {
     return new Promise((resolve) => {
-      let origin;
+      let origin: string;
       try {
         origin = new URL(urlOrOrigin).origin;
       } catch {
@@ -204,24 +302,25 @@ class CrUXAPI {
       let psiUrl = `${this.#PSI_ENDPOINT}?url=${encodeURIComponent(origin)}&category=performance&strategy=mobile`;
       if (apiKey) psiUrl += `&key=${apiKey}`;
 
-      https.get(psiUrl, { timeout: 15000 }, (res) => {
+      const request = https.get(psiUrl, { timeout: 15000 }, (res: IncomingMessage) => {
         let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        res.on('data', (chunk: Buffer | string) => { data += chunk; });
         res.on('end', () => {
           try {
             if (res.statusCode !== 200) {
               resolve(null);
               return;
             }
-            const parsed = JSON.parse(data);
+            const parsed = JSON.parse(data) as PSIRawResponse;
             const cruxData = this.#parsePSIResponse(parsed, origin);
             resolve(cruxData);
           } catch {
             resolve(null);
           }
         });
-      }).on('error', () => resolve(null))
-        .on('timeout', function(this: any) { this.destroy(); resolve(null); });
+      });
+      request.on('error', () => resolve(null));
+      request.on('timeout', () => { request.destroy(); resolve(null); });
     });
   }
 
@@ -229,20 +328,20 @@ class CrUXAPI {
    * Parse CrUX data from PSI response
    * @private
    */
-  static #parsePSIResponse(psiData: any, origin: string) {
+  static #parsePSIResponse(psiData: PSIRawResponse, origin: string): CrUXFieldData | null {
     // PSI provides origin-level CrUX data in originLoadingExperience
     const experience = psiData.originLoadingExperience || psiData.loadingExperience;
     if (!experience || !experience.metrics) return null;
 
     const metrics = experience.metrics;
-    const result = {
+    const result: CrUXFieldData = {
       target: origin,
       targetType: experience === psiData.originLoadingExperience ? 'origin' : 'url',
       collectionPeriod: null,
-      metrics: {} as Record<string, any>,
+      metrics: {},
     };
 
-    const metricMappings = {
+    const metricMappings: Record<string, string> = {
       LARGEST_CONTENTFUL_PAINT_MS: 'LCP',
       CUMULATIVE_LAYOUT_SHIFT_SCORE: 'CLS',
       INTERACTION_TO_NEXT_PAINT: 'INP',
@@ -253,10 +352,10 @@ class CrUXAPI {
     for (const [psiName, shortName] of Object.entries(metricMappings)) {
       const metric = metrics[psiName];
       if (metric) {
-        const data = {
+        const data: CrUXMetricData = {
           percentiles: { p75: metric.percentile },
           histogram: [],
-          distribution: {},
+          distribution: undefined,
         };
 
         if (metric.distributions) {
@@ -280,14 +379,14 @@ class CrUXAPI {
    * @param {object} fieldData - CrUX field data
    * @returns {object} Comparison results
    */
-  static compareLabVsField(labMetrics: any, fieldData: any) {
+  static compareLabVsField(labMetrics: LabMetrics, fieldData: CrUXFieldData | null): CrUXComparison {
     if (!fieldData || !fieldData.metrics) {
       return { available: false };
     }
 
-    const comparison = {
+    const comparison: CrUXComparison = {
       available: true,
-      metrics: {} as Record<string, any>,
+      metrics: {},
     };
 
     const metricsToCompare = ['TTFB', 'FCP', 'LCP', 'CLS', 'INP'];
@@ -301,7 +400,7 @@ class CrUXAPI {
         const difference = labValue - fieldP75;
         const percentDiff = fieldP75 > 0 ? Math.round((difference / fieldP75) * 100) : 0;
 
-        comparison.metrics[metric] = {
+        comparison.metrics![metric] = {
           lab: labValue,
           fieldP75: fieldP75,
           difference,
@@ -320,21 +419,21 @@ class CrUXAPI {
    * @param {object} fieldData - CrUX field data
    * @returns {object} Formatted summary
    */
-  static formatFieldDataSummary(fieldData: any) {
+  static formatFieldDataSummary(fieldData: CrUXFieldData | null): CrUXFieldSummary | null {
     if (!fieldData || !fieldData.metrics) {
       return null;
     }
 
-    const summary = {
+    const summary: CrUXFieldSummary = {
       target: fieldData.target,
       targetType: fieldData.targetType,
       collectionPeriod: fieldData.collectionPeriod,
-      coreWebVitals: {} as Record<string, any>,
+      coreWebVitals: {},
       passingCWV: true,
     };
 
     // Core Web Vitals thresholds
-    const thresholds = {
+    const thresholds: Record<string, number> = {
       LCP: 2500,
       CLS: 0.1,
       INP: 200,
@@ -344,7 +443,7 @@ class CrUXAPI {
       const data = fieldData.metrics[metric];
       if (data?.percentiles?.p75 !== undefined) {
         const p75 = Number(data.percentiles.p75);
-        const passing = metric === 'CLS' ? p75 <= threshold : p75 <= threshold;
+        const passing = p75 <= threshold;
 
         summary.coreWebVitals[metric] = {
           p75: metric === 'CLS' ? p75.toFixed(2) : `${Math.round(p75)}ms`,
@@ -368,7 +467,7 @@ class CrUXAPI {
    * @param {string} apiKey - Optional API key
    * @returns {Promise<object>} Comparison data
    */
-  static async fetchAndCompare(url: string, labMetrics: any, apiKey: string | null = null) {
+  static async fetchAndCompare(url: string, labMetrics: LabMetrics, apiKey: string | null = null) {
     const fieldData = await this.fetchCrUXData(url, apiKey);
 
     if (!fieldData) {
@@ -394,14 +493,14 @@ class CrUXAPI {
    * Generate insights from lab vs field comparison
    * @private
    */
-  static #generateInsights(comparison: any) {
-    const insights: any[] = [];
+  static #generateInsights(comparison: CrUXComparison): CrUXInsight[] {
+    const insights: CrUXInsight[] = [];
 
-    if (!comparison.available) {
+    if (!comparison.available || !comparison.metrics) {
       return insights;
     }
 
-    for (const [metric, data] of Object.entries(comparison.metrics) as Array<[string, any]>) {
+    for (const [metric, data] of Object.entries(comparison.metrics)) {
       if (data.labVsField === 'worse' && Math.abs(data.percentDiff) > 20) {
         insights.push({
           metric,
@@ -417,7 +516,7 @@ class CrUXAPI {
       }
 
       // Check field distribution
-      if (data.distribution?.poor > 25) {
+      if (data.distribution?.poor && data.distribution.poor > 25) {
         insights.push({
           metric,
           type: 'critical',
@@ -433,13 +532,13 @@ class CrUXAPI {
    * Format metric value for display
    * @private
    */
-  static #formatValue(metric: string, value: any) {
-    const num = Number(value);
+  static #formatValue(metric: string, value: number): string {
     if (metric === 'CLS') {
-      return num.toFixed(2);
+      return value.toFixed(2);
     }
-    return `${Math.round(num)}ms`;
+    return `${Math.round(value)}ms`;
   }
 }
 
 export { CrUXAPI };
+export type { CrUXFieldData, CrUXMetricData, CrUXComparison, CrUXInsight, CrUXFieldSummary, LabMetrics };

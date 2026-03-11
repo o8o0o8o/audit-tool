@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 const STOPWORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
@@ -28,7 +28,7 @@ class KeywordCannibalisationAnalyzer {
    * @param {Object} pages - All pages data
    * @returns {Object} Analysis results
    */
-  static analyze(pages: Record<string, any>) {
+  static analyze(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -120,7 +120,7 @@ class KeywordCannibalisationAnalyzer {
     for (const group of nearDuplicates) {
       issues.push({
         message: 'Near-duplicate page titles detected',
-        detail: `These pages have very similar titles: ${group.map(p => `<a href="${p.url}">"${this.truncate(p.title, 40)}"</a>`).join(', ')}`,
+        detail: `These pages have very similar titles: ${group.map(p => `<a href="${p.url}">"${this.truncate(p.title || '', 40)}"</a>`).join(', ')}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -184,7 +184,7 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Extract main topic from URL and content
    */
-  static extractTopic(url: string, page: any) {
+  static extractTopic(url: string, page: PageInfo) {
     try {
       const parsed = new URL(url);
       const pathParts = parsed.pathname.split('/').filter(p => p.length > 0);
@@ -211,7 +211,7 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Find keywords with multiple pages
    */
-  static findConflicts(keywordMap: Map<string, any[]>, minCount: number) {
+  static findConflicts(keywordMap: Map<string, Record<string, any>[]>, minCount: number) {
     const conflicts = new Map();
 
     for (const [keyword, pages] of keywordMap) {
@@ -238,7 +238,7 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Find near-duplicate titles using similarity
    */
-  static findNearDuplicateTitles(pages: Record<string, any>) {
+  static findNearDuplicateTitles(pages: Record<string, PageInfo>) {
     const groups = [];
     const processed = new Set();
     const pageList = Object.entries(pages)
@@ -251,12 +251,12 @@ class KeywordCannibalisationAnalyzer {
       if (processed.has(pageList[i].url)) continue;
 
       const group = [pageList[i]];
-      const baseTitle = this.normalizeForComparison(pageList[i].title);
+      const baseTitle = this.normalizeForComparison(pageList[i].title || '');
 
       for (let j = i + 1; j < pageList.length; j++) {
         if (processed.has(pageList[j].url)) continue;
 
-        const compareTitle = this.normalizeForComparison(pageList[j].title);
+        const compareTitle = this.normalizeForComparison(pageList[j].title || '');
         const similarity = this.calculateSimilarity(baseTitle, compareTitle);
 
         if (similarity > 0.85) {

@@ -3,23 +3,45 @@
  * Centralized error tracking and aggregation for SEO audit
  */
 
+import type { SeverityLevel, AnalysisDetail } from '../types';
 import { SEVERITY, CRAWL_SETTINGS } from '../constants';
 
+export interface AnalysisState {
+  overall: Set<string>;
+  details: Record<string, AnalysisDetail>;
+  bySeverity: Record<string, string[]>;
+  summary: {
+    totalIssues: number;
+    criticalCount: number;
+    highCount: number;
+    mediumCount: number;
+    lowCount: number;
+    [key: string]: number;
+  };
+}
+
+interface SerializedAnalysis {
+  overall?: string[];
+  details?: Record<string, AnalysisDetail>;
+  bySeverity?: Record<string, string[]>;
+  summary?: AnalysisState['summary'];
+}
+
 class ErrorAggregator {
-  #analysis;
+  #analysis: AnalysisState;
 
   /**
    * Create a new ErrorAggregator
-   * @param {Object} existingAnalysis - Optional existing analysis data (for resume)
+   * @param existingAnalysis - Optional existing analysis data (for resume)
    */
-  constructor(existingAnalysis: any = null) {
+  constructor(existingAnalysis: SerializedAnalysis | null = null) {
     if (existingAnalysis) {
       // Resume from existing data
       // Restore details with proper truncation state
-      const restoredDetails: Record<string, any> = {};
+      const restoredDetails: Record<string, AnalysisDetail> = {};
       const MAX_EXAMPLES = CRAWL_SETTINGS.MAX_EXAMPLES_PER_ISSUE;
 
-      for (const [key, detail] of Object.entries(existingAnalysis.details || {}) as [string, any][]) {
+      for (const [key, detail] of Object.entries(existingAnalysis.details || {}) as [string, AnalysisDetail][]) {
         restoredDetails[key] = {
           severity: detail.severity,
           count: detail.count || 0,
@@ -74,7 +96,7 @@ class ErrorAggregator {
    * @param {string|null} detailedError - Specific error details
    * @param {string} severity - Error severity (critical, high, medium, low)
    */
-  addError(generalError: string, detailedError: string | null, severity: string = SEVERITY.MEDIUM) {
+  addError(generalError: string, detailedError: string | null, severity: SeverityLevel | string = SEVERITY.MEDIUM) {
     // Add to overall set
     this.#analysis.overall.add(generalError);
 
@@ -86,7 +108,7 @@ class ErrorAggregator {
     if (detailedError) {
       if (!this.#analysis.details[generalError]) {
         this.#analysis.details[generalError] = {
-          severity: severity,
+          severity: severity as SeverityLevel,
           count: 0,
           examples: [],
           truncated: false, // Track if examples were truncated

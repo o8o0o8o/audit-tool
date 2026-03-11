@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo, NetworkRequest } from '../../types';
 
 class FontLoadingAnalyzer {
   /**
@@ -15,18 +15,18 @@ class FontLoadingAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: any[], url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: NetworkRequest[], url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const fontData: Record<string, any> = {
-      fonts: [] as any[],
+      fonts: [] as Record<string, any>[],
       totalFontSize: 0,
       hasPreload: false,
       hasFontDisplay: false,
       fontDisplayValues: [] as string[],
       webFontCount: 0,
       systemFonts: false,
-      issues: [] as any[],
+      issues: [] as Record<string, any>[],
     };
 
     // 1. Analyze font requests from network
@@ -122,8 +122,8 @@ class FontLoadingAnalyzer {
    * Analyze font requests from network data
    * @private
    */
-  static #analyzeFontRequests(requests: any[]) {
-    const fonts: any[] = [];
+  static #analyzeFontRequests(requests: NetworkRequest[]) {
+    const fonts: Record<string, any>[] = [];
     let totalSize = 0;
 
     const fontExtensions = ['.woff2', '.woff', '.ttf', '.otf', '.eot'];
@@ -166,7 +166,7 @@ class FontLoadingAnalyzer {
    * @private
    */
   static #checkFontPreload(parsedPage: ParsedPage) {
-    const preloaded: any[] = [];
+    const preloaded: Record<string, any>[] = [];
     const preloadLinks = parsedPage.querySelectorAll('link[rel="preload"][as="font"]');
 
     for (const link of preloadLinks) {
@@ -196,13 +196,13 @@ class FontLoadingAnalyzer {
             const rules = sheet.cssRules || sheet.rules;
             for (const rule of rules) {
               if (rule instanceof CSSFontFaceRule) {
-                const fontDisplay = (rule.style as any).fontDisplay;
+                const fontDisplay = (rule.style as unknown as Record<string, string>).fontDisplay;
                 const fontFamily = rule.style.fontFamily;
 
                 fontFaces.push({
                   family: fontFamily,
                   display: fontDisplay || 'auto',
-                  src: (rule.style as any).src?.substring(0, 100),
+                  src: (rule.style as unknown as Record<string, string>).src?.substring(0, 100),
                 });
 
                 if (fontDisplay) {
@@ -263,7 +263,7 @@ class FontLoadingAnalyzer {
    * Check for external font services
    * @private
    */
-  static #checkExternalFontServices(requests: any[], parsedPage: ParsedPage) {
+  static #checkExternalFontServices(requests: NetworkRequest[], parsedPage: ParsedPage) {
     const services: string[] = [];
     let hasPreconnect = false;
 
@@ -303,7 +303,7 @@ class FontLoadingAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

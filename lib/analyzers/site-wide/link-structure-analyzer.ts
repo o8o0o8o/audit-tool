@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide Link Structure Analyzer
@@ -13,7 +13,7 @@ class LinkStructureAnalyzer {
    * @param {Object} incomingLinks - Object with incoming link counts { url: count }
    * @returns {Object} { issues: [], hubPages: [], orphanedPages: [], mostLinkedPages: [] }
    */
-  static analyzeLinkStructure(allPages: Record<string, any>, incomingLinks: Record<string, any>) {
+  static analyzeLinkStructure(allPages: Record<string, PageInfo>, incomingLinks: Record<string, any>) {
     console.log('\nAnalyzing site-wide link structure...');
 
     const linkStats: Record<string, any> = {

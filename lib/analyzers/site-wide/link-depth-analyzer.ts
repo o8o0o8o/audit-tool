@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class LinkDepthAnalyzer {
   /**
@@ -14,7 +14,7 @@ class LinkDepthAnalyzer {
    * @param {string} origin - Site origin URL
    * @returns {Object} Analysis results with issues and metrics
    */
-  static analyze(pages: Record<string, any>, incomingLinks: Record<string, any>, origin: string) {
+  static analyze(pages: Record<string, PageInfo>, incomingLinks: Record<string, any>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -153,7 +153,7 @@ class LinkDepthAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Map} Link graph (url -> Set of linked urls)
    */
-  static buildLinkGraph(pages: Record<string, any>, origin: string) {
+  static buildLinkGraph(pages: Record<string, PageInfo>, origin: string) {
     const graph = new Map();
     const originHost = new URL(origin).host;
     const allPageUrls = new Set(Object.keys(pages));
@@ -210,7 +210,7 @@ class LinkDepthAnalyzer {
   static calculateLinkDepths(graph: Map<string, Set<string>>, origin: string) {
     const depths = new Map();
     const visited = new Set();
-    const queue = [];
+    const queue: Array<{ url: string; depth: number }> = [];
 
     // Start from homepage (both with and without trailing slash)
     const homepages = [origin, origin + '/', origin.replace(/\/$/, '')];

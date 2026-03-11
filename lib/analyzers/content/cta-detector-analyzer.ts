@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class CTADetectorAnalyzer {
   /**
@@ -20,7 +20,7 @@ class CTADetectorAnalyzer {
     const warnings: Issue[] = [];
 
     const ctas = await chromePage.evaluate(() => {
-      const results: any[] = [];
+      const results: Record<string, any>[] = [];
       const viewport = { width: window.innerWidth, height: window.innerHeight };
 
       // Detect forms
@@ -51,7 +51,7 @@ class CTADetectorAnalyzer {
         // Skip buttons inside forms (already counted)
         if (btn.closest('form') && btn.tagName !== 'A') return;
 
-        const text = (btn.textContent || (btn as any).value || '').trim();
+        const text = (btn.textContent || (btn as HTMLInputElement).value || '').trim();
         if (!text || text.length > 100) return;
 
         const rect = btn.getBoundingClientRect();
@@ -142,7 +142,7 @@ class CTADetectorAnalyzer {
    * @param {object} allPages - All page data
    * @returns {object} Site-wide analysis results
    */
-  static analyzeSiteWide(allPages: Record<string, any>) {
+  static analyzeSiteWide(allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.values(allPages);

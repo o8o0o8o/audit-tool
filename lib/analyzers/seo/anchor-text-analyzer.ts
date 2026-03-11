@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 // Stop words to ignore in anchor text analysis
 const STOP_WORDS = new Set([
@@ -34,16 +34,16 @@ class AnchorTextAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: any, url: string) {
+  static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: Record<string, any> = {
       totalLinks: 0,
       internalLinks: 0,
       externalLinks: 0,
-      genericAnchors: [] as any[],
+      genericAnchors: [] as Record<string, any>[],
       emptyAnchors: [] as string[],
-      imageOnlyLinks: [] as any[],
+      imageOnlyLinks: [] as Record<string, any>[],
       duplicateAnchors: {} as Record<string, string[]>,
       anchorDistribution: {} as Record<string, number>,
       avgAnchorLength: 0,
@@ -231,7 +231,7 @@ class AnchorTextAnalyzer {
    * @param {string} origin - Site origin
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, any>, origin: string) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {

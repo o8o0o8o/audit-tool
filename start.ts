@@ -19,6 +19,7 @@ if (fs.existsSync(envFile)) {
 
 import { spawn } from 'child_process';
 import * as zlib from 'zlib';
+import type { ParsedArgs } from './lib/types';
 import { parseArgs } from './lib/args-parser';
 import { validateURL, sanitizeDomainName } from './validators';
 import { printHelp, interactiveMode } from './lib/cli-interactive';
@@ -42,7 +43,7 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-async function audit(restoredArgs?: any, restartCount: number = 0) {
+async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
   try {
     // Parse arguments from command line or use restored values
     let args = restoredArgs || parseArgs(process.argv.slice(2));
@@ -61,7 +62,7 @@ async function audit(restoredArgs?: any, restartCount: number = 0) {
 
     // Interactive mode when no args provided
     if (!args.origin && !args.sitemap && !restoredArgs && process.stdin.isTTY) {
-      args = await interactiveMode();
+      args = await interactiveMode() as ParsedArgs;
     }
 
     const { origin, sitemap, compare, proceed, perf, saveHtml } = args;
@@ -180,41 +181,13 @@ async function audit(restoredArgs?: any, restartCount: number = 0) {
         console.log(`🔄 Restarting with --proceed to resume from saved progress (attempt ${restartCount + 1}/${MAX_RESTART_ATTEMPTS})...\n`);
 
         // Restart with proceed flag enabled
-        await audit({
-          origin: args.origin,
-          compare: args.compare,
-          sitemap: args.sitemap,
-          compareSitemap: args.compareSitemap,
-          proceed: true,
-          perf: args.perf,
-          saveHtml: args.saveHtml,
-          concurrency: args.concurrency,
-          repo: args.repo,
-          open: args.open,
-          verbose: args.verbose,
-          ci: args.ci,
-          json: args.json,
-          exclude: args.exclude,
-          limit: args.limit,
-          onlyErrors: args.onlyErrors,
-          quiet: args.quiet,
-          preset: args.preset,
-          webhook: args.webhook,
-          sites: args.sites,
-          slack: args.slack,
-          brandLogo: args.brandLogo,
-          brandName: args.brandName,
-          validateConfig: args.validateConfig,
-          screenshots: args.screenshots,
-          dryRun: args.dryRun,
-          generateCi: args.generateCi,
-        }, restartCount + 1);
+        await audit({ ...args, proceed: true }, restartCount + 1);
       } else {
         console.log("\n✅ Audit completed successfully (exit code: 0)");
       }
     });
-  } catch (error: any) {
-    console.error("Error:", error.message);
+  } catch (error: unknown) {
+    console.error("Error:", (error as Error).message);
     process.exit(1);
   }
 }
@@ -229,8 +202,8 @@ if (watchArgs.watch) {
     while (true) {
       try {
         await audit();
-      } catch (err: any) {
-        console.error(`\n⚠️ Audit failed: ${err.message}. Will retry next cycle.`);
+      } catch (err: unknown) {
+        console.error(`\n⚠️ Audit failed: ${(err as Error).message}. Will retry next cycle.`);
       }
       console.log(`\nNext audit in ${intervalMin} minute(s)...`);
       await new Promise(r => setTimeout(r, intervalMin * 60 * 1000));

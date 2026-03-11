@@ -50,7 +50,7 @@ class ProgressReporter {
       this.#originalConsoleLog = console.log;
       this.#originalConsoleError = console.error;
 
-      const wrapConsole = (originalFn: any) => (...args: any[]) => {
+      const wrapConsole = (originalFn: (...args: unknown[]) => void) => (...args: unknown[]) => {
         // Clear current progress line, print the message, then redraw
         process.stdout.clearLine(0);
         process.stdout.cursorTo(0);
@@ -215,7 +215,7 @@ class ProgressReporter {
   #restoreConsoleLog() {
     if (this.#onResize) {
       process.stdout.removeListener('resize', this.#onResize);
-      this.#onResize = null;
+      this.#onResize = undefined;
     }
     if (this.#originalConsoleLog) {
       console.log = this.#originalConsoleLog;
@@ -323,7 +323,7 @@ class ProgressReporter {
       },
     };
 
-    const colors = (schemes as Record<string, any>)[this.#colorScheme] || schemes.default;
+    const colors = (schemes as Record<string, typeof schemes.default>)[this.#colorScheme] || schemes.default;
 
     // Choose color based on progress
     let color;

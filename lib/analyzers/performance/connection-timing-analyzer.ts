@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage } from '../../types';
+import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
 class ConnectionTimingAnalyzer {
   /**
@@ -14,19 +14,19 @@ class ConnectionTimingAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, requests: any[], url: string) {
+  static async analyze(chromePage: ChromePage, requests: NetworkRequest[], url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
     const timingData = {
-      document: null as any,
-      dns: { total: 0, slow: [] as any[] },
-      tcp: { total: 0, slow: [] as any[] },
-      tls: { total: 0, slow: [] as any[] },
-      ttfb: { total: 0, slow: [] as any[] },
+      document: null as Record<string, any> | null,
+      dns: { total: 0, slow: [] as Record<string, any>[] },
+      tcp: { total: 0, slow: [] as Record<string, any>[] },
+      tls: { total: 0, slow: [] as Record<string, any>[] },
+      ttfb: { total: 0, slow: [] as Record<string, any>[] },
       uniqueOrigins: [] as string[],
       originTimings: {} as Record<string, any>,
-      resourceTimings: [] as any[],
+      resourceTimings: [] as Record<string, any>[],
     };
 
     // 1. Get Navigation Timing for main document
@@ -187,7 +187,7 @@ class ConnectionTimingAnalyzer {
    * Analyze timings by origin
    * @private
    */
-  static #analyzeByOrigin(resourceTimings: any[], pageUrl: string) {
+  static #analyzeByOrigin(resourceTimings: Record<string, any>[], pageUrl: string) {
     const timings: Record<string, any> = {};
     const pageOrigin = new URL(pageUrl).origin;
 
@@ -224,11 +224,11 @@ class ConnectionTimingAnalyzer {
    * Find slow connections
    * @private
    */
-  static #findSlowConnections(resourceTimings: any[]) {
-    const slowDns: any[] = [];
-    const slowTcp: any[] = [];
-    const slowTls: any[] = [];
-    const slowTtfb: any[] = [];
+  static #findSlowConnections(resourceTimings: Record<string, any>[]) {
+    const slowDns: Record<string, any>[] = [];
+    const slowTcp: Record<string, any>[] = [];
+    const slowTls: Record<string, any>[] = [];
+    const slowTtfb: Record<string, any>[] = [];
 
     for (const resource of resourceTimings) {
       if (resource.dns > 50) {
@@ -295,9 +295,9 @@ class ConnectionTimingAnalyzer {
    * @param {Object} pages - All pages
    * @returns {Object} Analysis results
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
 
     let pagesWithSlowDns = 0;
     let pagesWithSlowTtfb = 0;

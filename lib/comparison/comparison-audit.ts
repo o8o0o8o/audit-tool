@@ -13,14 +13,112 @@ import { generateTimestamp } from '../utils';
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { formatElapsedTime } from '../utils';
 import { generateHTML } from '../../generateHTML';
+import type { PageInfo, Issue, AuditSummary } from '../types';
+
+interface ComparisonOptions {
+  proceed: boolean;
+  perf: boolean;
+  saveHtml: boolean;
+  concurrency: number;
+  sitemap: string | null;
+  compareSitemap: string | null;
+}
+
+interface AuditSiteResult {
+  data: Record<string, unknown>;
+  domain: string | null;
+  resultsDir: string;
+  file: string;
+  htmlPath: string;
+}
+
+interface PageDelta {
+  path: string;
+  originUrl: string;
+  compareUrl: string;
+  status: { origin: number; compare: number };
+  deltas: Record<string, number>;
+  changes: Record<string, { origin: string; compare: string; changed: boolean }>;
+  issues: { fixed: string[]; new: string[]; persistent: string[] };
+  metrics: { origin: Record<string, unknown>; compare: Record<string, unknown> };
+}
+
+interface UnmatchedPageInfo {
+  url: string;
+  title: string;
+  status: number;
+  issues: number;
+}
+
+interface MatchedPageEntry {
+  path: string;
+  originUrl: string;
+  compareUrl: string;
+  originPage: PageInfo;
+  comparePage: PageInfo;
+}
+
+interface ScoreSet {
+  overall: number;
+  seo: number;
+  performance: number;
+  accessibility: number;
+  security: number;
+  technical: number;
+}
+
+interface IssueSet {
+  total: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+interface ComparisonSummary {
+  originTotalPages: number;
+  compareTotalPages: number;
+  matchedPages: number;
+  originOnlyPages: number;
+  compareOnlyPages: number;
+  matchPercentage: number;
+  scoreComparison: {
+    origin: ScoreSet;
+    compare: ScoreSet;
+    delta: ScoreSet;
+  };
+  issueComparison: {
+    origin: IssueSet;
+    compare: IssueSet;
+    delta: IssueSet;
+  };
+}
+
+interface ComparisonResultData {
+  meta: {
+    originUrl: string | null;
+    compareUrl: string | null;
+    originDomain: string | null;
+    compareDomain: string | null;
+    timestamp: string;
+    mode: string;
+    duration: string;
+  };
+  summary: ComparisonSummary;
+  pageComparisons: Record<string, PageDelta>;
+  originOnly: Record<string, UnmatchedPageInfo>;
+  compareOnly: Record<string, UnmatchedPageInfo>;
+  originAuditPath: string;
+  compareAuditPath: string;
+}
 
 class ComparisonAudit {
   #originUrl: string | null;
   #compareUrl: string | null;
-  #options: any;
-  #originResults: any;
-  #compareResults: any;
-  #comparisonResults: any;
+  #options: ComparisonOptions;
+  #originResults: AuditSiteResult | null;
+  #compareResults: AuditSiteResult | null;
+  #comparisonResults: ComparisonResultData | null;
   #startTime!: number;
 
   originDomain: string | null;
@@ -34,7 +132,7 @@ class ComparisonAudit {
    * @param {string|null} compareUrl - Comparison site URL (null when using sitemap file)
    * @param {object} options - Options (perf, saveHtml, concurrency, sitemap, compareSitemap)
    */
-  constructor(originUrl: string | null, compareUrl: string | null, options: any = {}) {
+  constructor(originUrl: string | null, compareUrl: string | null, options: Partial<ComparisonOptions> = {}) {
     this.#originUrl = originUrl;
     this.#compareUrl = compareUrl;
     this.#options = {
@@ -189,8 +287,9 @@ class ComparisonAudit {
    * @param {object} auditResult - { data, domain, resultsDir, file }
    * @returns {object} Pages keyed by URL
    */
-  #loadPagesFromDisk(auditResult: any) {
-    const pages = auditResult.data.pageData.pages || {};
+  #loadPagesFromDisk(auditResult: AuditSiteResult): Record<string, PageInfo> {
+    const data = auditResult.data as { pageData?: { pages?: Record<string, PageInfo> } };
+    const pages = data.pageData?.pages || {};
 
     // If pages are already in memory, use them
     if (Object.keys(pages).length > 0) {
@@ -210,17 +309,17 @@ class ComparisonAudit {
       .filter(f => f.startsWith('batch_') && f.endsWith('.json.gz'))
       .sort();
 
-    const allPages = {};
+    const allPages: Record<string, PageInfo> = {};
     for (const batchFile of batchFiles) {
       try {
         const filePath = path.join(pagesDir, batchFile);
         const compressed = fs.readFileSync(filePath);
-        const batchData = JSON.parse(zlib.gunzipSync(compressed).toString('utf-8'));
+        const batchData = JSON.parse(zlib.gunzipSync(compressed).toString('utf-8')) as { pages?: Record<string, PageInfo> };
         if (batchData.pages) {
           Object.assign(allPages, batchData.pages);
         }
-      } catch (error) {
-        console.warn(`  Warning: Could not load batch ${batchFile}: ${(error as any).message}`);
+      } catch (error: unknown) {
+        console.warn(`  Warning: Could not load batch ${batchFile}: ${(error as Error).message}`);
       }
     }
 
@@ -232,8 +331,8 @@ class ComparisonAudit {
    * Compare the results from both sites
    */
   #performComparison() {
-    const originPages = this.#loadPagesFromDisk(this.#originResults);
-    const comparePages = this.#loadPagesFromDisk(this.#compareResults);
+    const originPages = this.#loadPagesFromDisk(this.#originResults!);
+    const comparePages = this.#loadPagesFromDisk(this.#compareResults!);
 
     // Match pages by URL path
     const matchResult = PageMatcher.matchPages(originPages, comparePages);
@@ -250,14 +349,16 @@ class ComparisonAudit {
     }
 
     // Calculate page-level comparisons
-    const pageComparisons: Record<string, any> = {};
+    const pageComparisons: Record<string, PageDelta> = {};
     for (const match of matchResult.matched) {
       pageComparisons[match.path] = this.#calculatePageDelta(match);
     }
 
     // Calculate score comparisons
-    const originSummary = this.#originResults.data.analysis?.summary || {};
-    const compareSummary = this.#compareResults.data.analysis?.summary || {};
+    const originData = this.#originResults!.data as { analysis?: { summary?: Partial<AuditSummary> } };
+    const compareData = this.#compareResults!.data as { analysis?: { summary?: Partial<AuditSummary> } };
+    const originSummary = originData.analysis?.summary || {};
+    const compareSummary = compareData.analysis?.summary || {};
 
     this.#comparisonResults = {
       meta: {
@@ -329,8 +430,8 @@ class ComparisonAudit {
       pageComparisons,
       originOnly: this.#formatUnmatchedPages(matchResult.originOnly),
       compareOnly: this.#formatUnmatchedPages(matchResult.compareOnly),
-      originAuditPath: this.#originResults.file,
-      compareAuditPath: this.#compareResults.file,
+      originAuditPath: this.#originResults!.file,
+      compareAuditPath: this.#compareResults!.file,
     };
   }
 
@@ -339,7 +440,7 @@ class ComparisonAudit {
    * @param {object} match - Match object with originPage and comparePage
    * @returns {object} Page comparison data
    */
-  #calculatePageDelta(match: any) {
+  #calculatePageDelta(match: MatchedPageEntry): PageDelta {
     const origin = match.originPage;
     const compare = match.comparePage;
 
@@ -375,15 +476,15 @@ class ComparisonAudit {
         changed: (origin.canonical || '') !== (compare.canonical || ''),
       },
       h1: {
-        origin: origin.h1 || '',
-        compare: compare.h1 || '',
-        changed: (origin.h1 || '') !== (compare.h1 || ''),
+        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : (origin.h1 || ''),
+        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : (compare.h1 || ''),
+        changed: String(origin.h1 || '') !== String(compare.h1 || ''),
       },
     };
 
     // Categorize issues
-    const originIssues = new Set(origin.issues?.map((i: any) => i.issue || i) || []);
-    const compareIssues = new Set(compare.issues?.map((i: any) => i.issue || i) || []);
+    const originIssues = new Set(origin.issues?.map((i: Issue) => i.message || String(i)) || []);
+    const compareIssues = new Set(compare.issues?.map((i: Issue) => i.message || String(i)) || []);
 
     const issues = {
       fixed: [...compareIssues].filter(i => !originIssues.has(i)), // In compare but not origin = fixed
@@ -428,8 +529,8 @@ class ComparisonAudit {
    * @param {Array} pages - Array of unmatched page objects
    * @returns {object} Formatted pages keyed by path
    */
-  #formatUnmatchedPages(pages: any[]) {
-    const result: Record<string, any> = {};
+  #formatUnmatchedPages(pages: Array<{ path: string; url: string; page: PageInfo }>): Record<string, UnmatchedPageInfo> {
+    const result: Record<string, UnmatchedPageInfo> = {};
     for (const page of pages) {
       result[page.path] = {
         url: page.url,
@@ -456,17 +557,17 @@ class ComparisonAudit {
 
     // Generate individual HTML reports for each site
     try {
-      generateHTML(this.#originResults.file, this.#originResults.domain, this.#originResults.htmlPath);
-      console.log(`📄 Generated origin report: ${this.#originResults.htmlPath}`);
+      generateHTML(this.#originResults!.file, this.#originResults!.domain!, this.#originResults!.htmlPath);
+      console.log(`📄 Generated origin report: ${this.#originResults!.htmlPath}`);
     } catch (error) {
-      console.warn(`⚠️  Could not generate origin HTML report: ${(error as any).message}`);
+      console.warn(`⚠️  Could not generate origin HTML report: ${(error as Error).message}`);
     }
 
     try {
-      generateHTML(this.#compareResults.file, this.#compareResults.domain, this.#compareResults.htmlPath);
-      console.log(`📄 Generated compare report: ${this.#compareResults.htmlPath}`);
+      generateHTML(this.#compareResults!.file, this.#compareResults!.domain!, this.#compareResults!.htmlPath);
+      console.log(`📄 Generated compare report: ${this.#compareResults!.htmlPath}`);
     } catch (error) {
-      console.warn(`⚠️  Could not generate compare HTML report: ${(error as any).message}`);
+      console.warn(`⚠️  Could not generate compare HTML report: ${(error as Error).message}`);
     }
 
     // Generate comparison HTML report
@@ -481,7 +582,7 @@ class ComparisonAudit {
    * @param {string} outputPath - Output file path
    */
   #generateComparisonHtml(outputPath: string) {
-    const data = this.#comparisonResults;
+    const data = this.#comparisonResults!;
     const summary = data.summary;
     const scores = summary.scoreComparison;
     const issues = summary.issueComparison;
@@ -491,7 +592,7 @@ class ComparisonAudit {
     let regressions = 0;
     let unchanged = 0;
 
-    for (const comparison of Object.values(data.pageComparisons) as any[]) {
+    for (const comparison of Object.values(data.pageComparisons)) {
       const newIssues = comparison.issues.new.length;
       const fixedIssues = comparison.issues.fixed.length;
 
@@ -893,13 +994,13 @@ class ComparisonAudit {
   /**
    * Get page comparison rows HTML
    */
-  #getPageRows(pageComparisons: Record<string, any>) {
-    return Object.values(pageComparisons).map((page: any) => {
+  #getPageRows(pageComparisons: Record<string, PageDelta>) {
+    return Object.values(pageComparisons).map((page: PageDelta) => {
       const fixedCount = page.issues.fixed.length;
       const newCount = page.issues.new.length;
       const status = newCount > fixedCount ? 'regressed' : fixedCount > newCount ? 'improved' : 'unchanged';
 
-      const changesCount = Object.values(page.changes).filter((c: any) => c.changed).length;
+      const changesCount = Object.values(page.changes).filter((c: { origin: string; compare: string; changed: boolean }) => c.changed).length;
 
       const getDeltaClass = (val: number, inverse: boolean = false) => {
         if (val === 0 || val === undefined) return 'same';
@@ -907,7 +1008,7 @@ class ComparisonAudit {
         return val > 0 ? 'worse' : 'better';
       };
 
-      const formatDelta = (val: any, unit: string = '') => {
+      const formatDelta = (val: number | undefined | null, unit: string = '') => {
         if (val === undefined || val === null) return '-';
         const sign = val > 0 ? '+' : '';
         if (Math.abs(val) > 1000) return `${sign}${(val/1000).toFixed(1)}s`;
@@ -932,8 +1033,8 @@ class ComparisonAudit {
   /**
    * Get unmatched pages table HTML
    */
-  #getUnmatchedPagesTable(pages: Record<string, any>) {
-    const rows = Object.entries(pages).map(([path, page]: [string, any]) => `
+  #getUnmatchedPagesTable(pages: Record<string, UnmatchedPageInfo>) {
+    const rows = Object.entries(pages).map(([path, page]: [string, UnmatchedPageInfo]) => `
       <tr>
         <td class="path-cell">${this.#escapeHtml(path)}</td>
         <td>${this.#escapeHtml(page.title || '-')}</td>
@@ -960,7 +1061,7 @@ class ComparisonAudit {
   /**
    * Escape HTML special characters
    */
-  #escapeHtml(str: any) {
+  #escapeHtml(str: string | null | undefined) {
     if (!str) return '';
     return String(str)
       .replace(/&/g, '&amp;')
@@ -974,7 +1075,7 @@ class ComparisonAudit {
    * Print summary to console
    */
   #printSummary() {
-    const data = this.#comparisonResults;
+    const data = this.#comparisonResults!;
     const scores = data.summary.scoreComparison;
     const issues = data.summary.issueComparison;
 
@@ -1015,8 +1116,8 @@ class ComparisonAudit {
     console.log('\nREPORTS GENERATED');
     console.log('-'.repeat(40));
     console.log(`  Comparison: ${this.comparisonDir}/comparison.html`);
-    console.log(`  Origin:     ${this.#originResults.htmlPath}`);
-    console.log(`  Compare:    ${this.#compareResults.htmlPath}`);
+    console.log(`  Origin:     ${this.#originResults!.htmlPath}`);
+    console.log(`  Compare:    ${this.#compareResults!.htmlPath}`);
     console.log('='.repeat(60) + '\n');
   }
 }

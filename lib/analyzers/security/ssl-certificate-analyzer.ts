@@ -3,6 +3,7 @@
  * Analyzes SSL/TLS certificate configuration, expiry, and security
  */
 
+import type { PageInfo } from '../../types';
 import { SEVERITY } from '../../constants';
 import * as tls from 'tls';
 import * as https from 'https';
@@ -14,11 +15,11 @@ interface CertificateDetails {
   validFrom?: string;
   validTo?: string;
   daysUntilExpiry?: number | null;
-  issuer?: { CN?: string; O?: string; [key: string]: any };
-  subject?: { CN?: string; O?: string; [key: string]: any };
+  issuer?: { CN?: string; O?: string; [key: string]: unknown };
+  subject?: { CN?: string; O?: string; [key: string]: unknown };
   altNames?: string[];
   protocol?: string | null;
-  cipher?: { name?: string; [key: string]: any } | null;
+  cipher?: { name?: string; [key: string]: unknown } | null;
   chainLength?: number;
   fingerprint?: string;
   serialNumber?: string;
@@ -43,8 +44,8 @@ class SSLCertificateAnalyzer {
    * @returns {Promise<object>} Analysis results
    */
   static async analyze(url: string) {
-    const issues: any[] = [];
-    const warnings: any[] = [];
+    const issues: Record<string, any>[] = [];
+    const warnings: Record<string, any>[] = [];
     const info = {
       hasSSL: false,
       certificate: null,
@@ -198,10 +199,10 @@ class SSLCertificateAnalyzer {
         });
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       issues.push({
         message: 'Failed to analyze SSL certificate',
-        detail: error.message,
+        detail: (error as Error).message,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -255,17 +256,17 @@ class SSLCertificateAnalyzer {
 
         resolve({
           isValid,
-          validationError: (validationError as any) || null,
+          validationError: (validationError as unknown as string | null) || null,
           validFrom: validFrom.toISOString().split('T')[0],
           validTo: validTo.toISOString().split('T')[0],
           daysUntilExpiry,
-          issuer: cert.issuer as any,
-          subject: cert.subject as any,
+          issuer: cert.issuer as Record<string, unknown>,
+          subject: cert.subject as Record<string, unknown>,
           altNames: cert.subjectaltname
             ? cert.subjectaltname.split(', ').map(s => s.replace('DNS:', ''))
             : [],
           protocol: socket.getProtocol ? socket.getProtocol() : null,
-          cipher: socket.getCipher ? socket.getCipher() : null,
+          cipher: socket.getCipher ? socket.getCipher() as unknown as Record<string, unknown> : null,
           chainLength,
           fingerprint: cert.fingerprint,
           serialNumber: cert.serialNumber,
@@ -330,7 +331,7 @@ class SSLCertificateAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Promise<object>} Site-wide analysis
    */
-  static async analyzeSiteWide(pages: Record<string, any>, origin: string) {
+  static async analyzeSiteWide(pages: Record<string, PageInfo>, origin: string) {
     // Just analyze the origin once
     const result = await this.analyze(origin);
 

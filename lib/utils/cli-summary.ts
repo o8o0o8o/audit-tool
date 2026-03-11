@@ -4,6 +4,32 @@
  */
 
 import { SEVERITY } from '../constants';
+import type { AuditResults, AnalysisDetail, PageInfo, AuditSummary, CategoryScores } from '../types';
+import type { AnalysisState } from './error-aggregator';
+
+interface AuditResultsExtended {
+  analysis: {
+    overall?: string[] | Set<string>;
+    details?: Record<string, AnalysisDetail>;
+    bySeverity?: Record<string, string[]>;
+    summary?: Partial<AuditSummary>;
+  };
+  pageData: {
+    pages?: Record<string, PageInfo>;
+    total?: number;
+    totalWithoutError?: number;
+    totalWithError?: number;
+    byError?: Record<string, string[] | number>;
+    incomingLinks?: Record<string, string[]>;
+  };
+  sitemaps?: { total?: number };
+  robots?: { sitemaps?: string[] };
+  timing?: {
+    elapsedTimeFormatted?: string;
+    phases?: Array<{ name: string; duration: string }>;
+  };
+  previousScore?: number | null;
+}
 
 // ANSI color codes
 const C = {
@@ -101,7 +127,7 @@ function emptyLine() {
 /**
  * Print audit summary to console
  */
-function printAuditSummary(results: any, domainName: string, htmlPath: string) {
+function printAuditSummary(results: AuditResultsExtended, domainName: string, htmlPath: string) {
   const analysis = results.analysis || {};
   const summary = analysis.summary || {};
   const pageData = results.pageData || {};
@@ -118,7 +144,7 @@ function printAuditSummary(results: any, domainName: string, htmlPath: string) {
   const successRate = totalPages > 0 ? ((successPages / totalPages) * 100).toFixed(1) : 0;
 
   const overallScore = summary.overallScore || 0;
-  const categoryScores = summary.categoryScores || {};
+  const categoryScores: Record<string, number> = (summary.categoryScores || {}) as Record<string, number>;
 
   const quickWins = getTopQuickWins(analysis, 3);
 
@@ -164,10 +190,10 @@ function printAuditSummary(results: any, domainName: string, htmlPath: string) {
     line(`  ${C.RED}✗${C.RESET} ${failedPages} failed`);
     // Error type breakdown — show array entries (URLs) with their count, skip total_* keys
     const byError = pageData.byError || {};
-    const errorTypes = (Object.entries(byError) as [string, any][])
-      .filter(([key, val]: [string, any]) => Array.isArray(val))
-      .map(([key, urls]: [string, any]) => [key, urls.length] as [string, number])
-      .sort(([,a]: [string, number], [,b]: [string, number]) => b - a)
+    const errorTypes = Object.entries(byError)
+      .filter(([, val]) => Array.isArray(val))
+      .map(([key, urls]) => [key, (urls as string[]).length] as [string, number])
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 3);
     if (errorTypes.length > 0) {
       for (const [errorType, count] of errorTypes) {
@@ -215,16 +241,16 @@ function printAuditSummary(results: any, domainName: string, htmlPath: string) {
   }
 
   // Top 3 slowest pages (if performance data available)
-  const slowestPages = (Object.entries(pagesObj) as [string, any][])
-    .filter(([, p]: [string, any]) => p.TTFB && p.TTFB > 0)
-    .sort(([, a]: [string, any], [, b]: [string, any]) => (b.TTFB || 0) - (a.TTFB || 0))
+  const slowestPages = Object.entries(pagesObj)
+    .filter(([, p]) => p.TTFB && p.TTFB > 0)
+    .sort(([, a], [, b]) => ((b.TTFB as number) || 0) - ((a.TTFB as number) || 0))
     .slice(0, 3);
 
   if (slowestPages.length > 0) {
     emptyLine();
     divider();
     line(`${C.BOLD}Slowest Pages (TTFB):${C.RESET}`);
-    slowestPages.forEach(([url, p]: [string, any], i: number) => {
+    slowestPages.forEach(([url, p], i: number) => {
       const ttfb = p.TTFB;
       const color = ttfb > 1500 ? C.RED : ttfb > 800 ? C.ORANGE : C.GREEN;
       let shortUrl;
@@ -295,8 +321,8 @@ function printAuditSummary(results: any, domainName: string, htmlPath: string) {
 /**
  * Get top quick wins from analysis
  */
-function getTopQuickWins(analysis: any, count: number) {
-  const quickWins = [];
+function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: number) {
+  const quickWins: { title: string; count: number }[] = [];
   const details = analysis.details || {};
 
   const issuePatterns = [
@@ -340,7 +366,7 @@ function getTopQuickWins(analysis: any, count: number) {
 /**
  * Generate JSON summary for --json mode
  */
-function getJsonSummary(results: any, domainName: string, htmlPath: string) {
+function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlPath: string) {
   const summary = results.analysis?.summary || {};
   const pageData = results.pageData || {};
   const totalPages = pageData.total || Object.keys(pageData.pages || {}).length;
@@ -368,12 +394,12 @@ function getJsonSummary(results: any, domainName: string, htmlPath: string) {
     duration: results.timing?.elapsedTimeFormatted || null,
     report: htmlPath,
     insights: (() => {
-      const pArr = Object.values(pageData.pages || {}) as any[];
+      const pArr = Object.values(pageData.pages || {}) as PageInfo[];
       if (pArr.length === 0) return undefined;
       return {
-        languageMismatches: pArr.filter((p: any) => p.languageDetection?.match === false).length,
-        brokenOutboundLinks: pArr.reduce((s: number, p: any) => s + (p.outboundLinkHealth?.broken?.length || 0), 0),
-        nearDuplicatePages: pArr.filter((p: any) => p.contentSimilarity?.similarPages?.length > 0).length,
+        languageMismatches: pArr.filter((p) => p.languageDetection?.match === false).length,
+        brokenOutboundLinks: pArr.reduce((s: number, p) => s + (p.outboundLinkHealth?.broken?.length || 0), 0),
+        nearDuplicatePages: pArr.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length,
       };
     })(),
   };
@@ -382,8 +408,8 @@ function getJsonSummary(results: any, domainName: string, htmlPath: string) {
 /**
  * Build insight summary lines from page data
  */
-function getInsightLines(pagesArray: any[]) {
-  const lines = [];
+function getInsightLines(pagesArray: PageInfo[]) {
+  const lines: string[] = [];
   if (pagesArray.length === 0) return lines;
 
   // Language mismatches

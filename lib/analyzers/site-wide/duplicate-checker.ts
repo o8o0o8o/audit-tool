@@ -1,6 +1,6 @@
 import { SEVERITY } from '../../constants';
 import { escapeHtml } from '../../reports/html-utils';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Site-wide Duplicate Checker
@@ -13,7 +13,7 @@ class DuplicateChecker {
    * @param {Object} allPages - Object containing all page data { url: pageData }
    * @returns {Object} { duplicateTitles: Map, duplicateDescriptions: Map, issues: [] }
    */
-  static checkDuplicates(allPages: Record<string, any>) {
+  static checkDuplicates(allPages: Record<string, PageInfo>) {
     console.log('\nChecking for duplicate titles and descriptions...');
 
     const titleMap: Record<string, string[]> = {}; // title -> array of URLs

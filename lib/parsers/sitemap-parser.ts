@@ -3,8 +3,32 @@
  * Fetches and parses XML sitemaps according to the sitemap protocol
  */
 
-import { parse } from 'node-html-parser';
+import { parse, HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
+import type { SitemapUrl } from '../types';
+
+interface SitemapEntry {
+  total: number;
+  totalUnique: number;
+  urls: Record<string, SitemapParsedUrl>;
+}
+
+/** Extends SitemapUrl with alternates stored as a record (keyed by href) during parsing */
+interface SitemapParsedUrl {
+  loc: string;
+  lastmod?: string;
+  changefreq?: string;
+  priority?: string;
+  alternates?: Record<string, { hreflang: string; href: string }>;
+}
+
+/** Combined result type for the sitemap parser */
+interface SitemapParserResult {
+  sitemaps: Record<string, SitemapEntry>;
+  urls: Record<string, SitemapParsedUrl>;
+  total: number;
+  errors: Array<{ message: string; detail: string; severity: string }>;
+}
 
 class SitemapParser {
   /**
@@ -14,11 +38,11 @@ class SitemapParser {
    * @returns {Promise<object>} Parsed sitemap data and any errors found
    */
   static async parseSitemaps(origin: string, sitemapUrls: string[]) {
-    const result: Record<string, any> = {
+    const result: SitemapParserResult = {
       sitemaps: {}, // Per-sitemap data
       urls: {}, // All URLs combined
       total: 0, // Total URL count
-      errors: [] as any[], // Array of { message, detail, severity }
+      errors: [], // Array of { message, detail, severity }
     };
 
     console.log("Analyzing sitemaps...");
@@ -80,9 +104,10 @@ class SitemapParser {
 
               console.log(`  Processing ${nestedUrls.length} URLs from nested sitemap`);
               this.processSitemap(nestedUrls, origin, sitemapPage, result);
-            } catch (nestedError: any) {
+            } catch (nestedError: unknown) {
               const nestedSitemapUrl = sitemap.querySelector("loc")?.innerText?.trim() || 'unknown';
-              const errorMessage = `Error processing nested sitemap ${nestedSitemapUrl}: ${nestedError.name} ${nestedError.message}`;
+              const nestedErr = nestedError as Error;
+              const errorMessage = `Error processing nested sitemap ${nestedSitemapUrl}: ${nestedErr.name} ${nestedErr.message}`;
               console.log(`  ${errorMessage}`);
               result.errors.push({
                 message: `Failed to process nested sitemap`,
@@ -93,11 +118,12 @@ class SitemapParser {
             }
           }
         }
-      } catch (error: any) {
-        const message = `Error during processing sitemap ${sitemapUrl} ${error.name} ${error.message} ${error.cause || ''}`;
+      } catch (error: unknown) {
+        const err = error as Error;
+        const message = `Error during processing sitemap ${sitemapUrl} ${err.name} ${err.message} ${err.cause || ''}`;
         result.errors.push({
           message,
-          detail: null,
+          detail: '',
           severity: SEVERITY.HIGH
         });
         console.log(message);
@@ -115,10 +141,10 @@ class SitemapParser {
    * @param {string} currentSitemap - Current sitemap URL being processed
    * @param {object} result - Result object to update
    */
-  static processSitemap(urls: any[], origin: string, currentSitemap: string, result: Record<string, any>) {
+  static processSitemap(urls: HTMLElement[], origin: string, currentSitemap: string, result: SitemapParserResult) {
     const validChangefreqValues = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'];
     const unique = new Set<string>();
-    const processedUrls: Record<string, any> = {};
+    const processedUrls: Record<string, SitemapParsedUrl> = {};
 
     for (const site of urls) {
       const loc = site.querySelector("loc")?.innerText?.trim();
@@ -145,7 +171,7 @@ class SitemapParser {
         continue;
       }
 
-      const processedData: Record<string, any> = {
+      const processedData: SitemapParsedUrl = {
         loc,
         lastmod: site.querySelector("lastmod")?.innerText,
         changefreq: site.querySelector("changefreq")?.innerText,
@@ -210,7 +236,7 @@ class SitemapParser {
     if (locs.length >= THRESHOLDS.SITEMAP_LIMIT) {
       result.errors.push({
         message: `Sitemap is reached the limit ${THRESHOLDS.SITEMAP_LIMIT} ${currentSitemap}`,
-        detail: null,
+        detail: '',
         severity: SEVERITY.MEDIUM
       });
     }
@@ -238,16 +264,16 @@ class SitemapParser {
 
     for (const site of unique) {
       // Check origin
-      if (!(site as string).startsWith(origin)) {
+      if (!site.startsWith(origin)) {
         result.errors.push({
           message: `Incorrect origin ${site} in sitemap ${currentSitemap}`,
-          detail: null,
+          detail: '',
           severity: SEVERITY.HIGH
         });
       }
 
       // Track trailing slash usage
-      if ((site as string).endsWith("/")) {
+      if (site.endsWith("/")) {
         withTrailingSlash.push(site);
       } else {
         withoutTrailingSlash.push(site);
@@ -257,7 +283,7 @@ class SitemapParser {
     if (withTrailingSlash.length && withoutTrailingSlash.length) {
       result.errors.push({
         message: `Trailing slash inconsistencies in sitemap ${currentSitemap}: withTrailingSlash = ${withTrailingSlash.length}, withoutTrailingLSlash = ${withoutTrailingSlash.length}`,
-        detail: null,
+        detail: '',
         severity: SEVERITY.MEDIUM
       });
     }
@@ -308,14 +334,14 @@ if (isMainModule || isDirectRun) {
     console.log('Total URLs:', result.total);
     console.log('Sitemaps processed:', Object.keys(result.sitemaps).length);
 
-    Object.entries(result.sitemaps).forEach(([url, data]: [string, any]) => {
+    Object.entries(result.sitemaps).forEach(([url, data]: [string, SitemapEntry]) => {
       console.log(`\n  ${url}:`);
       console.log(`    - Total: ${data.total}`);
       console.log(`    - Unique: ${data.totalUnique}`);
     });
 
     console.log('\nErrors/Warnings:', result.errors.length);
-    result.errors.forEach(err => {
+    result.errors.forEach((err: { message: string; detail: string; severity: string }) => {
       console.log(`  - [${err.severity}] ${err.message}`);
       if (err.detail) console.log(`    ${err.detail}`);
     });

@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 class CrawlBudgetAnalyzer {
   /**
@@ -14,7 +14,7 @@ class CrawlBudgetAnalyzer {
    * @param {object} robots - Robots.txt data
    * @returns {object} Analysis results
    */
-  static analyze(pages: Record<string, any>, sitemaps: any = {}, robots: any = {}) {
+  static analyze(pages: Record<string, PageInfo>, sitemaps: Record<string, any> = {}, robots: Record<string, any> = {}) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {
@@ -52,7 +52,7 @@ class CrawlBudgetAnalyzer {
 
     // Track issues
     const redirectedUrls: string[] = [];
-    const errorUrls: any[] = [];
+    const errorUrls: Record<string, any>[] = [];
     const duplicateTitles = new Map();
     const canonicalTargets = new Map();
     const blockedUrls: string[] = [];
@@ -244,7 +244,7 @@ class CrawlBudgetAnalyzer {
    * @param {object} pageData
    * @returns {boolean}
    */
-  static isPageIndexable(pageData: any) {
+  static isPageIndexable(pageData: PageInfo) {
     // Check noindex
     if (pageData.noindex || pageData.metaRobots?.includes('noindex')) {
       return false;
@@ -275,7 +275,7 @@ class CrawlBudgetAnalyzer {
    * @param {object} pages - All pages data
    * @returns {object}
    */
-  static analyzeSiteWide(pages: Record<string, any>) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>) {
     return this.analyze(pages);
   }
 }

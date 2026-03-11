@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import type { Issue } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 
 /**
  * Content Gap Analyzer
@@ -12,7 +12,7 @@ class ContentGapAnalyzer {
    * @param {Object} allPages - Object containing all page data { url: pageData }
    * @returns {Object} { gaps: [], coverage: {}, stats: {}, issues: [] }
    */
-  static analyze(allPages: Record<string, any>) {
+  static analyze(allPages: Record<string, PageInfo>) {
     console.log('\nAnalyzing content gaps...');
 
     // Step 1: Aggregate all keywords from pages
@@ -58,7 +58,7 @@ class ContentGapAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Map} Keyword index
    */
-  static buildKeywordIndex(allPages: Record<string, any>) {
+  static buildKeywordIndex(allPages: Record<string, PageInfo>) {
     const keywordIndex = new Map();
 
     for (const url in allPages) {
@@ -146,7 +146,7 @@ class ContentGapAnalyzer {
    * @returns {Array} Related keywords
    */
   static findRelatedKeywords(keyword: string, keywordIndex: Map<string, any>, processed: Set<string>) {
-    const related: any[] = [];
+    const related: string[] = [];
 
     // Method 1: Prefix matching (first 4 characters)
     const prefix = keyword.substring(0, Math.min(4, keyword.length));
@@ -189,7 +189,7 @@ class ContentGapAnalyzer {
    * @returns {Object} Coverage levels
    */
   static analyzeCoverage(clusters: Map<string, any>) {
-    const coverage: Record<string, any[]> = {
+    const coverage: Record<string, Record<string, any>[]> = {
       high: [],    // 5+ pages
       medium: [],  // 2-4 pages
       low: [],     // 1 page only
@@ -229,8 +229,8 @@ class ContentGapAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Array} Content gap opportunities
    */
-  static identifyGaps(clusters: Map<string, any>, allPages: Record<string, any>) {
-    const gaps: any[] = [];
+  static identifyGaps(clusters: Map<string, any>, allPages: Record<string, PageInfo>) {
+    const gaps: Record<string, any>[] = [];
     const totalPages = Object.keys(allPages).length;
 
     clusters.forEach((data, topic) => {
@@ -264,7 +264,7 @@ class ContentGapAnalyzer {
    * @param {number} totalPages - Total number of pages
    * @returns {number} Score 0-100
    */
-  static calculateOpportunityScore(clusterData: any, totalPages: number) {
+  static calculateOpportunityScore(clusterData: Record<string, any>, totalPages: number) {
     let score = 0;
 
     // Higher density = more important keyword
@@ -316,7 +316,7 @@ class ContentGapAnalyzer {
    * @param {Object} coverage - Coverage data
    * @returns {Array} Issues array
    */
-  static generateIssues(gaps: any[], coverage: any) {
+  static generateIssues(gaps: Record<string, any>[], coverage: Record<string, any>) {
     const issues: Issue[] = [];
 
     // Issue 1: Many low-coverage topics

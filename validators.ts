@@ -80,9 +80,9 @@ export function sanitizeFilename(filename: string): string {
  * Validates command-line arguments
  */
 export function validateArguments(args: {
-  origin?: string;
-  sitemap?: string;
-  compareSitemap?: string;
+  origin?: string | null;
+  sitemap?: string | null;
+  compareSitemap?: string | null;
   perf?: boolean | string;
   proceed?: boolean | string;
 }): { valid: boolean; error?: string } {

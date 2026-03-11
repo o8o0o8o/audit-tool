@@ -13,7 +13,7 @@ class RouteExtractor {
    * @param {object} frameworkInfo - Output from RepoFrameworkDetector.detect()
    * @returns {Array<{ pattern: string, file: string, isDynamic: boolean }>}
    */
-  static extract(repoPath: string, frameworkInfo: any) {
+  static extract(repoPath: string, frameworkInfo: Record<string, any>) {
     const { framework, router } = frameworkInfo;
 
     switch (framework) {
@@ -39,7 +39,7 @@ class RouteExtractor {
    * When both routers are present, deduplicates overlapping route patterns
    */
   static #extractNextRoutes(repoPath: string, router: string | null) {
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
 
     if (router === 'app' || router === 'both') {
       const appDir = fs.existsSync(path.join(repoPath, 'app')) ? 'app' : 'src/app';
@@ -71,7 +71,7 @@ class RouteExtractor {
    * Looks for page.tsx/page.jsx/page.js files
    */
   static #extractNextAppRoutes(repoPath: string, appDir: string) {
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const absDir = path.join(repoPath, appDir);
     if (!fs.existsSync(absDir)) return routes;
 
@@ -124,7 +124,7 @@ class RouteExtractor {
    * Extract routes from Next.js Pages Router (pages/ directory)
    */
   static #extractNextPagesRoutes(repoPath: string, pagesDir: string) {
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const absDir = path.join(repoPath, pagesDir);
     if (!fs.existsSync(absDir)) return routes;
 
@@ -175,7 +175,7 @@ class RouteExtractor {
     const absDir = path.join(repoPath, pagesDir);
     if (!fs.existsSync(absDir)) return [];
 
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const pagePattern = /\.(vue|tsx|jsx|js|ts)$/;
 
     const walk = (dir: string, routePath: string) => {
@@ -221,7 +221,7 @@ class RouteExtractor {
     const absDir = path.join(repoPath, pagesDir);
     if (!fs.existsSync(absDir)) return [];
 
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const pagePattern = /\.(tsx|jsx|js|ts)$/;
 
     const walk = (dir: string, routePath: string) => {
@@ -267,7 +267,7 @@ class RouteExtractor {
     const absDir = path.join(repoPath, pagesDir);
     if (!fs.existsSync(absDir)) return [];
 
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const pagePattern = /\.(astro|md|mdx|html|tsx|jsx)$/;
 
     const walk = (dir: string, routePath: string) => {
@@ -313,7 +313,7 @@ class RouteExtractor {
     const absDir = path.join(repoPath, routesDir);
     if (!fs.existsSync(absDir)) return [];
 
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const pagePattern = /^\+page\.(svelte|ts|js)$/;
 
     const walk = (dir: string, routePath: string) => {
@@ -359,7 +359,7 @@ class RouteExtractor {
     const absDir = path.join(repoPath, routesDir);
     if (!fs.existsSync(absDir)) return [];
 
-    const routes: any[] = [];
+    const routes: Record<string, any>[] = [];
     const pagePattern = /\.(tsx|jsx|js|ts)$/;
 
     const walk = (dir: string, pathPrefix: string) => {

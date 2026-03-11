@@ -2,6 +2,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
+import type {
+  SeverityLevel, AuditHistory, AuditSnapshot, AuditComparison,
+  IssueSummary, PerformanceSummary, InsightsSummary, IssueTrend, TrendData,
+  PageInfo, AuditResults, AnalysisDetail,
+} from './lib/types';
 import { FileManager } from './lib/storage/file-manager';
 import { sanitizeDomainName } from './validators';
 
@@ -41,13 +46,13 @@ class HistoryManager {
     }
   }
 
-  loadHistory() {
+  loadHistory(): AuditHistory {
     // Try compressed file first
     if (fs.existsSync(this.historyFile)) {
       try {
         return FileManager.readJsonFile(this.historyFile);
-      } catch (error: any) {
-        console.error(`Error loading compressed history: ${error.message}`);
+      } catch (error: unknown) {
+        console.error(`Error loading compressed history: ${(error as Error).message}`);
         return { domain: this.domainName, audits: [] };
       }
     }
@@ -70,19 +75,19 @@ class HistoryManager {
               try {
                 fs.unlinkSync(this.historyFileUncompressed);
                 console.log(`✓ History migrated to compressed: ${this.historyFile}`);
-              } catch (unlinkError: any) {
-                console.warn(`⚠️  Could not remove old history file: ${unlinkError.message}`);
+              } catch (unlinkError: unknown) {
+                console.warn(`⚠️  Could not remove old history file: ${(unlinkError as Error).message}`);
               }
             } else {
               console.warn(`⚠️  Migration verification failed - keeping both files`);
             }
-          } catch (verifyError: any) {
-            console.warn(`⚠️  Could not verify compressed file - keeping both files: ${verifyError.message}`);
+          } catch (verifyError: unknown) {
+            console.warn(`⚠️  Could not verify compressed file - keeping both files: ${(verifyError as Error).message}`);
           }
         }
         return uncompressedHistory;
-      } catch (error: any) {
-        console.error(`Error migrating uncompressed history: ${error.message}`);
+      } catch (error: unknown) {
+        console.error(`Error migrating uncompressed history: ${(error as Error).message}`);
       }
     }
 
@@ -104,8 +109,8 @@ class HistoryManager {
         this.saveHistory(legacyHistory);
         console.log(`✓ History migrated to: ${this.historyFile}`);
         return legacyHistory;
-      } catch (error: any) {
-        console.error(`Error migrating history: ${error.message}`);
+      } catch (error: unknown) {
+        console.error(`Error migrating history: ${(error as Error).message}`);
         console.log(`  ℹ️  Starting with fresh history. Old data preserved at: ${this.legacyHistoryFile}`);
       }
     }
@@ -114,7 +119,7 @@ class HistoryManager {
     return { domain: this.domainName, audits: [] };
   }
 
-  saveHistory(history: any) {
+  saveHistory(history: AuditHistory) {
     // Save as compressed gzip JSON with atomic write (temp file + rename)
     const jsonString = JSON.stringify(history);
     const compressedData = zlib.gzipSync(jsonString);
@@ -145,7 +150,7 @@ class HistoryManager {
     }
   }
 
-  addAuditSnapshot(auditData: any, runTimestamp: string | null = null) {
+  addAuditSnapshot(auditData: Partial<AuditResults> & Record<string, any>, runTimestamp: string | null = null) {
     const history = this.loadHistory();
 
     const snapshot = {
@@ -185,12 +190,11 @@ class HistoryManager {
     return snapshot;
   }
 
-  extractIssuesSummary(auditData: any) {
+  extractIssuesSummary(auditData: Partial<AuditResults> & Record<string, any>): Record<string, IssueSummary> {
     const details = auditData.analysis?.details || {};
-    const summary: Record<string, any> = {};
+    const summary: Record<string, IssueSummary> = {};
 
-    Object.entries(details).forEach(([issue, _data]) => {
-      const data = _data as any;
+    Object.entries(details).forEach(([issue, data]) => {
       summary[issue] = {
         severity: data.severity,
         count: data.examples?.length || 0
@@ -200,9 +204,9 @@ class HistoryManager {
     return summary;
   }
 
-  extractPerformanceSummary(auditData: any) {
+  extractPerformanceSummary(auditData: Partial<AuditResults> & Record<string, any>): PerformanceSummary | null {
     const pages = auditData.pageData?.pages || {};
-    const pagesWithPerf = (Object.values(pages) as any[]).filter(p => p.vitals || p.TTFB);
+    const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter(p => p.vitals || p.TTFB);
 
     if (pagesWithPerf.length === 0) return null;
 
@@ -230,8 +234,8 @@ class HistoryManager {
     };
   }
 
-  extractInsightsSummary(auditData: any) {
-    const pages = Object.values(auditData.pageData?.pages || {}) as any[];
+  extractInsightsSummary(auditData: Partial<AuditResults> & Record<string, any>): InsightsSummary | null {
+    const pages = Object.values(auditData.pageData?.pages || {}) as PageInfo[];
     if (pages.length === 0) return null;
 
     const langMismatches = pages.filter(p => p.languageDetection?.match === false).length;
@@ -257,11 +261,11 @@ class HistoryManager {
     };
   }
 
-  extractTechnologiesSummary(auditData: any) {
+  extractTechnologiesSummary(auditData: Partial<AuditResults> & Record<string, any>): string[] {
     const pages = auditData.pageData?.pages || {};
     const allTechs = new Set<string>();
 
-    for (const page of Object.values(pages) as any[]) {
+    for (const page of Object.values(pages) as PageInfo[]) {
       const tech = page.technologies || {};
       const technologies = tech.technologies || [];
       for (const t of technologies) {
@@ -291,8 +295,8 @@ class HistoryManager {
     return history.audits;
   }
 
-  compareAudits(oldAudit: any, newAudit: any) {
-    const comparison: Record<string, any> = {
+  compareAudits(oldAudit: AuditSnapshot, newAudit: AuditSnapshot): AuditComparison {
+    const comparison: AuditComparison = {
       timestamp: new Date().toISOString(),
       oldDate: oldAudit.date,
       newDate: newAudit.date,
@@ -314,10 +318,10 @@ class HistoryManager {
     // Compare category scores
     if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
       comparison.categoryDeltas = {};
-      ['seo', 'performance', 'accessibility', 'security', 'technical'].forEach(cat => {
+      (['seo', 'performance', 'accessibility', 'security', 'technical'] as const).forEach(cat => {
         const oldScore = oldAudit.summary.categoryScores[cat] || 0;
         const newScore = newAudit.summary.categoryScores[cat] || 0;
-        comparison.categoryDeltas[cat] = newScore - oldScore;
+        comparison.categoryDeltas![cat] = newScore - oldScore;
       });
     }
 
@@ -333,7 +337,7 @@ class HistoryManager {
     // Compare insight metrics
     if (oldAudit.insights && newAudit.insights) {
       comparison.insightDeltas = {};
-      for (const key of ['languageMismatches', 'brokenOutboundLinks', 'nearDuplicatePages', 'pagesWithoutCTAs', 'avgJsUnused', 'avgCssUnused']) {
+      for (const key of ['languageMismatches', 'brokenOutboundLinks', 'nearDuplicatePages', 'pagesWithoutCTAs', 'avgJsUnused', 'avgCssUnused'] as const) {
         const oldVal = oldAudit.insights[key];
         const newVal = newAudit.insights[key];
         if (oldVal != null && newVal != null) {
@@ -380,30 +384,30 @@ class HistoryManager {
     const issueTrends = this.generateIssueTrends(history.audits);
 
     return {
-      labels: history.audits.map((a: any) => a.date),
-      overallScores: history.audits.map((a: any) => a.summary.overallScore),
-      totalIssues: history.audits.map((a: any) => a.summary.totalIssues),
-      criticalIssues: history.audits.map((a: any) => a.summary.criticalCount),
-      highIssues: history.audits.map((a: any) => a.summary.highCount),
+      labels: history.audits.map(a => a.date),
+      overallScores: history.audits.map(a => a.summary.overallScore),
+      totalIssues: history.audits.map(a => a.summary.totalIssues),
+      criticalIssues: history.audits.map(a => a.summary.criticalCount),
+      highIssues: history.audits.map(a => a.summary.highCount),
       categoryScores: {
-        seo: history.audits.map((a: any) => a.summary.categoryScores?.seo || 0),
-        performance: history.audits.map((a: any) => a.summary.categoryScores?.performance || 0),
-        accessibility: history.audits.map((a: any) => a.summary.categoryScores?.accessibility || 0),
-        security: history.audits.map((a: any) => a.summary.categoryScores?.security || 0),
-        technical: history.audits.map((a: any) => a.summary.categoryScores?.technical || 0)
+        seo: history.audits.map(a => a.summary.categoryScores?.seo || 0),
+        performance: history.audits.map(a => a.summary.categoryScores?.performance || 0),
+        accessibility: history.audits.map(a => a.summary.categoryScores?.accessibility || 0),
+        security: history.audits.map(a => a.summary.categoryScores?.security || 0),
+        technical: history.audits.map(a => a.summary.categoryScores?.technical || 0)
       },
       performance: {
         // Keep nulls to maintain alignment with labels array (Chart.js handles null as gaps)
-        ttfb: history.audits.map((a: any) => a.performance?.avgTTFB ?? null),
-        lcp: history.audits.map((a: any) => a.performance?.avgLCP ?? null),
-        cls: history.audits.map((a: any) => a.performance?.avgCLS ?? null)
+        ttfb: history.audits.map(a => a.performance?.avgTTFB ?? null),
+        lcp: history.audits.map(a => a.performance?.avgLCP ?? null),
+        cls: history.audits.map(a => a.performance?.avgCLS ?? null)
       },
       issueTrends,
       insights: {
-        languageMismatches: history.audits.map((a: any) => a.insights?.languageMismatches ?? null),
-        brokenOutboundLinks: history.audits.map((a: any) => a.insights?.brokenOutboundLinks ?? null),
-        nearDuplicatePages: history.audits.map((a: any) => a.insights?.nearDuplicatePages ?? null),
-        avgJsUnused: history.audits.map((a: any) => a.insights?.avgJsUnused ?? null),
+        languageMismatches: history.audits.map(a => a.insights?.languageMismatches ?? null),
+        brokenOutboundLinks: history.audits.map(a => a.insights?.brokenOutboundLinks ?? null),
+        nearDuplicatePages: history.audits.map(a => a.insights?.nearDuplicatePages ?? null),
+        avgJsUnused: history.audits.map(a => a.insights?.avgJsUnused ?? null),
       }
     };
   }
@@ -413,7 +417,7 @@ class HistoryManager {
    * @param {Array} audits - Array of audit snapshots
    * @returns {Object} Issue trends with labels, counts, severity, and trend direction
    */
-  generateIssueTrends(audits: any[]) {
+  generateIssueTrends(audits: AuditSnapshot[]): Record<string, IssueTrend> | null {
     if (audits.length < 2) {
       return null;
     }
@@ -424,7 +428,7 @@ class HistoryManager {
       Object.keys(audit.issues || {}).forEach(issue => allIssues.add(issue));
     });
 
-    const trends: Record<string, any> = {};
+    const trends: Record<string, IssueTrend> = {};
     const labels = audits.map(a => a.date);
 
     allIssues.forEach(issue => {
@@ -440,7 +444,7 @@ class HistoryManager {
       const lastNonZero = reverseIndex === -1 ? -1 : counts.length - 1 - reverseIndex;
       const latestCount = counts[counts.length - 1] || 0;
 
-      let trend = 'stable';
+      let trend: IssueTrend['trend'] = 'stable';
       if (firstNonZero === -1) {
         // All counts are zero - issue never existed
         trend = 'stable';
@@ -507,7 +511,7 @@ if (require.main === module) {
     const audits = manager.getAllAudits();
 
     console.log(`\n📊 Audit History for ${domainName}\n`);
-    audits.forEach((audit: any, i: number) => {
+    audits.forEach((audit, i: number) => {
       console.log(`${i + 1}. ${audit.date} - Score: ${audit.summary.overallScore}, Issues: ${audit.summary.totalIssues}`);
     });
     console.log(`\nTotal audits: ${audits.length}`);
@@ -533,12 +537,12 @@ if (require.main === module) {
 
     if (comparison.improvements.length > 0) {
       console.log(`\n✅ Improvements (${comparison.improvements.length}):`);
-      comparison.improvements.forEach((imp: any) => console.log(`   - ${imp}`));
+      comparison.improvements.forEach(imp => console.log(`   - ${imp}`));
     }
 
     if (comparison.regressions.length > 0) {
       console.log(`\n⚠️  Regressions (${comparison.regressions.length}):`);
-      comparison.regressions.forEach((reg: any) => console.log(`   - ${reg}`));
+      comparison.regressions.forEach(reg => console.log(`   - ${reg}`));
     }
   }
   else {

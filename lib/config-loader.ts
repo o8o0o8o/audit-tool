@@ -7,8 +7,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /** Dynamic config object with known section types */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ConfigRecord = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+ 
+type ConfigRecord = Record<string, any>;  
 
 const CONFIG_FILE_NAMES = [
   ".seoauditrc",

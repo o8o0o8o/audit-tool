@@ -266,8 +266,8 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
   if (slowest.length === 0) return '';
 
   const rows = slowest.map((p, i) => {
-    const ttfbColor = p.TTFB > 1500 ? '#ef4444' : p.TTFB > 800 ? '#f59e0b' : '#10b981';
-    const lcpColor = p.LCP > 4000 ? '#ef4444' : p.LCP > 2500 ? '#f59e0b' : '#10b981';
+    const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
+    const lcpColor = (p.LCP ?? 0) > 4000 ? '#ef4444' : (p.LCP ?? 0) > 2500 ? '#f59e0b' : '#10b981';
     let shortUrl;
     try { shortUrl = new URL(p.url).pathname; } catch { shortUrl = p.url; }
     if (shortUrl.length > 50) shortUrl = '...' + shortUrl.slice(-47);
@@ -316,7 +316,7 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
   // Count bottleneck types
   const bottleneckCounts: Record<string, number> = {};
   for (const p of pagesWithAttribution) {
-    const bn = p.vitals.lcpAnalysis.bottleneck;
+    const bn = p.vitals!.lcpAnalysis.bottleneck;
     bottleneckCounts[bn] = (bottleneckCounts[bn] || 0) + 1;
   }
 
@@ -343,7 +343,7 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
   // Sample recommendations
   const topBottleneck = sorted[0][0];
-  const samplePage = pagesWithAttribution.find(p => p.vitals.lcpAnalysis.bottleneck === topBottleneck);
+  const samplePage = pagesWithAttribution.find(p => p.vitals!.lcpAnalysis.bottleneck === topBottleneck);
   const recommendation = samplePage?.vitals?.lcpAnalysis?.recommendation || '';
 
   return `

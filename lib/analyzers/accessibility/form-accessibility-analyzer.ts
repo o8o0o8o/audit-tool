@@ -310,11 +310,11 @@ class FormAccessibilityAnalyzer {
 
     for (const [url, page] of Object.entries(pages)) {
       if (page.formData) {
-        totalForms += page.formData.totalForms;
-        totalInputs += page.formData.totalInputs;
-        totalInputsWithoutLabels += page.formData.inputsWithoutLabels;
+        totalForms += page.formData.totalForms ?? 0;
+        totalInputs += page.formData.totalInputs ?? 0;
+        totalInputsWithoutLabels += page.formData.inputsWithoutLabels ?? 0;
 
-        if (page.formData.inputsWithoutLabels > 0) {
+        if ((page.formData.inputsWithoutLabels ?? 0) > 0) {
           pagesWithFormIssues++;
         }
       }

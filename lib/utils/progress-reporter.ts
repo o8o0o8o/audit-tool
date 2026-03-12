@@ -182,7 +182,7 @@ class ProgressReporter {
 
     // Speed rating
     const rate = parseFloat(stats.rate);
-    let speedRating = '';
+    let speedRating: string;
     if (rate >= 5) speedRating = ' ⚡ Fast';
     else if (rate >= 2) speedRating = ' ✓ Good';
     else if (rate >= 0.5) speedRating = ' ⚠ Moderate';

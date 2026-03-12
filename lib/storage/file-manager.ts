@@ -128,7 +128,7 @@ class FileManager {
     const jsonPath = filePath.replace(/\.gz$/, '');
 
     let actualPath;
-    let isCompressed = false;
+    let isCompressed: boolean;
 
     if (fs.existsSync(gzPath)) {
       actualPath = gzPath;
@@ -144,7 +144,7 @@ class FileManager {
     try {
       fileContent = fs.readFileSync(actualPath);
     } catch (readError: unknown) {
-      throw new Error(`Failed to read file "${actualPath}": ${(readError as Error).message}`);
+      throw new Error(`Failed to read file "${actualPath}": ${(readError as Error).message}`, { cause: readError });
     }
 
     // Validate file is not empty
@@ -158,7 +158,7 @@ class FileManager {
         try {
           decompressed = zlib.gunzipSync(fileContent);
         } catch (decompressError: unknown) {
-          throw new Error(`Failed to decompress gzip file "${actualPath}": ${(decompressError as Error).message}. File may be corrupted or not gzip compressed.`);
+          throw new Error(`Failed to decompress gzip file "${actualPath}": ${(decompressError as Error).message}. File may be corrupted or not gzip compressed.`, { cause: decompressError });
         }
 
         if (!decompressed || decompressed.length === 0) {
@@ -170,14 +170,14 @@ class FileManager {
         } catch (jsonError: unknown) {
           // Provide helpful context about where parsing failed
           const preview = decompressed.toString('utf-8').substring(0, 100);
-          throw new Error(`Failed to parse JSON from "${actualPath}" after decompression: ${(jsonError as Error).message}. Content preview: "${preview}..."`);
+          throw new Error(`Failed to parse JSON from "${actualPath}" after decompression: ${(jsonError as Error).message}. Content preview: "${preview}..."`, { cause: jsonError });
         }
       } else {
         try {
           return JSON.parse(fileContent.toString('utf-8'));
         } catch (jsonError: unknown) {
           const preview = fileContent.toString('utf-8').substring(0, 100);
-          throw new Error(`Failed to parse JSON from "${actualPath}": ${(jsonError as Error).message}. Content preview: "${preview}..."`);
+          throw new Error(`Failed to parse JSON from "${actualPath}": ${(jsonError as Error).message}. Content preview: "${preview}..."`, { cause: jsonError });
         }
       }
     } catch (error: unknown) {
@@ -186,7 +186,7 @@ class FileManager {
         throw error;
       }
       // Add context to unexpected errors
-      throw new Error(`Error processing file "${actualPath}": ${(error as Error).message}`);
+      throw new Error(`Error processing file "${actualPath}": ${(error as Error).message}`, { cause: error });
     }
   }
 

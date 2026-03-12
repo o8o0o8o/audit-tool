@@ -94,7 +94,7 @@ class RouteExtractor {
           // Skip route groups (parentheses), private folders (_), parallel routes (@)
           if (entry.name.startsWith('_')) continue;
 
-          let segment = entry.name;
+          const segment = entry.name;
           // Route groups don't add to URL path
           if (segment.startsWith('(') && segment.endsWith(')')) {
             walk(fullPath, routePath);
@@ -331,7 +331,7 @@ class RouteExtractor {
 
         if (entry.isDirectory()) {
           // SvelteKit route groups use (group) syntax
-          let segment = entry.name;
+          const segment = entry.name;
           if (segment.startsWith('(') && segment.endsWith(')')) {
             walk(fullPath, routePath);
             continue;

@@ -45,7 +45,7 @@ class LinkDepthAnalyzer {
       // Dead-end page detection (no outgoing internal links)
       // After data stripping, page.links may only contain problematic links
       // Use linksCount/internalLinksCount if available (set by stripping), otherwise count from array
-      const hasInternalLinks = page.internalLinksCount > 0 ||
+      const hasInternalLinks = (page.internalLinksCount ?? 0) > 0 ||
         (Array.isArray(page.links) && page.links.some((link: any) => {
           try {
             const linkUrl = new URL(link.href, origin);

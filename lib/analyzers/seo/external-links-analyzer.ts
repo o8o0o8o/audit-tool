@@ -53,7 +53,7 @@ class ExternalLinksAnalyzer {
       socialLinks: [] as string[],
     };
 
-    const links = pageData.links || [];
+    const links = Array.isArray(pageData.links) ? pageData.links : [] as any[];
     const pageOrigin = this.getOrigin(url);
 
     for (const link of links) {

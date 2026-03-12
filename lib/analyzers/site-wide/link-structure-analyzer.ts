@@ -55,7 +55,7 @@ class LinkStructureAnalyzer {
       }
 
       // Track hub pages (pages with many outbound links)
-      if (linkData.internalLinks > 20) {
+      if ((linkData.internalLinks ?? 0) > 20) {
         linkStats.hubPages.push({
           url,
           internalLinks: linkData.internalLinks,
@@ -77,9 +77,9 @@ class LinkStructureAnalyzer {
       }
 
       // Track internal nofollow links
-      if (linkData.internalNofollowLinks?.length > 0) {
+      if ((linkData.internalNofollowLinks?.length ?? 0) > 0) {
         if (!linkStats.totalInternalNofollow) linkStats.totalInternalNofollow = 0;
-        linkStats.totalInternalNofollow += linkData.internalNofollowLinks.length;
+        linkStats.totalInternalNofollow += linkData.internalNofollowLinks!.length;
         if (!linkStats.pagesWithInternalNofollow) linkStats.pagesWithInternalNofollow = 0;
         linkStats.pagesWithInternalNofollow++;
       }

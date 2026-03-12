@@ -36,7 +36,7 @@ class OutboundLinkChecker {
       healthy: 0,
     };
 
-    const links = pageData.links || [];
+    const links = Array.isArray(pageData.links) ? pageData.links : [] as any[];
     let originHost;
     try {
       originHost = new URL(origin).hostname;

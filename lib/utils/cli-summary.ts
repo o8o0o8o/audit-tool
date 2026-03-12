@@ -252,7 +252,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     line(`${C.BOLD}Slowest Pages (TTFB):${C.RESET}`);
     slowestPages.forEach(([url, p], i: number) => {
       const ttfb = p.TTFB;
-      const color = ttfb > 1500 ? C.RED : ttfb > 800 ? C.ORANGE : C.GREEN;
+      const color = (ttfb ?? 0) > 1500 ? C.RED : (ttfb ?? 0) > 800 ? C.ORANGE : C.GREEN;
       let shortUrl;
       try {
         shortUrl = new URL(url).pathname;
@@ -427,7 +427,7 @@ function getInsightLines(pagesArray: PageInfo[]) {
   // Code coverage (avg unused JS/CSS)
   const coveragePages = pagesArray.filter(p => p.codeCoverage?.js?.ratio != null);
   if (coveragePages.length > 0) {
-    const avgUnusedJs = coveragePages.reduce((s, p) => s + p.codeCoverage.js.ratio, 0) / coveragePages.length;
+    const avgUnusedJs = coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length;
     if (avgUnusedJs > 40) {
       lines.push(`${C.YELLOW}📦${C.RESET} Avg ${avgUnusedJs.toFixed(0)}% unused JavaScript`);
     }

@@ -208,7 +208,7 @@ class FreshnessAnalyzer {
    * @returns {number} Freshness score
    */
   static calculateFreshnessScore(freshnessData: Record<string, any>, now: Date) {
-    let score = 50; // Start neutral
+    let score: number;
 
     // Get the most recent date we have
     const dates = [

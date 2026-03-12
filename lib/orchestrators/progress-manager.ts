@@ -263,7 +263,7 @@ class ProgressManager {
     if (pendingCount >= MAX_PENDING_PAGES) {
       console.log(`  📦 Auto-flushing ${pendingCount} pending pages to prevent memory issues...`);
       // Track the flush promise so saveProgress() can await it before writing
-      this.#pendingFlush = this.flushPendingPages(true).catch(err => {
+      this.#pendingFlush = this.flushPendingPages(true).then(() => {}).catch(err => {
         console.warn(`  ⚠️  Auto-flush failed: ${err.message}`);
       }).finally(() => {
         this.#pendingFlush = null;
@@ -625,7 +625,7 @@ class ProgressManager {
    * Optimize page data in memory to reduce footprint
    * @private
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Page data has dynamic analyzer properties beyond typed interface
+   
   #optimizePageInMemory(page: Record<string, any>): PageInfo {
     // Strip raw schema data but preserve key fields needed by site-wide validators
     if (page.structuredData?.jsonLdSchemas) {

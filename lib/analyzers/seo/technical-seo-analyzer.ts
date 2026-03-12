@@ -18,14 +18,14 @@ class TechnicalSEOAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const technicalData = {
-      metaRefresh: null as Record<string, any> | null,
+      metaRefresh: null as { delay: number; url: string | null } | null,
       jsFramework: null as string | null,
       cms: null as string | null,
-      generator: null as string | null | undefined,
+      generator: null as string | null,
       amp: false,
       pwa: false,
       lazyLoading: false as boolean | { type: string; count?: number; pattern?: string } | null,
-      preload: [] as Record<string, any>[],
+      preload: [] as { href: string; as: string | null }[],
       prefetch: [] as string[],
       dns_prefetch: [] as string[],
     };
@@ -90,7 +90,7 @@ class TechnicalSEOAnalyzer {
     technicalData.prefetch = hints.prefetch;
     technicalData.dns_prefetch = hints.dnsPrefetch;
 
-    if (hints.preload.length === 0 && pageData.totalResponseSize > 500000) {
+    if (hints.preload.length === 0 && (pageData.totalResponseSize ?? 0) > 500000) {
       warnings.push({
         message: 'No resource preloading detected on large page',
         detail: 'Consider using preload for critical resources to improve LCP',
@@ -294,7 +294,7 @@ class TechnicalSEOAnalyzer {
    */
   static getGenerator(parsedPage: ParsedPage) {
     const generator = parsedPage.querySelector('meta[name="generator"]');
-    return generator ? generator.getAttribute('content') : null;
+    return generator ? (generator.getAttribute('content') ?? null) : null;
   }
 
   /**
@@ -332,7 +332,7 @@ class TechnicalSEOAnalyzer {
    * Analyze resource hints (preload, prefetch, dns-prefetch)
    */
   static analyzeResourceHints(parsedPage: ParsedPage) {
-    const preload: Record<string, any>[] = [];
+    const preload: { href: string; as: string | null }[] = [];
     const prefetch: string[] = [];
     const dnsPrefetch: string[] = [];
 
@@ -346,7 +346,7 @@ class TechnicalSEOAnalyzer {
       if (rel === 'preload') {
         preload.push({
           href,
-          as: link.getAttribute('as'),
+          as: link.getAttribute('as') ?? null,
         });
       } else if (rel === 'prefetch') {
         prefetch.push(href);
@@ -513,7 +513,7 @@ class TechnicalSEOAnalyzer {
    * Check for robots tag conflicts
    */
   static checkRobotsTagConflicts(pageData: PageInfo, issues: Issue[]) {
-    const metaRobots = pageData.meta?.find((m: any) => m.robots)?.robots || '';
+    const metaRobots = (pageData.meta?.find((m: any) => m.robots) as any)?.robots || '';
     const xRobotsTag = pageData.response?.headers?.['x-robots-tag'] || '';
 
     if (metaRobots && xRobotsTag) {

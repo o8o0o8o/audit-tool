@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { chromium } from 'playwright';
 import type { Request as PlaywrightRequest, Response as PlaywrightResponse, BrowserContext } from 'playwright';
-import type { ParsedPage, ChromePage, PageInfo, NetworkCondition, CpuCondition, CrawlerEngineOptions, CrawlerCallbacks, SitemapUrl, Issue } from '../types';
+import type { ParsedPage, ChromePage, PageInfo, NetworkCondition, CpuCondition, CrawlerEngineOptions, CrawlerCallbacks, SitemapUrl, Issue, CodeCoverageData, OutboundLinkHealthData } from '../types';
 import type { CollectedVitals } from './vitals-collector';
 import type { CrUXFieldData } from './crux-api';
 
@@ -1052,9 +1052,9 @@ class CrawlerEngine {
     } = params;
 
     const chromePage = await context.newPage();
-    let pageData = null;
+    const pageData = null;
     let isMultiLang = false;
-    let failed = false;
+    let failed: boolean;
 
     try {
       const page = await this.#withTimeout<BasicTestResult | null>(
@@ -1339,9 +1339,9 @@ class CrawlerEngine {
     // Other metrics
     pageData.requests = requests;
     pageData.metrics = metrics;
-    pageData.blockers = blockers;
+    pageData.blockers = blockers as Record<string, any>;
     pageData.totalResponseSize = totalResponseSize;
-    pageData.responseHeaders = responseHeaders || {};
+    pageData.responseHeaders = (responseHeaders || {}) as Record<string, string>;
     pageData.response = { headers: pageData.responseHeaders };
 
     // Check page size threshold
@@ -1725,7 +1725,7 @@ class CrawlerEngine {
         audioCount: pageData.mediaData.audios?.length || 0,
         issues: pageData.mediaData.issues,
         warnings: pageData.mediaData.warnings,
-      };
+      } as any;
     }
 
     // 22. Strip web component data
@@ -2020,7 +2020,7 @@ class CrawlerEngine {
       ImageAnalyzer.extractImageAlts(parsedPage),
       LinkQualityAnalyzer.analyzeLinkQuality(chromePage, parsedPage, url, this.#options.origin, {}),
       StructuredDataAnalyzer.analyzeStructuredData(chromePage),
-      IndexabilityAnalyzer.analyzeIndexability(chromePage, parsedPage, url, pageData.status, pageData.responseHeaders),
+      IndexabilityAnalyzer.analyzeIndexability(chromePage, parsedPage, url, pageData.status || 0, pageData.responseHeaders || {}),
       CrawlabilityAnalyzer.analyzeCrawlability(chromePage, parsedPage, url, pageData),
       InternationalSEOAnalyzer.analyzeInternationalSEO(chromePage, parsedPage, url, pageData.responseHeaders),
 
@@ -2044,7 +2044,7 @@ class CrawlerEngine {
       ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
       FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
       ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, this.#options.origin),
-      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics, url),
+      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics || {}, url),
       ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
 
       // Advanced
@@ -2208,7 +2208,7 @@ class CrawlerEngine {
       thinContentResult, redirectResult, compressionResult, hintsResult,
       mixedResult, protocolResult, pwaResult, aboveFoldResult,
       anchorResult, externalLinksResult, responseHeaderResult,
-    ] = syncResults as Array<AnalyzerResult & { freshnessData?: unknown; info?: unknown }>;
+    ] = syncResults as Array<AnalyzerResult & { freshnessData?: any; info?: any }>;
 
     // Apply data results
     pageData.freshnessData = freshnessResult.freshnessData;
@@ -2248,7 +2248,7 @@ class CrawlerEngine {
           analyzerTimeout,
           `Coverage analyzer timeout for ${url}`
         );
-        pageData.codeCoverage = coverageResult.info;
+        pageData.codeCoverage = coverageResult.info as CodeCoverageData;
         this.#reportIssues(coverageResult);
       } catch {
         pageData.codeCoverage = null;
@@ -2262,7 +2262,7 @@ class CrawlerEngine {
         analyzerTimeout * 3, // Allow more time for external requests
         `Outbound link checker timeout for ${url}`
       );
-      pageData.outboundLinkHealth = outboundResult.info;
+      pageData.outboundLinkHealth = outboundResult.info as OutboundLinkHealthData;
       this.#reportIssues(outboundResult);
     } catch {
       pageData.outboundLinkHealth = null;
@@ -2520,7 +2520,7 @@ class CrawlerEngine {
    */
   #checkMissingMetaTags(pageData: PageInfo, url: string) {
     const escapedUrl = escapeHtml(url);
-    const presentTags = new Set(Object.keys(pageData.metaMap));
+    const presentTags = new Set(Object.keys(pageData.metaMap || {}));
 
     // Check critical tags only - description
     // (Social tags are handled by SocialMediaAnalyzer to avoid duplicate errors)
@@ -2607,7 +2607,7 @@ class CrawlerEngine {
     for (const alternate of alternates) {
       const count = alternates.reduce((acc, cur) => {
         if (cur.href === alternate.href) {
-          return (acc += 1);
+          return acc + 1;
         }
         return acc;
       }, 0);

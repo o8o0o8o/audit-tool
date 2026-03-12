@@ -301,14 +301,14 @@ class ConnectionTimingAnalyzer {
 
     let pagesWithSlowDns = 0;
     let pagesWithSlowTtfb = 0;
-    let totalUniqueOrigins = new Set();
+    const totalUniqueOrigins = new Set();
 
     for (const [url, page] of Object.entries(pages)) {
       if (page.timingData) {
-        if (page.timingData.document?.dns > 100) {
+        if ((page.timingData.document?.dns ?? 0) > 100) {
           pagesWithSlowDns++;
         }
-        if (page.timingData.document?.ttfb > 600) {
+        if ((page.timingData.document?.ttfb ?? 0) > 600) {
           pagesWithSlowTtfb++;
         }
         for (const origin of page.timingData.uniqueOrigins || []) {

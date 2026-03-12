@@ -127,7 +127,7 @@ function getInsightHighlights(jsonData: Record<string, unknown>) {
 
   const coveragePages = pages.filter((p: PageInfo) => p.codeCoverage?.js?.ratio != null);
   if (coveragePages.length > 0) {
-    const avgUnused = coveragePages.reduce((s: number, p: PageInfo) => s + p.codeCoverage.js.ratio, 0) / coveragePages.length;
+    const avgUnused = coveragePages.reduce((s: number, p: PageInfo) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length;
     if (avgUnused > 50) {
       badges.push(`<span class="insight-badge warn">📦 ${avgUnused.toFixed(0)}% avg unused JS</span>`);
     }

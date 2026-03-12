@@ -49,7 +49,7 @@ class AnchorTextAnalyzer {
       avgAnchorLength: 0,
     };
 
-    const links = pageData.links || [];
+    const links = (Array.isArray(pageData.links) ? pageData.links : []) as any[];
     const pageOrigin = this.getOrigin(url);
 
     let totalAnchorLength = 0;
@@ -247,7 +247,7 @@ class AnchorTextAnalyzer {
     const targetAnchorMap = new Map(); // target URL -> anchor texts used
 
     for (const [url, pageData] of Object.entries(pages)) {
-      const links = pageData.links || [];
+      const links = (Array.isArray(pageData.links) ? pageData.links : []) as any[];
 
       for (const link of links) {
         const href = link.href || link.url || link;

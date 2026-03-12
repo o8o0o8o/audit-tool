@@ -255,7 +255,7 @@ class Soft404Analyzer {
       if (page.soft404?.isSoft404) {
         soft404Count++;
         soft404Urls.push(url);
-      } else if (page.soft404?.confidence >= 30) {
+      } else if ((page.soft404?.confidence ?? 0) >= 30) {
         potentialSoft404Count++;
       }
     }

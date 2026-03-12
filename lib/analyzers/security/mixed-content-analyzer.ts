@@ -176,7 +176,7 @@ class MixedContentAnalyzer {
     }
 
     // Check links
-    const links = pageData.links || [];
+    const links = Array.isArray(pageData.links) ? pageData.links : [] as any[];
     for (const link of links) {
       const href = link.href || link;
       if (typeof href === 'string' && href.startsWith('http://')) {

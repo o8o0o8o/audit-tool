@@ -299,16 +299,16 @@ class MediaSEOAnalyzer {
 
     for (const [url, page] of Object.entries(pages)) {
 
-      if (page.mediaData?.totalVideos > 0) {
+      if ((page.mediaData?.totalVideos ?? 0) > 0) {
         pagesWithVideo++;
 
-  
-        if (page.mediaData.hasVideoSchema) {
+
+        if (page.mediaData?.hasVideoSchema) {
           pagesWithVideoSchema++;
         }
 
-  
-        totalVideosWithoutCaptions += page.mediaData.videosWithoutCaptions || 0;
+
+        totalVideosWithoutCaptions += page.mediaData?.videosWithoutCaptions || 0;
       }
     }
 

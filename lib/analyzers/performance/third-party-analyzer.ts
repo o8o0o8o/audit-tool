@@ -266,7 +266,7 @@ class ThirdPartyAnalyzer {
       if (page.thirdPartyData) {
         totalThirdPartySize += page.thirdPartyData.totalSize || 0;
 
-        if (page.thirdPartyData.blockingScripts?.length > 0) {
+        if ((page.thirdPartyData.blockingScripts?.length ?? 0) > 0) {
           pagesWithBlockingScripts++;
         }
 

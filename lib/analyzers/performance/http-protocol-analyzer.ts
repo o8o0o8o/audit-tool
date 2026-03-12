@@ -115,7 +115,7 @@ class HTTPProtocolAnalyzer {
    */
   static detectProtocol(pageData: PageInfo) {
     // Check various sources
-    if (pageData.response?.protocol) return pageData.response.protocol;
+    if ((pageData.response as any)?.protocol) return (pageData.response as any).protocol;
     if (pageData.timing?.protocol) return pageData.timing.protocol;
 
     // Check performance entries

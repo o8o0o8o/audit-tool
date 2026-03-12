@@ -29,7 +29,7 @@ function calculateSafeConcurrency() {
   // Take the lower of the two limits
   const maxSafe = Math.max(1, Math.min(memoryBasedMax, cpuBasedMax, 20));
 
-  let reason = '';
+  let reason: string;
   if (memoryBasedMax < cpuBasedMax) {
     reason = `memory (${freeMemoryMB}MB free, ~${MEMORY_PER_BROWSER_MB}MB per browser)`;
   } else {

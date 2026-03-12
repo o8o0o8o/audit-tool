@@ -414,7 +414,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!)
   const missingMeta = getMissingMetaTags(page);
   const alternatesCount = page.alternates?.length || 0;
-  const linksWithoutText = page.links?.filter((link: { text?: string }) => !link.text || link.text.trim() === '').length || 0;
+  const linksWithoutText = (Array.isArray(page.links) ? page.links : []).filter((link: { text?: string }) => !link.text || link.text.trim() === '').length || 0;
 
   // Security metrics
   const securityScore = page.security?.securityScore ?? null;
@@ -439,7 +439,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   const titleWords = (page.title || '').toLowerCase();
 
   return `
-    <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment || 'other'}" data-has-errors="${page.status >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB || 0}" data-status="${page.status || ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
+    <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment || 'other'}" data-has-errors="${(page.status ?? 0) >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB || 0}" data-status="${page.status || ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
         <td style="text-align: center; color: #9ca3af; font-weight: 500; font-size: 12px;">
             ${index + 1}
         </td>
@@ -450,14 +450,14 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             <span class="source-badge source-${page.foundIn || 'sitemap'}" title="${page.foundIn === 'discovered' ? (page.discoveredOn ? 'Found on page: ' + escapeHtml(page.discoveredOn) : 'Found through internal links during crawl') : 'Listed in sitemap'}">${page.foundIn === 'discovered' ? 'Link' : 'Sitemap'}</span>
         </td>
         <td style="text-align: center;">
-            <span class="segment-badge segment-${page.segment || 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment)}; color: white;" title="Page segment: ${page.segment || 'other'}">${getSegmentLabel(page.segment)}</span>
+            <span class="segment-badge segment-${page.segment || 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment ?? 'other')}; color: white;" title="Page segment: ${page.segment || 'other'}">${getSegmentLabel(page.segment ?? 'other')}</span>
         </td>
         <td class="incoming-links-cell"
-            style="color: ${page.incomingLinksCount > 0 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center; cursor: ${page.incomingLinksCount > 0 ? 'pointer' : 'default'}; position: relative;"
+            style="color: ${(page.incomingLinksCount ?? 0) > 0 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center; cursor: ${(page.incomingLinksCount ?? 0) > 0 ? 'pointer' : 'default'}; position: relative;"
             data-url="${escapeHtml(page.url)}"
             data-count="${page.incomingLinksCount || 0}"
-            title="${page.incomingLinksCount > 0 ? 'Click to see ' + page.incomingLinksCount + ' incoming link(s)' : 'No incoming links - page is orphaned (only accessible via sitemap)'}">
-            ${page.incomingLinksCount || 0}${page.incomingLinksCount > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
+            title="${(page.incomingLinksCount ?? 0) > 0 ? 'Click to see ' + page.incomingLinksCount + ' incoming link(s)' : 'No incoming links - page is orphaned (only accessible via sitemap)'}">
+            ${page.incomingLinksCount || 0}${(page.incomingLinksCount ?? 0) > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
         </td>
         <td style="color: ${getMetricColor(page.urlAnalysis?.length || 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : (page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal')}">
             ${page.urlAnalysis?.length || 0}
@@ -465,13 +465,13 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
         <td style="color: ${getMetricColor(page.urlAnalysis?.depth || 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
             ${page.urlAnalysis?.depth || 0}
         </td>
-        <td style="color: ${page.redirectCount > 2 ? '#ef4444' : (page.redirectCount > 0 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="${page.redirectCount > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
+        <td style="color: ${(page.redirectCount ?? 0) > 2 ? '#ef4444' : ((page.redirectCount ?? 0) > 0 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="${(page.redirectCount ?? 0) > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
             ${page.redirectCount || 0}
         </td>
-        <td style="color: ${page.httpLinksCount > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${page.httpLinksCount > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
+        <td style="color: ${(page.httpLinksCount ?? 0) > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.httpLinksCount ?? 0) > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
             ${page.httpLinksCount || 0}
         </td>
-        <td><span class="status-badge" style="background: ${getStatusColor(page.status)};">${page.status || 'N/A'}</span></td>
+        <td><span class="status-badge" style="background: ${getStatusColor(page.status ?? 0)};">${page.status || 'N/A'}</span></td>
         <td class="text-cell" title="${titleTooltip || escapeHtml(page.title || 'No title')}">
             <span style="color: ${titleColor}; font-weight: 600;">${titleLength}</span>
             <span style="color: #9ca3af;"> | </span>
@@ -873,12 +873,12 @@ function getNewInsightCells(page: PageInfo) {
   // Code coverage
   const jsUnused = page.codeCoverage?.js?.ratio;
   const jsDisplay = jsUnused != null ? `${jsUnused}%` : '—';
-  const jsColor = jsUnused > 70 ? '#ef4444' : jsUnused > 50 ? '#f59e0b' : '#10b981';
+  const jsColor = (jsUnused ?? 0) > 70 ? '#ef4444' : (jsUnused ?? 0) > 50 ? '#f59e0b' : '#10b981';
 
   // Broken outbound links
   const brokenCount = page.outboundLinkHealth?.broken?.length ?? null;
   const brokenDisplay = brokenCount != null ? brokenCount : '—';
-  const brokenColor = brokenCount > 0 ? '#ef4444' : '#10b981';
+  const brokenColor = (brokenCount ?? 0) > 0 ? '#ef4444' : '#10b981';
 
   // Main content words
   const mainWords = page.contentQuality?.wordCountBySection?.main ?? null;
@@ -890,7 +890,7 @@ function getNewInsightCells(page: PageInfo) {
     <td style="text-align: center; font-size: 12px;">${prDisplay}</td>
     <td style="text-align: center; font-size: 12px;">${ctaDisplay}</td>
     <td style="text-align: center; font-size: 12px; color: ${jsUnused != null ? jsColor : '#6b7280'};">${jsDisplay}</td>
-    <td style="text-align: center; font-size: 12px; color: ${brokenCount != null ? brokenColor : '#6b7280'}; font-weight: ${brokenCount > 0 ? '600' : 'normal'};">${brokenDisplay}</td>
+    <td style="text-align: center; font-size: 12px; color: ${brokenCount != null ? brokenColor : '#6b7280'}; font-weight: ${(brokenCount ?? 0) > 0 ? '600' : 'normal'};">${brokenDisplay}</td>
     <td style="text-align: center; font-size: 12px; color: ${mainColor};">${mainDisplay}</td>
   `;
 }

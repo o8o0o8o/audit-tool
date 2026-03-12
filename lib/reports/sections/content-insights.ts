@@ -243,15 +243,15 @@ function getCTASection(pages: PageInfo[]) {
 }
 
 function getCodeCoverageSection(pages: PageInfo[]) {
-  const withCoverage = pages.filter(p => p.codeCoverage?.totalBytes > 0);
+  const withCoverage = pages.filter(p => (p.codeCoverage?.totalBytes ?? 0) > 0);
   if (withCoverage.length === 0) return '';
 
   let totalJS = 0, unusedJS = 0, totalCSS = 0, unusedCSS = 0;
   for (const page of withCoverage) {
-    totalJS += page.codeCoverage.js?.total || 0;
-    unusedJS += page.codeCoverage.js?.unused || 0;
-    totalCSS += page.codeCoverage.css?.total || 0;
-    unusedCSS += page.codeCoverage.css?.unused || 0;
+    totalJS += page.codeCoverage?.js?.total || 0;
+    unusedJS += page.codeCoverage?.js?.unused || 0;
+    totalCSS += page.codeCoverage?.css?.total || 0;
+    unusedCSS += page.codeCoverage?.css?.unused || 0;
   }
 
   const jsRatio = totalJS > 0 ? Math.round((unusedJS / totalJS) * 100) : 0;
@@ -291,15 +291,15 @@ function getCodeCoverageSection(pages: PageInfo[]) {
 }
 
 function getOutboundLinksSection(pages: PageInfo[]) {
-  const withData = pages.filter(p => p.outboundLinkHealth?.totalChecked > 0);
+  const withData = pages.filter(p => (p.outboundLinkHealth?.totalChecked ?? 0) > 0);
   if (withData.length === 0) return '';
 
   let totalChecked = 0, totalBroken = 0, totalRedirected = 0, totalTimeouts = 0;
   const brokenUrls = new Map();
 
   for (const page of withData) {
-    const h = page.outboundLinkHealth;
-    totalChecked += h.totalChecked;
+    const h = page.outboundLinkHealth!;
+    totalChecked += h.totalChecked ?? 0;
     totalBroken += h.broken?.length || 0;
     totalRedirected += h.redirected?.length || 0;
     totalTimeouts += h.timeouts?.length || 0;
@@ -346,10 +346,10 @@ function getResponseHeadersSection(pages: PageInfo[]) {
 
   let withXRobotsNoindex = 0, withDynamicServing = 0, withPreloadHints = 0, withHttpCanonical = 0;
   for (const page of withData) {
-    const h = page.responseHeaderAnalysis;
+    const h = page.responseHeaderAnalysis!;
     if (h.noindexViaHeader) withXRobotsNoindex++;
     if (h.dynamicServing) withDynamicServing++;
-    if (h.preloadHints?.length > 0) withPreloadHints++;
+    if ((h.preloadHints?.length ?? 0) > 0) withPreloadHints++;
     if (h.httpCanonical) withHttpCanonical++;
   }
 

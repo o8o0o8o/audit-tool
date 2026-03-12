@@ -304,12 +304,12 @@ class WebComponentAnalyzer {
 
     for (const [url, page] of Object.entries(pages)) {
       if (page.webComponentData) {
-        if (page.webComponentData.totalShadowRoots > 0) {
+        if ((page.webComponentData.totalShadowRoots ?? 0) > 0) {
           pagesWithShadowDom++;
         }
 
-        const content = page.webComponentData.contentInShadowDom || {};
-        if (content.headings || content.links) {
+        const content = page.webComponentData.contentInShadowDom;
+        if (content?.headings || content?.links) {
           pagesWithContentInShadow++;
         }
 

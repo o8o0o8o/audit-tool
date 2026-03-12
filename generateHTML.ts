@@ -92,7 +92,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
     hasPerformanceMetrics: pagesWithMetrics.length > 0,
   };
 
-  let htmlContent = `
+  const htmlContent = `
   <!DOCTYPE html>
   <html lang="en">
   <head>

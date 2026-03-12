@@ -213,7 +213,7 @@ function createPagesExportData(jsonData: Record<string, unknown>) {
 
     requests: d.totalNumberOfRequests || d.numberOfRequests || '',
 
-    hasErrors: (d.status >= 400 || d.errors?.length > 0) ? 'Yes' : 'No',
+    hasErrors: ((d.status ?? 0) >= 400 || (d.errors?.length ?? 0) > 0) ? 'Yes' : 'No',
 
     loadTime: d.loadEvent || '',
   };

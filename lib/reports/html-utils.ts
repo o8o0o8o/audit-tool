@@ -101,7 +101,7 @@ function getTextLengthColor(length: number, min: number, max: number) {
  */
 function hasMetaTag(page: PageInfo, tagName: string): boolean {
   if (!page.meta || !Array.isArray(page.meta)) return false;
-  return page.meta.some((metaObj: Record<string, unknown>) => metaObj[tagName] !== undefined);
+  return (page.meta as Record<string, unknown>[]).some((metaObj) => metaObj[tagName] !== undefined);
 }
 
 /**

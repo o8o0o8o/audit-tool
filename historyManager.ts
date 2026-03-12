@@ -245,10 +245,10 @@ class HistoryManager {
 
     const coveragePages = pages.filter(p => p.codeCoverage?.js?.ratio != null);
     const avgJsUnused = coveragePages.length > 0
-      ? +(coveragePages.reduce((s, p) => s + p.codeCoverage.js.ratio, 0) / coveragePages.length).toFixed(1)
+      ? +(coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length).toFixed(1)
       : null;
     const avgCssUnused = coveragePages.length > 0 && coveragePages.some(p => p.codeCoverage?.css?.ratio != null)
-      ? +(coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).reduce((s, p) => s + p.codeCoverage.css.ratio, 0) / coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).length).toFixed(1)
+      ? +(coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).reduce((s, p) => s + (p.codeCoverage?.css?.ratio ?? 0), 0) / coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).length).toFixed(1)
       : null;
 
     return {
@@ -444,7 +444,7 @@ class HistoryManager {
       const lastNonZero = reverseIndex === -1 ? -1 : counts.length - 1 - reverseIndex;
       const latestCount = counts[counts.length - 1] || 0;
 
-      let trend: IssueTrend['trend'] = 'stable';
+      let trend: IssueTrend['trend'];
       if (firstNonZero === -1) {
         // All counts are zero - issue never existed
         trend = 'stable';

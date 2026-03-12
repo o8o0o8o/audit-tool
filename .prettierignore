@@ -1,0 +1,5 @@
+dist/
+node_modules/
+audit-results/
+coverage/
+*.json.gz

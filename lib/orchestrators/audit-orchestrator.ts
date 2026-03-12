@@ -218,7 +218,7 @@ class AuditOrchestrator {
    * @private
    */
   static #detectMultilanguage(results: AnalyzeContext['results']) {
-    let isMultiLang = results.isMultiLang || false;
+    const isMultiLang = results.isMultiLang || false;
 
     if (!isMultiLang) {
       // Check sitemap for alternates (xhtml:link rel="alternate")

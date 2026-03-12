@@ -19,16 +19,6 @@ class ConsoleErrorAnalyzer {
     /hydration/i,  // React hydration errors
   ];
 
-  static #warningPatterns = [
-    /deprecated/i,
-    /warning/i,
-    /third.?party\s*cookie/i,
-    /mixed\s*content/i,
-    /cors/i,
-    /content\s*security\s*policy/i,
-    /failed\s*to\s*load\s*resource/i,  // Network failures (401, 403, 404) — not JS errors
-  ];
-
   // Patterns to ignore (noise)
   static #ignorePatterns = [
     /favicon\.ico/i,
@@ -232,7 +222,7 @@ class ConsoleErrorAnalyzer {
       if (page.consoleAnalysis?.hasErrors) {
         pagesWithErrors++;
   
-        totalErrors += page.consoleAnalysis.errorCount;
+        totalErrors += page.consoleAnalysis.errorCount ?? 0;
 
   
         if (page.consoleAnalysis.hasCriticalErrors) {

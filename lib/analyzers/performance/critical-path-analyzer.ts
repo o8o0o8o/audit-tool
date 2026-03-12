@@ -334,10 +334,10 @@ class CriticalPathAnalyzer {
 
     for (const [url, page] of Object.entries(pages)) {
       if (page.criticalPathData) {
-        if (page.criticalPathData.blockingCSS?.length > 2) {
+        if ((page.criticalPathData.blockingCSS?.length ?? 0) > 2) {
           pagesWithBlockingCSS++;
         }
-        if (page.criticalPathData.blockingJS?.filter((js: any) => js.inHead).length > 0) {
+        if ((page.criticalPathData.blockingJS?.filter((js: any) => js.inHead).length ?? 0) > 0) {
           pagesWithBlockingJS++;
         }
         totalBlockingResources += (page.criticalPathData.blockingCSS?.length || 0) +

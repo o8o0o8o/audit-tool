@@ -173,7 +173,7 @@ class VitalsCollector {
         };
 
         let lcpFired = false;
-        let clsObserver: PerformanceObserver | undefined, lcpObserver: PerformanceObserver | undefined, inpObserver: PerformanceObserver | undefined, longTaskObserver: PerformanceObserver | undefined;
+        let clsObserver: PerformanceObserver | undefined = undefined, lcpObserver: PerformanceObserver | undefined = undefined, inpObserver: PerformanceObserver | undefined, longTaskObserver: PerformanceObserver | undefined;
 
         // CLS Session Window tracking
         let clsSessionValue = 0;

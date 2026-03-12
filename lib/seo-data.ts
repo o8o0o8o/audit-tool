@@ -25,7 +25,7 @@ import { parse } from 'node-html-parser';
 
 class SEOData {
   // Internal results state - uses index signature because analyzers add dynamic keys
-  #results: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  #results: Record<string, any>;  
   #proceed: boolean;
   #perf: boolean;
   #saveHtml: boolean;
@@ -427,7 +427,7 @@ class SEOData {
       }
 
       // Rebuild sitemaps.urls with only filtered URLs
-      const newUrls: Record<string, any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const newUrls: Record<string, any> = {};  
       for (const url of filtered) {
         newUrls[url] = this.#results.sitemaps.urls[url];
       }

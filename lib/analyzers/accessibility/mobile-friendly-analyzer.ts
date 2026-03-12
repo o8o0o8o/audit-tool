@@ -5,7 +5,7 @@ class MobileFriendlyAnalyzer {
     return await page.evaluate(() => {
       const issues: string[] = [];
       const warnings: string[] = [];
-      const metrics: Record<string, number | boolean | string | Record<string, number>> = {};
+      const metrics: Record<string, unknown> = {};
 
       // 1. Check viewport meta tag
       const viewport = document.querySelector('meta[name="viewport"]');
@@ -97,13 +97,56 @@ class MobileFriendlyAnalyzer {
         issues.push(`${smallTargets.length} touch targets smaller than 48x48px`);
       }
 
-      // 4. Check for content wider than viewport
+      // 4. Check for content wider than viewport (WCAG 1.4.10 Reflow)
       const bodyWidth = document.body.scrollWidth;
       const viewportWidth = window.innerWidth;
 
       if (bodyWidth > viewportWidth + 10) {
         // 10px tolerance
         issues.push('Content is wider than viewport (horizontal scroll required)');
+      }
+
+      // 4b. Find specific elements causing horizontal overflow
+      const overflowingElements: { tag: string; width: number; overflow: number }[] = [];
+      const checkElements = document.querySelectorAll('*');
+      for (const el of checkElements) {
+        if (el === document.documentElement || el === document.body) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.right > viewportWidth + 5 && rect.width > 0) {
+          overflowingElements.push({
+            tag: `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}`,
+            width: Math.round(rect.width),
+            overflow: Math.round(rect.right - viewportWidth),
+          });
+          if (overflowingElements.length >= 10) break;
+        }
+      }
+
+      if (overflowingElements.length > 0 && bodyWidth <= viewportWidth + 10) {
+        // Elements overflow but body doesn't scroll (overflow hidden)
+        warnings.push(
+          `${overflowingElements.length} element(s) extend beyond viewport (may be clipped): ${overflowingElements.slice(0, 3).map((e) => `<${e.tag}> +${e.overflow}px`).join(', ')}`,
+        );
+      } else if (overflowingElements.length > 0) {
+        metrics.overflowingElements = overflowingElements.slice(0, 5);
+      }
+
+      // 4c. Check for elements with fixed widths that exceed viewport
+      const fixedWidthElements: string[] = [];
+      const potentialFixed = document.querySelectorAll('table, pre, code, img, video, iframe');
+      for (const el of potentialFixed) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > viewportWidth) {
+          const style = window.getComputedStyle(el);
+          if (style.width !== 'auto' && !style.width.includes('%') && !style.maxWidth.includes('%')) {
+            fixedWidthElements.push(el.tagName.toLowerCase());
+          }
+        }
+      }
+      if (fixedWidthElements.length > 0) {
+        issues.push(
+          `${fixedWidthElements.length} element(s) with fixed width exceed viewport: ${[...new Set(fixedWidthElements)].join(', ')}. Use max-width: 100% or responsive sizing.`,
+        );
       }
 
       // 5. Check tap target spacing

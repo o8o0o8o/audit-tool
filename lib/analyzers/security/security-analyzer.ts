@@ -4,6 +4,7 @@ interface InsecureCookieDetail {
   name: string;
   domain: string;
   issues: string[];
+  sameSite?: string;
 }
 
 class SecurityAnalyzer {
@@ -17,6 +18,7 @@ class SecurityAnalyzer {
       missingHeaders: [],
       insecureCookies: 0,
       insecureCookieDetails: [], // Track details for reporting
+      sameSiteIssues: 0,
       mixedContent: 0,
       formsWithoutCSRF: 0,
       inlineScripts: 0,
@@ -65,6 +67,16 @@ class SecurityAnalyzer {
         issues.push('missing HttpOnly flag on sensitive cookie');
       }
 
+      // Check SameSite attribute
+      const sameSite = cookie.sameSite || 'None';
+      if (sameSite === 'None' && !cookie.secure) {
+        issues.push('SameSite=None without Secure flag (cookie will be rejected by browsers)');
+        securityIssues.sameSiteIssues++;
+      } else if (sameSite === 'None' && isSensitiveCookie) {
+        issues.push('Sensitive cookie with SameSite=None (vulnerable to CSRF)');
+        securityIssues.sameSiteIssues++;
+      }
+
       // Count each cookie only once, even if it has multiple issues
       if (issues.length > 0 && !insecureCookieSet.has(cookieKey)) {
         insecureCookieSet.add(cookieKey);
@@ -75,6 +87,7 @@ class SecurityAnalyzer {
             name: cookie.name,
             domain: cookie.domain,
             issues: issues,
+            sameSite: sameSite,
           });
         }
       }
@@ -115,6 +128,7 @@ class SecurityAnalyzer {
     let score = 100;
     score -= securityIssues.missingHeaders.length * 10; // -10 per missing header
     score -= securityIssues.insecureCookies * 5; // -5 per insecure cookie
+    score -= securityIssues.sameSiteIssues * 4; // -4 per SameSite issue
     score -= securityIssues.mixedContent * 3; // -3 per mixed content
     score -= securityIssues.formsWithoutCSRF * 8; // -8 per form without CSRF
     score -= Math.min(securityIssues.inlineScripts, 10) * 2; // -2 per inline script (max 10)

@@ -300,6 +300,9 @@ class EEATAnalyzer {
       hasContactInfo: false,
       hasPrivacyPolicy: false,
       hasTermsOfService: false,
+      hasCookiePolicy: false,
+      hasAccessibilityStatement: false,
+      hasImpressum: false,
     };
 
     for (const link of links) {
@@ -317,6 +320,15 @@ class EEATAnalyzer {
       }
       if (/terms|tos|conditions/i.test(href) || /terms/i.test(text)) {
         result.hasTermsOfService = true;
+      }
+      if (/cookie.policy|cookie-policy|cookies$/i.test(href) || /cookie policy/i.test(text)) {
+        result.hasCookiePolicy = true;
+      }
+      if (/accessibility/i.test(href) || /accessibility statement|accessibility/i.test(text)) {
+        result.hasAccessibilityStatement = true;
+      }
+      if (/impressum|imprint|legal.notice|legal-notice/i.test(href) || /impressum|imprint|legal notice/i.test(text)) {
+        result.hasImpressum = true;
       }
     }
 
@@ -406,6 +418,9 @@ class EEATAnalyzer {
     hasContactInfo: boolean;
     hasPrivacyPolicy: boolean;
     hasTermsOfService: boolean;
+    hasCookiePolicy?: boolean;
+    hasAccessibilityStatement?: boolean;
+    hasImpressum?: boolean;
     trustSignals: string[];
     expertiseSignals: string[];
     score: number;

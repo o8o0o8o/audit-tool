@@ -166,6 +166,8 @@ class ScoreCalculator {
         'cta',
         'outbound',
         'broken outbound',
+        'spelling',
+        'misspell',
       ],
       performance: [
         'ttfb',
@@ -203,6 +205,11 @@ class ScoreCalculator {
         'unused javascript',
         'unused css',
         'code coverage',
+        'dom size',
+        'dom complexity',
+        'dom depth',
+        'dom nesting',
+        'dom children',
       ],
       technical: [
         'redirect',
@@ -238,6 +245,10 @@ class ScoreCalculator {
         'overlay',
         'ad density',
         'open redirect',
+        'dns',
+        'ipv6',
+        'aaaa',
+        'nameserver',
       ],
     };
 

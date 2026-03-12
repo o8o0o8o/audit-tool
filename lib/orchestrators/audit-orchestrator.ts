@@ -48,6 +48,7 @@ interface PageDataForValidation {
   contentGapStats?: unknown;
   linkingOpportunities?: unknown;
   linkingStats?: unknown;
+  dnsData?: unknown;
   externalLinkVerification?: unknown;
 }
 
@@ -116,6 +117,7 @@ import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker'
 import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyzer';
 import { ContentGapAnalyzer } from '../analyzers/site-wide/content-gap-analyzer';
 import { LinkingOpportunityAnalyzer } from '../analyzers/site-wide/linking-opportunity-analyzer';
+import { DNSIPv6Analyzer } from '../analyzers/performance/dns-ipv6-analyzer';
 
 class AuditOrchestrator {
   /**
@@ -593,6 +595,15 @@ class AuditOrchestrator {
       } catch (error: unknown) {
         console.error(`Error running ${validator.name} validator:`, (error as Error).message);
       }
+    }
+
+    // Run DNS & IPv6 analyzer (async, site-level)
+    try {
+      const dnsResult = await DNSIPv6Analyzer.analyze(origin);
+      AuditOrchestrator.#processValidationResult(dnsResult, saveError);
+      pageData.dnsData = dnsResult.info;
+    } catch (error: unknown) {
+      console.error('Error running DNS & IPv6 analyzer:', (error as Error).message);
     }
 
     // Run Page Segment Analyzer and store results

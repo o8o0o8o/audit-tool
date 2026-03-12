@@ -305,6 +305,7 @@ import { DOMComplexityAnalyzer } from '../analyzers/performance/dom-complexity-a
 import { DeprecatedHTMLAnalyzer } from '../analyzers/seo/deprecated-html-analyzer';
 import { InterstitialAnalyzer } from '../analyzers/seo/interstitial-analyzer';
 import { AdDensityAnalyzer } from '../analyzers/seo/ad-density-analyzer';
+import { SpellingGrammarAnalyzer } from '../analyzers/content/spelling-grammar-analyzer';
 import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
 
 // Circuit breaker constants
@@ -2215,6 +2216,7 @@ class CrawlerEngine {
       { issues: [], warnings: [], info: {} }, // sriResult
       { issues: [], warnings: [], info: {} }, // infoDisclosureResult
       { issues: [], warnings: [], info: {} }, // openRedirectResult
+      { issues: [], warnings: [], info: {} }, // spellingResult
     ];
 
     const browserAnalyzersSettled = await this.#withTimeout(
@@ -2294,6 +2296,7 @@ class CrawlerEngine {
         SRIAnalyzer.analyze(parsedPage, url),
         InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url),
         OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
+        SpellingGrammarAnalyzer.analyze(chromePage, url),
       ]),
       analyzerTimeout,
       `Analyzer timeout for ${url}`,
@@ -2344,6 +2347,7 @@ class CrawlerEngine {
       sriResult,
       infoDisclosureResult,
       openRedirectResult,
+      spellingResult,
     ] = browserAnalyzers as AnalyzerResult[];
 
     // Apply results to pageData
@@ -2393,6 +2397,7 @@ class CrawlerEngine {
     pd.sriData = (sriResult as AnalyzerResult & { info: unknown }).info;
     pd.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: unknown }).info;
     pd.openRedirectData = (openRedirectResult as AnalyzerResult & { info: unknown }).info;
+    pd.spellingData = (spellingResult as AnalyzerResult & { info: unknown }).info;
 
     // Report issues from Group 1
     [
@@ -2433,6 +2438,7 @@ class CrawlerEngine {
       sriResult,
       infoDisclosureResult,
       openRedirectResult,
+      spellingResult,
     ].forEach((result) => this.#reportIssues(result as AnalyzerResult));
 
     // ============================================================

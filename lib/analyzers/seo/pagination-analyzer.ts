@@ -173,7 +173,7 @@ class PaginationAnalyzer {
       /[?&]p=(\d+)/i,
       /\/page\/(\d+)/i,
       /\/p\/(\d+)/i,
-      /\/(\d{1,4})\/?$/,  // Only match small numbers to avoid false-positives on product/article IDs
+      /\/(\d{1,4})\/?$/, // Only match small numbers to avoid false-positives on product/article IDs
       /-page-(\d+)/i,
       /_page_(\d+)/i,
     ];
@@ -248,7 +248,7 @@ class PaginationAnalyzer {
 
         // Find current page
         const currentIndicators = paginationContainer.querySelectorAll(
-          '.current, .active, [aria-current="page"], span.page-numbers:not(a)'
+          '.current, .active, [aria-current="page"], span.page-numbers:not(a)',
         );
         for (const indicator of currentIndicators) {
           const pageNum = parseInt(indicator.textContent.trim(), 10);
@@ -293,11 +293,11 @@ class PaginationAnalyzer {
           document.querySelector('[data-waypoint]'),
         ];
 
-        const hasIndicator = indicators.some(el => el !== null);
+        const hasIndicator = indicators.some((el) => el !== null);
 
         // Check for sentinel elements (end-of-list markers)
         const sentinels = document.querySelectorAll(
-          '.load-more-sentinel, .scroll-sentinel, [data-sentinel], .infinite-scroll-trigger'
+          '.load-more-sentinel, .scroll-sentinel, [data-sentinel], .infinite-scroll-trigger',
         );
 
         return {
@@ -309,13 +309,9 @@ class PaginationAnalyzer {
 
       // Also check HTML for common patterns
       const html = parsedPage.toString();
-      const infinitePatterns = [
-        /infinite[-_]?scroll/i,
-        /endless[-_]?scroll/i,
-        /load[-_]?more[-_]?on[-_]?scroll/i,
-      ];
+      const infinitePatterns = [/infinite[-_]?scroll/i, /endless[-_]?scroll/i, /load[-_]?more[-_]?on[-_]?scroll/i];
 
-      const htmlHasPattern = infinitePatterns.some(p => p.test(html));
+      const htmlHasPattern = infinitePatterns.some((p) => p.test(html));
 
       return {
         detected: result.detected || htmlHasPattern,
@@ -347,8 +343,12 @@ class PaginationAnalyzer {
         const buttons = document.querySelectorAll('button, a.btn, a.button');
         for (const btn of buttons) {
           const text = btn.textContent.toLowerCase();
-          if (text.includes('load more') || text.includes('show more') ||
-              text.includes('view more') || text.includes('see more')) {
+          if (
+            text.includes('load more') ||
+            text.includes('show more') ||
+            text.includes('view more') ||
+            text.includes('see more')
+          ) {
             return { detected: true, text: btn.textContent.trim() };
           }
         }
@@ -402,20 +402,15 @@ class PaginationAnalyzer {
     let pagesWithBadCanonical = 0;
 
     for (const [_url, page] of Object.entries(pages)) {
-
       if (page.paginationData?.hasPagination) {
-
-  
         if (page.paginationData.infiniteScrollDetected) {
           infiniteScrollPages++;
         }
 
-  
         if (page.paginationData.hasRelPrevNext) {
           pagesWithRelPrevNext++;
         }
 
-  
         if (page.paginationData.currentPage > 1 && !page.paginationData.canonicalPointsToSelf) {
           pagesWithBadCanonical++;
         }
@@ -425,7 +420,8 @@ class PaginationAnalyzer {
     if (infiniteScrollPages > 0 && pagesWithRelPrevNext === 0) {
       issues.push({
         message: `${infiniteScrollPages} pages use infinite scroll without pagination fallback`,
-        detail: 'Infinite scroll pages should have static pagination links or ensure all content URLs are in the sitemap.',
+        detail:
+          'Infinite scroll pages should have static pagination links or ensure all content URLs are in the sitemap.',
         severity: SEVERITY.HIGH,
       });
     }

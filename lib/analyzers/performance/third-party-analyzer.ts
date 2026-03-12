@@ -10,40 +10,66 @@ class ThirdPartyAnalyzer {
   // Known third-party categories
   static #categories = {
     analytics: [
-      'google-analytics.com', 'googletagmanager.com', 'analytics.google.com',
-      'hotjar.com', 'clarity.ms', 'mouseflow.com', 'fullstory.com',
-      'segment.com', 'mixpanel.com', 'amplitude.com', 'heap.io',
-      'plausible.io', 'matomo', 'piwik',
+      'google-analytics.com',
+      'googletagmanager.com',
+      'analytics.google.com',
+      'hotjar.com',
+      'clarity.ms',
+      'mouseflow.com',
+      'fullstory.com',
+      'segment.com',
+      'mixpanel.com',
+      'amplitude.com',
+      'heap.io',
+      'plausible.io',
+      'matomo',
+      'piwik',
     ],
     advertising: [
-      'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-      'facebook.net', 'fbcdn.net', 'ads-twitter.com', 'amazon-adsystem.com',
-      'criteo.com', 'outbrain.com', 'taboola.com', 'adsrvr.org',
+      'doubleclick.net',
+      'googlesyndication.com',
+      'googleadservices.com',
+      'facebook.net',
+      'fbcdn.net',
+      'ads-twitter.com',
+      'amazon-adsystem.com',
+      'criteo.com',
+      'outbrain.com',
+      'taboola.com',
+      'adsrvr.org',
     ],
     social: [
-      'facebook.com', 'twitter.com', 'linkedin.com', 'pinterest.com',
-      'instagram.com', 'tiktok.com', 'addthis.com', 'sharethis.com',
+      'facebook.com',
+      'twitter.com',
+      'linkedin.com',
+      'pinterest.com',
+      'instagram.com',
+      'tiktok.com',
+      'addthis.com',
+      'sharethis.com',
     ],
-    video: [
-      'youtube.com', 'youtu.be', 'vimeo.com', 'wistia.com', 'vidyard.com',
-      'jwplayer.com', 'brightcove.com',
-    ],
+    video: ['youtube.com', 'youtu.be', 'vimeo.com', 'wistia.com', 'vidyard.com', 'jwplayer.com', 'brightcove.com'],
     customerService: [
-      'intercom.io', 'zendesk.com', 'drift.com', 'crisp.chat',
-      'freshdesk.com', 'livechat.com', 'tawk.to', 'olark.com',
+      'intercom.io',
+      'zendesk.com',
+      'drift.com',
+      'crisp.chat',
+      'freshdesk.com',
+      'livechat.com',
+      'tawk.to',
+      'olark.com',
     ],
     cdn: [
-      'cloudflare.com', 'jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com',
-      'bootstrapcdn.com', 'jquery.com', 'googleapis.com/ajax',
+      'cloudflare.com',
+      'jsdelivr.net',
+      'unpkg.com',
+      'cdnjs.cloudflare.com',
+      'bootstrapcdn.com',
+      'jquery.com',
+      'googleapis.com/ajax',
     ],
-    fonts: [
-      'fonts.googleapis.com', 'fonts.gstatic.com', 'use.typekit.net',
-      'fast.fonts.net',
-    ],
-    maps: [
-      'maps.googleapis.com', 'maps.google.com', 'mapbox.com',
-      'openstreetmap.org', 'leafletjs.com',
-    ],
+    fonts: ['fonts.googleapis.com', 'fonts.gstatic.com', 'use.typekit.net', 'fast.fonts.net'],
+    maps: ['maps.googleapis.com', 'maps.google.com', 'mapbox.com', 'openstreetmap.org', 'leafletjs.com'],
     other: [],
   };
 
@@ -127,13 +153,15 @@ class ThirdPartyAnalyzer {
     // Generate issues
 
     // Too much third-party payload
-    if (thirdPartyData.totalSize > 1000000) { // 1MB
+    if (thirdPartyData.totalSize > 1000000) {
+      // 1MB
       issues.push({
         message: 'Excessive third-party payload',
         detail: `<a href="${url}">${url}</a> loads ${(thirdPartyData.totalSize / 1024).toFixed(0)}KB from third parties. This significantly impacts load time.`,
         severity: SEVERITY.HIGH,
       });
-    } else if (thirdPartyData.totalSize > 500000) { // 500KB
+    } else if (thirdPartyData.totalSize > 500000) {
+      // 500KB
       warnings.push({
         message: 'Large third-party payload',
         detail: `<a href="${url}">${url}</a> loads ${(thirdPartyData.totalSize / 1024).toFixed(0)}KB from third parties.`,
@@ -154,7 +182,10 @@ class ThirdPartyAnalyzer {
     if (thirdPartyData.blockingScripts.length > 0) {
       issues.push({
         message: 'Render-blocking third-party scripts',
-        detail: `<a href="${url}">${url}</a> has ${thirdPartyData.blockingScripts.length} render-blocking third-party script(s): ${thirdPartyData.blockingScripts.slice(0, 3).map((s: any) => s.host).join(', ')}. Add async or defer.`,
+        detail: `<a href="${url}">${url}</a> has ${thirdPartyData.blockingScripts.length} render-blocking third-party script(s): ${thirdPartyData.blockingScripts
+          .slice(0, 3)
+          .map((s: any) => s.host)
+          .join(', ')}. Add async or defer.`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -188,9 +219,7 @@ class ThirdPartyAnalyzer {
    */
   static #isFirstParty(reqHost: string, originHost: string) {
     // Same domain or subdomain
-    return reqHost === originHost ||
-           reqHost.endsWith('.' + originHost) ||
-           originHost.endsWith('.' + reqHost);
+    return reqHost === originHost || reqHost.endsWith('.' + originHost) || originHost.endsWith('.' + reqHost);
   }
 
   /**
@@ -263,7 +292,6 @@ class ThirdPartyAnalyzer {
 
     for (const [_url, page] of Object.entries(pages)) {
       if (page.thirdPartyData) {
-
         if ((page.thirdPartyData.blockingScripts?.length ?? 0) > 0) {
           pagesWithBlockingScripts++;
         }

@@ -29,11 +29,14 @@ class CodeCoverageAnalyzer {
    * Must be called BEFORE page.goto()
    * @param {object} chromePage - Playwright page object
    */
-  static async startCoverage(chromePage: ChromePage & { __coverageClient?: unknown; __cssStyleSheets?: Map<string, StyleSheetInfo> }, existingClient?: unknown) {
+  static async startCoverage(
+    chromePage: ChromePage & { __coverageClient?: unknown; __cssStyleSheets?: Map<string, StyleSheetInfo> },
+    existingClient?: unknown,
+  ) {
     try {
       // Reuse existing CDP session if provided, otherwise create a new one
       // Creating multiple CDP sessions on the same page can cause conflicts
-      const client = (existingClient || await chromePage.context().newCDPSession(chromePage)) as CDPClient;
+      const client = (existingClient || (await chromePage.context().newCDPSession(chromePage))) as CDPClient;
       await client.send('Profiler.enable');
       await client.send('Profiler.startPreciseCoverage', {
         callCount: false,
@@ -74,7 +77,11 @@ class CodeCoverageAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static async analyze(chromePage: ChromePage & { __coverageClient?: unknown; __cssStyleSheets?: Map<string, StyleSheetInfo> }, requests: NetworkRequest[], url: string) {
+  static async analyze(
+    chromePage: ChromePage & { __coverageClient?: unknown; __cssStyleSheets?: Map<string, StyleSheetInfo> },
+    requests: NetworkRequest[],
+    url: string,
+  ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -139,7 +146,10 @@ class CodeCoverageAnalyzer {
       const ruleUsageResult = await client.send('CSS.stopRuleUsageTracking');
       if (ruleUsageResult?.ruleUsage && styleSheets) {
         // Group rule usage by stylesheet
-        const sheetUsage = new Map<string, { used: { start: number; end: number }[]; unused: { start: number; end: number }[] }>();
+        const sheetUsage = new Map<
+          string,
+          { used: { start: number; end: number }[]; unused: { start: number; end: number }[] }
+        >();
         for (const rule of ruleUsageResult.ruleUsage) {
           if (!sheetUsage.has(rule.styleSheetId)) {
             sheetUsage.set(rule.styleSheetId, { used: [], unused: [] });
@@ -200,7 +210,11 @@ class CodeCoverageAnalyzer {
       return { info, issues, warnings };
     } finally {
       // Clean up
-      try { await client.detach(); } catch { /* ignore */ }
+      try {
+        await client.detach();
+      } catch {
+        /* ignore */
+      }
       delete chromePage.__coverageClient;
       delete chromePage.__cssStyleSheets;
     }
@@ -228,11 +242,17 @@ class CodeCoverageAnalyzer {
     // Report issues with top offending files for actionable insights
     if (info.js.ratio > 70 && info.js.total > 50000) {
       const topFiles = info.js.files.slice(0, 3);
-      const fileList = topFiles.length > 0
-        ? '<br>Top unused scripts:<ul style="margin:4px 0;">' + topFiles.map((f: any) =>
-          `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`
-        ).join('') + '</ul>'
-        : '';
+      const fileList =
+        topFiles.length > 0
+          ? '<br>Top unused scripts:<ul style="margin:4px 0;">' +
+            topFiles
+              .map(
+                (f: any) =>
+                  `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
+              )
+              .join('') +
+            '</ul>'
+          : '';
       issues.push({
         message: 'High percentage of unused JavaScript',
         detail: `<a href="${url}">${url}</a>: ${info.js.ratio}% of JavaScript is unused (${(info.js.unused / 1024).toFixed(0)}KB of ${(info.js.total / 1024).toFixed(0)}KB).${fileList}`,
@@ -242,11 +262,17 @@ class CodeCoverageAnalyzer {
 
     if (info.css.ratio > 80 && info.css.total > 20000) {
       const topCssFiles = info.css.files.slice(0, 3);
-      const cssFileList = topCssFiles.length > 0
-        ? '<br>Top unused stylesheets:<ul style="margin:4px 0;">' + topCssFiles.map((f: any) =>
-          `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`
-        ).join('') + '</ul>'
-        : '';
+      const cssFileList =
+        topCssFiles.length > 0
+          ? '<br>Top unused stylesheets:<ul style="margin:4px 0;">' +
+            topCssFiles
+              .map(
+                (f: any) =>
+                  `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
+              )
+              .join('') +
+            '</ul>'
+          : '';
       issues.push({
         message: 'High percentage of unused CSS',
         detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${(info.css.unused / 1024).toFixed(0)}KB of ${(info.css.total / 1024).toFixed(0)}KB).${cssFileList}`,
@@ -256,11 +282,17 @@ class CodeCoverageAnalyzer {
 
     if (info.totalUnusedBytes > 500000) {
       const topFiles = info.js.files.slice(0, 5);
-      const fileList = topFiles.length > 0
-        ? '<br>Largest unused bundles:<ul style="margin:4px 0;">' + topFiles.map((f: any) =>
-          `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB of ${(f.total / 1024).toFixed(0)}KB)</li>`
-        ).join('') + '</ul>'
-        : '';
+      const fileList =
+        topFiles.length > 0
+          ? '<br>Largest unused bundles:<ul style="margin:4px 0;">' +
+            topFiles
+              .map(
+                (f: any) =>
+                  `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB of ${(f.total / 1024).toFixed(0)}KB)</li>`,
+              )
+              .join('') +
+            '</ul>'
+          : '';
       warnings.push({
         message: 'Large amount of unused code',
         detail: `<a href="${url}">${url}</a>: ${(info.totalUnusedBytes / 1024).toFixed(0)}KB of unused code (${info.unusedRatio}% of total). This significantly impacts page load time.${fileList}`,
@@ -301,7 +333,7 @@ class CodeCoverageAnalyzer {
       totalUnusedCSS += coverage.css?.unused || 0;
 
       // Track frequently unused scripts
-      for (const file of (coverage.js?.files || [])) {
+      for (const file of coverage.js?.files || []) {
         if (file.unusedPercent > 60) {
           const key = file.url;
           if (!unusedScripts[key]) {
@@ -341,10 +373,13 @@ class CodeCoverageAnalyzer {
       .sort((a: any, b: any) => b.count - a.count);
 
     if (frequentlyUnused.length > 0) {
-      const list = frequentlyUnused.slice(0, 5).map((s: any) => {
-        s.avgUnused = Math.round(s.avgUnused / s.count);
-        return `<li>${s.url} - ${s.avgUnused}% unused on ${s.count} pages</li>`;
-      }).join('');
+      const list = frequentlyUnused
+        .slice(0, 5)
+        .map((s: any) => {
+          s.avgUnused = Math.round(s.avgUnused / s.count);
+          return `<li>${s.url} - ${s.avgUnused}% unused on ${s.count} pages</li>`;
+        })
+        .join('');
       warnings.push({
         title: `${frequentlyUnused.length} script(s) consistently have high unused code`,
         description: `These scripts are frequently loaded but mostly unused:<ul>${list}</ul>`,

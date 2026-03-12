@@ -1,7 +1,12 @@
 import type { ChromePage, ParsedPage } from '../../types';
 
 class InternationalSEOAnalyzer {
-  static async analyzeInternationalSEO(chromePage: ChromePage, parsedPage: ParsedPage, url: string, responseHeaders: Record<string, string> = {}) {
+  static async analyzeInternationalSEO(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    url: string,
+    responseHeaders: Record<string, string> = {},
+  ) {
     const intlData: Record<string, any> = {
       language: null,
       region: null,
@@ -46,7 +51,9 @@ class InternationalSEOAnalyzer {
 
       // Check consistency with HTML lang
       if (htmlLang && contentLanguage.toLowerCase() !== htmlLang.toLowerCase()) {
-        intlData.warnings.push(`Content-Language header (${contentLanguage}) doesn't match HTML lang attribute (${htmlLang})`);
+        intlData.warnings.push(
+          `Content-Language header (${contentLanguage}) doesn't match HTML lang attribute (${htmlLang})`,
+        );
       }
     }
 
@@ -117,7 +124,26 @@ class InternationalSEOAnalyzer {
 
       // Check for ccTLD (country-code top-level domain)
       // Generic 2-letter TLDs commonly used as non-country domains
-      const genericTLDs = new Set(['com', 'org', 'net', 'io', 'co', 'ai', 'me', 'tv', 'gg', 'fm', 'am', 'sh', 'to', 'ly', 'st', 'ms', 'cc', 'ws']);
+      const genericTLDs = new Set([
+        'com',
+        'org',
+        'net',
+        'io',
+        'co',
+        'ai',
+        'me',
+        'tv',
+        'gg',
+        'fm',
+        'am',
+        'sh',
+        'to',
+        'ly',
+        'st',
+        'ms',
+        'cc',
+        'ws',
+      ]);
       const tldMatch = hostname.match(/\.([a-z]{2})$/i);
       if (tldMatch && !genericTLDs.has(tldMatch[1].toLowerCase())) {
         intlData.urlStructure = 'tld';
@@ -138,7 +164,9 @@ class InternationalSEOAnalyzer {
     }
 
     // 6. Check for language switcher
-    const languageSwitcher = parsedPage.querySelector('[class*="lang"], [id*="lang"], [class*="language"], select[name*="lang"]');
+    const languageSwitcher = parsedPage.querySelector(
+      '[class*="lang"], [id*="lang"], [class*="language"], select[name*="lang"]',
+    );
     if (!languageSwitcher && intlData.hasHreflang) {
       intlData.warnings.push('No visible language switcher found (user experience issue)');
     }
@@ -148,13 +176,13 @@ class InternationalSEOAnalyzer {
 
     // Check for currency symbols (localization signal)
     const currencies = {
-      '$': 'USD/AUD/CAD',
+      $: 'USD/AUD/CAD',
       '€': 'EUR',
       '£': 'GBP',
       '¥': 'JPY/CNY',
       '₹': 'INR',
       '₽': 'RUB',
-      'R$': 'BRL',
+      R$: 'BRL',
     };
 
     for (const [symbol, currency] of Object.entries(currencies)) {

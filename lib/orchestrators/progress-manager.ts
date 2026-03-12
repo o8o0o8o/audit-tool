@@ -261,11 +261,14 @@ class ProgressManager {
     if (pendingCount >= MAX_PENDING_PAGES) {
       console.log(`  📦 Auto-flushing ${pendingCount} pending pages to prevent memory issues...`);
       // Track the flush promise so saveProgress() can await it before writing
-      this.#pendingFlush = this.flushPendingPages(true).then(() => {}).catch(err => {
-        console.warn(`  ⚠️  Auto-flush failed: ${err.message}`);
-      }).finally(() => {
-        this.#pendingFlush = null;
-      });
+      this.#pendingFlush = this.flushPendingPages(true)
+        .then(() => {})
+        .catch((err) => {
+          console.warn(`  ⚠️  Auto-flush failed: ${err.message}`);
+        })
+        .finally(() => {
+          this.#pendingFlush = null;
+        });
       return true;
     }
     return false;
@@ -336,7 +339,10 @@ class ProgressManager {
       try {
         await new Promise((resolve, reject) => {
           const timeoutId = setTimeout(() => reject(new Error('Write lock timeout')), 30000);
-          this.#flushWaiters.push(() => { clearTimeout(timeoutId); resolve(undefined); });
+          this.#flushWaiters.push(() => {
+            clearTimeout(timeoutId);
+            resolve(undefined);
+          });
         });
       } catch {
         console.warn(`  ⚠️  Write lock timeout after 30s, skipping flush`);
@@ -396,7 +402,9 @@ class ProgressManager {
       const batchNum = this.fileManager.getNextBatchNumber();
       const batchInfo = this.fileManager.writeBatch(batchNum, batchPages);
 
-      console.log(`  📦 Wrote batch ${batchNum}: ${batchInfo.count} pages (${batchInfo.stats.compressedSizeMB.toFixed(2)} MB)`);
+      console.log(
+        `  📦 Wrote batch ${batchNum}: ${batchInfo.count} pages (${batchInfo.stats.compressedSizeMB.toFixed(2)} MB)`,
+      );
 
       newBatches.push(batchInfo);
       this.#writtenBatches.push(batchInfo);
@@ -447,7 +455,7 @@ class ProgressManager {
     // Get URLs that have already been written to batches
     const writtenUrls = new Set<string>();
     for (const batch of this.#writtenBatches) {
-      for (const url of (batch.urls || [])) {
+      for (const url of batch.urls || []) {
         writtenUrls.add(url);
       }
     }
@@ -484,7 +492,7 @@ class ProgressManager {
       // Clear written pages from memory to prevent OOM
       const urlsToRemove = new Set(urlsWritten);
       results.pageData.pages = Object.fromEntries(
-        Object.entries(results.pageData.pages).filter(([url]) => !urlsToRemove.has(url))
+        Object.entries(results.pageData.pages).filter(([url]) => !urlsToRemove.has(url)),
       );
 
       // Trigger garbage collection if available
@@ -535,7 +543,7 @@ class ProgressManager {
         metadata: 'metadata.json.gz',
         analysis: 'analysis.json.gz',
         incomingLinks: 'incoming-links.json.gz',
-        pageBatches: this.#writtenBatches.map(b => ({
+        pageBatches: this.#writtenBatches.map((b) => ({
           file: b.file,
           count: b.count,
           urls: b.urls,
@@ -623,7 +631,7 @@ class ProgressManager {
    * Optimize page data in memory to reduce footprint
    * @private
    */
-   
+
   #optimizePageInMemory(page: Record<string, any>): PageInfo {
     // Strip raw schema data but preserve key fields needed by site-wide validators
     if (page.structuredData?.jsonLdSchemas) {
@@ -662,7 +670,8 @@ class ProgressManager {
     // Reduce images to only problematic ones
     if (Array.isArray(page.images) && page.images.length > 0) {
       page.imagesCount = page.imagesCount || page.images.length;
-      page.imagesWithoutAltCount = page.imagesWithoutAltCount || page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').length;
+      page.imagesWithoutAltCount =
+        page.imagesWithoutAltCount || page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').length;
       page.images = page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').slice(0, 10);
     }
 
@@ -932,11 +941,29 @@ class ProgressManager {
     };
 
     // Apply limits to all analyzer outputs
-    ['linkAnalysis', 'accessibility', 'caching', 'contentQuality', 'imageOptimization',
-     'resourceOptimization', 'structuredData', 'headings', 'internationalSEO',
-     'thirdPartyData', 'timingData', 'criticalPathData', 'fontData', 'compressionData',
-     'consoleAnalysis', 'formData', 'mediaData', 'webComponentData', 'aboveFoldData',
-     'anchorTextData', 'externalLinksData'].forEach(key => {
+    [
+      'linkAnalysis',
+      'accessibility',
+      'caching',
+      'contentQuality',
+      'imageOptimization',
+      'resourceOptimization',
+      'structuredData',
+      'headings',
+      'internationalSEO',
+      'thirdPartyData',
+      'timingData',
+      'criticalPathData',
+      'fontData',
+      'compressionData',
+      'consoleAnalysis',
+      'formData',
+      'mediaData',
+      'webComponentData',
+      'aboveFoldData',
+      'anchorTextData',
+      'externalLinksData',
+    ].forEach((key) => {
       if (page[key]) {
         limitIssuesWarnings(page[key]);
       }

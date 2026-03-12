@@ -1,7 +1,12 @@
 import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class CrawlabilityAnalyzer {
-  static async analyzeCrawlability(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: PageInfo = { url: '' }) {
+  static async analyzeCrawlability(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    url: string,
+    pageData: PageInfo = { url: '' },
+  ) {
     const crawlabilityData = {
       isCrawlable: true,
       blockingFactors: [] as string[],
@@ -51,7 +56,9 @@ class CrawlabilityAnalyzer {
 
     crawlabilityData.loadTime = pageData.TTFB || pageData.loadTime || 0;
     if (crawlabilityData.loadTime > 10000) {
-      crawlabilityData.warnings.push(`Very slow load time (${Math.round(crawlabilityData.loadTime / 1000)}s) - may timeout for crawlers`);
+      crawlabilityData.warnings.push(
+        `Very slow load time (${Math.round(crawlabilityData.loadTime / 1000)}s) - may timeout for crawlers`,
+      );
     }
 
     // 6. Check for frames/iframes (crawlability issue)

@@ -51,7 +51,11 @@ interface PageDataForValidation {
   externalLinkVerification?: unknown;
 }
 
-type SaveErrorFn = (generalError: string, detailedError: string | null | undefined, severity?: SeverityLevel | string) => void;
+type SaveErrorFn = (
+  generalError: string,
+  detailedError: string | null | undefined,
+  severity?: SeverityLevel | string,
+) => void;
 
 interface ValidationResult {
   issues?: Issue[];
@@ -134,7 +138,7 @@ class AuditOrchestrator {
     // Detect multilanguage site
     let isMultiLang = AuditOrchestrator.#detectMultilanguage(results);
 
-    console.log("Crawling pages from sitemap...");
+    console.log('Crawling pages from sitemap...');
 
     // First crawl: pages from sitemap
     const crawledData = await crawlerEngine.crawlPages({
@@ -157,11 +161,11 @@ class AuditOrchestrator {
         saveError(
           `Some URLs are not listed in sitemap`,
           `<a href="${escapedUrl}">${escapedUrl}</a> was found on the site but is not listed in sitemap`,
-          SEVERITY.MEDIUM
+          SEVERITY.MEDIUM,
         );
       }
 
-      console.log("Crawling pages that are missing in sitemap...");
+      console.log('Crawling pages that are missing in sitemap...');
 
       const discoveredData = await crawlerEngine.crawlPages({
         pagesToCrawl: Array.from(collectedURLs),
@@ -191,20 +195,15 @@ class AuditOrchestrator {
 
     // Write failed pages file asynchronously to avoid blocking event loop
     if (failedPages.length) {
-      fsPromises.writeFile(
-        path.join(resultsDir, "failedPages.json"),
-        JSON.stringify(failedPages)
-      ).catch(err => console.warn(`⚠️  Could not write failedPages.json: ${err.message}`));
+      fsPromises
+        .writeFile(path.join(resultsDir, 'failedPages.json'), JSON.stringify(failedPages))
+        .catch((err) => console.warn(`⚠️  Could not write failedPages.json: ${err.message}`));
     }
 
     // Report alternates errors
     if (isMultiLang && alternatesErrors.length) {
       for (const alternatesError of alternatesErrors) {
-        saveError(
-          `Alternates are not set for some pages`,
-          alternatesError,
-          SEVERITY.MEDIUM
-        );
+        saveError(`Alternates are not set for some pages`, alternatesError, SEVERITY.MEDIUM);
       }
     }
 
@@ -225,7 +224,7 @@ class AuditOrchestrator {
         const sitemapEntry = results.sitemaps.urls[url];
         if (sitemapEntry.alternates && Object.keys(sitemapEntry.alternates).length > 0) {
           const hasValidAlternate = Object.values(sitemapEntry.alternates).some(
-              (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default'
+            (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default',
           );
           if (hasValidAlternate) {
             console.log(`Detected multilanguage site from sitemap entry: ${url}`);
@@ -240,7 +239,9 @@ class AuditOrchestrator {
       for (const url in results.pageData.pages) {
         const page = results.pageData.pages[url];
         if (page.alternates && page.alternates.length > 0) {
-          const hasValidAlternate = page.alternates.some((alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default');
+          const hasValidAlternate = page.alternates.some(
+            (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default',
+          );
           if (hasValidAlternate) {
             console.log(`Detected multilanguage site from previously crawled page: ${url}`);
             return true;
@@ -269,10 +270,53 @@ class AuditOrchestrator {
   static #detectLanguagePatternsInUrls(urls: Record<string, SitemapUrl>) {
     // Common language codes (ISO 639-1)
     const langCodes = new Set([
-      'en', 'de', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh',
-      'ar', 'he', 'hi', 'th', 'vi', 'id', 'ms', 'tr', 'sv', 'da', 'no', 'fi',
-      'cs', 'hu', 'ro', 'bg', 'uk', 'el', 'sk', 'sl', 'hr', 'sr', 'lt', 'lv',
-      'et', 'ca', 'eu', 'gl', 'cy', 'ga', 'mt', 'is', 'mk', 'sq', 'bs',
+      'en',
+      'de',
+      'fr',
+      'es',
+      'it',
+      'pt',
+      'nl',
+      'pl',
+      'ru',
+      'ja',
+      'ko',
+      'zh',
+      'ar',
+      'he',
+      'hi',
+      'th',
+      'vi',
+      'id',
+      'ms',
+      'tr',
+      'sv',
+      'da',
+      'no',
+      'fi',
+      'cs',
+      'hu',
+      'ro',
+      'bg',
+      'uk',
+      'el',
+      'sk',
+      'sl',
+      'hr',
+      'sr',
+      'lt',
+      'lv',
+      'et',
+      'ca',
+      'eu',
+      'gl',
+      'cy',
+      'ga',
+      'mt',
+      'is',
+      'mk',
+      'sq',
+      'bs',
     ]);
 
     // Extended patterns: en-us, en-gb, de-de, etc.
@@ -334,7 +378,7 @@ class AuditOrchestrator {
         saveError(
           `Some pages have no incoming links from other pages`,
           `The page <a href="${escapedUrl}">${escapedUrl}</a> is only accessible through the sitemap (no internal links point to it)`,
-          SEVERITY.MEDIUM
+          SEVERITY.MEDIUM,
         );
       }
     }
@@ -350,7 +394,12 @@ class AuditOrchestrator {
    * @param {boolean} isMultiLang - Whether site has multiple languages
    * @param {Function} saveError - Callback to save errors
    */
-  static async runSiteWideValidation(pageData: PageDataForValidation, origin: string, isMultiLang: boolean, saveError: SaveErrorFn) {
+  static async runSiteWideValidation(
+    pageData: PageDataForValidation,
+    origin: string,
+    isMultiLang: boolean,
+    saveError: SaveErrorFn,
+  ) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
     const analysisConfig = config.analysis || {};
@@ -539,11 +588,7 @@ class AuditOrchestrator {
 
     for (const validator of validators) {
       try {
-        const result = AuditOrchestrator.#runWithTimeout(
-          validator.run,
-          validator.name,
-          VALIDATOR_TIMEOUT_MS
-        );
+        const result = AuditOrchestrator.#runWithTimeout(validator.run, validator.name, VALIDATOR_TIMEOUT_MS);
         AuditOrchestrator.#processValidationResult(result, saveError);
       } catch (error: unknown) {
         console.error(`Error running ${validator.name} validator:`, (error as Error).message);
@@ -603,9 +648,11 @@ class AuditOrchestrator {
     // Run External Link HTTP Verification (async, potentially slow)
     try {
       console.log('\nVerifying external links...');
-      const externalVerifyResult = await ExternalLinksAnalyzer.verifyExternalLinks(
-        pageData.pages, origin, { concurrency: 5, timeout: 10000, maxUrls: 500 }
-      );
+      const externalVerifyResult = await ExternalLinksAnalyzer.verifyExternalLinks(pageData.pages, origin, {
+        concurrency: 5,
+        timeout: 10000,
+        maxUrls: 500,
+      });
 
       // Store verification data
       pageData.externalLinkVerification = externalVerifyResult.stats;
@@ -635,7 +682,9 @@ class AuditOrchestrator {
       const duration = Date.now() - startTime;
 
       if (duration > timeoutMs) {
-        console.warn(`⚠️  ${name} validator took ${(duration / 1000).toFixed(1)}s (exceeded ${timeoutMs / 1000}s threshold)`);
+        console.warn(
+          `⚠️  ${name} validator took ${(duration / 1000).toFixed(1)}s (exceeded ${timeoutMs / 1000}s threshold)`,
+        );
       } else if (duration > timeoutMs / 2) {
         console.log(`  ⏱️  ${name}: ${(duration / 1000).toFixed(1)}s`);
       }
@@ -645,7 +694,9 @@ class AuditOrchestrator {
       const duration = Date.now() - startTime;
       if (duration > timeoutMs * 0.9) {
         // Likely timed out or hit resource limits
-        console.error(`❌ ${name} validator failed after ${(duration / 1000).toFixed(1)}s: ${(error as Error).message}`);
+        console.error(
+          `❌ ${name} validator failed after ${(duration / 1000).toFixed(1)}s: ${(error as Error).message}`,
+        );
       }
       throw error;
     }

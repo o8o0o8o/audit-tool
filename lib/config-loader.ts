@@ -7,14 +7,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /** Dynamic config object with known section types */
- 
-type ConfigRecord = Record<string, any>;  
 
-const CONFIG_FILE_NAMES = [
-  ".seoauditrc",
-  ".seoauditrc.json",
-  "seoaudit.config.json",
-];
+type ConfigRecord = Record<string, any>;
+
+const CONFIG_FILE_NAMES = ['.seoauditrc', '.seoauditrc.json', 'seoaudit.config.json'];
 
 /**
  * Default configuration
@@ -58,9 +54,9 @@ const DEFAULT_CONFIG = {
 
   // Query parameter handling
   queryParams: {
-    mode: "strip_tracking", // 'strip_all' | 'strip_tracking' | 'keep_all' | 'whitelist'
-    whitelist: ["page", "id", "p"], // Params to keep when mode is 'whitelist'
-    blacklist: ["color"], // Additional params to strip (beyond tracking params)
+    mode: 'strip_tracking', // 'strip_all' | 'strip_tracking' | 'keep_all' | 'whitelist'
+    whitelist: ['page', 'id', 'p'], // Params to keep when mode is 'whitelist'
+    blacklist: ['color'], // Additional params to strip (beyond tracking params)
   },
 
   // URL filtering
@@ -148,13 +144,11 @@ function loadConfigFile(filePath: string) {
     // Check file size to prevent memory exhaustion (max 1MB)
     const stats = fs.statSync(filePath);
     if (stats.size > 1024 * 1024) {
-      console.error(
-        `❌ Config file too large (${stats.size} bytes, max 1MB): ${filePath}`,
-      );
+      console.error(`❌ Config file too large (${stats.size} bytes, max 1MB): ${filePath}`);
       return {};
     }
 
-    const content = fs.readFileSync(filePath, "utf-8");
+    const content = fs.readFileSync(filePath, 'utf-8');
     const config = JSON.parse(content);
 
     // Validate and sanitize config
@@ -174,77 +168,70 @@ function loadConfigFile(filePath: string) {
  * Maps old names to canonical names (used in constants.js)
  */
 const THRESHOLD_ALIASES = {
-  REQUESTS: "REQUEST_COUNT",
-  MIN_CONTENT_WORDS: "CONTENT_MIN",
-  RECOMMENDED_CONTENT_WORDS: "CONTENT_RECOMMENDED",
+  REQUESTS: 'REQUEST_COUNT',
+  MIN_CONTENT_WORDS: 'CONTENT_MIN',
+  RECOMMENDED_CONTENT_WORDS: 'CONTENT_RECOMMENDED',
 };
 
 const CONFIG_SCHEMA = {
   thresholds: {
-    type: "object",
+    type: 'object',
     // Canonical names (matching constants.js) plus legacy aliases
     allowedKeys: [
-      "TTFB",
-      "LCP",
-      "CLS",
-      "FCP",
-      "INP",
-      "TBT",
-      "TTI",
-      "PAGE_SIZE",
-      "REQUEST_COUNT",
-      "REQUESTS", // REQUEST_COUNT is canonical, REQUESTS is alias
-      "TITLE_MIN",
-      "TITLE_MAX",
-      "DESCRIPTION_MIN",
-      "DESCRIPTION_MAX",
-      "CONTENT_MIN",
-      "MIN_CONTENT_WORDS", // CONTENT_MIN is canonical
-      "CONTENT_RECOMMENDED",
-      "RECOMMENDED_CONTENT_WORDS", // CONTENT_RECOMMENDED is canonical
-      "URL_LENGTH_MAX",
-      "URL_LENGTH_RECOMMENDED",
-      "URL_DEPTH_MAX",
-      "IMAGE_SIZE_MAX",
-      "RETRY_ATTEMPTS",
-      "PAGE_TIMEOUT",
+      'TTFB',
+      'LCP',
+      'CLS',
+      'FCP',
+      'INP',
+      'TBT',
+      'TTI',
+      'PAGE_SIZE',
+      'REQUEST_COUNT',
+      'REQUESTS', // REQUEST_COUNT is canonical, REQUESTS is alias
+      'TITLE_MIN',
+      'TITLE_MAX',
+      'DESCRIPTION_MIN',
+      'DESCRIPTION_MAX',
+      'CONTENT_MIN',
+      'MIN_CONTENT_WORDS', // CONTENT_MIN is canonical
+      'CONTENT_RECOMMENDED',
+      'RECOMMENDED_CONTENT_WORDS', // CONTENT_RECOMMENDED is canonical
+      'URL_LENGTH_MAX',
+      'URL_LENGTH_RECOMMENDED',
+      'URL_DEPTH_MAX',
+      'IMAGE_SIZE_MAX',
+      'RETRY_ATTEMPTS',
+      'PAGE_TIMEOUT',
     ],
-    valueType: "number",
+    valueType: 'number',
   },
   crawl: {
-    type: "object",
-    allowedKeys: [
-      "concurrency",
-      "timeout",
-      "retryAttempts",
-      "userAgent",
-      "batchSize",
-      "maxDiscoveredUrls",
-    ],
+    type: 'object',
+    allowedKeys: ['concurrency', 'timeout', 'retryAttempts', 'userAgent', 'batchSize', 'maxDiscoveredUrls'],
   },
   queryParams: {
-    type: "object",
-    allowedKeys: ["mode", "whitelist", "blacklist"],
+    type: 'object',
+    allowedKeys: ['mode', 'whitelist', 'blacklist'],
   },
-  excludeUrls: { type: "array", itemType: "string" },
-  includeUrls: { type: "array", itemType: "string" },
+  excludeUrls: { type: 'array', itemType: 'string' },
+  includeUrls: { type: 'array', itemType: 'string' },
   analysis: {
-    type: "object",
+    type: 'object',
     allowedKeys: [
-      "similarityThreshold",
-      "jsUnusedThreshold",
-      "cssUnusedThreshold",
-      "maxOutboundChecks",
-      "outboundTimeout",
+      'similarityThreshold',
+      'jsUnusedThreshold',
+      'cssUnusedThreshold',
+      'maxOutboundChecks',
+      'outboundTimeout',
     ],
   },
   report: {
-    type: "object",
-    allowedKeys: ["showQuickWins", "maxQuickWins", "showPerformanceCharts"],
+    type: 'object',
+    allowedKeys: ['showQuickWins', 'maxQuickWins', 'showPerformanceCharts'],
   },
   apiKeys: {
-    type: "object",
-    allowedKeys: ["crux"],
+    type: 'object',
+    allowedKeys: ['crux'],
   },
 };
 
@@ -267,7 +254,7 @@ function validateConfig(config: ConfigRecord) {
   for (const key of Object.keys(config)) {
     if (!allowedTopLevelKeys.has(key)) {
       warnings.push(
-        `Unknown config key "${key}" - will be ignored. Valid keys: ${[...allowedTopLevelKeys].join(", ")}`,
+        `Unknown config key "${key}" - will be ignored. Valid keys: ${[...allowedTopLevelKeys].join(', ')}`,
       );
       delete validated[key];
     }
@@ -279,24 +266,14 @@ function validateConfig(config: ConfigRecord) {
 
     // First, normalize aliases to canonical names
     for (const [alias, canonical] of Object.entries(THRESHOLD_ALIASES)) {
-      if (
-        alias in validated.thresholds &&
-        !(canonical in validated.thresholds)
-      ) {
+      if (alias in validated.thresholds && !(canonical in validated.thresholds)) {
         validated.thresholds[canonical] = validated.thresholds[alias];
         delete validated.thresholds[alias];
-        warnings.push(
-          `Threshold "${alias}" renamed to "${canonical}" (using canonical name)`,
-        );
-      } else if (
-        alias in validated.thresholds &&
-        canonical in validated.thresholds
-      ) {
+        warnings.push(`Threshold "${alias}" renamed to "${canonical}" (using canonical name)`);
+      } else if (alias in validated.thresholds && canonical in validated.thresholds) {
         // Both exist - prefer canonical, remove alias
         delete validated.thresholds[alias];
-        warnings.push(
-          `Both "${alias}" and "${canonical}" specified - using "${canonical}"`,
-        );
+        warnings.push(`Both "${alias}" and "${canonical}" specified - using "${canonical}"`);
       }
     }
 
@@ -308,16 +285,14 @@ function validateConfig(config: ConfigRecord) {
       // Check if key is allowed
       if (!thresholdSchema.allowedKeys.includes(key)) {
         warnings.push(
-          `Unknown threshold "${key}" - will be ignored. Valid thresholds: ${thresholdSchema.allowedKeys.slice(0, 5).join(", ")}...`,
+          `Unknown threshold "${key}" - will be ignored. Valid thresholds: ${thresholdSchema.allowedKeys.slice(0, 5).join(', ')}...`,
         );
         delete validated.thresholds[key];
         continue;
       }
       // Check value type
-      if (typeof value !== "number" || value < 0 || !Number.isFinite(value)) {
-        warnings.push(
-          `Invalid threshold "${key}": ${value} (must be a positive number)`,
-        );
+      if (typeof value !== 'number' || value < 0 || !Number.isFinite(value)) {
+        warnings.push(`Invalid threshold "${key}": ${value} (must be a positive number)`);
         delete validated.thresholds[key];
       }
     }
@@ -327,31 +302,29 @@ function validateConfig(config: ConfigRecord) {
   if (validated.crawl) {
     if (validated.crawl.concurrency !== undefined) {
       const c = validated.crawl.concurrency;
-      if (typeof c !== "number" || c < 1 || c > 20) {
+      if (typeof c !== 'number' || c < 1 || c > 20) {
         warnings.push(`Invalid crawl.concurrency: ${c} (must be 1-20)`);
         delete validated.crawl.concurrency;
       }
     }
     if (validated.crawl.timeout !== undefined) {
       const t = validated.crawl.timeout;
-      if (typeof t !== "number" || t < 1000 || t > 300000) {
+      if (typeof t !== 'number' || t < 1000 || t > 300000) {
         warnings.push(`Invalid crawl.timeout: ${t} (must be 1000-300000ms)`);
         delete validated.crawl.timeout;
       }
     }
     if (validated.crawl.batchSize !== undefined) {
       const b = validated.crawl.batchSize;
-      if (typeof b !== "number" || b < 10 || b > 1000) {
+      if (typeof b !== 'number' || b < 10 || b > 1000) {
         warnings.push(`Invalid crawl.batchSize: ${b} (must be 10-1000)`);
         delete validated.crawl.batchSize;
       }
     }
     if (validated.crawl.maxDiscoveredUrls !== undefined) {
       const m = validated.crawl.maxDiscoveredUrls;
-      if (typeof m !== "number" || m < 1000 || m > 1000000) {
-        warnings.push(
-          `Invalid crawl.maxDiscoveredUrls: ${m} (must be 1000-1000000)`,
-        );
+      if (typeof m !== 'number' || m < 1000 || m > 1000000) {
+        warnings.push(`Invalid crawl.maxDiscoveredUrls: ${m} (must be 1000-1000000)`);
         delete validated.crawl.maxDiscoveredUrls;
       }
     }
@@ -360,7 +333,7 @@ function validateConfig(config: ConfigRecord) {
   // Validate excludeUrls patterns (limit complexity to prevent ReDoS)
   if (validated.excludeUrls && Array.isArray(validated.excludeUrls)) {
     validated.excludeUrls = validated.excludeUrls.filter((pattern: unknown, index: number) => {
-      if (typeof pattern !== "string") {
+      if (typeof pattern !== 'string') {
         warnings.push(`Invalid excludeUrls[${index}]: must be a string`);
         return false;
       }
@@ -371,9 +344,7 @@ function validateConfig(config: ConfigRecord) {
       // Check for too many wildcards using simple string counting (safe from ReDoS)
       const wildcardCount = (pattern.match(/\*/g) || []).length;
       if (wildcardCount > 2) {
-        warnings.push(
-          `excludeUrls[${index}] has too many wildcards (${wildcardCount}, max 2)`,
-        );
+        warnings.push(`excludeUrls[${index}] has too many wildcards (${wildcardCount}, max 2)`);
         return false;
       }
       return true;
@@ -382,29 +353,20 @@ function validateConfig(config: ConfigRecord) {
 
   // Validate queryParams
   if (validated.queryParams) {
-    const validModes = ["strip_all", "strip_tracking", "keep_all", "whitelist"];
-    if (
-      validated.queryParams.mode &&
-      !validModes.includes(validated.queryParams.mode)
-    ) {
+    const validModes = ['strip_all', 'strip_tracking', 'keep_all', 'whitelist'];
+    if (validated.queryParams.mode && !validModes.includes(validated.queryParams.mode)) {
       warnings.push(
-        `Invalid queryParams.mode: "${validated.queryParams.mode}" (must be one of: ${validModes.join(", ")})`,
+        `Invalid queryParams.mode: "${validated.queryParams.mode}" (must be one of: ${validModes.join(', ')})`,
       );
       delete validated.queryParams.mode;
     }
     // Validate whitelist is an array of strings
-    if (
-      validated.queryParams.whitelist &&
-      !Array.isArray(validated.queryParams.whitelist)
-    ) {
+    if (validated.queryParams.whitelist && !Array.isArray(validated.queryParams.whitelist)) {
       warnings.push(`Invalid queryParams.whitelist: must be an array`);
       delete validated.queryParams.whitelist;
     }
     // Validate blacklist is an array of strings
-    if (
-      validated.queryParams.blacklist &&
-      !Array.isArray(validated.queryParams.blacklist)
-    ) {
+    if (validated.queryParams.blacklist && !Array.isArray(validated.queryParams.blacklist)) {
       warnings.push(`Invalid queryParams.blacklist: must be an array`);
       delete validated.queryParams.blacklist;
     }
@@ -414,35 +376,35 @@ function validateConfig(config: ConfigRecord) {
   if (validated.analysis) {
     if (validated.analysis.similarityThreshold !== undefined) {
       const s = validated.analysis.similarityThreshold;
-      if (typeof s !== "number" || s < 0 || s > 1) {
+      if (typeof s !== 'number' || s < 0 || s > 1) {
         warnings.push(`Invalid analysis.similarityThreshold: ${s} (must be 0-1)`);
         delete validated.analysis.similarityThreshold;
       }
     }
     if (validated.analysis.jsUnusedThreshold !== undefined) {
       const j = validated.analysis.jsUnusedThreshold;
-      if (typeof j !== "number" || j < 0 || j > 100) {
+      if (typeof j !== 'number' || j < 0 || j > 100) {
         warnings.push(`Invalid analysis.jsUnusedThreshold: ${j} (must be 0-100)`);
         delete validated.analysis.jsUnusedThreshold;
       }
     }
     if (validated.analysis.cssUnusedThreshold !== undefined) {
       const c = validated.analysis.cssUnusedThreshold;
-      if (typeof c !== "number" || c < 0 || c > 100) {
+      if (typeof c !== 'number' || c < 0 || c > 100) {
         warnings.push(`Invalid analysis.cssUnusedThreshold: ${c} (must be 0-100)`);
         delete validated.analysis.cssUnusedThreshold;
       }
     }
     if (validated.analysis.maxOutboundChecks !== undefined) {
       const m = validated.analysis.maxOutboundChecks;
-      if (typeof m !== "number" || m < 0 || m > 100) {
+      if (typeof m !== 'number' || m < 0 || m > 100) {
         warnings.push(`Invalid analysis.maxOutboundChecks: ${m} (must be 0-100)`);
         delete validated.analysis.maxOutboundChecks;
       }
     }
     if (validated.analysis.outboundTimeout !== undefined) {
       const t = validated.analysis.outboundTimeout;
-      if (typeof t !== "number" || t < 1000 || t > 30000) {
+      if (typeof t !== 'number' || t < 1000 || t > 30000) {
         warnings.push(`Invalid analysis.outboundTimeout: ${t} (must be 1000-30000)`);
         delete validated.analysis.outboundTimeout;
       }
@@ -453,15 +415,12 @@ function validateConfig(config: ConfigRecord) {
   if (validated.report) {
     if (validated.report.maxQuickWins !== undefined) {
       const m = validated.report.maxQuickWins;
-      if (typeof m !== "number" || m < 1 || m > 50) {
+      if (typeof m !== 'number' || m < 1 || m > 50) {
         warnings.push(`Invalid report.maxQuickWins: ${m} (must be 1-50)`);
         delete validated.report.maxQuickWins;
       }
     }
-    if (
-      validated.report.showQuickWins !== undefined &&
-      typeof validated.report.showQuickWins !== "boolean"
-    ) {
+    if (validated.report.showQuickWins !== undefined && typeof validated.report.showQuickWins !== 'boolean') {
       warnings.push(`Invalid report.showQuickWins: must be a boolean`);
       delete validated.report.showQuickWins;
     }
@@ -469,7 +428,7 @@ function validateConfig(config: ConfigRecord) {
 
   // Print warnings
   if (warnings.length > 0) {
-    console.warn("⚠️  Config validation warnings:");
+    console.warn('⚠️  Config validation warnings:');
     warnings.forEach((w) => console.warn(`   - ${w}`));
   }
 
@@ -487,26 +446,26 @@ function validateMergedConfig(config: ConfigRecord) {
   const errors: string[] = [];
 
   // Ensure required sections exist with correct types
-  if (!validated.thresholds || typeof validated.thresholds !== "object") {
-    errors.push("thresholds must be an object");
+  if (!validated.thresholds || typeof validated.thresholds !== 'object') {
+    errors.push('thresholds must be an object');
     validated.thresholds = { ...DEFAULT_CONFIG.thresholds };
   }
 
-  if (!validated.crawl || typeof validated.crawl !== "object") {
-    errors.push("crawl must be an object");
+  if (!validated.crawl || typeof validated.crawl !== 'object') {
+    errors.push('crawl must be an object');
     validated.crawl = { ...DEFAULT_CONFIG.crawl };
   }
 
-  if (!validated.queryParams || typeof validated.queryParams !== "object") {
-    errors.push("queryParams must be an object");
+  if (!validated.queryParams || typeof validated.queryParams !== 'object') {
+    errors.push('queryParams must be an object');
     validated.queryParams = { ...DEFAULT_CONFIG.queryParams };
   }
 
   // Ensure critical numeric thresholds are valid after merge
-  const criticalThresholds = ["TTFB", "LCP", "CLS", "FCP"];
+  const criticalThresholds = ['TTFB', 'LCP', 'CLS', 'FCP'];
   for (const key of criticalThresholds) {
     const val = validated.thresholds[key];
-    if (typeof val !== "number" || !Number.isFinite(val) || val < 0) {
+    if (typeof val !== 'number' || !Number.isFinite(val) || val < 0) {
       errors.push(`Invalid merged threshold ${key}: ${val}`);
       validated.thresholds[key] = (DEFAULT_CONFIG.thresholds as Record<string, number>)[key];
     }
@@ -514,7 +473,7 @@ function validateMergedConfig(config: ConfigRecord) {
 
   // Ensure concurrency is within bounds
   if (
-    typeof validated.crawl.concurrency !== "number" ||
+    typeof validated.crawl.concurrency !== 'number' ||
     validated.crawl.concurrency < 1 ||
     validated.crawl.concurrency > 20
   ) {
@@ -530,7 +489,7 @@ function validateMergedConfig(config: ConfigRecord) {
   }
 
   if (errors.length > 0) {
-    console.warn("⚠️  Config merge validation issues (using defaults):");
+    console.warn('⚠️  Config merge validation issues (using defaults):');
     errors.forEach((e) => console.warn(`   - ${e}`));
   }
 
@@ -550,7 +509,7 @@ function validateMergedConfig(config: ConfigRecord) {
  */
 function deepMerge(target: ConfigRecord, source: ConfigRecord, options: ConfigRecord = {}) {
   const result: ConfigRecord = { ...target };
-  const replaceArrays = options.replaceArrays || ["whitelist"]; // These arrays replace, not merge
+  const replaceArrays = options.replaceArrays || ['whitelist']; // These arrays replace, not merge
 
   for (const key of Object.keys(source)) {
     const sourceVal = source[key];
@@ -577,7 +536,7 @@ function deepMerge(target: ConfigRecord, source: ConfigRecord, options: ConfigRe
       } else {
         result[key] = [...sourceVal];
       }
-    } else if (sourceVal && typeof sourceVal === "object") {
+    } else if (sourceVal && typeof sourceVal === 'object') {
       result[key] = deepMerge(targetVal || {}, sourceVal, options);
     } else {
       result[key] = sourceVal;
@@ -641,16 +600,16 @@ function matchesPattern(url: string, pattern: string) {
   }
 
   // Fast path: no wildcards - simple substring match
-  if (!pattern.includes("*")) {
+  if (!pattern.includes('*')) {
     return url.includes(pattern);
   }
 
   // Use safe string-based glob matching instead of regex
   // Split pattern by * and match segments in order
-  const segments = pattern.split("*");
+  const segments = pattern.split('*');
 
   // Empty pattern or just "*" matches everything
-  if (segments.length === 0 || (segments.length === 1 && segments[0] === "")) {
+  if (segments.length === 0 || (segments.length === 1 && segments[0] === '')) {
     return true;
   }
 
@@ -660,12 +619,12 @@ function matchesPattern(url: string, pattern: string) {
     const segment = segments[i];
 
     // Empty segment means * at start, end, or consecutive *
-    if (segment === "") {
+    if (segment === '') {
       continue;
     }
 
     // First segment must match at start if pattern doesn't start with *
-    if (i === 0 && !pattern.startsWith("*")) {
+    if (i === 0 && !pattern.startsWith('*')) {
       if (!url.startsWith(segment)) {
         return false;
       }
@@ -674,7 +633,7 @@ function matchesPattern(url: string, pattern: string) {
     }
 
     // Last segment must match at end if pattern doesn't end with *
-    if (i === segments.length - 1 && !pattern.endsWith("*")) {
+    if (i === segments.length - 1 && !pattern.endsWith('*')) {
       if (!url.endsWith(segment)) {
         return false;
       }
@@ -720,8 +679,8 @@ function generateSampleConfig() {
         maxDiscoveredUrls: 100000, // Max URLs to discover via crawling (1000-1000000)
       },
       queryParams: {
-        mode: "strip_tracking", // 'strip_all' | 'strip_tracking' | 'keep_all' | 'whitelist'
-        whitelist: ["page", "id"], // Params to keep when mode is 'whitelist'
+        mode: 'strip_tracking', // 'strip_all' | 'strip_tracking' | 'keep_all' | 'whitelist'
+        whitelist: ['page', 'id'], // Params to keep when mode is 'whitelist'
         blacklist: [], // Additional params to strip
       },
       analysis: {
@@ -731,7 +690,7 @@ function generateSampleConfig() {
         maxOutboundChecks: 20, // Max external links to verify per page
         outboundTimeout: 5000, // Timeout for external link checks (ms)
       },
-      excludeUrls: ["/admin/*", "/staging/*", "*.pdf"],
+      excludeUrls: ['/admin/*', '/staging/*', '*.pdf'],
       report: {
         showQuickWins: true,
         maxQuickWins: 10,
@@ -760,12 +719,16 @@ function getConfigSummary(config: ConfigRecord) {
 
   // Crawl
   const cr = config.crawl || {};
-  lines.push(`  Crawl: concurrency=${cr.concurrency} timeout=${cr.timeout}ms retries=${cr.retryAttempts} batch=${cr.batchSize}`);
+  lines.push(
+    `  Crawl: concurrency=${cr.concurrency} timeout=${cr.timeout}ms retries=${cr.retryAttempts} batch=${cr.batchSize}`,
+  );
 
   // Analysis
   const an = config.analysis || {};
   if (an.similarityThreshold !== undefined || an.jsUnusedThreshold !== undefined) {
-    lines.push(`  Analysis: similarity=${an.similarityThreshold || 0.6} jsUnused=${an.jsUnusedThreshold || 50}% outbound=${an.maxOutboundChecks || 20}`);
+    lines.push(
+      `  Analysis: similarity=${an.similarityThreshold || 0.6} jsUnused=${an.jsUnusedThreshold || 50}% outbound=${an.maxOutboundChecks || 20}`,
+    );
   }
 
   // Query params
@@ -774,7 +737,9 @@ function getConfigSummary(config: ConfigRecord) {
 
   // Excludes
   if (config.excludeUrls && config.excludeUrls.length > 0) {
-    lines.push(`  Exclude: ${config.excludeUrls.slice(0, 3).join(', ')}${config.excludeUrls.length > 3 ? ` (+${config.excludeUrls.length - 3} more)` : ''}`);
+    lines.push(
+      `  Exclude: ${config.excludeUrls.slice(0, 3).join(', ')}${config.excludeUrls.length > 3 ? ` (+${config.excludeUrls.length - 3} more)` : ''}`,
+    );
   }
 
   return lines.join('\n');
@@ -786,7 +751,12 @@ function getConfigSummary(config: ConfigRecord) {
  * @returns {Object} { valid: boolean, errors: string[], warnings: string[], config: Object }
  */
 function validateConfigFile(configPath: string | null) {
-  const result: { valid: boolean; errors: string[]; warnings: string[]; config: Record<string, unknown> | null } = { valid: true, errors: [], warnings: [], config: null };
+  const result: { valid: boolean; errors: string[]; warnings: string[]; config: Record<string, unknown> | null } = {
+    valid: true,
+    errors: [],
+    warnings: [],
+    config: null,
+  };
 
   if (!configPath) {
     // Find config automatically
@@ -849,4 +819,12 @@ function validateConfigFile(configPath: string | null) {
   return result;
 }
 
-export { loadConfig, applyConfigToConstants, shouldExcludeUrl, generateSampleConfig, getConfigSummary, validateConfigFile, DEFAULT_CONFIG };
+export {
+  loadConfig,
+  applyConfigToConstants,
+  shouldExcludeUrl,
+  generateSampleConfig,
+  getConfigSummary,
+  validateConfigFile,
+  DEFAULT_CONFIG,
+};

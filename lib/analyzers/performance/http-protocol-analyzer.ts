@@ -62,7 +62,8 @@ class HTTPProtocolAnalyzer {
     if (info.protocolVersion === 1 || info.protocolVersion === 1.1) {
       issues.push({
         message: 'Site using HTTP/1.1',
-        detail: 'HTTP/2 offers significant performance benefits including multiplexing, header compression, and server push. Upgrade to HTTP/2.',
+        detail:
+          'HTTP/2 offers significant performance benefits including multiplexing, header compression, and server push. Upgrade to HTTP/2.',
         severity: SEVERITY.MEDIUM,
       });
 
@@ -78,7 +79,8 @@ class HTTPProtocolAnalyzer {
     } else if (info.protocolVersion === 2 && !info.supportsHttp3) {
       warnings.push({
         message: 'Consider enabling HTTP/3',
-        detail: 'HTTP/3 (QUIC) offers improved performance especially on mobile networks with its 0-RTT connection establishment and better congestion control.',
+        detail:
+          'HTTP/3 (QUIC) offers improved performance especially on mobile networks with its 0-RTT connection establishment and better congestion control.',
         severity: SEVERITY.LOW,
       });
     }
@@ -177,14 +179,14 @@ class HTTPProtocolAnalyzer {
     // Estimate time savings (rough)
     const avgResourceTime = 100; // ms estimate
     const http1Time = http1Rounds * avgResourceTime;
-    const http2Time = avgResourceTime + (totalResources * 5); // Small overhead per resource
+    const http2Time = avgResourceTime + totalResources * 5; // Small overhead per resource
 
     return {
       resourceCount: totalResources,
       http1EstimatedRounds: http1Rounds,
       estimatedSavings: supportsHttp2
         ? 'Already using HTTP/2'
-        : `~${Math.round((http1Time - http2Time) / http1Time * 100)}% faster with HTTP/2`,
+        : `~${Math.round(((http1Time - http2Time) / http1Time) * 100)}% faster with HTTP/2`,
     };
   }
 
@@ -240,7 +242,8 @@ class HTTPProtocolAnalyzer {
     if (stats.supportsHttp2 > 0 && stats.supportsHttp3 === 0) {
       warnings.push({
         message: 'HTTP/3 not detected',
-        detail: 'Site uses HTTP/2 but HTTP/3 is not available. Consider enabling HTTP/3 for improved mobile performance.',
+        detail:
+          'Site uses HTTP/2 but HTTP/3 is not available. Consider enabling HTTP/3 for improved mobile performance.',
         severity: SEVERITY.LOW,
       });
     }

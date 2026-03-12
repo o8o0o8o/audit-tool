@@ -42,7 +42,7 @@ class UrlArchitectureAnalyzer {
       }
 
       // URL depth check (number of path segments)
-      const pathSegments = parsedUrl.pathname.split('/').filter(s => s.length > 0);
+      const pathSegments = parsedUrl.pathname.split('/').filter((s) => s.length > 0);
       const depth = pathSegments.length;
       if (depth > 4) {
         issues.push({
@@ -55,8 +55,21 @@ class UrlArchitectureAnalyzer {
       }
 
       // Check for tracking parameters
-      const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-        'fbclid', 'gclid', 'msclkid', 'mc_cid', 'mc_eid', '_ga', 'ref', 'source'];
+      const trackingParams = [
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_term',
+        'utm_content',
+        'fbclid',
+        'gclid',
+        'msclkid',
+        'mc_cid',
+        'mc_eid',
+        '_ga',
+        'ref',
+        'source',
+      ];
       const foundTracking: string[] = [];
       for (const param of trackingParams) {
         if (parsedUrl.searchParams.has(param)) {
@@ -76,8 +89,7 @@ class UrlArchitectureAnalyzer {
       // Check for session IDs in URL
       const sessionParams = ['sessionid', 'session_id', 'sid', 'phpsessid', 'jsessionid', 'aspsessionid'];
       for (const param of sessionParams) {
-        if (parsedUrl.searchParams.has(param) ||
-            parsedUrl.pathname.toLowerCase().includes(param)) {
+        if (parsedUrl.searchParams.has(param) || parsedUrl.pathname.toLowerCase().includes(param)) {
           issues.push({
             type: 'session_id_in_url',
             message: 'Session ID detected in URL',
@@ -111,7 +123,11 @@ class UrlArchitectureAnalyzer {
       // Check for special characters
       const specialChars = /[!@#$%^&*()+=\[\]{}|\\:;"'<>,?]/;
       let decodedPath;
-      try { decodedPath = decodeURIComponent(parsedUrl.pathname); } catch { decodedPath = parsedUrl.pathname; }
+      try {
+        decodedPath = decodeURIComponent(parsedUrl.pathname);
+      } catch {
+        decodedPath = parsedUrl.pathname;
+      }
       if (specialChars.test(decodedPath)) {
         issues.push({
           type: 'special_chars_in_url',
@@ -122,7 +138,8 @@ class UrlArchitectureAnalyzer {
       }
 
       // Check for multiple consecutive slashes
-      if (/\/\/+/.test(parsedUrl.pathname.slice(1))) { // Skip protocol slashes
+      if (/\/\/+/.test(parsedUrl.pathname.slice(1))) {
+        // Skip protocol slashes
         issues.push({
           type: 'multiple_slashes',
           message: 'URL contains multiple consecutive slashes',
@@ -183,8 +200,8 @@ class UrlArchitectureAnalyzer {
       // Check subdomain consistency with origin
       if (parsedUrl.hostname !== parsedOrigin.hostname) {
         const isWwwVariant =
-          (parsedUrl.hostname === 'www.' + parsedOrigin.hostname) ||
-          (parsedOrigin.hostname === 'www.' + parsedUrl.hostname);
+          parsedUrl.hostname === 'www.' + parsedOrigin.hostname ||
+          parsedOrigin.hostname === 'www.' + parsedUrl.hostname;
 
         if (isWwwVariant) {
           issues.push({
@@ -212,7 +229,6 @@ class UrlArchitectureAnalyzer {
         isHttps: parsedUrl.protocol === 'https:',
         issues: [],
       };
-
     } catch (error: unknown) {
       issues.push({
         type: 'url_parse_error',
@@ -248,7 +264,7 @@ class UrlArchitectureAnalyzer {
         urlLengths.push(url.length);
 
         // Track URL depths
-        const depth = parsed.pathname.split('/').filter(s => s.length > 0).length;
+        const depth = parsed.pathname.split('/').filter((s) => s.length > 0).length;
         urlDepths.push(depth);
 
         // Track trailing slashes
@@ -308,7 +324,7 @@ class UrlArchitectureAnalyzer {
     // Check average URL length
     if (urlLengths.length > 0) {
       const avgLength = urlLengths.reduce((a, b) => a + b, 0) / urlLengths.length;
-      const longUrls = urlLengths.filter(l => l > 100).length;
+      const longUrls = urlLengths.filter((l) => l > 100).length;
 
       if (longUrls > 0) {
         const percent = ((longUrls / urlLengths.length) * 100).toFixed(1);

@@ -88,8 +88,8 @@ class AboveFoldAnalyzer {
     }
 
     // Check fetchpriority for LCP image
-    const lcpImage = info.aboveFoldElements.images.find(img =>
-      img.src === pageData.lcpUrl || img.src === pageData.vitals?.lcpUrl
+    const lcpImage = info.aboveFoldElements.images.find(
+      (img) => img.src === pageData.lcpUrl || img.src === pageData.vitals?.lcpUrl,
     );
     if (lcpImage && lcpImage.fetchPriority !== 'high') {
       warnings.push({
@@ -117,10 +117,11 @@ class AboveFoldAnalyzer {
 
     // Analyze render-blocking resources
     const resources = pageData.resources || [];
-    const renderBlocking = resources.filter((r: any) =>
-      r.renderBlocking ||
-      (r.type === 'stylesheet' && !r.media) ||
-      (r.type === 'script' && !r.async && !r.defer && r.inHead)
+    const renderBlocking = resources.filter(
+      (r: any) =>
+        r.renderBlocking ||
+        (r.type === 'stylesheet' && !r.media) ||
+        (r.type === 'script' && !r.async && !r.defer && r.inHead),
     );
 
     info.renderBlockingResources = renderBlocking.length;
@@ -145,7 +146,8 @@ class AboveFoldAnalyzer {
     }
 
     // Check above-fold image size
-    if (info.aboveFoldImageSize > 500000) { // 500KB
+    if (info.aboveFoldImageSize > 500000) {
+      // 500KB
       issues.push({
         message: 'Large above-fold image payload',
         detail: `Above-fold images total ${this.formatBytes(info.aboveFoldImageSize)}. Optimize images for faster LCP.`,
@@ -154,8 +156,7 @@ class AboveFoldAnalyzer {
     }
 
     // Check for content above fold
-    info.hasContentAboveFold = info.aboveFoldElements.headings.length > 0 ||
-                               info.aboveFoldElements.images.length > 0;
+    info.hasContentAboveFold = info.aboveFoldElements.headings.length > 0 || info.aboveFoldElements.images.length > 0;
 
     if (!info.hasContentAboveFold) {
       warnings.push({
@@ -186,14 +187,14 @@ class AboveFoldAnalyzer {
    * @param {object} viewport - Viewport dimensions
    * @returns {boolean}
    */
-  static isInViewport(rect: {top: number; bottom: number; left: number; right: number}, viewport: {width: number; height: number}) {
+  static isInViewport(
+    rect: { top: number; bottom: number; left: number; right: number },
+    viewport: { width: number; height: number },
+  ) {
     if (!rect) return false;
 
     // Element is in viewport if any part of it is visible
-    return rect.top < viewport.height &&
-           rect.bottom > 0 &&
-           rect.left < viewport.width &&
-           rect.right > 0;
+    return rect.top < viewport.height && rect.bottom > 0 && rect.left < viewport.width && rect.right > 0;
   }
 
   /**

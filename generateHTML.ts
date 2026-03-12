@@ -8,9 +8,7 @@ import { sanitizeDomainName } from './validators';
 
 // Import report modules
 import { ReportDataProcessor } from './lib/reports/data-processor';
-import {
-  escapeHtml,
-} from './lib/reports/html-utils';
+import { escapeHtml } from './lib/reports/html-utils';
 
 // Import section generators
 import {
@@ -65,11 +63,11 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
 
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
 
-  const pagesWithMetrics = pages.filter(p => p.TTFB !== undefined);
+  const pagesWithMetrics = pages.filter((p) => p.TTFB !== undefined);
 
   // Count pages by source
-  const pagesFromSitemap = pages.filter(p => p.foundIn === 'sitemap').length;
-  const pagesDiscovered = pages.filter(p => p.foundIn === 'discovered').length;
+  const pagesFromSitemap = pages.filter((p) => p.foundIn === 'sitemap').length;
+  const pagesDiscovered = pages.filter((p) => p.foundIn === 'discovered').length;
 
   // Build section data object for report generators
   const sectionData: ReportSectionData = {
@@ -165,28 +163,40 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
                       <span class="stat-label">With Errors:</span>
                       <span class="stat-value" style="color: #ef4444;">${pageData.totalWithError || 0}</span>
                   </div>
-                  ${(jsonData.sitemaps?.total || 0) > pages.length ? `
+                  ${
+                    (jsonData.sitemaps?.total || 0) > pages.length
+                      ? `
                   <div class="stat">
                       <span class="stat-label">Not Crawled:</span>
                       <span class="stat-value" style="color: #f59e0b;">${(jsonData.sitemaps?.total || 0) - pages.length}</span>
                   </div>
-                  ` : ''}
-                  ${pagesWithMetrics.length > 0 ? `
+                  `
+                      : ''
+                  }
+                  ${
+                    pagesWithMetrics.length > 0
+                      ? `
                   <div class="stat">
                       <span class="stat-label">With Performance Data:</span>
                       <span class="stat-value">${pagesWithMetrics.length}</span>
                   </div>
-                  ` : ''}
+                  `
+                      : ''
+                  }
                   <div class="stat">
                       <span class="stat-label">In Sitemap:</span>
                       <span class="stat-value" style="color: #2563eb;">${pagesFromSitemap}</span>
                   </div>
-                  ${pagesDiscovered > 0 ? `
+                  ${
+                    pagesDiscovered > 0
+                      ? `
                   <div class="stat">
                       <span class="stat-label">Discovered:</span>
                       <span class="stat-value" style="color: #f59e0b;">${pagesDiscovered}</span>
                   </div>
-                  ` : ''}
+                  `
+                      : ''
+                  }
                   <div class="stat">
                       <span class="stat-label">Multilanguage:</span>
                       <span class="stat-value" style="color: ${jsonData.isMultiLang ? '#10b981' : '#9ca3af'};">${jsonData.isMultiLang ? 'Yes' : 'No'}</span>
@@ -244,7 +254,9 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               </div>
           </header>
 
-          ${loadError ? `
+          ${
+            loadError
+              ? `
           <div class="section" style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
               <h2 style="color: #dc2626; margin-top: 0;">⚠️ Report Generation Error</h2>
               <p style="color: #991b1b;">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
@@ -257,7 +269,9 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
                   Try re-running the audit with <code>--proceed</code> flag to resume from the last checkpoint.
               </p>
           </div>
-          ` : ''}
+          `
+              : ''
+          }
 
           <!-- Section tabs for quick navigation -->
           <div class="section-tabs" id="sectionTabs">

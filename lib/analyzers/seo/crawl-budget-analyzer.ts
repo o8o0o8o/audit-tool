@@ -14,7 +14,11 @@ class CrawlBudgetAnalyzer {
    * @param {object} robots - Robots.txt data
    * @returns {object} Analysis results
    */
-  static analyze(pages: Record<string, PageInfo>, _sitemaps: Record<string, any> = {}, _robots: Record<string, any> = {}) {
+  static analyze(
+    pages: Record<string, PageInfo>,
+    _sitemaps: Record<string, any> = {},
+    _robots: Record<string, any> = {},
+  ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {
@@ -128,9 +132,8 @@ class CrawlBudgetAnalyzer {
     stats.crawlWaste.errorWaste = stats.errors.total;
     stats.crawlWaste.duplicateWaste = stats.duplicates.byCanonical;
     stats.crawlWaste.blockedWaste = blockedUrls.length;
-    stats.crawlWaste.percentage = stats.totalPages > 0
-      ? parseFloat(((wastedCrawls / stats.totalPages) * 100).toFixed(1))
-      : 0;
+    stats.crawlWaste.percentage =
+      stats.totalPages > 0 ? parseFloat(((wastedCrawls / stats.totalPages) * 100).toFixed(1)) : 0;
 
     // Calculate efficiency score
     const efficiencyPenalties = {
@@ -141,12 +144,14 @@ class CrawlBudgetAnalyzer {
       nonIndexable: Math.min((stats.nonIndexablePages / stats.totalPages) * 20, 20),
     };
 
-    stats.efficiency.score = Math.max(0, 100 -
-      efficiencyPenalties.redirects -
-      efficiencyPenalties.errors -
-      efficiencyPenalties.duplicates -
-      efficiencyPenalties.blocked -
-      efficiencyPenalties.nonIndexable
+    stats.efficiency.score = Math.max(
+      0,
+      100 -
+        efficiencyPenalties.redirects -
+        efficiencyPenalties.errors -
+        efficiencyPenalties.duplicates -
+        efficiencyPenalties.blocked -
+        efficiencyPenalties.nonIndexable,
     );
 
     // Assign grade

@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
-
 // Load .env file if present
 import * as fs from 'fs';
 import * as path from 'path';
-const envFile = path.join(__dirname, ".env");
+const envFile = path.join(__dirname, '.env');
 if (fs.existsSync(envFile)) {
-  for (const line of fs.readFileSync(envFile, "utf-8").split("\n")) {
+  for (const line of fs.readFileSync(envFile, 'utf-8').split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIndex = trimmed.indexOf("=");
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIndex = trimmed.indexOf('=');
     if (eqIndex === -1) continue;
     const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, "");
+    const value = trimmed
+      .slice(eqIndex + 1)
+      .trim()
+      .replace(/^["']|["']$/g, '');
     if (!process.env[key]) process.env[key] = value;
   }
 }
@@ -62,7 +64,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
 
     // Interactive mode when no args provided
     if (!args.origin && !args.sitemap && !restoredArgs && process.stdin.isTTY) {
-      args = await interactiveMode() as ParsedArgs;
+      args = (await interactiveMode()) as ParsedArgs;
     }
 
     const { origin, sitemap, compare, proceed, perf, saveHtml } = args;
@@ -106,57 +108,57 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     // Also use --expose-gc to allow manual garbage collection hints
     const heapSize = process.env.NODE_HEAP_SIZE || args.heapSize || 8192;
     const childArgs = [
-      `--max-old-space-size=${heapSize}`,  // Heap limit (default 8GB, configurable via NODE_HEAP_SIZE env or --heap-size arg)
-      "--expose-gc",                        // Allow gc() calls
-      "--import=tsx",                       // Enable TypeScript support
-      "robots.ts",
+      `--max-old-space-size=${heapSize}`, // Heap limit (default 8GB, configurable via NODE_HEAP_SIZE env or --heap-size arg)
+      '--expose-gc', // Allow gc() calls
+      '--import=tsx', // Enable TypeScript support
+      'robots.ts',
     ];
     if (origin) childArgs.push(`--origin=${origin}`);
     if (sitemap) childArgs.push(`--sitemap=${sitemap}`);
     if (args.compareSitemap) childArgs.push(`--compare-sitemap=${args.compareSitemap}`);
     if (compare) childArgs.push(`--compare=${compare}`);
-    if (proceed) childArgs.push("--proceed");
-    if (perf) childArgs.push("--perf");
-    if (saveHtml) childArgs.push("--save-html");
-    if (args.screenshots) childArgs.push("--screenshots");
+    if (proceed) childArgs.push('--proceed');
+    if (perf) childArgs.push('--perf');
+    if (saveHtml) childArgs.push('--save-html');
+    if (args.screenshots) childArgs.push('--screenshots');
     if (args.concurrency) childArgs.push(`--concurrency=${args.concurrency}`);
     if (args.repo) childArgs.push(`--repo=${args.repo}`);
-    if (args.open) childArgs.push("--open");
-    if (args.verbose) childArgs.push("--verbose");
+    if (args.open) childArgs.push('--open');
+    if (args.verbose) childArgs.push('--verbose');
     if (args.ci !== null && args.ci !== undefined) childArgs.push(`--ci=${args.ci}`);
-    if (args.json) childArgs.push("--json");
+    if (args.json) childArgs.push('--json');
     if (args.exclude && args.exclude.length > 0) {
-      args.exclude.forEach(pattern => childArgs.push(`--exclude=${pattern}`));
+      args.exclude.forEach((pattern) => childArgs.push(`--exclude=${pattern}`));
     }
     if (args.limit) childArgs.push(`--limit=${args.limit}`);
-    if (args.onlyErrors) childArgs.push("--only-errors");
-    if (args.dryRun) childArgs.push("--dry-run");
-    if (args.quiet) childArgs.push("--quiet");
+    if (args.onlyErrors) childArgs.push('--only-errors');
+    if (args.dryRun) childArgs.push('--dry-run');
+    if (args.quiet) childArgs.push('--quiet');
     if (args.preset) childArgs.push(`--preset=${args.preset}`);
     if (args.webhook) childArgs.push(`--webhook=${args.webhook}`);
-    if (args.generateCi) childArgs.push("--generate-ci");
-    if (args.validateConfig) childArgs.push("--validate-config");
+    if (args.generateCi) childArgs.push('--generate-ci');
+    if (args.validateConfig) childArgs.push('--validate-config');
     if (args.sites) childArgs.push(`--sites=${args.sites}`);
     if (args.slack) childArgs.push(`--slack=${args.slack}`);
     if (args.brandLogo) childArgs.push(`--brand-logo=${args.brandLogo}`);
     if (args.brandName) childArgs.push(`--brand-name=${args.brandName}`);
 
-    const child = spawn("node", childArgs, {
-      stdio: "inherit",
+    const child = spawn('node', childArgs, {
+      stdio: 'inherit',
     });
 
-    child.on("error", (error) => {
-      console.error("\n❌ Failed to start child process:", error.message);
+    child.on('error', (error) => {
+      console.error('\n❌ Failed to start child process:', error.message);
       process.exit(1);
     });
 
-    child.on("exit", async (code) => {
+    child.on('exit', async (code) => {
       if (code !== 0) {
-        console.log("\n⚠️  Process crashed or interrupted (exit code: " + code + ")");
+        console.log('\n⚠️  Process crashed or interrupted (exit code: ' + code + ')');
 
         // Try to show crash progress summary
         try {
-          const domain = args.origin ? sanitizeDomainName(args.origin) : (args.sitemap ? 'sitemap' : 'unknown');
+          const domain = args.origin ? sanitizeDomainName(args.origin) : args.sitemap ? 'sitemap' : 'unknown';
           const latestRun = FileManager.findLatestRun(domain);
           if (latestRun) {
             const manifestPath = path.join(latestRun, 'manifest.json.gz');
@@ -170,24 +172,28 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
               }
             }
           }
-        } catch { /* ignore - best effort */ }
+        } catch {
+          /* ignore - best effort */
+        }
 
         if (restartCount >= MAX_RESTART_ATTEMPTS) {
           console.error(`\n❌ Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached. Giving up.`);
-          console.error("Please check the logs above for errors and try again manually.");
+          console.error('Please check the logs above for errors and try again manually.');
           throw new Error(`Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached`);
         }
 
-        console.log(`🔄 Restarting with --proceed to resume from saved progress (attempt ${restartCount + 1}/${MAX_RESTART_ATTEMPTS})...\n`);
+        console.log(
+          `🔄 Restarting with --proceed to resume from saved progress (attempt ${restartCount + 1}/${MAX_RESTART_ATTEMPTS})...\n`,
+        );
 
         // Restart with proceed flag enabled
         await audit({ ...args, proceed: true }, restartCount + 1);
       } else {
-        console.log("\n✅ Audit completed successfully (exit code: 0)");
+        console.log('\n✅ Audit completed successfully (exit code: 0)');
       }
     });
   } catch (error: unknown) {
-    console.error("Error:", (error as Error).message);
+    console.error('Error:', (error as Error).message);
     process.exit(1);
   }
 }
@@ -206,7 +212,7 @@ if (watchArgs.watch) {
         console.error(`\n⚠️ Audit failed: ${(err as Error).message}. Will retry next cycle.`);
       }
       console.log(`\nNext audit in ${intervalMin} minute(s)...`);
-      await new Promise(r => setTimeout(r, intervalMin * 60 * 1000));
+      await new Promise((r) => setTimeout(r, intervalMin * 60 * 1000));
     }
   })();
 } else {

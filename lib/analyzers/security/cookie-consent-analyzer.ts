@@ -26,14 +26,23 @@ class CookieConsentAnalyzer {
 
   // Common cookie types that require consent
   static #trackingCookiePatterns = [
-    '_ga', '_gid', '_gat', // Google Analytics
-    'fbp', '_fbp', 'fr', // Facebook
-    '__hssc', '__hstc', 'hubspot', // HubSpot
-    '_hjid', '_hjSession', // Hotjar
-    '_clck', '_clsk', // Microsoft Clarity
+    '_ga',
+    '_gid',
+    '_gat', // Google Analytics
+    'fbp',
+    '_fbp',
+    'fr', // Facebook
+    '__hssc',
+    '__hstc',
+    'hubspot', // HubSpot
+    '_hjid',
+    '_hjSession', // Hotjar
+    '_clck',
+    '_clsk', // Microsoft Clarity
     'intercom', // Intercom
     '_gcl', // Google Ads
-    'NID', 'IDE', // Google DoubleClick
+    'NID',
+    'IDE', // Google DoubleClick
   ];
 
   /**
@@ -150,7 +159,7 @@ class CookieConsentAnalyzer {
     // Method 1: Check for known consent platform scripts/styles
     for (const [reqUrl] of Object.entries(requests)) {
       for (const platform of this.#consentPlatforms) {
-        if (platform.patterns.some(p => reqUrl.toLowerCase().includes(p))) {
+        if (platform.patterns.some((p) => reqUrl.toLowerCase().includes(p))) {
           result.detected = true;
           result.platform = platform.name;
           result.method = 'script-detection';
@@ -162,7 +171,7 @@ class CookieConsentAnalyzer {
     // Method 2: Check HTML for consent-related elements
     const html = parsedPage.toString().toLowerCase();
     for (const platform of this.#consentPlatforms) {
-      if (platform.patterns.some(p => html.includes(p))) {
+      if (platform.patterns.some((p) => html.includes(p))) {
         result.detected = true;
         result.platform = platform.name;
         result.method = 'html-detection';
@@ -205,7 +214,7 @@ class CookieConsentAnalyzer {
           // Check if visible and fixed/sticky (common for banners)
           if (style.position === 'fixed' || style.position === 'sticky') {
             const text = el.textContent.toLowerCase();
-            if (keywords.some(k => text.includes(k)) && text.length < 2000) {
+            if (keywords.some((k) => text.includes(k)) && text.length < 2000) {
               return true;
             }
           }
@@ -267,8 +276,7 @@ class CookieConsentAnalyzer {
       const pageHost = new URL(chromePage.url()).hostname;
 
       const cookieList = cookies.map((cookie: any) => {
-        const isThirdParty = !cookie.domain.includes(pageHost) &&
-                            !pageHost.includes(cookie.domain.replace(/^\./, ''));
+        const isThirdParty = !cookie.domain.includes(pageHost) && !pageHost.includes(cookie.domain.replace(/^\./, ''));
         if (isThirdParty) thirdParty++;
 
         return {

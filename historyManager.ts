@@ -3,9 +3,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import type {
-  AuditHistory, AuditSnapshot, AuditComparison,
-  IssueSummary, PerformanceSummary, InsightsSummary, IssueTrend,
-  PageInfo, AuditResults,
+  AuditHistory,
+  AuditSnapshot,
+  AuditComparison,
+  IssueSummary,
+  PerformanceSummary,
+  InsightsSummary,
+  IssueTrend,
+  PageInfo,
+  AuditResults,
 } from './lib/types';
 import { FileManager } from './lib/storage/file-manager';
 import { sanitizeDomainName } from './validators';
@@ -82,7 +88,9 @@ class HistoryManager {
               console.warn(`⚠️  Migration verification failed - keeping both files`);
             }
           } catch (verifyError: unknown) {
-            console.warn(`⚠️  Could not verify compressed file - keeping both files: ${(verifyError as Error).message}`);
+            console.warn(
+              `⚠️  Could not verify compressed file - keeping both files: ${(verifyError as Error).message}`,
+            );
           }
         }
         return uncompressedHistory;
@@ -168,7 +176,7 @@ class HistoryManager {
         categoryScores: auditData.analysis?.summary?.categoryScores || {},
         totalPages: Object.keys(auditData.pageData?.pages || {}).length,
         pagesWithErrors: auditData.pageData?.totalWithError || 0,
-        sitemapUrls: auditData.sitemaps?.total || 0
+        sitemapUrls: auditData.sitemaps?.total || 0,
       },
       issues: this.extractIssuesSummary(auditData),
       performance: this.extractPerformanceSummary(auditData),
@@ -177,8 +185,8 @@ class HistoryManager {
       quickWins: (auditData.analysis?.summary?.quickWins || []).map((qw: any) => ({
         issue: qw.issue,
         affectedPages: qw.affectedPages,
-        severity: qw.severity
-      }))
+        severity: qw.severity,
+      })),
     };
 
     history.audits.push(snapshot);
@@ -197,7 +205,7 @@ class HistoryManager {
     Object.entries(details).forEach(([issue, data]) => {
       summary[issue] = {
         severity: data.severity,
-        count: data.examples?.length || 0
+        count: data.examples?.length || 0,
       };
     });
 
@@ -206,11 +214,11 @@ class HistoryManager {
 
   extractPerformanceSummary(auditData: Partial<AuditResults> & Record<string, any>): PerformanceSummary | null {
     const pages = auditData.pageData?.pages || {};
-    const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter(p => p.vitals || p.TTFB);
+    const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter((p) => p.vitals || p.TTFB);
 
     if (pagesWithPerf.length === 0) return null;
 
-    const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a: number, b: number) => a + b, 0) / arr.length : 0;
+    const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a: number, b: number) => a + b, 0) / arr.length : 0);
     const p75 = (arr: number[]) => {
       if (arr.length === 0) return 0;
       const sorted = [...arr].sort((a, b) => a - b);
@@ -218,10 +226,12 @@ class HistoryManager {
     };
 
     // Support both old (vitals.ttfb) and new (TTFB) formats
-    const ttfbValues = pagesWithPerf.map(p => p.TTFB || p.vitals?.ttfb || 0).filter(v => v > 0);
-    const lcpValues = pagesWithPerf.map(p => p.LCP || p.vitals?.lcp || 0).filter(v => v > 0);
+    const ttfbValues = pagesWithPerf.map((p) => p.TTFB || p.vitals?.ttfb || 0).filter((v) => v > 0);
+    const lcpValues = pagesWithPerf.map((p) => p.LCP || p.vitals?.lcp || 0).filter((v) => v > 0);
     // CLS=0 is a perfect score (no layout shift) — don't filter it out
-    const clsValues = pagesWithPerf.map(p => p.CLS ?? p.vitals?.cls ?? null).filter(v => v !== null && v !== undefined);
+    const clsValues = pagesWithPerf
+      .map((p) => p.CLS ?? p.vitals?.cls ?? null)
+      .filter((v) => v !== null && v !== undefined);
 
     return {
       avgTTFB: avg(ttfbValues).toFixed(0),
@@ -230,7 +240,7 @@ class HistoryManager {
       p75TTFB: p75(ttfbValues).toFixed(0),
       p75LCP: p75(lcpValues).toFixed(0),
       p75CLS: p75(clsValues).toFixed(3),
-      pagesWithMetrics: pagesWithPerf.length
+      pagesWithMetrics: pagesWithPerf.length,
     };
   }
 
@@ -238,18 +248,25 @@ class HistoryManager {
     const pages = Object.values(auditData.pageData?.pages || {}) as PageInfo[];
     if (pages.length === 0) return null;
 
-    const langMismatches = pages.filter(p => p.languageDetection?.match === false).length;
+    const langMismatches = pages.filter((p) => p.languageDetection?.match === false).length;
     const brokenOutbound = pages.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length || 0), 0);
-    const similarPages = pages.filter(p => p.contentSimilarity?.similarPages?.length > 0).length;
-    const noCta = pages.filter(p => p.ctaData?.summary?.total === 0).length;
+    const similarPages = pages.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length;
+    const noCta = pages.filter((p) => p.ctaData?.summary?.total === 0).length;
 
-    const coveragePages = pages.filter(p => p.codeCoverage?.js?.ratio != null);
-    const avgJsUnused = coveragePages.length > 0
-      ? +(coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length).toFixed(1)
-      : null;
-    const avgCssUnused = coveragePages.length > 0 && coveragePages.some(p => p.codeCoverage?.css?.ratio != null)
-      ? +(coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).reduce((s, p) => s + (p.codeCoverage?.css?.ratio ?? 0), 0) / coveragePages.filter(p => p.codeCoverage?.css?.ratio != null).length).toFixed(1)
-      : null;
+    const coveragePages = pages.filter((p) => p.codeCoverage?.js?.ratio != null);
+    const avgJsUnused =
+      coveragePages.length > 0
+        ? +(coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length).toFixed(1)
+        : null;
+    const avgCssUnused =
+      coveragePages.length > 0 && coveragePages.some((p) => p.codeCoverage?.css?.ratio != null)
+        ? +(
+            coveragePages
+              .filter((p) => p.codeCoverage?.css?.ratio != null)
+              .reduce((s, p) => s + (p.codeCoverage?.css?.ratio ?? 0), 0) /
+            coveragePages.filter((p) => p.codeCoverage?.css?.ratio != null).length
+          ).toFixed(1)
+        : null;
 
     return {
       languageMismatches: langMismatches,
@@ -311,14 +328,14 @@ class HistoryManager {
         high: newAudit.summary.highCount - oldAudit.summary.highCount,
         medium: newAudit.summary.mediumCount - oldAudit.summary.mediumCount,
         low: newAudit.summary.lowCount - oldAudit.summary.lowCount,
-        passRate: newAudit.summary.passRate - oldAudit.summary.passRate
-      }
+        passRate: newAudit.summary.passRate - oldAudit.summary.passRate,
+      },
     };
 
     // Compare category scores
     if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
       comparison.categoryDeltas = {};
-      (['seo', 'performance', 'accessibility', 'security', 'technical'] as const).forEach(cat => {
+      (['seo', 'performance', 'accessibility', 'security', 'technical'] as const).forEach((cat) => {
         const oldScore = oldAudit.summary.categoryScores[cat] || 0;
         const newScore = newAudit.summary.categoryScores[cat] || 0;
         comparison.categoryDeltas![cat] = newScore - oldScore;
@@ -330,14 +347,21 @@ class HistoryManager {
       comparison.performanceDeltas = {
         ttfb: parseFloat(newAudit.performance.avgTTFB) - parseFloat(oldAudit.performance.avgTTFB),
         lcp: parseFloat(newAudit.performance.avgLCP) - parseFloat(oldAudit.performance.avgLCP),
-        cls: parseFloat(newAudit.performance.avgCLS) - parseFloat(oldAudit.performance.avgCLS)
+        cls: parseFloat(newAudit.performance.avgCLS) - parseFloat(oldAudit.performance.avgCLS),
       };
     }
 
     // Compare insight metrics
     if (oldAudit.insights && newAudit.insights) {
       comparison.insightDeltas = {};
-      for (const key of ['languageMismatches', 'brokenOutboundLinks', 'nearDuplicatePages', 'pagesWithoutCTAs', 'avgJsUnused', 'avgCssUnused'] as const) {
+      for (const key of [
+        'languageMismatches',
+        'brokenOutboundLinks',
+        'nearDuplicatePages',
+        'pagesWithoutCTAs',
+        'avgJsUnused',
+        'avgCssUnused',
+      ] as const) {
         const oldVal = oldAudit.insights[key];
         const newVal = newAudit.insights[key];
         if (oldVal != null && newVal != null) {
@@ -350,20 +374,24 @@ class HistoryManager {
     const oldIssues = new Set(Object.keys(oldAudit.issues));
     const newIssues = new Set(Object.keys(newAudit.issues));
 
-    oldIssues.forEach(issue => {
+    oldIssues.forEach((issue) => {
       if (!newIssues.has(issue)) {
         comparison.fixed.push(issue);
         comparison.improvements.push(`Fixed: ${issue}`);
       } else if (oldAudit.issues[issue].count > newAudit.issues[issue].count) {
         const reduction = oldAudit.issues[issue].count - newAudit.issues[issue].count;
-        comparison.improvements.push(`${issue}: Reduced from ${oldAudit.issues[issue].count} to ${newAudit.issues[issue].count} pages (-${reduction})`);
+        comparison.improvements.push(
+          `${issue}: Reduced from ${oldAudit.issues[issue].count} to ${newAudit.issues[issue].count} pages (-${reduction})`,
+        );
       } else if (oldAudit.issues[issue].count < newAudit.issues[issue].count) {
         const increase = newAudit.issues[issue].count - oldAudit.issues[issue].count;
-        comparison.regressions.push(`${issue}: Increased from ${oldAudit.issues[issue].count} to ${newAudit.issues[issue].count} pages (+${increase})`);
+        comparison.regressions.push(
+          `${issue}: Increased from ${oldAudit.issues[issue].count} to ${newAudit.issues[issue].count} pages (+${increase})`,
+        );
       }
     });
 
-    newIssues.forEach(issue => {
+    newIssues.forEach((issue) => {
       if (!oldIssues.has(issue)) {
         comparison.newIssues.push(issue);
         comparison.regressions.push(`New issue: ${issue} (${newAudit.issues[issue].count} pages)`);
@@ -384,31 +412,31 @@ class HistoryManager {
     const issueTrends = this.generateIssueTrends(history.audits);
 
     return {
-      labels: history.audits.map(a => a.date),
-      overallScores: history.audits.map(a => a.summary.overallScore),
-      totalIssues: history.audits.map(a => a.summary.totalIssues),
-      criticalIssues: history.audits.map(a => a.summary.criticalCount),
-      highIssues: history.audits.map(a => a.summary.highCount),
+      labels: history.audits.map((a) => a.date),
+      overallScores: history.audits.map((a) => a.summary.overallScore),
+      totalIssues: history.audits.map((a) => a.summary.totalIssues),
+      criticalIssues: history.audits.map((a) => a.summary.criticalCount),
+      highIssues: history.audits.map((a) => a.summary.highCount),
       categoryScores: {
-        seo: history.audits.map(a => a.summary.categoryScores?.seo || 0),
-        performance: history.audits.map(a => a.summary.categoryScores?.performance || 0),
-        accessibility: history.audits.map(a => a.summary.categoryScores?.accessibility || 0),
-        security: history.audits.map(a => a.summary.categoryScores?.security || 0),
-        technical: history.audits.map(a => a.summary.categoryScores?.technical || 0)
+        seo: history.audits.map((a) => a.summary.categoryScores?.seo || 0),
+        performance: history.audits.map((a) => a.summary.categoryScores?.performance || 0),
+        accessibility: history.audits.map((a) => a.summary.categoryScores?.accessibility || 0),
+        security: history.audits.map((a) => a.summary.categoryScores?.security || 0),
+        technical: history.audits.map((a) => a.summary.categoryScores?.technical || 0),
       },
       performance: {
         // Keep nulls to maintain alignment with labels array (Chart.js handles null as gaps)
-        ttfb: history.audits.map(a => a.performance?.avgTTFB ?? null),
-        lcp: history.audits.map(a => a.performance?.avgLCP ?? null),
-        cls: history.audits.map(a => a.performance?.avgCLS ?? null)
+        ttfb: history.audits.map((a) => a.performance?.avgTTFB ?? null),
+        lcp: history.audits.map((a) => a.performance?.avgLCP ?? null),
+        cls: history.audits.map((a) => a.performance?.avgCLS ?? null),
       },
       issueTrends,
       insights: {
-        languageMismatches: history.audits.map(a => a.insights?.languageMismatches ?? null),
-        brokenOutboundLinks: history.audits.map(a => a.insights?.brokenOutboundLinks ?? null),
-        nearDuplicatePages: history.audits.map(a => a.insights?.nearDuplicatePages ?? null),
-        avgJsUnused: history.audits.map(a => a.insights?.avgJsUnused ?? null),
-      }
+        languageMismatches: history.audits.map((a) => a.insights?.languageMismatches ?? null),
+        brokenOutboundLinks: history.audits.map((a) => a.insights?.brokenOutboundLinks ?? null),
+        nearDuplicatePages: history.audits.map((a) => a.insights?.nearDuplicatePages ?? null),
+        avgJsUnused: history.audits.map((a) => a.insights?.avgJsUnused ?? null),
+      },
     };
   }
 
@@ -424,22 +452,24 @@ class HistoryManager {
 
     // Collect all unique issues across all audits
     const allIssues = new Set<string>();
-    audits.forEach(audit => {
-      Object.keys(audit.issues || {}).forEach(issue => allIssues.add(issue));
+    audits.forEach((audit) => {
+      Object.keys(audit.issues || {}).forEach((issue) => allIssues.add(issue));
     });
 
     const trends: Record<string, IssueTrend> = {};
-    const labels = audits.map(a => a.date);
+    const labels = audits.map((a) => a.date);
 
-    allIssues.forEach(issue => {
-      const counts = audits.map(audit => audit.issues?.[issue]?.count || 0);
+    allIssues.forEach((issue) => {
+      const counts = audits.map((audit) => audit.issues?.[issue]?.count || 0);
       const latestAudit = audits[audits.length - 1];
-      const severity = latestAudit.issues?.[issue]?.severity ||
-                       audits.find(a => a.issues?.[issue])?.issues?.[issue]?.severity || 'medium';
+      const severity =
+        latestAudit.issues?.[issue]?.severity ||
+        audits.find((a) => a.issues?.[issue])?.issues?.[issue]?.severity ||
+        'medium';
 
       // Calculate trend direction
-      const firstNonZero = counts.findIndex(c => c > 0);
-      const reverseIndex = [...counts].reverse().findIndex(c => c > 0);
+      const firstNonZero = counts.findIndex((c) => c > 0);
+      const reverseIndex = [...counts].reverse().findIndex((c) => c > 0);
       // Handle case when all counts are 0 (reverseIndex would be -1)
       const lastNonZero = reverseIndex === -1 ? -1 : counts.length - 1 - reverseIndex;
       const latestCount = counts[counts.length - 1] || 0;
@@ -472,7 +502,7 @@ class HistoryManager {
       const firstCount = counts[firstNonZero] || 0;
       // latestCount already defined above
       const change = latestCount - firstCount;
-      const changePercent = firstCount > 0 ? ((latestCount - firstCount) / firstCount * 100).toFixed(0) : 0;
+      const changePercent = firstCount > 0 ? (((latestCount - firstCount) / firstCount) * 100).toFixed(0) : 0;
 
       trends[issue] = {
         labels,
@@ -481,7 +511,7 @@ class HistoryManager {
         trend,
         latestCount,
         change,
-        changePercent
+        changePercent,
       };
     });
 
@@ -498,25 +528,28 @@ if (require.main === module) {
   if (command === 'save' && args[1]) {
     const jsonFile = args[1];
     // Extract domain name from filename and sanitize consistently
-    const rawDomain = path.basename(jsonFile).replace('SEOAnalysis__', '').replace(/\.json(\.gz)?$/, '');
+    const rawDomain = path
+      .basename(jsonFile)
+      .replace('SEOAnalysis__', '')
+      .replace(/\.json(\.gz)?$/, '');
     const domainName = sanitizeDomainName(rawDomain);
     const auditData = FileManager.readJsonFile(jsonFile);
 
     const manager = new HistoryManager(domainName);
     manager.addAuditSnapshot(auditData);
-  }
-  else if (command === 'list' && args[1]) {
+  } else if (command === 'list' && args[1]) {
     const domainName = args[1];
     const manager = new HistoryManager(domainName);
     const audits = manager.getAllAudits();
 
     console.log(`\n📊 Audit History for ${domainName}\n`);
     audits.forEach((audit, i: number) => {
-      console.log(`${i + 1}. ${audit.date} - Score: ${audit.summary.overallScore}, Issues: ${audit.summary.totalIssues}`);
+      console.log(
+        `${i + 1}. ${audit.date} - Score: ${audit.summary.overallScore}, Issues: ${audit.summary.totalIssues}`,
+      );
     });
     console.log(`\nTotal audits: ${audits.length}`);
-  }
-  else if (command === 'compare' && args[1] && args[2] && args[3]) {
+  } else if (command === 'compare' && args[1] && args[2] && args[3]) {
     const domainName = args[1];
     const oldIndex = parseInt(args[2], 10) - 1;
     const newIndex = parseInt(args[3], 10) - 1;
@@ -532,20 +565,23 @@ if (require.main === module) {
 
     const comparison = manager.compareAudits(oldAudit, newAudit);
     console.log(`\n📊 Comparison: ${comparison.oldDate} → ${comparison.newDate}\n`);
-    console.log(`Overall Score: ${oldAudit.summary.overallScore} → ${newAudit.summary.overallScore} (${comparison.scoreChange > 0 ? '+' : ''}${comparison.scoreChange})`);
-    console.log(`Total Issues: ${oldAudit.summary.totalIssues} → ${newAudit.summary.totalIssues} (${comparison.deltaMetrics.totalIssues > 0 ? '+' : ''}${comparison.deltaMetrics.totalIssues})`);
+    console.log(
+      `Overall Score: ${oldAudit.summary.overallScore} → ${newAudit.summary.overallScore} (${comparison.scoreChange > 0 ? '+' : ''}${comparison.scoreChange})`,
+    );
+    console.log(
+      `Total Issues: ${oldAudit.summary.totalIssues} → ${newAudit.summary.totalIssues} (${comparison.deltaMetrics.totalIssues > 0 ? '+' : ''}${comparison.deltaMetrics.totalIssues})`,
+    );
 
     if (comparison.improvements.length > 0) {
       console.log(`\n✅ Improvements (${comparison.improvements.length}):`);
-      comparison.improvements.forEach(imp => console.log(`   - ${imp}`));
+      comparison.improvements.forEach((imp) => console.log(`   - ${imp}`));
     }
 
     if (comparison.regressions.length > 0) {
       console.log(`\n⚠️  Regressions (${comparison.regressions.length}):`);
-      comparison.regressions.forEach(reg => console.log(`   - ${reg}`));
+      comparison.regressions.forEach((reg) => console.log(`   - ${reg}`));
     }
-  }
-  else {
+  } else {
     console.log(`
 Usage:
   node historyManager.js save <json-file>           Save audit to history

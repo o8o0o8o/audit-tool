@@ -53,11 +53,11 @@ class DuplicateChecker {
         duplicateTitleCount++;
         duplicateTitles.set(title, urls);
 
-        const urlList = urls.map(url => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`).join('');
+        const urlList = urls.map((url) => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`).join('');
         issues.push({
           title: `Duplicate page titles found`,
           description: `The title "${escapeHtml(title)}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -72,11 +72,11 @@ class DuplicateChecker {
         duplicateDescriptionCount++;
         duplicateDescriptions.set(description, urls);
 
-        const urlList = urls.map(url => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`).join('');
+        const urlList = urls.map((url) => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`).join('');
         issues.push({
           title: `Duplicate meta descriptions found`,
           description: `The description "${escapeHtml(description.substring(0, 100))}${description.length > 100 ? '...' : ''}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -94,7 +94,7 @@ class DuplicateChecker {
     return {
       duplicateTitles,
       duplicateDescriptions,
-      issues
+      issues,
     };
   }
 }

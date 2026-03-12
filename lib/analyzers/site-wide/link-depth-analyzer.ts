@@ -45,15 +45,17 @@ class LinkDepthAnalyzer {
       // Dead-end page detection (no outgoing internal links)
       // After data stripping, page.links may only contain problematic links
       // Use linksCount/internalLinksCount if available (set by stripping), otherwise count from array
-      const hasInternalLinks = (page.internalLinksCount ?? 0) > 0 ||
-        (Array.isArray(page.links) && page.links.some((link: any) => {
-          try {
-            const linkUrl = new URL(link.href, origin);
-            return linkUrl.origin === new URL(origin).origin;
-          } catch {
-            return false;
-          }
-        }));
+      const hasInternalLinks =
+        (page.internalLinksCount ?? 0) > 0 ||
+        (Array.isArray(page.links) &&
+          page.links.some((link: any) => {
+            try {
+              const linkUrl = new URL(link.href, origin);
+              return linkUrl.origin === new URL(origin).origin;
+            } catch {
+              return false;
+            }
+          }));
 
       if (!hasInternalLinks && url !== origin && url !== origin + '/') {
         deadEndPages.push(url);
@@ -76,7 +78,7 @@ class LinkDepthAnalyzer {
       const sampleOrphans = orphanPages.slice(0, 5);
       issues.push({
         message: `${orphanPages.length} orphan pages detected (no internal links pointing to them)`,
-        detail: `Example orphan pages: ${sampleOrphans.map(u => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}${orphanPages.length > 5 ? ` and ${orphanPages.length - 5} more` : ''}`,
+        detail: `Example orphan pages: ${sampleOrphans.map((u) => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}${orphanPages.length > 5 ? ` and ${orphanPages.length - 5} more` : ''}`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -84,11 +86,12 @@ class LinkDepthAnalyzer {
     // Report dead-end pages
     if (deadEndPages.length > 0) {
       const percent = ((deadEndPages.length / totalPages) * 100).toFixed(1);
-      if (deadEndPages.length > totalPages * 0.1) { // More than 10%
+      if (deadEndPages.length > totalPages * 0.1) {
+        // More than 10%
         const sampleDeadEnds = deadEndPages.slice(0, 5);
         issues.push({
           message: `${deadEndPages.length} dead-end pages (${percent}%) have no outgoing internal links`,
-          detail: `Dead-end pages don't pass link equity. Examples: ${sampleDeadEnds.map(u => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}`,
+          detail: `Dead-end pages don't pass link equity. Examples: ${sampleDeadEnds.map((u) => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -102,27 +105,25 @@ class LinkDepthAnalyzer {
 
       warnings.push({
         message: `${deepPages.length} pages are more than 4 clicks from homepage`,
-        detail: `Maximum depth: ${maxDepth} clicks. Deep pages may be crawled less frequently. Examples: ${sampleDeep.map(p => `<a href="${p.url}">${this.shortenUrl(p.url)}</a> (${p.depth} clicks)`).join(', ')}`,
+        detail: `Maximum depth: ${maxDepth} clicks. Deep pages may be crawled less frequently. Examples: ${sampleDeep.map((p) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a> (${p.depth} clicks)`).join(', ')}`,
         severity: SEVERITY.LOW,
       });
     }
 
     // Check for unreachable pages
-    const unreachablePages = pageUrls.filter(url => !depths.has(url) && url !== origin && url !== origin + '/');
+    const unreachablePages = pageUrls.filter((url) => !depths.has(url) && url !== origin && url !== origin + '/');
     if (unreachablePages.length > 0) {
       const sampleUnreachable = unreachablePages.slice(0, 5);
       issues.push({
         message: `${unreachablePages.length} pages are unreachable from homepage via internal links`,
-        detail: `These pages can only be accessed via sitemap or external links. Examples: ${sampleUnreachable.map(u => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}`,
+        detail: `These pages can only be accessed via sitemap or external links. Examples: ${sampleUnreachable.map((u) => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}`,
         severity: SEVERITY.HIGH,
       });
     }
 
     // Calculate metrics
     const depthValues = Array.from(depths.values());
-    const avgDepth = depthValues.length > 0
-      ? depthValues.reduce((a, b) => a + b, 0) / depthValues.length
-      : 0;
+    const avgDepth = depthValues.length > 0 ? depthValues.reduce((a, b) => a + b, 0) / depthValues.length : 0;
 
     const depthDistribution: Record<string, number> = {};
     for (const depth of depthValues) {
@@ -164,7 +165,6 @@ class LinkDepthAnalyzer {
       // but page reports many links), we can't build an accurate graph for this page.
 
       if (Array.isArray(page.links)) {
-  
         for (const link of page.links) {
           try {
             const linkUrl = new URL(link.href, url);
@@ -190,7 +190,6 @@ class LinkDepthAnalyzer {
     // If page A links to page B, then B should appear in A's outgoing links
     // This helps when page A's links were stripped
     for (const [url, page] of Object.entries(pages)) {
-
       if (page.hasIncomingLinks && !graph.has(url)) {
         graph.set(url, new Set());
       }

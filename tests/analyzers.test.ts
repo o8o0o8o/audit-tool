@@ -19,7 +19,6 @@ import { getContentInsights } from '../lib/reports/sections/content-insights';
 // Response Header Analyzer
 // ============================================================
 describe('ResponseHeaderAnalyzer', () => {
-
   it('detects X-Robots-Tag noindex in info', () => {
     const pageData = {
       responseHeaders: { 'x-robots-tag': 'noindex', 'content-type': 'text/html' },
@@ -37,7 +36,7 @@ describe('ResponseHeaderAnalyzer', () => {
       },
     };
     const result = ResponseHeaderAnalyzer.analyzeSiteWide(allPages as any);
-    assert.ok(result.issues.some(i => (i.title || '').toLowerCase().includes('x-robots-tag')));
+    assert.ok(result.issues.some((i) => (i.title || '').toLowerCase().includes('x-robots-tag')));
   });
 
   it('returns no issues for clean headers', () => {
@@ -53,7 +52,6 @@ describe('ResponseHeaderAnalyzer', () => {
 // Language Detection Analyzer (public API only - needs browser for full test)
 // ============================================================
 describe('LanguageDetectionAnalyzer', () => {
-
   it('exports analyzeLanguage method', () => {
     assert.strictEqual(typeof LanguageDetectionAnalyzer.analyzeLanguage, 'function');
   });
@@ -66,15 +64,27 @@ describe('LanguageDetectionAnalyzer', () => {
     const allPages = {
       'https://example.com/': {
         url: 'https://example.com/',
-        languageDetection: { match: false, detectedLanguage: 'fr', declaredLanguage: 'en', detectedConfidence: 0.8, htmlLang: 'en' },
+        languageDetection: {
+          match: false,
+          detectedLanguage: 'fr',
+          declaredLanguage: 'en',
+          detectedConfidence: 0.8,
+          htmlLang: 'en',
+        },
       },
       'https://example.com/about': {
         url: 'https://example.com/about',
-        languageDetection: { match: true, detectedLanguage: 'en', declaredLanguage: 'en', detectedConfidence: 0.9, htmlLang: 'en' },
+        languageDetection: {
+          match: true,
+          detectedLanguage: 'en',
+          declaredLanguage: 'en',
+          detectedConfidence: 0.9,
+          htmlLang: 'en',
+        },
       },
     };
     const result = LanguageDetectionAnalyzer.analyzeSiteWide(allPages);
-    assert.ok(result.issues.some(i => (i.title || i.description || '').toLowerCase().includes('language')));
+    assert.ok(result.issues.some((i) => (i.title || i.description || '').toLowerCase().includes('language')));
   });
 });
 
@@ -82,7 +92,6 @@ describe('LanguageDetectionAnalyzer', () => {
 // Content Similarity Analyzer
 // ============================================================
 describe('ContentSimilarityAnalyzer', () => {
-
   it('detects similar pages', () => {
     const allPages = {
       'https://example.com/a': {
@@ -146,7 +155,6 @@ describe('ContentSimilarityAnalyzer', () => {
 // Internal PageRank Analyzer
 // ============================================================
 describe('InternalPageRankAnalyzer', () => {
-
   it('exports analyze method', () => {
     assert.strictEqual(typeof InternalPageRankAnalyzer.analyze, 'function');
   });
@@ -173,7 +181,6 @@ describe('InternalPageRankAnalyzer', () => {
 // Code Coverage Analyzer
 // ============================================================
 describe('CodeCoverageAnalyzer', () => {
-
   it('exports startCoverage and analyze methods', () => {
     assert.strictEqual(typeof CodeCoverageAnalyzer.startCoverage, 'function');
     assert.strictEqual(typeof CodeCoverageAnalyzer.analyze, 'function');
@@ -184,7 +191,6 @@ describe('CodeCoverageAnalyzer', () => {
 // CTA Detector Analyzer
 // ============================================================
 describe('CTADetectorAnalyzer', () => {
-
   it('exports analyzeCTAs method', () => {
     assert.strictEqual(typeof CTADetectorAnalyzer.analyzeCTAs, 'function');
   });
@@ -194,7 +200,6 @@ describe('CTADetectorAnalyzer', () => {
 // Outbound Link Checker
 // ============================================================
 describe('OutboundLinkChecker', () => {
-
   it('exports analyze method', () => {
     assert.strictEqual(typeof OutboundLinkChecker.analyze, 'function');
   });
@@ -204,7 +209,6 @@ describe('OutboundLinkChecker', () => {
 // Score Calculator - new patterns
 // ============================================================
 describe('ScoreCalculator - new patterns', () => {
-
   // Need at least one page to avoid early return
   const dummyPages: Record<string, any> = { 'https://example.com/': {} };
 
@@ -271,7 +275,10 @@ describe('ScoreCalculator - new patterns', () => {
 
     const scoresFew = ScoreCalculator.calculateCategoryScores(fewAffected, pages100);
     const scoresMany = ScoreCalculator.calculateCategoryScores(manyAffected, pages100);
-    assert.ok(scoresMany.seo < scoresFew.seo, `Expected many-affected penalty (${scoresMany.seo}) < few-affected penalty (${scoresFew.seo})`);
+    assert.ok(
+      scoresMany.seo < scoresFew.seo,
+      `Expected many-affected penalty (${scoresMany.seo}) < few-affected penalty (${scoresFew.seo})`,
+    );
   });
 
   it('reads security score from page.security.securityScore', () => {
@@ -317,7 +324,7 @@ describe('ScoreCalculator - new patterns', () => {
       },
     };
     const quickWins = ScoreCalculator.identifyQuickWins(details);
-    const issues = quickWins.map(q => q.issue);
+    const issues = quickWins.map((q) => q.issue);
     assert.ok(issues.includes('Some pages have redirect chains or loops'), 'Expected redirect chains in quick wins');
     assert.ok(issues.includes('Some pages have very thin content'), 'Expected thin content in quick wins');
   });
@@ -327,7 +334,6 @@ describe('ScoreCalculator - new patterns', () => {
 // Config Loader - analysis section
 // ============================================================
 describe('Config Loader - analysis section', () => {
-
   it('has analysis defaults', () => {
     assert.ok(DEFAULT_CONFIG.analysis);
     assert.strictEqual(DEFAULT_CONFIG.analysis.similarityThreshold, 0.6);
@@ -342,13 +348,20 @@ describe('Config Loader - analysis section', () => {
 // Metrics Metadata - new entries
 // ============================================================
 describe('Metrics Metadata - new entries', () => {
-
   it('has all new metric entries', () => {
     const newKeys = [
-      'internalPageRank', 'languageDetected', 'languageMatch',
-      'ctaCount', 'ctaAboveFold', 'jsUnused', 'cssUnused',
-      'brokenOutboundLinks', 'mainContentWords', 'boilerplateRatio',
-      'contentSimilarity', 'responseHeaders',
+      'internalPageRank',
+      'languageDetected',
+      'languageMatch',
+      'ctaCount',
+      'ctaAboveFold',
+      'jsUnused',
+      'cssUnused',
+      'brokenOutboundLinks',
+      'mainContentWords',
+      'boilerplateRatio',
+      'contentSimilarity',
+      'responseHeaders',
     ];
     for (const key of newKeys) {
       assert.ok(METRIC_INFO[key], `Missing METRIC_INFO entry: ${key}`);
@@ -367,10 +380,19 @@ describe('Metrics Metadata - new entries', () => {
 // CLI Summary
 // ============================================================
 describe('CLI Summary', () => {
-
   it('getJsonSummary includes insights', () => {
     const results = {
-      analysis: { summary: { overallScore: 75, totalIssues: 5, criticalCount: 0, highCount: 1, mediumCount: 2, lowCount: 2, categoryScores: {} } },
+      analysis: {
+        summary: {
+          overallScore: 75,
+          totalIssues: 5,
+          criticalCount: 0,
+          highCount: 1,
+          mediumCount: 2,
+          lowCount: 2,
+          categoryScores: {},
+        },
+      },
       pageData: {
         pages: {
           'https://example.com/': { languageDetection: { match: false } },
@@ -391,7 +413,6 @@ describe('CLI Summary', () => {
 // History Manager - insights extraction
 // ============================================================
 describe('HistoryManager - insights', () => {
-
   it('extractInsightsSummary returns metrics', () => {
     const mgr = new HistoryManager('test-domain', '/tmp/audit-test-results');
     const auditData = {
@@ -426,7 +447,6 @@ describe('HistoryManager - insights', () => {
 // Content Insights Report Section
 // ============================================================
 describe('Content Insights Report', () => {
-
   it('generates HTML string', () => {
     const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } } as any);
     assert.strictEqual(typeof html, 'string');

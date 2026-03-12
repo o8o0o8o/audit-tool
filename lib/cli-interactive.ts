@@ -85,9 +85,10 @@ async function interactiveMode() {
     output: process.stdout,
   });
 
-  const ask = (question: string): Promise<string> => new Promise((resolve) => {
-    rl.question(question, (answer) => resolve(answer.trim()));
-  });
+  const ask = (question: string): Promise<string> =>
+    new Promise((resolve) => {
+      rl.question(question, (answer) => resolve(answer.trim()));
+    });
 
   console.log('\nSEO Audit Tool - Interactive Setup\n');
 
@@ -134,7 +135,9 @@ async function interactiveMode() {
   }
 
   // Preset selection
-  const presetAnswer = await ask('Audit preset [1=quick ~2s/page, 2=standard ~4s/page, 3=deep ~6s/page] (default: 2): ');
+  const presetAnswer = await ask(
+    'Audit preset [1=quick ~2s/page, 2=standard ~4s/page, 3=deep ~6s/page] (default: 2): ',
+  );
   if (presetAnswer === '1') {
     args.preset = 'quick';
     args.concurrency = 10;

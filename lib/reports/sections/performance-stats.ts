@@ -20,26 +20,47 @@ function getPerformanceStats(data: ReportSectionData) {
   const pagesArray: PageInfo[] = Object.values(pages);
   const cruxData = (jsonData.cruxData || null) as Record<string, unknown> | null;
   // Check for pages with Core Web Vitals (stored at top level as TTFB, LCP, CLS, INP)
-  const pagesWithPerf = pagesArray.filter(p => p.TTFB || p.LCP || p.CLS || p.INP);
+  const pagesWithPerf = pagesArray.filter((p) => p.TTFB || p.LCP || p.CLS || p.INP);
 
   if (pagesWithPerf.length === 0 && !cruxData) return '';
 
   // Calculate statistics - metrics are stored at top level (TTFB, LCP, CLS)
-  const ttfbValues = pagesWithPerf.map(p => p.TTFB || 0).filter(v => v > 0).sort((a, b) => a - b);
-  const lcpValues = pagesWithPerf.map(p => p.LCP || 0).filter(v => v > 0).sort((a, b) => a - b);
-  const clsValues = pagesWithPerf.map(p => p.CLS || 0).filter(v => v >= 0).sort((a, b) => a - b);
-  const fcpValues = pagesWithPerf.map(p => p.FCP || 0).filter(v => v > 0).sort((a, b) => a - b);
-  const inpValues = pagesWithPerf.map(p => p.INP || 0).filter(v => v > 0).sort((a, b) => a - b);
-  const pageSizes = pagesArray.map(p => p.totalResponseSize || 0).filter(v => v > 0).sort((a, b) => a - b);
+  const ttfbValues = pagesWithPerf
+    .map((p) => p.TTFB || 0)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  const lcpValues = pagesWithPerf
+    .map((p) => p.LCP || 0)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  const clsValues = pagesWithPerf
+    .map((p) => p.CLS || 0)
+    .filter((v) => v >= 0)
+    .sort((a, b) => a - b);
+  const fcpValues = pagesWithPerf
+    .map((p) => p.FCP || 0)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  const inpValues = pagesWithPerf
+    .map((p) => p.INP || 0)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  const pageSizes = pagesArray
+    .map((p) => p.totalResponseSize || 0)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
 
-  const avg = (arr: number[]): string | number => arr.length > 0 ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(0) : 0;
-  const p50 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.5)] : 0;
-  const p75 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0;
-  const p95 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.95)] : 0;
-  const p99 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.99)] : 0;
+  const avg = (arr: number[]): string | number =>
+    arr.length > 0 ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(0) : 0;
+  const p50 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.5)] : 0);
+  const p75 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0);
+  const p95 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.95)] : 0);
+  const p99 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.99)] : 0);
 
   // Build CrUX comparison section if available
-  const cruxSection = cruxData ? getCrUXSection(cruxData, { ttfbValues, lcpValues, clsValues, fcpValues, inpValues }, p75) : '';
+  const cruxSection = cruxData
+    ? getCrUXSection(cruxData, { ttfbValues, lcpValues, clsValues, fcpValues, inpValues }, p75)
+    : '';
 
   return `
     <div class="charts-section">
@@ -65,7 +86,17 @@ function getPerformanceStats(data: ReportSectionData) {
 /**
  * Generate CrUX comparison section
  */
-function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbValues: number[]; lcpValues: number[]; clsValues: number[]; fcpValues: number[]; inpValues: number[] }, p75Fn: (arr: number[]) => number) {
+function getCrUXSection(
+  cruxData: Record<string, unknown>,
+  labMetrics: {
+    ttfbValues: number[];
+    lcpValues: number[];
+    clsValues: number[];
+    fcpValues: number[];
+    inpValues: number[];
+  },
+  p75Fn: (arr: number[]) => number,
+) {
   if (!cruxData || !cruxData.metrics) return '';
 
   const labP75 = {
@@ -77,43 +108,43 @@ function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbVal
   };
 
   const metrics = cruxData.metrics as Record<string, Record<string, unknown>> | undefined;
-  const metricsHtml = ['LCP', 'CLS', 'INP', 'TTFB', 'FCP'].map(metric => {
-    const fieldData = metrics?.[metric] as Record<string, unknown> | undefined;
-    if (!fieldData) return '';
+  const metricsHtml = ['LCP', 'CLS', 'INP', 'TTFB', 'FCP']
+    .map((metric) => {
+      const fieldData = metrics?.[metric] as Record<string, unknown> | undefined;
+      if (!fieldData) return '';
 
-    const percentiles = fieldData.percentiles as Record<string, unknown> | undefined;
-    const fieldP75 = Number(percentiles?.p75);
-    if (isNaN(fieldP75)) return '';
+      const percentiles = fieldData.percentiles as Record<string, unknown> | undefined;
+      const fieldP75 = Number(percentiles?.p75);
+      if (isNaN(fieldP75)) return '';
 
-    const dist = (fieldData.distribution || {}) as Record<string, number>;
-    const labValue = (labP75 as Record<string, number | null>)[metric];
+      const dist = (fieldData.distribution || {}) as Record<string, number>;
+      const labValue = (labP75 as Record<string, number | null>)[metric];
 
-    // Format values
-    const fieldDisplay = metric === 'CLS' ? fieldP75.toFixed(2) : `${Math.round(fieldP75)}ms`;
-    const labDisplay = labValue != null
-      ? (metric === 'CLS' ? labValue.toFixed(3) : `${Math.round(labValue)}ms`)
-      : 'N/A';
+      // Format values
+      const fieldDisplay = metric === 'CLS' ? fieldP75.toFixed(2) : `${Math.round(fieldP75)}ms`;
+      const labDisplay =
+        labValue != null ? (metric === 'CLS' ? labValue.toFixed(3) : `${Math.round(labValue)}ms`) : 'N/A';
 
-    // Determine threshold status
-    const thresholds: Record<string, number> = { LCP: 2500, CLS: 0.1, INP: 200, TTFB: 800, FCP: 1800 };
-    const threshold = thresholds[metric];
-    const isPassing = metric === 'CLS' ? fieldP75 <= threshold : fieldP75 <= threshold;
-    const statusColor = isPassing ? '#10b981' : '#ef4444';
-    const statusText = isPassing ? 'Good' : 'Needs Improvement';
+      // Determine threshold status
+      const thresholds: Record<string, number> = { LCP: 2500, CLS: 0.1, INP: 200, TTFB: 800, FCP: 1800 };
+      const threshold = thresholds[metric];
+      const isPassing = metric === 'CLS' ? fieldP75 <= threshold : fieldP75 <= threshold;
+      const statusColor = isPassing ? '#10b981' : '#ef4444';
+      const statusText = isPassing ? 'Good' : 'Needs Improvement';
 
-    // Compare lab vs field
-    let comparisonText = '';
-    if (labValue != null) {
-      const diff = labValue - fieldP75;
-      const percentDiff = fieldP75 > 0 ? Math.round(Math.abs(diff / fieldP75) * 100) : 0;
-      if (diff > fieldP75 * 0.2) {
-        comparisonText = `<span style="color: #f59e0b; font-size: 11px;">Lab ${percentDiff}% slower</span>`;
-      } else if (diff < -fieldP75 * 0.2) {
-        comparisonText = `<span style="color: #10b981; font-size: 11px;">Lab ${percentDiff}% faster</span>`;
+      // Compare lab vs field
+      let comparisonText = '';
+      if (labValue != null) {
+        const diff = labValue - fieldP75;
+        const percentDiff = fieldP75 > 0 ? Math.round(Math.abs(diff / fieldP75) * 100) : 0;
+        if (diff > fieldP75 * 0.2) {
+          comparisonText = `<span style="color: #f59e0b; font-size: 11px;">Lab ${percentDiff}% slower</span>`;
+        } else if (diff < -fieldP75 * 0.2) {
+          comparisonText = `<span style="color: #10b981; font-size: 11px;">Lab ${percentDiff}% faster</span>`;
+        }
       }
-    }
 
-    return `
+      return `
       <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <span style="font-weight: 600; color: #374151;">${metric}</span>
@@ -144,7 +175,9 @@ function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbVal
         </div>
       </div>
     `;
-  }).filter(Boolean).join('');
+    })
+    .filter(Boolean)
+    .join('');
 
   if (!metricsHtml) return '';
 
@@ -184,7 +217,19 @@ function getCrUXSection(cruxData: Record<string, unknown>, labMetrics: { ttfbVal
 /**
  * Generate a stat card with description from METRIC_INFO
  */
-function getStatCard(metricKey: string, icon: string, gradientStart: string, gradientEnd: string, values: number[], unit: string, avg: (arr: number[]) => string | number, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
+function getStatCard(
+  metricKey: string,
+  icon: string,
+  gradientStart: string,
+  gradientEnd: string,
+  values: number[],
+  unit: string,
+  avg: (arr: number[]) => string | number,
+  p50: (arr: number[]) => number,
+  p75: (arr: number[]) => number,
+  p95: (arr: number[]) => number,
+  p99: (arr: number[]) => number,
+) {
   const info = METRIC_INFO[metricKey] || {};
   const fullName = info.fullName || metricKey.toUpperCase();
   const description = info.description || '';
@@ -209,8 +254,15 @@ function getStatCard(metricKey: string, icon: string, gradientStart: string, gra
 /**
  * Generate CLS stat card (special formatting)
  */
-function getClsCard(clsValues: number[], avg: (arr: number[]) => string | number, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
-  const info = METRIC_INFO.cls || {} as MetricInfoEntry;
+function getClsCard(
+  clsValues: number[],
+  avg: (arr: number[]) => string | number,
+  p50: (arr: number[]) => number,
+  p75: (arr: number[]) => number,
+  p95: (arr: number[]) => number,
+  p99: (arr: number[]) => number,
+) {
+  const info = METRIC_INFO.cls || ({} as MetricInfoEntry);
   const description = info.description || 'Measures visual stability by tracking unexpected layout shifts';
   const threshold = THRESHOLDS.CLS || 0.1;
   const learnMore = info.learnMore || '';
@@ -233,8 +285,15 @@ function getClsCard(clsValues: number[], avg: (arr: number[]) => string | number
 /**
  * Generate page size stat card (special formatting)
  */
-function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => string | number, p50: (arr: number[]) => number, p75: (arr: number[]) => number, p95: (arr: number[]) => number, p99: (arr: number[]) => number) {
-  const info = METRIC_INFO.pageSize || {} as MetricInfoEntry;
+function getPageSizeCard(
+  pageSizes: number[],
+  avg: (arr: number[]) => string | number,
+  p50: (arr: number[]) => number,
+  p75: (arr: number[]) => number,
+  p95: (arr: number[]) => number,
+  p99: (arr: number[]) => number,
+) {
+  const info = METRIC_INFO.pageSize || ({} as MetricInfoEntry);
   const description = info.description || 'Total size of all resources loaded by the page';
   const threshold = (THRESHOLDS.PAGE_SIZE / (1024 * 1024)).toFixed(1);
 
@@ -258,20 +317,25 @@ function getPageSizeCard(pageSizes: number[], avg: (arr: number[]) => string | n
  */
 function getSlowestPagesSection(pagesArray: PageInfo[]) {
   const slowest = pagesArray
-    .filter(p => p.TTFB && p.TTFB > 0)
+    .filter((p) => p.TTFB && p.TTFB > 0)
     .sort((a, b) => (b.TTFB || 0) - (a.TTFB || 0))
     .slice(0, 5);
 
   if (slowest.length === 0) return '';
 
-  const rows = slowest.map((p, i) => {
-    const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
-    const lcpColor = (p.LCP ?? 0) > 4000 ? '#ef4444' : (p.LCP ?? 0) > 2500 ? '#f59e0b' : '#10b981';
-    let shortUrl;
-    try { shortUrl = new URL(p.url).pathname; } catch { shortUrl = p.url; }
-    if (shortUrl.length > 50) shortUrl = '...' + shortUrl.slice(-47);
+  const rows = slowest
+    .map((p, i) => {
+      const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
+      const lcpColor = (p.LCP ?? 0) > 4000 ? '#ef4444' : (p.LCP ?? 0) > 2500 ? '#f59e0b' : '#10b981';
+      let shortUrl;
+      try {
+        shortUrl = new URL(p.url).pathname;
+      } catch {
+        shortUrl = p.url;
+      }
+      if (shortUrl.length > 50) shortUrl = '...' + shortUrl.slice(-47);
 
-    return `
+      return `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">${i + 1}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 13px; word-break: break-all;">
@@ -282,7 +346,8 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${p.CLS !== undefined ? p.CLS : '—'}</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   return `
     <div style="margin-top: 20px;">
@@ -309,7 +374,7 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
  * Generate vitals attribution section (LCP bottleneck + CLS sources)
  */
 function getVitalsAttributionSection(pagesArray: PageInfo[]) {
-  const pagesWithAttribution = pagesArray.filter(p => p.vitals?.lcpAnalysis?.bottleneck);
+  const pagesWithAttribution = pagesArray.filter((p) => p.vitals?.lcpAnalysis?.bottleneck);
   if (pagesWithAttribution.length === 0) return '';
 
   // Count bottleneck types
@@ -319,15 +384,20 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
     bottleneckCounts[bn] = (bottleneckCounts[bn] || 0) + 1;
   }
 
-  const sorted = Object.entries(bottleneckCounts).sort(([,a]: [string, number], [,b]: [string, number]) => b - a);
+  const sorted = Object.entries(bottleneckCounts).sort(([, a]: [string, number], [, b]: [string, number]) => b - a);
   const total = pagesWithAttribution.length;
 
-  const bars = sorted.map(([bottleneck, count]: [string, number]) => {
-    const pct = Math.round((count / total) * 100);
-    const color = bottleneck.toLowerCase().includes('ttfb') ? '#8b5cf6' :
-                  bottleneck.toLowerCase().includes('load') ? '#ec4899' :
-                  bottleneck.toLowerCase().includes('render') ? '#f59e0b' : '#6b7280';
-    return `
+  const bars = sorted
+    .map(([bottleneck, count]: [string, number]) => {
+      const pct = Math.round((count / total) * 100);
+      const color = bottleneck.toLowerCase().includes('ttfb')
+        ? '#8b5cf6'
+        : bottleneck.toLowerCase().includes('load')
+          ? '#ec4899'
+          : bottleneck.toLowerCase().includes('render')
+            ? '#f59e0b'
+            : '#6b7280';
+      return `
       <div style="margin-bottom: 8px;">
         <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px;">
           <span style="color: #374151; font-weight: 500;">${bottleneck}</span>
@@ -338,11 +408,12 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
         </div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   // Sample recommendations
   const topBottleneck = sorted[0][0];
-  const samplePage = pagesWithAttribution.find(p => p.vitals!.lcpAnalysis.bottleneck === topBottleneck);
+  const samplePage = pagesWithAttribution.find((p) => p.vitals!.lcpAnalysis.bottleneck === topBottleneck);
   const recommendation = samplePage?.vitals?.lcpAnalysis?.recommendation || '';
 
   return `
@@ -353,12 +424,16 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
           Analysis of ${total} pages with LCP data — showing what's slowing down the Largest Contentful Paint.
         </p>
         ${bars}
-        ${recommendation ? `
+        ${
+          recommendation
+            ? `
         <div style="margin-top: 15px; padding: 12px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b;">
           <div style="font-size: 12px; font-weight: 600; color: #92400e; margin-bottom: 4px;">Top recommendation:</div>
           <div style="font-size: 13px; color: #78350f;">${escapeHtml(recommendation)}</div>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
       </div>
     </div>
   `;

@@ -12,29 +12,57 @@ import { validateURL as coreValidateURL } from '../validators';
 // Tracking parameters to always strip (marketing, analytics, session)
 const TRACKING_PARAMS = new Set([
   // Google Analytics / Ads
-  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id',
-  'gclid', 'gclsrc', 'dclid', 'gbraid', 'wbraid',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'utm_id',
+  'gclid',
+  'gclsrc',
+  'dclid',
+  'gbraid',
+  'wbraid',
   // Facebook
-  'fbclid', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fb_ref',
+  'fbclid',
+  'fb_action_ids',
+  'fb_action_types',
+  'fb_source',
+  'fb_ref',
   // Microsoft/Bing
   'msclkid',
   // Other common tracking
-  'mc_cid', 'mc_eid',
-  'oly_enc_id', 'oly_anon_id',
-  '_hsenc', '_hsmi', 'hsCtaTracking',
-  'vero_id', 'vero_conv',
+  'mc_cid',
+  'mc_eid',
+  'oly_enc_id',
+  'oly_anon_id',
+  '_hsenc',
+  '_hsmi',
+  'hsCtaTracking',
+  'vero_id',
+  'vero_conv',
   'nr_email_referer',
   'mkt_tok',
-  'trk', 'trkCampaign', 'trkInfo',
+  'trk',
+  'trkCampaign',
+  'trkInfo',
   'si',
   'igshid',
   '__twitter_impression',
   's_kwcid',
   'ef_id',
   // Session/misc
-  'ref', 'referrer', 'source',
-  'sessionid', 'sid', 'phpsessid', 'jsessionid', 'aspsessionid',
-  '_ga', '_gl', '_ke',
+  'ref',
+  'referrer',
+  'source',
+  'sessionid',
+  'sid',
+  'phpsessid',
+  'jsessionid',
+  'aspsessionid',
+  '_ga',
+  '_gl',
+  '_ke',
 ]);
 
 interface NormalizeUrlOptions {
@@ -49,11 +77,7 @@ interface NormalizeUrlOptions {
 function normalizeUrl(urlString: string, options: NormalizeUrlOptions = {}): string {
   if (!urlString) return urlString;
 
-  const {
-    mode = 'strip_tracking',
-    whitelist = [],
-    blacklist = [],
-  } = options;
+  const { mode = 'strip_tracking', whitelist = [], blacklist = [] } = options;
 
   try {
     const url = new URL(urlString);
@@ -69,10 +93,8 @@ function normalizeUrl(urlString: string, options: NormalizeUrlOptions = {}): str
     }
 
     const paramsToRemove: string[] = [];
-    const blacklistSet = new Set(blacklist.map(p => p.toLowerCase()));
-    const whitelistSet = mode === 'whitelist'
-      ? new Set(whitelist.map(p => p.toLowerCase()))
-      : null;
+    const blacklistSet = new Set(blacklist.map((p) => p.toLowerCase()));
+    const whitelistSet = mode === 'whitelist' ? new Set(whitelist.map((p) => p.toLowerCase())) : null;
 
     for (const [key] of url.searchParams) {
       const keyLower = key.toLowerCase();
@@ -224,7 +246,7 @@ function analyzeUrlStructure(urlString: string, origin: string): UrlAnalysis {
     analysis.length = pathAndQuery.length;
     analysis.isHttps = url.protocol === 'https:';
 
-    const pathSegments = url.pathname.split('/').filter(segment => segment.length > 0);
+    const pathSegments = url.pathname.split('/').filter((segment) => segment.length > 0);
     analysis.depth = pathSegments.length;
 
     analysis.hasUppercase = /[A-Z]/.test(url.pathname);
@@ -233,7 +255,11 @@ function analyzeUrlStructure(urlString: string, origin: string): UrlAnalysis {
 
     const specialCharsPattern = /[^a-zA-Z0-9\-_\/\.]/;
     let decodedPath: string;
-    try { decodedPath = decodeURIComponent(url.pathname); } catch { decodedPath = url.pathname; }
+    try {
+      decodedPath = decodeURIComponent(url.pathname);
+    } catch {
+      decodedPath = url.pathname;
+    }
     analysis.hasSpecialChars = specialCharsPattern.test(decodedPath);
 
     analysis.hasQueryParams = url.search.length > 0;
@@ -294,7 +320,6 @@ function analyzeUrlStructure(urlString: string, origin: string): UrlAnalysis {
         message: 'URL uses HTTP instead of HTTPS',
       });
     }
-
   } catch (error) {
     analysis.issues.push({
       severity: SEVERITY.HIGH,

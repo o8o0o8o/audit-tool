@@ -67,17 +67,22 @@ class AnalyticsValidator {
         if (analytics.consentTool) {
           analyticsStats.consentTools.set(
             analytics.consentTool,
-            (analyticsStats.consentTools.get(analytics.consentTool) || 0) + 1
+            (analyticsStats.consentTools.get(analytics.consentTool) || 0) + 1,
           );
         }
       }
 
       if (analytics.hasPrivacyPolicy) analyticsStats.pagesWithPrivacyPolicy++;
 
-      const hasAnyTracking = analytics.hasGA4 || analytics.hasUniversalAnalytics ||
-                            analytics.hasGTM || analytics.hasFacebookPixel ||
-                            analytics.hasLinkedInTag || analytics.hasTwitterPixel ||
-                            analytics.hasTikTokPixel || analytics.hasPinterestTag;
+      const hasAnyTracking =
+        analytics.hasGA4 ||
+        analytics.hasUniversalAnalytics ||
+        analytics.hasGTM ||
+        analytics.hasFacebookPixel ||
+        analytics.hasLinkedInTag ||
+        analytics.hasTwitterPixel ||
+        analytics.hasTikTokPixel ||
+        analytics.hasPinterestTag;
 
       if (!hasAnyTracking) {
         analyticsStats.pagesWithoutAnalytics++;
@@ -109,14 +114,16 @@ class AnalyticsValidator {
 
     console.log(`GA4 coverage: ${analyticsStats.pagesWithGA4}/${totalPages} pages (${ga4Coverage}%)`);
     console.log(`GTM coverage: ${analyticsStats.pagesWithGTM}/${totalPages} pages (${gtmCoverage}%)`);
-    console.log(`Cookie consent coverage: ${analyticsStats.pagesWithCookieConsent}/${totalPages} pages (${consentCoverage}%)`);
+    console.log(
+      `Cookie consent coverage: ${analyticsStats.pagesWithCookieConsent}/${totalPages} pages (${consentCoverage}%)`,
+    );
 
     // Report 1: Pages without any analytics
     if (analyticsStats.pagesWithoutAnalytics > totalPages * 0.1 && totalPages > 10) {
       issues.push({
         title: `Many pages missing analytics`,
         description: `${analyticsStats.pagesWithoutAnalytics} page(s) (${Math.round((analyticsStats.pagesWithoutAnalytics / totalPages) * 100)}%) have no analytics or tracking tools. Consider adding GA4 for visitor insights.`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
@@ -129,7 +136,7 @@ class AnalyticsValidator {
       issues.push({
         title: `Inconsistent GA4 measurement IDs across pages`,
         description: `Found ${analyticsStats.ga4Ids.size} different GA4 measurement IDs across your site. All pages should use the same ID:<ul>${idsList}</ul>`,
-        severity: SEVERITY.CRITICAL
+        severity: SEVERITY.CRITICAL,
       });
     }
 
@@ -142,7 +149,7 @@ class AnalyticsValidator {
       issues.push({
         title: `Inconsistent GTM container IDs across pages`,
         description: `Found ${analyticsStats.gtmIds.size} different GTM container IDs. All pages should use the same container:<ul>${idsList}</ul>`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     }
 
@@ -155,7 +162,7 @@ class AnalyticsValidator {
       issues.push({
         title: `Inconsistent Universal Analytics IDs across pages`,
         description: `Found ${analyticsStats.uaIds.size} different UA tracking IDs across your site:<ul>${idsList}</ul>`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     }
 
@@ -164,19 +171,22 @@ class AnalyticsValidator {
       issues.push({
         title: `Low GA4 coverage across site`,
         description: `Only ${ga4Coverage}% of pages (${analyticsStats.pagesWithGA4}/${totalPages}) have GA4 tracking. Ensure all pages include your analytics code.`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     }
 
     // Report 6: Cookie consent coverage issues
-    const hasTracking = analyticsStats.pagesWithGA4 > 0 || analyticsStats.pagesWithUA > 0 ||
-                       analyticsStats.pagesWithGTM > 0 || analyticsStats.pagesWithFacebookPixel > 0;
+    const hasTracking =
+      analyticsStats.pagesWithGA4 > 0 ||
+      analyticsStats.pagesWithUA > 0 ||
+      analyticsStats.pagesWithGTM > 0 ||
+      analyticsStats.pagesWithFacebookPixel > 0;
 
     if (hasTracking && consentCoverage < 80) {
       issues.push({
         title: `Inconsistent cookie consent implementation`,
         description: `Your site uses tracking but only ${consentCoverage}% of pages (${analyticsStats.pagesWithCookieConsent}/${totalPages}) have cookie consent. GDPR/CCPA requires consent on all pages with tracking.`,
-        severity: SEVERITY.CRITICAL
+        severity: SEVERITY.CRITICAL,
       });
     }
 
@@ -189,7 +199,7 @@ class AnalyticsValidator {
       issues.push({
         title: `Multiple cookie consent tools detected`,
         description: `Found ${analyticsStats.consentTools.size} different consent tools across your site. Use one consistent solution:<ul>${toolsList}</ul>`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     }
 
@@ -199,24 +209,25 @@ class AnalyticsValidator {
       issues.push({
         title: `Both Universal Analytics and GA4 detected`,
         description: `Your site has both UA (${uaCoverage}% coverage) and GA4 (${ga4Coverage}% coverage). Universal Analytics stopped collecting data in July 2024. Complete migration to GA4 and remove UA code.`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     } else if (analyticsStats.pagesWithUA > 0 && analyticsStats.pagesWithGA4 === 0) {
       issues.push({
         title: `Still using Universal Analytics only`,
         description: `Your site only uses Universal Analytics, which stopped collecting data in July 2024. Migrate to GA4 immediately to continue tracking visitors.`,
-        severity: SEVERITY.CRITICAL
+        severity: SEVERITY.CRITICAL,
       });
     }
 
     // Report 9: Privacy policy coverage
     if (hasTracking) {
-      const privacyCoverage = totalPages > 0 ? Math.round((analyticsStats.pagesWithPrivacyPolicy / totalPages) * 100) : 0;
+      const privacyCoverage =
+        totalPages > 0 ? Math.round((analyticsStats.pagesWithPrivacyPolicy / totalPages) * 100) : 0;
       if (privacyCoverage < 80) {
         issues.push({
           title: `Privacy policy link missing on many pages`,
           description: `Your site uses tracking but only ${privacyCoverage}% of pages (${analyticsStats.pagesWithPrivacyPolicy}/${totalPages}) have a privacy policy link. Privacy policies are required by GDPR/CCPA.`,
-          severity: SEVERITY.HIGH
+          severity: SEVERITY.HIGH,
         });
       }
     }
@@ -262,7 +273,7 @@ class AnalyticsValidator {
         },
         totalIssues: analyticsStats.totalIssues,
         totalWarnings: analyticsStats.totalWarnings,
-      }
+      },
     };
   }
 }

@@ -85,10 +85,8 @@ class ContentGapAnalyzer {
     }
 
     // Calculate average density
-    keywordIndex.forEach(entry => {
-      entry.avgDensity = entry.urls.size > 0
-        ? (entry.totalDensity / entry.urls.size).toFixed(2)
-        : 0;
+    keywordIndex.forEach((entry) => {
+      entry.avgDensity = entry.urls.size > 0 ? (entry.totalDensity / entry.urls.size).toFixed(2) : 0;
     });
 
     return keywordIndex;
@@ -104,8 +102,7 @@ class ContentGapAnalyzer {
     const processed = new Set<string>();
 
     // Sort keywords by frequency for better clustering
-    const sortedKeywords = Array.from(keywordIndex.entries())
-      .sort((a, b) => b[1].urls.size - a[1].urls.size);
+    const sortedKeywords = Array.from(keywordIndex.entries()).sort((a, b) => b[1].urls.size - a[1].urls.size);
 
     for (const [keyword, data] of sortedKeywords as [string, any][]) {
       if (processed.has(keyword)) continue;
@@ -174,7 +171,7 @@ class ContentGapAnalyzer {
       // Common word overlap (for multi-word keywords)
       const keywordWords = keyword.split(/[\s-_]+/);
       const otherWords = otherKeyword.split(/[\s-_]+/);
-      const commonWords = keywordWords.filter(w => otherWords.includes(w) && w.length > 3);
+      const commonWords = keywordWords.filter((w) => otherWords.includes(w) && w.length > 3);
       if (commonWords.length > 0 && commonWords.length >= keywordWords.length / 2) {
         related.push(otherKeyword);
       }
@@ -190,10 +187,10 @@ class ContentGapAnalyzer {
    */
   static analyzeCoverage(clusters: Map<string, any>) {
     const coverage: Record<string, Record<string, any>[]> = {
-      high: [],    // 5+ pages
-      medium: [],  // 2-4 pages
-      low: [],     // 1 page only
-      orphan: [],  // 0 pages (shouldn't happen but for safety)
+      high: [], // 5+ pages
+      medium: [], // 2-4 pages
+      low: [], // 1 page only
+      orphan: [], // 0 pages (shouldn't happen but for safety)
     };
 
     clusters.forEach((data, topic) => {
@@ -216,7 +213,7 @@ class ContentGapAnalyzer {
     });
 
     // Sort each by page count descending
-    ['high', 'medium', 'low', 'orphan'].forEach(level => {
+    ['high', 'medium', 'low', 'orphan'].forEach((level) => {
       coverage[level].sort((a: any, b: any) => b.pageCount - a.pageCount);
     });
 
@@ -240,7 +237,8 @@ class ContentGapAnalyzer {
       // Calculate opportunity score based on keyword density and uniqueness
       const opportunityScore = this.calculateOpportunityScore(data, totalPages);
 
-      if (opportunityScore > 30) { // Only include significant gaps
+      if (opportunityScore > 30) {
+        // Only include significant gaps
         gaps.push({
           topic,
           keywords: data.keywords.slice(0, 5), // Limit to top 5 keywords
@@ -283,7 +281,8 @@ class ContentGapAnalyzer {
     }
 
     // Keyword length bonus (longer keywords = more specific = higher value)
-    const avgKeywordLength = clusterData.keywords.reduce((sum: any, k: any) => sum + k.length, 0) / clusterData.keywords.length;
+    const avgKeywordLength =
+      clusterData.keywords.reduce((sum: any, k: any) => sum + k.length, 0) / clusterData.keywords.length;
     if (avgKeywordLength >= 8) {
       score += 10;
     } else if (avgKeywordLength >= 5) {
@@ -329,9 +328,12 @@ class ContentGapAnalyzer {
     }
 
     // Issue 2: High-opportunity gaps
-    const highOpportunityGaps = gaps.filter(g => g.opportunityScore >= 60);
+    const highOpportunityGaps = gaps.filter((g) => g.opportunityScore >= 60);
     if (highOpportunityGaps.length > 0) {
-      const topTopics = highOpportunityGaps.slice(0, 5).map(g => g.topic).join(', ');
+      const topTopics = highOpportunityGaps
+        .slice(0, 5)
+        .map((g) => g.topic)
+        .join(', ');
       issues.push({
         message: 'High-opportunity content gaps identified',
         detail: `${highOpportunityGaps.length} topics have high opportunity scores but limited page coverage. Top opportunities: ${topTopics}`,

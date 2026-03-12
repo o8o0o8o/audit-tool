@@ -11,11 +11,35 @@ class TechnologyDetector {
   static SIGNATURES = {
     // Content Management Systems
     cms: [
-      { name: 'WordPress', patterns: { html: [/wp-content/i, /wp-includes/i], meta: { generator: /wordpress/i }, scripts: [/wp-content|wp-includes/i] } },
-      { name: 'Drupal', patterns: { html: [/Drupal\.settings/i, /drupal\.js/i], meta: { generator: /drupal/i }, headers: { 'x-drupal-cache': /./i } } },
+      {
+        name: 'WordPress',
+        patterns: {
+          html: [/wp-content/i, /wp-includes/i],
+          meta: { generator: /wordpress/i },
+          scripts: [/wp-content|wp-includes/i],
+        },
+      },
+      {
+        name: 'Drupal',
+        patterns: {
+          html: [/Drupal\.settings/i, /drupal\.js/i],
+          meta: { generator: /drupal/i },
+          headers: { 'x-drupal-cache': /./i },
+        },
+      },
       { name: 'Joomla', patterns: { html: [/\/media\/jui\//i], meta: { generator: /joomla/i } } },
-      { name: 'Shopify', patterns: { html: [/cdn\.shopify\.com/i, /Shopify\.theme/i], scripts: [/cdn\.shopify\.com/i], cookies: [/^_shopify/i] } },
-      { name: 'Squarespace', patterns: { html: [/squarespace\.com/i, /static\.squarespace/i], scripts: [/squarespace/i] } },
+      {
+        name: 'Shopify',
+        patterns: {
+          html: [/cdn\.shopify\.com/i, /Shopify\.theme/i],
+          scripts: [/cdn\.shopify\.com/i],
+          cookies: [/^_shopify/i],
+        },
+      },
+      {
+        name: 'Squarespace',
+        patterns: { html: [/squarespace\.com/i, /static\.squarespace/i], scripts: [/squarespace/i] },
+      },
       { name: 'Wix', patterns: { html: [/wix\.com/i, /wixstatic\.com/i], meta: { generator: /wix/i } } },
       { name: 'Webflow', patterns: { html: [/webflow/i], meta: { generator: /webflow/i }, scripts: [/webflow/i] } },
       { name: 'Ghost', patterns: { meta: { generator: /ghost/i }, html: [/ghost\.org/i] } },
@@ -30,12 +54,42 @@ class TechnologyDetector {
 
     // JavaScript Frameworks
     frameworks: [
-      { name: 'React', patterns: { html: [/data-reactroot|data-reactid|__react/i], scripts: [/react\.production|react\.development|react-dom/i], globals: ['React', '__REACT_DEVTOOLS_GLOBAL_HOOK__'] } },
-      { name: 'Next.js', patterns: { html: [/__NEXT_DATA__|_next\/static|_next\/image/], scripts: [/_next\/static\//], globals: ['__NEXT_DATA__'] } },
-      { name: 'Vue.js', patterns: { html: [/data-v-[a-f0-9]{6,}/i, /v-cloak/i], scripts: [/\/vue\.js|\/vue\.min\.js|\/vue\.runtime|\/vue@/i], globals: ['Vue', '__VUE__'] } },
+      {
+        name: 'React',
+        patterns: {
+          html: [/data-reactroot|data-reactid|__react/i],
+          scripts: [/react\.production|react\.development|react-dom/i],
+          globals: ['React', '__REACT_DEVTOOLS_GLOBAL_HOOK__'],
+        },
+      },
+      {
+        name: 'Next.js',
+        patterns: {
+          html: [/__NEXT_DATA__|_next\/static|_next\/image/],
+          scripts: [/_next\/static\//],
+          globals: ['__NEXT_DATA__'],
+        },
+      },
+      {
+        name: 'Vue.js',
+        patterns: {
+          html: [/data-v-[a-f0-9]{6,}/i, /v-cloak/i],
+          scripts: [/\/vue\.js|\/vue\.min\.js|\/vue\.runtime|\/vue@/i],
+          globals: ['Vue', '__VUE__'],
+        },
+      },
       { name: 'Nuxt.js', patterns: { html: [/__NUXT__/], scripts: [/_nuxt\//], globals: ['__NUXT__'] } },
-      { name: 'Angular', patterns: { html: [/ng-version="/, /_ngcontent-/, /_nghost-/], scripts: [/\/@angular\//i, /\/angular\.min\.js/i] } },
-      { name: 'Svelte', patterns: { html: [/svelte-[a-z0-9]+|__svelte/], scripts: [/\/svelte\//i, /svelte\.min\.js/i] } },
+      {
+        name: 'Angular',
+        patterns: {
+          html: [/ng-version="/, /_ngcontent-/, /_nghost-/],
+          scripts: [/\/@angular\//i, /\/angular\.min\.js/i],
+        },
+      },
+      {
+        name: 'Svelte',
+        patterns: { html: [/svelte-[a-z0-9]+|__svelte/], scripts: [/\/svelte\//i, /svelte\.min\.js/i] },
+      },
       { name: 'SvelteKit', patterns: { html: [/__sveltekit/], scripts: [/sveltekit/i] } },
       { name: 'Gatsby', patterns: { html: [/id="___gatsby"|___gatsby/], scripts: [/\/gatsby-/i] } },
       { name: 'Remix', patterns: { html: [/__remixContext/], globals: ['__remixContext'] } },
@@ -43,26 +97,73 @@ class TechnologyDetector {
       { name: 'jQuery', patterns: { scripts: [/\/jquery[\.-]\d|\/jquery\.min\.js/i], globals: ['jQuery'] } },
       { name: 'Alpine.js', patterns: { html: [/x-data\s*=|x-init\s*=/i], scripts: [/\/alpine[\.\/@]/i] } },
       { name: 'HTMX', patterns: { html: [/hx-get\s*=|hx-post\s*=|hx-trigger\s*=/i], scripts: [/\/htmx[\.\/@]/i] } },
-      { name: 'Ember.js', patterns: { html: [/data-ember-action|id="ember\d+"|class="ember-view"/], scripts: [/\/ember\.js|\/ember\.min\.js|\/ember\.prod/i], globals: ['Ember'] } },
+      {
+        name: 'Ember.js',
+        patterns: {
+          html: [/data-ember-action|id="ember\d+"|class="ember-view"/],
+          scripts: [/\/ember\.js|\/ember\.min\.js|\/ember\.prod/i],
+          globals: ['Ember'],
+        },
+      },
       { name: 'Backbone.js', patterns: { scripts: [/\/backbone[\.\-]|\/backbone\.min\.js/i], globals: ['Backbone'] } },
     ],
 
     // CSS Frameworks
     cssFrameworks: [
-      { name: 'Tailwind CSS', patterns: { html: [/class="[^"]*(?:sm:|md:|lg:|xl:)[^"]*"/i, /class="[^"]*(?:p-\d|m-\d|text-\w+-\d{3}|bg-\w+-\d{3})[^"]*"/i] } },
-      { name: 'Bootstrap', patterns: { html: [/class="[^"]*(?:col-(?:sm|md|lg|xl)-\d|navbar-(?:brand|toggler)|btn-(?:primary|secondary|success|danger))[^"]*"/i], scripts: [/\/bootstrap[\.\-]|\/bootstrap\.min/i] } },
-      { name: 'Material UI', patterns: { html: [/class="[^"]*Mui[A-Z][a-z]+-root[^"]*"/], scripts: [/\/@mui\//i, /\/material-ui\//i] } },
+      {
+        name: 'Tailwind CSS',
+        patterns: {
+          html: [
+            /class="[^"]*(?:sm:|md:|lg:|xl:)[^"]*"/i,
+            /class="[^"]*(?:p-\d|m-\d|text-\w+-\d{3}|bg-\w+-\d{3})[^"]*"/i,
+          ],
+        },
+      },
+      {
+        name: 'Bootstrap',
+        patterns: {
+          html: [
+            /class="[^"]*(?:col-(?:sm|md|lg|xl)-\d|navbar-(?:brand|toggler)|btn-(?:primary|secondary|success|danger))[^"]*"/i,
+          ],
+          scripts: [/\/bootstrap[\.\-]|\/bootstrap\.min/i],
+        },
+      },
+      {
+        name: 'Material UI',
+        patterns: { html: [/class="[^"]*Mui[A-Z][a-z]+-root[^"]*"/], scripts: [/\/@mui\//i, /\/material-ui\//i] },
+      },
       { name: 'Chakra UI', patterns: { html: [/class="[^"]*chakra-[a-z]/i], scripts: [/\/@chakra-ui\//i] } },
-      { name: 'Bulma', patterns: { html: [/class="[^"]*(?:is-size-\d|is-(?:primary|success|warning|danger|info)|has-text-|column is-)[^"]*"/i], scripts: [/\/bulma[\.\/@]/i] } },
-      { name: 'Foundation', patterns: { html: [/class="[^"]*(?:grid-x|grid-y|cell (?:small|medium|large)-\d)[^"]*"/i], scripts: [/\/foundation[\.\-]/i] } },
+      {
+        name: 'Bulma',
+        patterns: {
+          html: [/class="[^"]*(?:is-size-\d|is-(?:primary|success|warning|danger|info)|has-text-|column is-)[^"]*"/i],
+          scripts: [/\/bulma[\.\/@]/i],
+        },
+      },
+      {
+        name: 'Foundation',
+        patterns: {
+          html: [/class="[^"]*(?:grid-x|grid-y|cell (?:small|medium|large)-\d)[^"]*"/i],
+          scripts: [/\/foundation[\.\-]/i],
+        },
+      },
     ],
 
     // Analytics & Tracking
     analytics: [
-      { name: 'Google Analytics 4', patterns: { html: [/gtag\(['"]/i, /G-[A-Z0-9]+/i], scripts: [/googletagmanager\.com\/gtag/i] } },
-      { name: 'Google Universal Analytics', patterns: { html: [/UA-\d+-\d+/i], scripts: [/google-analytics\.com\/analytics/i] } },
+      {
+        name: 'Google Analytics 4',
+        patterns: { html: [/gtag\(['"]/i, /G-[A-Z0-9]+/i], scripts: [/googletagmanager\.com\/gtag/i] },
+      },
+      {
+        name: 'Google Universal Analytics',
+        patterns: { html: [/UA-\d+-\d+/i], scripts: [/google-analytics\.com\/analytics/i] },
+      },
       { name: 'Google Tag Manager', patterns: { html: [/GTM-[A-Z0-9]+/i], scripts: [/googletagmanager\.com\/gtm/i] } },
-      { name: 'Facebook Pixel', patterns: { html: [/fbq\(/i, /connect\.facebook\.net\/.*fbevents/i], scripts: [/connect\.facebook\.net/i] } },
+      {
+        name: 'Facebook Pixel',
+        patterns: { html: [/fbq\(/i, /connect\.facebook\.net\/.*fbevents/i], scripts: [/connect\.facebook\.net/i] },
+      },
       { name: 'Hotjar', patterns: { html: [/hotjar/i], scripts: [/hotjar\.com|static\.hotjar/i] } },
       { name: 'Mixpanel', patterns: { scripts: [/mixpanel/i], globals: ['mixpanel'] } },
       { name: 'Amplitude', patterns: { scripts: [/amplitude/i], globals: ['amplitude'] } },
@@ -186,7 +287,13 @@ class TechnologyDetector {
    * @param {Object} requests - Network requests made by the page
    * @returns {Object} Detection results
    */
-  static async detect(chromePage: ChromePage, parsedPage: ParsedPage, htmlContent: string, responseHeaders: Record<string, any> = {}, requests: Record<string, any> = {}) {
+  static async detect(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    htmlContent: string,
+    responseHeaders: Record<string, any> = {},
+    requests: Record<string, any> = {},
+  ) {
     const detected = {
       technologies: [] as Record<string, any>[],
       byCategory: {} as Record<string, string[]>,
@@ -206,13 +313,34 @@ class TechnologyDetector {
     try {
       const result = await chromePage.evaluate(() => {
         const knownGlobals = [
-          'React', '__REACT_DEVTOOLS_GLOBAL_HOOK__', 'Vue', '__VUE__',
-          'jQuery', 'Ember', 'Backbone', '__NEXT_DATA__', '__NUXT__', '__remixContext',
-          'mixpanel', 'amplitude', 'heap', 'FS', 'LogRocket', 'posthog',
-          'Intercom', 'drift', 'zE', '$crisp', 'Tawk_API', 'LiveChatWidget',
-          'Stripe', 'paypal', 'grecaptcha', 'Sentry'
+          'React',
+          '__REACT_DEVTOOLS_GLOBAL_HOOK__',
+          'Vue',
+          '__VUE__',
+          'jQuery',
+          'Ember',
+          'Backbone',
+          '__NEXT_DATA__',
+          '__NUXT__',
+          '__remixContext',
+          'mixpanel',
+          'amplitude',
+          'heap',
+          'FS',
+          'LogRocket',
+          'posthog',
+          'Intercom',
+          'drift',
+          'zE',
+          '$crisp',
+          'Tawk_API',
+          'LiveChatWidget',
+          'Stripe',
+          'paypal',
+          'grecaptcha',
+          'Sentry',
         ];
-        return knownGlobals.filter(g => {
+        return knownGlobals.filter((g) => {
           try {
             return typeof (window as any)[g] !== 'undefined';
           } catch {
@@ -248,7 +376,11 @@ class TechnologyDetector {
     detected.summary.total = detected.technologies.length;
     detected.summary.categories = Object.entries(detected.byCategory)
       .filter(([_, techs]: [string, any]) => techs.length > 0)
-      .map(([cat, techs]: [string, any]) => ({ category: this.#formatCategory(cat), count: techs.length, technologies: techs }));
+      .map(([cat, techs]: [string, any]) => ({
+        category: this.#formatCategory(cat),
+        count: techs.length,
+        technologies: techs,
+      }));
 
     return detected;
   }
@@ -287,7 +419,11 @@ class TechnologyDetector {
     detected.summary.total = detected.technologies.length;
     detected.summary.categories = Object.entries(detected.byCategory)
       .filter(([_, techs]: [string, any]) => techs.length > 0)
-      .map(([cat, techs]: [string, any]) => ({ category: this.#formatCategory(cat), count: techs.length, technologies: techs }));
+      .map(([cat, techs]: [string, any]) => ({
+        category: this.#formatCategory(cat),
+        count: techs.length,
+        technologies: techs,
+      }));
 
     return detected;
   }
@@ -297,7 +433,14 @@ class TechnologyDetector {
    * @private
    * @returns {Object|null} Detection methods or null if not matched
    */
-  static #matchSignature(sig: Record<string, any>, htmlLower: string, headersLower: Record<string, any>, scriptSrcs: string[], metaTags: Record<string, string>, globals: string[]) {
+  static #matchSignature(
+    sig: Record<string, any>,
+    htmlLower: string,
+    headersLower: Record<string, any>,
+    scriptSrcs: string[],
+    metaTags: Record<string, string>,
+    globals: string[],
+  ) {
     const patterns = sig.patterns || {};
     const methods: Record<string, any>[] = [];
 
@@ -320,7 +463,7 @@ class TechnologyDetector {
             break;
           }
         }
-        if (methods.some(m => m.type === 'script')) break;
+        if (methods.some((m) => m.type === 'script')) break;
       }
     }
 
@@ -374,7 +517,14 @@ class TechnologyDetector {
    * Calculate confidence level
    * @private
    */
-  static #calculateConfidence(sig: Record<string, any>, htmlLower: string, headersLower: Record<string, any>, scriptSrcs: string[], metaTags: Record<string, string>, globals: string[]) {
+  static #calculateConfidence(
+    sig: Record<string, any>,
+    htmlLower: string,
+    headersLower: Record<string, any>,
+    scriptSrcs: string[],
+    metaTags: Record<string, string>,
+    globals: string[],
+  ) {
     let matches = 0;
     const patterns = sig.patterns || {};
 
@@ -415,7 +565,7 @@ class TechnologyDetector {
     // From HTML
     if (parsedPage) {
       const scripts = parsedPage.querySelectorAll('script[src]');
-      scripts.forEach(s => {
+      scripts.forEach((s) => {
         const src = s.getAttribute('src');
         if (src) sources.add(src.toLowerCase());
       });
@@ -442,7 +592,7 @@ class TechnologyDetector {
     if (!parsedPage) return tags;
 
     const metas = parsedPage.querySelectorAll('meta');
-    metas.forEach(meta => {
+    metas.forEach((meta) => {
       const name = meta.getAttribute('name') || meta.getAttribute('property');
       const content = meta.getAttribute('content');
       if (name && content) {

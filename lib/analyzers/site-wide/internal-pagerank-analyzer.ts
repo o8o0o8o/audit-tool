@@ -42,11 +42,14 @@ class InternalPageRankAnalyzer {
     const ranked = (Object.entries(scores) as [string, number][]).sort((a, b) => b[1] - a[1]);
 
     // Identify pages with very low PageRank (potential orphans or poorly linked)
-    const lowThreshold = 1 / pages.length * 0.5; // Below half of uniform distribution
+    const lowThreshold = (1 / pages.length) * 0.5; // Below half of uniform distribution
     const lowRankPages = ranked.filter(([, score]) => score < lowThreshold);
 
     if (lowRankPages.length > pages.length * 0.2 && lowRankPages.length > 5) {
-      const examples = lowRankPages.slice(0, 5).map(([url]) => `<li><a href="${url}">${url}</a></li>`).join('');
+      const examples = lowRankPages
+        .slice(0, 5)
+        .map(([url]) => `<li><a href="${url}">${url}</a></li>`)
+        .join('');
       warnings.push({
         title: `${lowRankPages.length} pages have very low internal link equity`,
         description: `These pages receive minimal internal link equity, reducing their ranking potential:<ul>${examples}</ul>${lowRankPages.length > 5 ? `<p>...and ${lowRankPages.length - 5} more</p>` : ''}`,
@@ -70,8 +73,12 @@ class InternalPageRankAnalyzer {
     // Compute distribution stats
     const scoreValues = ranked.map(([, s]) => s as number);
     const distribution = {
-      topPages: ranked.slice(0, 10).map(([url, score]) => ({ url, score: Math.round((score as number) * 10000) / 10000 })),
-      bottomPages: ranked.slice(-5).map(([url, score]) => ({ url, score: Math.round((score as number) * 10000) / 10000 })),
+      topPages: ranked
+        .slice(0, 10)
+        .map(([url, score]) => ({ url, score: Math.round((score as number) * 10000) / 10000 })),
+      bottomPages: ranked
+        .slice(-5)
+        .map(([url, score]) => ({ url, score: Math.round((score as number) * 10000) / 10000 })),
       mean: scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length,
       median: scoreValues[Math.floor(scoreValues.length / 2)],
       max: scoreValues[0],
@@ -91,7 +98,13 @@ class InternalPageRankAnalyzer {
    * @returns {object} { url: score }
    * @private
    */
-  static #computePageRank(graph: Map<string, Set<string>>, pages: string[], damping = 0.85, iterations = 50, tolerance = 1e-6) {
+  static #computePageRank(
+    graph: Map<string, Set<string>>,
+    pages: string[],
+    damping = 0.85,
+    iterations = 50,
+    tolerance = 1e-6,
+  ) {
     const n = pages.length;
     const initialScore = 1 / n;
 
@@ -134,7 +147,7 @@ class InternalPageRankAnalyzer {
         rank += damping * (danglingSum / n); // Distribute dangling node rank
 
         // Sum contributions from incoming links
-        for (const source of (inbound[url] || [])) {
+        for (const source of inbound[url] || []) {
           const outDegree = graph.get(source)?.size || 1;
           rank += damping * (scores[source] / outDegree);
         }

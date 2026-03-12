@@ -20,9 +20,9 @@ class CachingAnalyzer {
       providers: {
         'cf-ray': 'Cloudflare',
         'x-amz-cf-id': 'CloudFront',
-        'fastly': 'Fastly',
-        'akamai': 'Akamai',
-      }
+        fastly: 'Fastly',
+        akamai: 'Akamai',
+      },
     };
 
     // Check response headers for CDN indicators
@@ -61,16 +61,26 @@ class CachingAnalyzer {
       const expires = pageResponse.headers['expires'];
       const etag = pageResponse.headers['etag'];
 
-      cachingAnalysis.htmlCacheable = (
-        cacheControl.includes('max-age') ||
-        cacheControl.includes('public') ||
-        expires ||
-        etag
-      ) && !cacheControl.includes('no-store') && !cacheControl.includes('no-cache');
+      cachingAnalysis.htmlCacheable =
+        (cacheControl.includes('max-age') || cacheControl.includes('public') || expires || etag) &&
+        !cacheControl.includes('no-store') &&
+        !cacheControl.includes('no-cache');
     }
 
     // 3. Analyze static resources caching
-    const staticExtensions = ['.js', '.css', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.woff', '.woff2', '.ttf', '.ico'];
+    const staticExtensions = [
+      '.js',
+      '.css',
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.gif',
+      '.svg',
+      '.woff',
+      '.woff2',
+      '.ttf',
+      '.ico',
+    ];
 
     for (const [reqUrl, reqData] of Object.entries(requests) as [string, any][]) {
       const urlPath = reqUrl.toLowerCase().split('?')[0]; // strip query params
@@ -82,11 +92,12 @@ class CachingAnalyzer {
         const expires = headers['expires'];
         const etag = headers['etag'];
 
-        const isCached = (
-          (cacheControl && (cacheControl.includes('max-age') || cacheControl.includes('public'))) ||
-          expires ||
-          etag
-        ) && !cacheControl.includes('no-store') && !cacheControl.includes('no-cache');
+        const isCached =
+          ((cacheControl && (cacheControl.includes('max-age') || cacheControl.includes('public'))) ||
+            expires ||
+            etag) &&
+          !cacheControl.includes('no-store') &&
+          !cacheControl.includes('no-cache');
 
         if (isCached) {
           cachingAnalysis.staticCached++;

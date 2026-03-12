@@ -40,16 +40,16 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
   const userAgents = (robots['user-agent'] || {}) as Record<string, unknown>;
   const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
   const overallIssues = (analysis.overall || []) as unknown[];
-  const hasRobotsErrors = overallIssues.some((err: unknown) =>
-    err && typeof err === 'string' && err.toLowerCase().includes('robots')
-  ) || false;
+  const hasRobotsErrors =
+    overallIssues.some((err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('robots')) ||
+    false;
 
   let robotsStatus = 'success';
   let robotsStatusText = 'Found';
 
   if (hasRobotsErrors) {
-    const errors = Array.from(overallIssues).filter((err: unknown) =>
-      err && typeof err === 'string' && err.toLowerCase().includes('robots')
+    const errors = Array.from(overallIssues).filter(
+      (err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('robots'),
     ) as string[];
     if (errors.some((e: string) => e.includes('Error fetching'))) {
       robotsStatus = 'error';
@@ -60,12 +60,18 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
     }
   }
 
-  const sitemapsList = robotsSitemaps.length > 0 ? `
+  const sitemapsList =
+    robotsSitemaps.length > 0
+      ? `
     <ul>
-      ${robotsSitemaps.slice(0, 3).map((sm: unknown) => `<li>${escapeHtml(sm)}</li>`).join('')}
+      ${robotsSitemaps
+        .slice(0, 3)
+        .map((sm: unknown) => `<li>${escapeHtml(sm)}</li>`)
+        .join('')}
       ${robotsSitemaps.length > 3 ? `<li>... and ${robotsSitemaps.length - 3} more</li>` : ''}
     </ul>
-  ` : '<p style="color: #f59e0b;">⚠ No sitemaps listed in robots.txt</p>';
+  `
+      : '<p style="color: #f59e0b;">⚠ No sitemaps listed in robots.txt</p>';
 
   return `
     <div class="info-card ${robotsStatus}">
@@ -86,27 +92,33 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
   const totalUrls = (sitemaps.total || 0) as number;
 
   // Get list of individual sitemaps (not the aggregated data)
-  const individualSitemaps = Object.keys(sitemaps).filter(key =>
-    key !== 'urls' && key !== 'total' && typeof sitemaps[key] === 'object'
+  const individualSitemaps = Object.keys(sitemaps).filter(
+    (key) => key !== 'urls' && key !== 'total' && typeof sitemaps[key] === 'object',
   );
 
   const analysisData = (jsonData.analysis || {}) as Record<string, unknown>;
   const overallIssues = (analysisData.overall || []) as unknown[];
-  const hasSitemapErrors = overallIssues.some((err: unknown) =>
-    err && typeof err === 'string' && err.toLowerCase().includes('sitemap')
-  ) || false;
+  const hasSitemapErrors =
+    overallIssues.some((err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('sitemap')) ||
+    false;
 
   const sitemapStatus = totalUrls > 0 ? 'success' : 'error';
 
-  const sitemapsList = individualSitemaps.length > 0 ? `
+  const sitemapsList =
+    individualSitemaps.length > 0
+      ? `
     <ul>
-      ${individualSitemaps.slice(0, 3).map(sm => {
-        const smData = (sitemaps[sm] || {}) as Record<string, unknown>;
-        return `<li>${escapeHtml(sm)} <span style="color: #9ca3af;">(${smData.total || 0} URLs)</span></li>`;
-      }).join('')}
+      ${individualSitemaps
+        .slice(0, 3)
+        .map((sm) => {
+          const smData = (sitemaps[sm] || {}) as Record<string, unknown>;
+          return `<li>${escapeHtml(sm)} <span style="color: #9ca3af;">(${smData.total || 0} URLs)</span></li>`;
+        })
+        .join('')}
       ${individualSitemaps.length > 3 ? `<li>... and ${individualSitemaps.length - 3} more</li>` : ''}
     </ul>
-  ` : '<p style="color: #ef4444;">✗ No sitemaps found</p>';
+  `
+      : '<p style="color: #ef4444;">✗ No sitemaps found</p>';
 
   const errorsNote = hasSitemapErrors
     ? '<p style="color: #f59e0b; margin-top: 8px;">⚠ Issues detected (see analysis below)</p>'
@@ -132,11 +144,10 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
 
   // Filter for robots.txt and sitemap related issues
   const filterRobotsSitemap = (issues: unknown[]) =>
-    issues.filter((issue: unknown): issue is string =>
-      typeof issue === 'string' && (
-        issue.toLowerCase().includes('robots') ||
-        issue.toLowerCase().includes('sitemap')
-      )
+    issues.filter(
+      (issue: unknown): issue is string =>
+        typeof issue === 'string' &&
+        (issue.toLowerCase().includes('robots') || issue.toLowerCase().includes('sitemap')),
     );
   const robotsSitemapIssues = {
     critical: filterRobotsSitemap(bySeverity.critical || []),
@@ -168,20 +179,32 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
   }
 
   const badgeCounts = [
-    robotsSitemapIssues.critical.length > 0 ? `<p><span class="issue-badge critical">CRITICAL</span> ${robotsSitemapIssues.critical.length}</p>` : '',
-    robotsSitemapIssues.high.length > 0 ? `<p><span class="issue-badge high">HIGH</span> ${robotsSitemapIssues.high.length}</p>` : '',
-    robotsSitemapIssues.medium.length > 0 ? `<p><span class="issue-badge medium">MEDIUM</span> ${robotsSitemapIssues.medium.length}</p>` : '',
-    robotsSitemapIssues.low.length > 0 ? `<p><span class="issue-badge low">LOW</span> ${robotsSitemapIssues.low.length}</p>` : '',
-  ].filter(Boolean).join('');
+    robotsSitemapIssues.critical.length > 0
+      ? `<p><span class="issue-badge critical">CRITICAL</span> ${robotsSitemapIssues.critical.length}</p>`
+      : '',
+    robotsSitemapIssues.high.length > 0
+      ? `<p><span class="issue-badge high">HIGH</span> ${robotsSitemapIssues.high.length}</p>`
+      : '',
+    robotsSitemapIssues.medium.length > 0
+      ? `<p><span class="issue-badge medium">MEDIUM</span> ${robotsSitemapIssues.medium.length}</p>`
+      : '',
+    robotsSitemapIssues.low.length > 0
+      ? `<p><span class="issue-badge low">LOW</span> ${robotsSitemapIssues.low.length}</p>`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('');
 
   const issuesList = [
     ...robotsSitemapIssues.critical.slice(0, 2),
     ...robotsSitemapIssues.high.slice(0, 2),
-    ...robotsSitemapIssues.medium.slice(0, 2)
-  ].map(issue => {
-    const cleanIssue = issue.replace(/\s*\[(critical|high|medium|low)\]\s*$/i, '');
-    return `<li>${escapeHtml(cleanIssue)}</li>`;
-  }).join('');
+    ...robotsSitemapIssues.medium.slice(0, 2),
+  ]
+    .map((issue) => {
+      const cleanIssue = issue.replace(/\s*\[(critical|high|medium|low)\]\s*$/i, '');
+      return `<li>${escapeHtml(cleanIssue)}</li>`;
+    })
+    .join('');
 
   return `
     <div class="info-card ${issuesStatus}">
@@ -217,25 +240,28 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
   }
 
   const coveragePercent = ((pagesCrawled / sitemapTotal) * 100).toFixed(1);
-  const cardClass = notCrawled > (sitemapTotal * 0.1) ? 'error' : 'warning';
+  const cardClass = notCrawled > sitemapTotal * 0.1 ? 'error' : 'warning';
 
   // Find URLs in sitemap but not in crawled pages
   const sitemapUrls = new Set(Object.keys((sitemapData.urls || {}) as Record<string, unknown>));
-  const crawledUrls = new Set(pages.map(p => p.url));
-  const missingUrls = Array.from(sitemapUrls).filter(url => !crawledUrls.has(url));
+  const crawledUrls = new Set(pages.map((p) => p.url));
+  const missingUrls = Array.from(sitemapUrls).filter((url) => !crawledUrls.has(url));
   const showUrls = missingUrls.slice(0, 10);
 
-  const missingUrlsHtml = missingUrls.length > 0 ? `
+  const missingUrlsHtml =
+    missingUrls.length > 0
+      ? `
     <details style="margin-top: 8px;">
       <summary style="cursor: pointer; color: #3b82f6; font-size: 12px; font-weight: 600;">
         Show ${missingUrls.length} missing URL(s)
       </summary>
       <ul style="margin-top: 8px; font-size: 11px; max-height: 200px; overflow-y: auto;">
-        ${showUrls.map(url => `<li style="word-break: break-all; margin: 4px 0;">${makeUrlClickable(url)}</li>`).join('')}
+        ${showUrls.map((url) => `<li style="word-break: break-all; margin: 4px 0;">${makeUrlClickable(url)}</li>`).join('')}
         ${missingUrls.length > 10 ? `<li style="color: #9ca3af;">... and ${missingUrls.length - 10} more</li>` : ''}
       </ul>
     </details>
-  ` : '';
+  `
+      : '';
 
   return `
     <div class="info-card ${cardClass}">
@@ -262,12 +288,15 @@ function getAuditConfigCard(jsonData: Record<string, unknown>) {
 
   if (phases.length === 0 && !timing.elapsedTimeFormatted) return '';
 
-  const phaseRows = phases.map((p: Record<string, unknown>) =>
-    `<div class="perf-budget-row" data-phase-ms="${p.durationMs || 0}">
+  const phaseRows = phases
+    .map(
+      (p: Record<string, unknown>) =>
+        `<div class="perf-budget-row" data-phase-ms="${p.durationMs || 0}">
       <span class="perf-budget-label">${escapeHtml(p.name)}</span>
       <span class="perf-budget-value">${escapeHtml(p.duration)}</span>
-    </div>`
-  ).join('');
+    </div>`,
+    )
+    .join('');
 
   return `
     <div style="margin-top: 20px; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -306,17 +335,25 @@ function getAnalysisConfigCard(jsonData: Record<string, unknown>) {
   return `
     <div style="margin-top: 20px; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
       <h3 style="margin: 0 0 12px; color: #1f2937; font-size: 15px;">Audit Configuration</h3>
-      ${flags.length > 0 ? `
+      ${
+        flags.length > 0
+          ? `
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-          ${flags.map(f => `<span style="background: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 4px; font-size: 12px;">${escapeHtml(f)}</span>`).join('')}
+          ${flags.map((f) => `<span style="background: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 4px; font-size: 12px;">${escapeHtml(f)}</span>`).join('')}
         </div>
-      ` : ''}
-      ${analysisSettings.length > 0 ? `
+      `
+          : ''
+      }
+      ${
+        analysisSettings.length > 0
+          ? `
         <div style="border-top: 1px solid #e5e7eb; padding-top: 10px;">
           <div style="font-size: 12px; color: #6b7280; margin-bottom: 6px;">Analysis Settings</div>
-          ${analysisSettings.map(s => `<div style="font-size: 12px; color: #374151; margin: 3px 0;">${escapeHtml(s)}</div>`).join('')}
+          ${analysisSettings.map((s) => `<div style="font-size: 12px; color: #374151; margin: 3px 0;">${escapeHtml(s)}</div>`).join('')}
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
   `;
 }

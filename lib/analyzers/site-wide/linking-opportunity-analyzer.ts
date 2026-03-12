@@ -28,10 +28,11 @@ class LinkingOpportunityAnalyzer {
     // Step 4: Calculate stats
     const stats = {
       totalOpportunities: opportunities.length,
-      avgRelevanceScore: opportunities.length > 0
-        ? (opportunities.reduce((sum, o) => sum + o.relevanceScore, 0) / opportunities.length).toFixed(2)
-        : 0,
-      pagesWithOpportunities: new Set(opportunities.map(o => o.sourcePage)).size,
+      avgRelevanceScore:
+        opportunities.length > 0
+          ? (opportunities.reduce((sum, o) => sum + o.relevanceScore, 0) / opportunities.length).toFixed(2)
+          : 0,
+      pagesWithOpportunities: new Set(opportunities.map((o) => o.sourcePage)).size,
       potentialNewLinks: opportunities.reduce((sum, o) => sum + o.suggestedLinks.length, 0),
     };
 
@@ -155,7 +156,12 @@ class LinkingOpportunityAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Array} Linking opportunities
    */
-  static findOpportunities(allPages: Record<string, PageInfo>, keywordIndex: Map<string, any>, existingLinks: Map<string, Set<string>>, origin: string) {
+  static findOpportunities(
+    allPages: Record<string, PageInfo>,
+    keywordIndex: Map<string, any>,
+    existingLinks: Map<string, Set<string>>,
+    origin: string,
+  ) {
     const opportunities = [];
     const urlList = Object.keys(allPages);
 
@@ -176,7 +182,7 @@ class LinkingOpportunityAnalyzer {
       // Find related pages
       const relatedPages = new Map(); // targetUrl -> { sharedKeywords, relevanceScore }
 
-      sourceKeywords.forEach(keyword => {
+      sourceKeywords.forEach((keyword) => {
         const pagesWithKeyword = keywordIndex.get(keyword as string);
         if (!pagesWithKeyword) return;
 
@@ -227,7 +233,8 @@ class LinkingOpportunityAnalyzer {
         score += titleMatches * 15;
 
         // Points for high density keywords
-        const avgDensity = data.sharedKeywords.reduce((sum: any, k: any) => sum + k.targetDensity, 0) / data.sharedKeywords.length;
+        const avgDensity =
+          data.sharedKeywords.reduce((sum: any, k: any) => sum + k.targetDensity, 0) / data.sharedKeywords.length;
         score += Math.min(avgDensity * 5, 20);
 
         // Store if score is significant
@@ -274,7 +281,7 @@ class LinkingOpportunityAnalyzer {
    */
   static suggestAnchorText(sharedKeywords: Record<string, any>[], _targetPage: PageInfo) {
     // Prefer keyword that's in target title
-    const titleKeyword = sharedKeywords.find(k => k.inTargetTitle);
+    const titleKeyword = sharedKeywords.find((k) => k.inTargetTitle);
     if (titleKeyword) {
       return titleKeyword.keyword;
     }
@@ -301,7 +308,7 @@ class LinkingOpportunityAnalyzer {
 
     // Issue 1: Many pages with linking opportunities
     if (opportunities.length > totalPages * 0.3) {
-      const highValueOpps = opportunities.filter(o => o.relevanceScore >= 60);
+      const highValueOpps = opportunities.filter((o) => o.relevanceScore >= 60);
       issues.push({
         message: 'Significant internal linking opportunities',
         detail: `${opportunities.length} pages could benefit from additional internal links. ${highValueOpps.length} have high-value opportunities (score ≥60). Improving internal linking can boost page authority and help search engines discover content.`,
@@ -310,9 +317,12 @@ class LinkingOpportunityAnalyzer {
     }
 
     // Issue 2: Very high-value opportunities
-    const excellentOpps = opportunities.filter(o => o.relevanceScore >= 80);
+    const excellentOpps = opportunities.filter((o) => o.relevanceScore >= 80);
     if (excellentOpps.length > 5) {
-      const topPages = excellentOpps.slice(0, 3).map(o => o.sourcePage.split('/').pop() || 'homepage').join(', ');
+      const topPages = excellentOpps
+        .slice(0, 3)
+        .map((o) => o.sourcePage.split('/').pop() || 'homepage')
+        .join(', ');
       issues.push({
         message: 'High-impact linking opportunities available',
         detail: `${excellentOpps.length} pages have excellent internal linking opportunities (score ≥80). Top pages: ${topPages}. These links would significantly improve content discoverability.`,
@@ -322,7 +332,7 @@ class LinkingOpportunityAnalyzer {
 
     // Issue 3: Potential orphan pages (pages with opportunities to link TO but not FROM)
     const targetedPages = new Set();
-    opportunities.forEach(o => {
+    opportunities.forEach((o) => {
       o.suggestedLinks.forEach((l: any) => targetedPages.add(l.targetUrl));
     });
 

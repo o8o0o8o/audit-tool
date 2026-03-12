@@ -36,7 +36,7 @@ class OutboundLinkChecker {
       healthy: 0,
     };
 
-    const links = Array.isArray(pageData.links) ? pageData.links : [] as any[];
+    const links = Array.isArray(pageData.links) ? pageData.links : ([] as any[]);
     let originHost;
     try {
       originHost = new URL(origin).hostname;
@@ -105,9 +105,10 @@ class OutboundLinkChecker {
 
     // Report broken outbound links
     if (info.broken.length > 0) {
-      const brokenList = info.broken.slice(0, 5).map(b =>
-        `<li><a href="${b.url}">${b.url}</a> (HTTP ${b.status})</li>`
-      ).join('');
+      const brokenList = info.broken
+        .slice(0, 5)
+        .map((b) => `<li><a href="${b.url}">${b.url}</a> (HTTP ${b.status})</li>`)
+        .join('');
       issues.push({
         message: `Page has ${info.broken.length} broken outbound link(s)`,
         detail: `<a href="${url}">${url}</a> links to dead external pages:<ul>${brokenList}</ul>${info.broken.length > 5 ? `<p>...and ${info.broken.length - 5} more</p>` : ''}`,
@@ -134,7 +135,7 @@ class OutboundLinkChecker {
       const linkHealth = page.outboundLinkHealth;
       if (!linkHealth) continue;
 
-      for (const broken of (linkHealth.broken || [])) {
+      for (const broken of linkHealth.broken || []) {
         if (!allBroken.has(broken.url)) {
           allBroken.set(broken.url, { status: broken.status, foundOn: [] });
         }
@@ -143,12 +144,15 @@ class OutboundLinkChecker {
     }
 
     if (allBroken.size > 0) {
-      const sorted = [...allBroken.entries()]
-        .sort((a, b) => b[1].foundOn.length - a[1].foundOn.length);
+      const sorted = [...allBroken.entries()].sort((a, b) => b[1].foundOn.length - a[1].foundOn.length);
 
-      const list = sorted.slice(0, 10).map(([brokenUrl, data]) =>
-        `<li><a href="${brokenUrl}">${brokenUrl}</a> (HTTP ${data.status}) - found on ${data.foundOn.length} page(s)</li>`
-      ).join('');
+      const list = sorted
+        .slice(0, 10)
+        .map(
+          ([brokenUrl, data]) =>
+            `<li><a href="${brokenUrl}">${brokenUrl}</a> (HTTP ${data.status}) - found on ${data.foundOn.length} page(s)</li>`,
+        )
+        .join('');
 
       issues.push({
         title: `${allBroken.size} broken outbound link(s) found across the site`,
@@ -183,7 +187,7 @@ class OutboundLinkChecker {
     const lastRequest = domainRequestTimes.get(hostname) || 0;
     const now = Date.now();
     if (now - lastRequest < RATE_LIMIT_MS) {
-      await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_MS - (now - lastRequest)));
+      await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS - (now - lastRequest)));
     }
     domainRequestTimes.set(hostname, Date.now());
 
@@ -193,23 +197,27 @@ class OutboundLinkChecker {
       }, 5000);
 
       const protocol = urlToCheck.startsWith('https') ? https : http;
-      const req = protocol.request(urlToCheck, {
-        method: 'HEAD',
-        timeout: timeoutMs,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
-          'Accept': '*/*',
+      const req = protocol.request(
+        urlToCheck,
+        {
+          method: 'HEAD',
+          timeout: timeoutMs,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
+            Accept: '*/*',
+          },
         },
-      }, (res) => {
-        clearTimeout(timeout);
-        const result = {
-          status: res.statusCode,
-          redirected: res.statusCode! >= 300 && res.statusCode! < 400,
-          redirectTo: res.headers.location || null,
-        };
-        urlCache.set(urlToCheck, result);
-        resolve(result);
-      });
+        (res) => {
+          clearTimeout(timeout);
+          const result = {
+            status: res.statusCode,
+            redirected: res.statusCode! >= 300 && res.statusCode! < 400,
+            redirectTo: res.headers.location || null,
+          };
+          urlCache.set(urlToCheck, result);
+          resolve(result);
+        },
+      );
 
       req.on('error', () => {
         clearTimeout(timeout);

@@ -28,7 +28,13 @@ class ProgressReporter {
    * @param {string} colorScheme - Color scheme: 'default' (red→yellow→green) or 'discovered' (cyan→blue→magenta)
    * @param {boolean} verbose - Whether to show per-URL logging (default: false)
    */
-  constructor(total: number, logInterval: number = 2000, alreadyProcessed: number = 0, colorScheme: string = 'default', verbose: boolean = false) {
+  constructor(
+    total: number,
+    logInterval: number = 2000,
+    alreadyProcessed: number = 0,
+    colorScheme: string = 'default',
+    verbose: boolean = false,
+  ) {
     this.#total = total;
     this.#processed = 0;
     this.#succeeded = 0;
@@ -50,16 +56,18 @@ class ProgressReporter {
       this.#originalConsoleLog = console.log;
       this.#originalConsoleError = console.error;
 
-      const wrapConsole = (originalFn: (...args: unknown[]) => void) => (...args: unknown[]) => {
-        // Clear current progress line, print the message, then redraw
-        process.stdout.clearLine(0);
-        process.stdout.cursorTo(0);
-        originalFn.apply(console, args);
-        // Redraw the last progress line
-        if (this.#lastLine) {
-          process.stdout.write(this.#lastLine);
-        }
-      };
+      const wrapConsole =
+        (originalFn: (...args: unknown[]) => void) =>
+        (...args: unknown[]) => {
+          // Clear current progress line, print the message, then redraw
+          process.stdout.clearLine(0);
+          process.stdout.cursorTo(0);
+          originalFn.apply(console, args);
+          // Redraw the last progress line
+          if (this.#lastLine) {
+            process.stdout.write(this.#lastLine);
+          }
+        };
 
       console.log = wrapConsole(this.#originalConsoleLog);
       console.error = wrapConsole(this.#originalConsoleError);
@@ -151,7 +159,7 @@ class ProgressReporter {
       rate: rate.toFixed(1),
       eta,
       etaFormatted: this.#formatTime(eta * 1000),
-      percentComplete: this.#total > 0 ? ((this.#processed + this.#skipped) / this.#total * 100).toFixed(1) : '0.0',
+      percentComplete: this.#total > 0 ? (((this.#processed + this.#skipped) / this.#total) * 100).toFixed(1) : '0.0',
     };
   }
 
@@ -178,7 +186,9 @@ class ProgressReporter {
       const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
       const rssMB = Math.round(mem.rss / 1024 / 1024);
       memInfo = `Memory:          ${heapUsedMB}MB / ${heapTotalMB}MB heap (${rssMB}MB RSS)`;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Speed rating
     const rate = parseFloat(stats.rate);
@@ -265,9 +275,8 @@ class ProgressReporter {
 
     // Show total progress (processed + skipped from resume)
     const totalDone = stats.processed + stats.skipped;
-    const progressText = stats.skipped > 0
-      ? `${totalDone}/${stats.total} (+${stats.processed} new)`
-      : `${stats.processed}/${stats.total}`;
+    const progressText =
+      stats.skipped > 0 ? `${totalDone}/${stats.total} (+${stats.processed} new)` : `${stats.processed}/${stats.total}`;
 
     const line =
       `${progressBar} ${stats.percentComplete}% | ` +
@@ -288,9 +297,7 @@ class ProgressReporter {
       process.stdout.write(line);
     } else {
       // Non-TTY or verbose mode: print full line with URL details
-      console.log(
-        `${line} | ${statusIcon} ${shortUrl} ${statusText}`
-      );
+      console.log(`${line} | ${statusIcon} ${shortUrl} ${statusText}`);
     }
   }
 
@@ -301,7 +308,7 @@ class ProgressReporter {
   #createProgressBar(percent: number) {
     const width = 20;
     // Clamp filled to [0, width] to handle edge cases (>100% or negative)
-    const filled = Math.min(width, Math.max(0, Math.round(width * percent / 100)));
+    const filled = Math.min(width, Math.max(0, Math.round((width * percent) / 100)));
     const empty = width - filled;
 
     // ANSI color codes
@@ -311,15 +318,15 @@ class ProgressReporter {
     const schemes = {
       // Default: red → yellow → green (sitemap crawl)
       default: {
-        low: '\x1b[31m',    // Red
-        mid: '\x1b[33m',    // Yellow
-        high: '\x1b[32m',   // Green
+        low: '\x1b[31m', // Red
+        mid: '\x1b[33m', // Yellow
+        high: '\x1b[32m', // Green
       },
       // Discovered links: bright red → bright yellow → bright green
       discovered: {
-        low: '\x1b[91m',    // Bright Red
-        mid: '\x1b[93m',    // Bright Yellow
-        high: '\x1b[92m',   // Bright Green
+        low: '\x1b[91m', // Bright Red
+        mid: '\x1b[93m', // Bright Yellow
+        high: '\x1b[92m', // Bright Green
       },
     };
 

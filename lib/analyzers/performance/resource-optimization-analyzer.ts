@@ -48,7 +48,8 @@ class ResourceOptimizationAnalyzer {
         resourceAnalysis.compression.compressedSize += size;
       } else if (resourceType === 'script' || resourceType === 'stylesheet' || resourceType === 'document') {
         resourceAnalysis.compression.uncompressed++;
-        if (size > 5000) { // Only flag significant uncompressed resources
+        if (size > 5000) {
+          // Only flag significant uncompressed resources
           resourceAnalysis.compression.issues.push({
             severity: SEVERITY.MEDIUM,
             url: resourceUrl,
@@ -103,12 +104,16 @@ class ResourceOptimizationAnalyzer {
 
     // Check for render-blocking resources
     const renderBlockingInfo = await chromePage.evaluate(() => {
-      const blockingScripts = Array.from(document.querySelectorAll('script:not([async]):not([defer]):not([type="module"])')).filter((script: any) => {
+      const blockingScripts = Array.from(
+        document.querySelectorAll('script:not([async]):not([defer]):not([type="module"])'),
+      ).filter((script: any) => {
         const src = script.src || '';
         return src && !src.includes('data:');
       });
 
-      const blockingStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"]:not([media="print"])')).filter(link => {
+      const blockingStyles = Array.from(
+        document.querySelectorAll('link[rel="stylesheet"]:not([media="print"])'),
+      ).filter((link) => {
         return !link.hasAttribute('disabled');
       });
 
@@ -120,7 +125,8 @@ class ResourceOptimizationAnalyzer {
 
     resourceAnalysis.renderBlocking.blockingScripts = renderBlockingInfo.blockingScripts;
     resourceAnalysis.renderBlocking.blockingStyles = renderBlockingInfo.blockingStyles;
-    resourceAnalysis.renderBlocking.totalBlocking = renderBlockingInfo.blockingScripts + renderBlockingInfo.blockingStyles;
+    resourceAnalysis.renderBlocking.totalBlocking =
+      renderBlockingInfo.blockingScripts + renderBlockingInfo.blockingStyles;
 
     if (resourceAnalysis.renderBlocking.totalBlocking > THRESHOLDS.RENDER_BLOCKING_MAX) {
       resourceAnalysis.renderBlocking.issues.push({
@@ -131,9 +137,7 @@ class ResourceOptimizationAnalyzer {
     }
 
     // Collect all issues at the top level for reportIssues()
-    (resourceAnalysis as Record<string, any>).issues = [
-      ...resourceAnalysis.renderBlocking.issues,
-    ];
+    (resourceAnalysis as Record<string, any>).issues = [...resourceAnalysis.renderBlocking.issues];
 
     return resourceAnalysis;
   }

@@ -41,7 +41,7 @@ class StructuredDataValidator {
       schemaStats.pagesWithSchema++;
 
       // Analyze each schema type
-      for (const schema of (page.structuredData.jsonLdSchemas || [])) {
+      for (const schema of page.structuredData.jsonLdSchemas || []) {
         const type = schema.type;
 
         // Count schema types
@@ -53,7 +53,7 @@ class StructuredDataValidator {
             url,
             name: schema.raw?.name,
             type,
-            schema: schema.raw
+            schema: schema.raw,
           });
         }
 
@@ -62,7 +62,7 @@ class StructuredDataValidator {
           schemaStats.websiteSchemas.push({
             url,
             name: schema.raw?.name,
-            schema: schema.raw
+            schema: schema.raw,
           });
         }
 
@@ -102,14 +102,16 @@ class StructuredDataValidator {
     // Check 1: Organization schema consistency
     if (schemaStats.organizationSchemas.length > 1) {
       // Check if all Organization schemas have the same name
-      const orgNames = new Set(schemaStats.organizationSchemas.map(o => o.name).filter(Boolean));
+      const orgNames = new Set(schemaStats.organizationSchemas.map((o) => o.name).filter(Boolean));
 
       if (orgNames.size > 1) {
-        const nameList = Array.from(orgNames).map(name => `<li>"${name}"</li>`).join('');
+        const nameList = Array.from(orgNames)
+          .map((name) => `<li>"${name}"</li>`)
+          .join('');
         issues.push({
           title: `Inconsistent Organization schema across pages`,
           description: `${orgNames.size} different organization names found in structured data. Organization schema should be consistent site-wide:<ul>${nameList}</ul>`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
 
@@ -118,24 +120,24 @@ class StructuredDataValidator {
         issues.push({
           title: `Organization schema not present on all pages`,
           description: `Organization schema found on only ${schemaStats.organizationSchemas.length} out of ${schemaStats.pagesWithSchema} pages with structured data. Consider adding it site-wide for better brand recognition.`,
-          severity: SEVERITY.LOW
+          severity: SEVERITY.LOW,
         });
       }
     } else if (schemaStats.organizationSchemas.length === 0 && schemaStats.pagesWithSchema > 0) {
       issues.push({
         title: `No Organization schema found`,
         description: `No Organization or LocalBusiness schema detected on any page. Adding this helps search engines understand your brand.`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
     // Check 2: WebSite schema (should only appear once, typically on homepage)
     if (schemaStats.websiteSchemas.length > 1) {
-      const urlList = schemaStats.websiteSchemas.map(w => `<li><a href="${w.url}">${w.url}</a></li>`).join('');
+      const urlList = schemaStats.websiteSchemas.map((w) => `<li><a href="${w.url}">${w.url}</a></li>`).join('');
       issues.push({
         title: `WebSite schema appears on multiple pages`,
         description: `WebSite schema found on ${schemaStats.websiteSchemas.length} pages. It should typically only appear on the homepage:<ul>${urlList}</ul>`,
-        severity: SEVERITY.LOW
+        severity: SEVERITY.LOW,
       });
     }
 
@@ -148,7 +150,7 @@ class StructuredDataValidator {
         issues.push({
           title: `Duplicate Article schema with same headline`,
           description: `Article headline "${headline}" appears on ${urls.length} different pages:<ul>${urlList}</ul>`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -162,7 +164,7 @@ class StructuredDataValidator {
         issues.push({
           title: `Duplicate Product schema with same name`,
           description: `Product name "${productName}" appears on ${urls.length} different pages:<ul>${urlList}</ul>`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -172,7 +174,7 @@ class StructuredDataValidator {
       issues.push({
         title: `Low structured data coverage`,
         description: `Only ${coveragePercent}% of pages (${schemaStats.pagesWithSchema}/${totalPages}) have structured data. Consider adding schema markup to more pages for better SEO.`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
@@ -199,7 +201,7 @@ class StructuredDataValidator {
       organizationSchemas: schemaStats.organizationSchemas,
       websiteSchemas: schemaStats.websiteSchemas,
       articlePages: schemaStats.articlePages,
-      productPages: schemaStats.productPages
+      productPages: schemaStats.productPages,
     };
   }
 }

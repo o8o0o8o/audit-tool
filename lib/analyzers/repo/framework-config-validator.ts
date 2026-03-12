@@ -64,21 +64,23 @@ class FrameworkConfigValidator {
     } else {
       warnings.push({
         message: 'No Next.js config file found',
-        detail: 'No <code>next.config.js</code> or <code>next.config.mjs</code> found. Default configuration will be used.',
+        detail:
+          'No <code>next.config.js</code> or <code>next.config.mjs</code> found. Default configuration will be used.',
         severity: SEVERITY.LOW,
       });
     }
 
     // App Router specific checks
     if (router === 'app' || router === 'both') {
-      const appDir = fs.existsSync(path.join(repoPath, 'app', 'layout.tsx')) ||
-                     fs.existsSync(path.join(repoPath, 'app', 'layout.js')) ||
-                     fs.existsSync(path.join(repoPath, 'app', 'page.tsx'))
-        ? 'app' : 'src/app';
+      const appDir =
+        fs.existsSync(path.join(repoPath, 'app', 'layout.tsx')) ||
+        fs.existsSync(path.join(repoPath, 'app', 'layout.js')) ||
+        fs.existsSync(path.join(repoPath, 'app', 'page.tsx'))
+          ? 'app'
+          : 'src/app';
 
       // Check for robots.ts
-      if (!this.#fileExists(repoPath, appDir, 'robots.ts') &&
-          !this.#fileExists(repoPath, appDir, 'robots.js')) {
+      if (!this.#fileExists(repoPath, appDir, 'robots.ts') && !this.#fileExists(repoPath, appDir, 'robots.js')) {
         issues.push({
           message: 'Missing robots.ts in Next.js App Router',
           detail: `No <code>${appDir}/robots.ts</code> found. Create one to programmatically generate robots.txt.`,
@@ -87,9 +89,11 @@ class FrameworkConfigValidator {
       }
 
       // Check for sitemap.ts
-      if (!this.#fileExists(repoPath, appDir, 'sitemap.ts') &&
-          !this.#fileExists(repoPath, appDir, 'sitemap.js') &&
-          !this.#fileExists(repoPath, appDir, 'sitemap.xml')) {
+      if (
+        !this.#fileExists(repoPath, appDir, 'sitemap.ts') &&
+        !this.#fileExists(repoPath, appDir, 'sitemap.js') &&
+        !this.#fileExists(repoPath, appDir, 'sitemap.xml')
+      ) {
         issues.push({
           message: 'Missing sitemap.ts in Next.js App Router',
           detail: `No <code>${appDir}/sitemap.ts</code> found. Create one to programmatically generate your sitemap.`,
@@ -131,11 +135,19 @@ class FrameworkConfigValidator {
     // Check for next/image usage vs plain <img> in JSX/TSX files only
     const jsxPattern = /\.(tsx|jsx)$/;
     const imgFiles = this.#searchInSrcDirs(repoPath, frameworkInfo.srcDirs, /<img\s+[^>]*/, jsxPattern);
-    const nextImageImports = this.#searchInSrcDirs(repoPath, frameworkInfo.srcDirs, /from\s+['"]next\/image['"]/, jsxPattern);
+    const nextImageImports = this.#searchInSrcDirs(
+      repoPath,
+      frameworkInfo.srcDirs,
+      /from\s+['"]next\/image['"]/,
+      jsxPattern,
+    );
     if (imgFiles.length > 0 && nextImageImports.length === 0) {
       issues.push({
         message: 'Using plain <img> tags instead of next/image',
-        detail: `Found ${imgFiles.length} JSX/TSX file(s) using <code>&lt;img&gt;</code> tags but no imports of <code>next/image</code>. Use the Next.js Image component for automatic optimization. Files: ${imgFiles.slice(0, 3).map(f => `<code>${f}</code>`).join(', ')}${imgFiles.length > 3 ? ` and ${imgFiles.length - 3} more` : ''}`,
+        detail: `Found ${imgFiles.length} JSX/TSX file(s) using <code>&lt;img&gt;</code> tags but no imports of <code>next/image</code>. Use the Next.js Image component for automatic optimization. Files: ${imgFiles
+          .slice(0, 3)
+          .map((f) => `<code>${f}</code>`)
+          .join(', ')}${imgFiles.length > 3 ? ` and ${imgFiles.length - 3} more` : ''}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -155,9 +167,10 @@ class FrameworkConfigValidator {
       const configContent = this.#readFile(repoPath, configFile);
       if (configContent) {
         // Check for app.head configuration - look for actual config patterns
-        const hasAppHead = /app\s*:\s*\{[\s\S]*?head\s*:/m.test(configContent) ||
-                           /app\s*:\s*\{[\s\S]*?head\s*\(/m.test(configContent) ||
-                           this.#hasConfigKey(configContent, 'head');
+        const hasAppHead =
+          /app\s*:\s*\{[\s\S]*?head\s*:/m.test(configContent) ||
+          /app\s*:\s*\{[\s\S]*?head\s*\(/m.test(configContent) ||
+          this.#hasConfigKey(configContent, 'head');
         if (!hasAppHead) {
           warnings.push({
             message: 'Nuxt config missing app.head configuration',
@@ -167,14 +180,16 @@ class FrameworkConfigValidator {
         }
 
         // Check for SEO module in modules array
-        const hasNuxtSEO = /@nuxtjs\/seo/.test(configContent) ||
-                           /nuxt-seo-kit/.test(configContent) ||
-                           /nuxt-simple-sitemap/.test(configContent) ||
-                           /@nuxtjs\/sitemap/.test(configContent);
+        const hasNuxtSEO =
+          /@nuxtjs\/seo/.test(configContent) ||
+          /nuxt-seo-kit/.test(configContent) ||
+          /nuxt-simple-sitemap/.test(configContent) ||
+          /@nuxtjs\/sitemap/.test(configContent);
         if (!hasNuxtSEO) {
           warnings.push({
             message: 'No Nuxt SEO module detected',
-            detail: 'Consider adding <code>@nuxtjs/seo</code> or <code>nuxt-simple-sitemap</code> for automatic sitemap and SEO meta generation.',
+            detail:
+              'Consider adding <code>@nuxtjs/seo</code> or <code>nuxt-simple-sitemap</code> for automatic sitemap and SEO meta generation.',
             severity: SEVERITY.LOW,
           });
         }
@@ -188,7 +203,8 @@ class FrameworkConfigValidator {
     if (useHeadFiles.length === 0 && useSeoMetaFiles.length === 0) {
       warnings.push({
         message: 'No useHead or useSeoMeta usage found',
-        detail: 'No files use <code>useHead()</code> or <code>useSeoMeta()</code> for dynamic meta tags. Consider using these composables for per-page SEO.',
+        detail:
+          'No files use <code>useHead()</code> or <code>useSeoMeta()</code> for dynamic meta tags. Consider using these composables for per-page SEO.',
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -235,16 +251,22 @@ class FrameworkConfigValidator {
         }
 
         // Check for head management - Gatsby 4.19+ has Head API built-in
-        const hasHeadManagement = configContent.includes('gatsby-plugin-react-helmet') ||
-                                   configContent.includes('react-helmet');
+        const hasHeadManagement =
+          configContent.includes('gatsby-plugin-react-helmet') || configContent.includes('react-helmet');
         // Also check if using Gatsby Head API in page files
         const jsxPattern = /\.(tsx|jsx|js)$/;
-        const headExports = this.#searchInSrcDirs(repoPath, ['src/pages', 'src/templates'], /export\s+(const|function)\s+Head\b/, jsxPattern);
+        const headExports = this.#searchInSrcDirs(
+          repoPath,
+          ['src/pages', 'src/templates'],
+          /export\s+(const|function)\s+Head\b/,
+          jsxPattern,
+        );
 
         if (!hasHeadManagement && headExports.length === 0) {
           warnings.push({
             message: 'No head management strategy detected',
-            detail: 'No <code>gatsby-plugin-react-helmet</code> or Gatsby Head API exports found. Ensure you have a strategy for managing meta tags.',
+            detail:
+              'No <code>gatsby-plugin-react-helmet</code> or Gatsby Head API exports found. Ensure you have a strategy for managing meta tags.',
             severity: SEVERITY.MEDIUM,
           });
         }
@@ -252,11 +274,11 @@ class FrameworkConfigValidator {
     }
 
     // Check for gatsby-ssr.js
-    if (!fs.existsSync(path.join(repoPath, 'gatsby-ssr.js')) &&
-        !fs.existsSync(path.join(repoPath, 'gatsby-ssr.ts'))) {
+    if (!fs.existsSync(path.join(repoPath, 'gatsby-ssr.js')) && !fs.existsSync(path.join(repoPath, 'gatsby-ssr.ts'))) {
       warnings.push({
         message: 'No gatsby-ssr.js found',
-        detail: 'Consider creating <code>gatsby-ssr.js</code> to inject global meta tags or structured data during server-side rendering.',
+        detail:
+          'Consider creating <code>gatsby-ssr.js</code> to inject global meta tags or structured data during server-side rendering.',
         severity: SEVERITY.LOW,
       });
     }
@@ -296,7 +318,8 @@ class FrameworkConfigValidator {
         if (!content) continue;
         // Look for <head> containing dynamic title or meta from props/frontmatter
         const hasHead = /<head[\s>]/.test(content);
-        const hasDynamicTitle = /<title>.*\{/.test(content) || /Astro\.props/.test(content) || /\{.*title.*\}/.test(content);
+        const hasDynamicTitle =
+          /<title>.*\{/.test(content) || /Astro\.props/.test(content) || /\{.*title.*\}/.test(content);
         if (hasHead && hasDynamicTitle) {
           hasHeadMeta = true;
           break;
@@ -305,7 +328,8 @@ class FrameworkConfigValidator {
       if (!hasHeadMeta && layoutFiles.length > 0) {
         warnings.push({
           message: 'Layout files may lack dynamic meta tags',
-          detail: 'Layout files in <code>src/layouts/</code> do not appear to have dynamic <code>&lt;title&gt;</code> or meta tags from props.',
+          detail:
+            'Layout files in <code>src/layouts/</code> do not appear to have dynamic <code>&lt;title&gt;</code> or meta tags from props.',
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -322,21 +346,27 @@ class FrameworkConfigValidator {
     const warnings: Record<string, any>[] = [];
 
     // Check for robots.txt
-    if (!fs.existsSync(path.join(repoPath, 'public/robots.txt')) &&
-        !fs.existsSync(path.join(repoPath, 'static/robots.txt'))) {
+    if (
+      !fs.existsSync(path.join(repoPath, 'public/robots.txt')) &&
+      !fs.existsSync(path.join(repoPath, 'static/robots.txt'))
+    ) {
       warnings.push({
         message: 'No robots.txt found in public/static directory',
-        detail: 'No <code>robots.txt</code> found in <code>public/</code> or <code>static/</code>. Ensure one is generated during build.',
+        detail:
+          'No <code>robots.txt</code> found in <code>public/</code> or <code>static/</code>. Ensure one is generated during build.',
         severity: SEVERITY.LOW,
       });
     }
 
     // Check for sitemap
-    if (!fs.existsSync(path.join(repoPath, 'public/sitemap.xml')) &&
-        !fs.existsSync(path.join(repoPath, 'static/sitemap.xml'))) {
+    if (
+      !fs.existsSync(path.join(repoPath, 'public/sitemap.xml')) &&
+      !fs.existsSync(path.join(repoPath, 'static/sitemap.xml'))
+    ) {
       warnings.push({
         message: 'No sitemap.xml found in public/static directory',
-        detail: 'No static <code>sitemap.xml</code> found. Ensure a sitemap is generated during build or served dynamically.',
+        detail:
+          'No static <code>sitemap.xml</code> found. Ensure a sitemap is generated during build or served dynamically.',
         severity: SEVERITY.LOW,
       });
     }

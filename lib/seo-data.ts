@@ -22,10 +22,9 @@ import { SitemapParser } from './parsers/sitemap-parser';
 import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { parse } from 'node-html-parser';
 
-
 class SEOData {
   // Internal results state - uses index signature because analyzers add dynamic keys
-  #results: Record<string, any>;  
+  #results: Record<string, any>;
   #proceed: boolean;
   #perf: boolean;
   #saveHtml: boolean;
@@ -52,7 +51,15 @@ class SEOData {
   file!: string;
   _currentPhase: { label: string; startMs: number } | null = null;
 
-  constructor(origin: string | null, proceed = false, perf = false, saveHtml = false, concurrency = 5, sitemapFile: string | null = null, options: SEODataOptions = {}) {
+  constructor(
+    origin: string | null,
+    proceed = false,
+    perf = false,
+    saveHtml = false,
+    concurrency = 5,
+    sitemapFile: string | null = null,
+    options: SEODataOptions = {},
+  ) {
     this.#sitemapFile = sitemapFile;
 
     // When sitemap file is provided, origin may be null (derived later)
@@ -78,7 +85,7 @@ class SEOData {
     this.#incomingLinksTracking = new Map();
 
     if (validatedUrl) {
-      this.origin = validatedUrl.replace(/\s/g, "").replace(/\/$/, "");
+      this.origin = validatedUrl.replace(/\s/g, '').replace(/\/$/, '');
     } else {
       // Origin will be derived from sitemap URLs in #parseSitemapFile()
       this.origin = null;
@@ -89,7 +96,7 @@ class SEOData {
     this.#errorAggregator = new ErrorAggregator();
 
     this.#results = {
-      robots: { sitemaps: [], "user-agent": {} },
+      robots: { sitemaps: [], 'user-agent': {} },
       sitemaps: { urls: {}, total: 0 },
       isMultiLang: false,
       pageData: {
@@ -175,7 +182,7 @@ class SEOData {
         saveData: this.saveData.bind(this),
         checkAttempts: this.#checkAttempts.bind(this),
         saveAttempt: this.#saveAttempt.bind(this),
-      }
+      },
     );
   }
 
@@ -215,7 +222,7 @@ class SEOData {
     const summary = ScoreCalculator.calculateSummary(
       this.#results.analysis,
       this.#results.pageData,
-      this.#results.pageData.pages
+      this.#results.pageData.pages,
     );
 
     this.#results.analysis.summary = summary;
@@ -266,10 +273,7 @@ class SEOData {
 
   async #restoreProgress() {
     try {
-      const restored = await this.#progressManager.loadProgress(
-        this.domainName!,
-        this.resultsDir
-      );
+      const restored = await this.#progressManager.loadProgress(this.domainName!, this.resultsDir);
 
       // Update instance state from restored data
       this.#results = restored.results;
@@ -278,9 +282,7 @@ class SEOData {
       if (!(this.#results.pageData.processedPages instanceof Set)) {
         console.log(`  ⚠️  Converting processedPages to Set (was ${typeof this.#results.pageData.processedPages})`);
         this.#results.pageData.processedPages = new Set(
-          Array.isArray(this.#results.pageData.processedPages)
-            ? this.#results.pageData.processedPages
-            : []
+          Array.isArray(this.#results.pageData.processedPages) ? this.#results.pageData.processedPages : [],
         );
       }
 
@@ -313,7 +315,7 @@ class SEOData {
 
     // Update results with parsed data
     this.#results.robots.sitemaps = result.sitemaps;
-    this.#results.robots["user-agent"] = result.userAgents;
+    this.#results.robots['user-agent'] = result.userAgents;
 
     // Register any errors found during parsing
     result.errors.forEach((error: { message: string; detail: string | null; severity: string }) => {
@@ -322,21 +324,20 @@ class SEOData {
 
     // Analyze AI crawler rules in robots.txt
     const aeoRobotsResult = AEOAnalyzer.analyzeRobotsTxt(result, this.origin!);
-    aeoRobotsResult.issues.forEach(i => this.saveError(i.message!, i.detail!, i.severity));
-    aeoRobotsResult.warnings.forEach(w => this.saveError(w.message!, w.detail!, w.severity));
+    aeoRobotsResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
+    aeoRobotsResult.warnings.forEach((w) => this.saveError(w.message!, w.detail!, w.severity));
     this.#results.aeo = { robotsTxt: aeoRobotsResult.info };
 
     // Check for llms.txt
     try {
       const llmsResult = await AEOAnalyzer.analyzeLlmsTxt(this.origin!);
-      llmsResult.issues.forEach(i => this.saveError(i.message!, i.detail!, i.severity));
-      llmsResult.warnings.forEach(w => this.saveError(w.message!, w.detail!, w.severity));
+      llmsResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
+      llmsResult.warnings.forEach((w) => this.saveError(w.message!, w.detail!, w.severity));
       this.#results.aeo.llmsTxt = llmsResult.info;
     } catch (e: unknown) {
       console.log('llms.txt check skipped:', (e as Error).message);
     }
   }
-
 
   /**
    * Parse a local sitemap XML file and derive origin from its URLs
@@ -392,10 +393,7 @@ class SEOData {
 
   async #analyzeSitemaps() {
     // Use SitemapParser module
-    const result = await SitemapParser.parseSitemaps(
-      this.origin!,
-      this.#results.robots.sitemaps
-    );
+    const result = await SitemapParser.parseSitemaps(this.origin!, this.#results.robots.sitemaps);
 
     // Store sitemap data
     Object.assign(this.#results.sitemaps, result.sitemaps);
@@ -415,8 +413,8 @@ class SEOData {
       let filtered = urls;
 
       if (this.#exclude.length > 0) {
-        const patterns = this.#exclude.map(p => new RegExp(p, 'i'));
-        filtered = filtered.filter(url => !patterns.some(re => re.test(url)));
+        const patterns = this.#exclude.map((p) => new RegExp(p, 'i'));
+        filtered = filtered.filter((url) => !patterns.some((re) => re.test(url)));
         const excluded = urls.length - filtered.length;
         if (excluded > 0) console.log(`  Excluded ${excluded} URLs matching --exclude patterns`);
       }
@@ -427,7 +425,7 @@ class SEOData {
       }
 
       // Rebuild sitemaps.urls with only filtered URLs
-      const newUrls: Record<string, any> = {};  
+      const newUrls: Record<string, any> = {};
       for (const url of filtered) {
         newUrls[url] = this.#results.sitemaps.urls[url];
       }
@@ -573,7 +571,7 @@ class SEOData {
       this.#results.pageData as any,
       this.origin!,
       this.#results.isMultiLang,
-      this.saveError.bind(this) as any
+      this.saveError.bind(this) as any,
     );
 
     // Stop timing

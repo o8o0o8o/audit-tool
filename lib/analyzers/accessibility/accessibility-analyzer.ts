@@ -54,17 +54,75 @@ class AccessibilityAnalyzer {
 
       // Valid ARIA roles
       const validAriaRoles = [
-        'alert', 'alertdialog', 'application', 'article', 'banner', 'button',
-        'cell', 'checkbox', 'columnheader', 'combobox', 'complementary',
-        'contentinfo', 'definition', 'dialog', 'directory', 'document', 'feed',
-        'figure', 'form', 'grid', 'gridcell', 'group', 'heading', 'img', 'link',
-        'list', 'listbox', 'listitem', 'log', 'main', 'marquee', 'math', 'menu',
-        'menubar', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'navigation',
-        'none', 'note', 'option', 'presentation', 'progressbar', 'radio',
-        'radiogroup', 'region', 'row', 'rowgroup', 'rowheader', 'scrollbar',
-        'search', 'searchbox', 'separator', 'slider', 'spinbutton', 'status',
-        'switch', 'tab', 'table', 'tablist', 'tabpanel', 'term', 'textbox',
-        'timer', 'toolbar', 'tooltip', 'tree', 'treegrid', 'treeitem'
+        'alert',
+        'alertdialog',
+        'application',
+        'article',
+        'banner',
+        'button',
+        'cell',
+        'checkbox',
+        'columnheader',
+        'combobox',
+        'complementary',
+        'contentinfo',
+        'definition',
+        'dialog',
+        'directory',
+        'document',
+        'feed',
+        'figure',
+        'form',
+        'grid',
+        'gridcell',
+        'group',
+        'heading',
+        'img',
+        'link',
+        'list',
+        'listbox',
+        'listitem',
+        'log',
+        'main',
+        'marquee',
+        'math',
+        'menu',
+        'menubar',
+        'menuitem',
+        'menuitemcheckbox',
+        'menuitemradio',
+        'navigation',
+        'none',
+        'note',
+        'option',
+        'presentation',
+        'progressbar',
+        'radio',
+        'radiogroup',
+        'region',
+        'row',
+        'rowgroup',
+        'rowheader',
+        'scrollbar',
+        'search',
+        'searchbox',
+        'separator',
+        'slider',
+        'spinbutton',
+        'status',
+        'switch',
+        'tab',
+        'table',
+        'tablist',
+        'tabpanel',
+        'term',
+        'textbox',
+        'timer',
+        'toolbar',
+        'tooltip',
+        'tree',
+        'treegrid',
+        'treeitem',
       ];
 
       // Check language attribute
@@ -96,9 +154,8 @@ class AccessibilityAnalyzer {
       for (const el of roleElements) {
         const role = el.getAttribute('role');
         if (interactiveRoles.includes(role!)) {
-          const hasLabel = el.hasAttribute('aria-label') ||
-                          el.hasAttribute('aria-labelledby') ||
-                          el.textContent.trim() !== '';
+          const hasLabel =
+            el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby') || el.textContent.trim() !== '';
           if (!hasLabel) {
             analysis.aria.missingLabels++;
             analysis.aria.issues.push(`Element with role="${role}" missing accessible label`);
@@ -133,7 +190,9 @@ class AccessibilityAnalyzer {
           analysis.forms.inputsWithLabels++;
         } else {
           analysis.forms.inputsWithoutLabels++;
-          analysis.forms.issues.push(`Input without associated label: type="${(input as HTMLInputElement).type || 'text'}"`);
+          analysis.forms.issues.push(
+            `Input without associated label: type="${(input as HTMLInputElement).type || 'text'}"`,
+          );
           analysis.a11yScore -= 3;
         }
       }
@@ -152,7 +211,9 @@ class AccessibilityAnalyzer {
       }
 
       // Check interactive elements for focus indicators
-      const interactiveElements = document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"]');
+      const interactiveElements = document.querySelectorAll(
+        'a, button, input, select, textarea, [role="button"], [role="link"]',
+      );
       for (const el of interactiveElements) {
         // Note: getComputedStyle cannot check :focus pseudo-class styles;
         // we check the element's default outline which, if set to none, suggests
@@ -170,7 +231,9 @@ class AccessibilityAnalyzer {
       }
 
       if (analysis.keyboard.elementsWithoutFocus > 5) {
-        analysis.keyboard.issues.push(`${analysis.keyboard.elementsWithoutFocus} interactive elements missing focus indicators`);
+        analysis.keyboard.issues.push(
+          `${analysis.keyboard.elementsWithoutFocus} interactive elements missing focus indicators`,
+        );
         analysis.a11yScore -= 5;
       }
 
@@ -198,8 +261,11 @@ class AccessibilityAnalyzer {
       if (firstLink) {
         const href = firstLink.getAttribute('href');
         const text = firstLink.textContent.toLowerCase();
-        analysis.semantic.hasSkipLink = !!(href && href.startsWith('#') &&
-          (text.includes('skip') || text.includes('jump')));
+        analysis.semantic.hasSkipLink = !!(
+          href &&
+          href.startsWith('#') &&
+          (text.includes('skip') || text.includes('jump'))
+        );
       }
 
       if (!analysis.semantic.hasSkipLink) {
@@ -220,8 +286,11 @@ class AccessibilityAnalyzer {
 
         // Check touch target size
         const rect = link.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0 &&
-            (rect.width < thresholds.MIN_TOUCH_TARGET_SIZE || rect.height < thresholds.MIN_TOUCH_TARGET_SIZE)) {
+        if (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          (rect.width < thresholds.MIN_TOUCH_TARGET_SIZE || rect.height < thresholds.MIN_TOUCH_TARGET_SIZE)
+        ) {
           analysis.interactive.smallTouchTargets++;
         }
       }
@@ -238,14 +307,19 @@ class AccessibilityAnalyzer {
 
         // Check touch target size
         const rect = button.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0 &&
-            (rect.width < thresholds.MIN_TOUCH_TARGET_SIZE || rect.height < thresholds.MIN_TOUCH_TARGET_SIZE)) {
+        if (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          (rect.width < thresholds.MIN_TOUCH_TARGET_SIZE || rect.height < thresholds.MIN_TOUCH_TARGET_SIZE)
+        ) {
           analysis.interactive.smallTouchTargets++;
         }
       }
 
       if (analysis.interactive.smallTouchTargets > 0) {
-        analysis.interactive.issues.push(`${analysis.interactive.smallTouchTargets} touch targets smaller than ${thresholds.MIN_TOUCH_TARGET_SIZE}px`);
+        analysis.interactive.issues.push(
+          `${analysis.interactive.smallTouchTargets} touch targets smaller than ${thresholds.MIN_TOUCH_TARGET_SIZE}px`,
+        );
         analysis.a11yScore -= 3;
       }
 

@@ -24,19 +24,27 @@ const AI_CRAWLERS = [
 
 // Semantic HTML elements that help AI understand structure
 const SEMANTIC_ELEMENTS = [
-  'article', 'section', 'nav', 'aside', 'header', 'footer',
-  'main', 'figure', 'figcaption', 'details', 'summary',
-  'time', 'mark', 'address',
+  'article',
+  'section',
+  'nav',
+  'aside',
+  'header',
+  'footer',
+  'main',
+  'figure',
+  'figcaption',
+  'details',
+  'summary',
+  'time',
+  'mark',
+  'address',
 ];
 
 // Generic container elements
 const GENERIC_ELEMENTS = ['div', 'span'];
 
 // FAQ-like patterns that are valuable for AI extraction
-const FAQ_PATTERNS = [
-  /(?:faq|frequently\s+asked|questions?\s+and\s+answers?)/i,
-  /(?:q\s*&\s*a|q:\s|a:\s)/i,
-];
+const FAQ_PATTERNS = [/(?:faq|frequently\s+asked|questions?\s+and\s+answers?)/i, /(?:q\s*&\s*a|q:\s|a:\s)/i];
 
 class AEOAnalyzer {
   /**
@@ -93,7 +101,13 @@ class AEOAnalyzer {
    * Analyze semantic HTML usage
    * @private
    */
-  static #analyzeSemanticHTML(parsedPage: ParsedPage, info: Record<string, any>, issues: Issue[], warnings: Issue[], url: string) {
+  static #analyzeSemanticHTML(
+    parsedPage: ParsedPage,
+    info: Record<string, any>,
+    issues: Issue[],
+    warnings: Issue[],
+    url: string,
+  ) {
     let semanticCount = 0;
     let genericCount = 0;
 
@@ -111,9 +125,7 @@ class AEOAnalyzer {
 
     info.totalElements = semanticCount + genericCount;
     info.genericElements = genericCount;
-    info.semanticHTMLRatio = info.totalElements > 0
-      ? Math.round((semanticCount / info.totalElements) * 100)
-      : 0;
+    info.semanticHTMLRatio = info.totalElements > 0 ? Math.round((semanticCount / info.totalElements) * 100) : 0;
 
     // Check for missing key semantic elements
     if (!info.semanticElements.main) {
@@ -184,9 +196,7 @@ class AEOAnalyzer {
 
     // Check for tables with headers (good for structured data extraction)
     const tables = parsedPage.querySelectorAll('table');
-    info.hasStructuredTables = Array.from(tables).some((table: any) =>
-      table.querySelector('th') !== null
-    );
+    info.hasStructuredTables = Array.from(tables).some((table: any) => table.querySelector('th') !== null);
   }
 
   /**
@@ -200,7 +210,7 @@ class AEOAnalyzer {
     info.hasFAQSchema = html.includes('FAQPage') || html.includes('QAPage');
 
     // Check for FAQ-like content patterns
-    info.hasFAQContent = FAQ_PATTERNS.some(pattern => pattern.test(html));
+    info.hasFAQContent = FAQ_PATTERNS.some((pattern) => pattern.test(html));
 
     // Check for structured Q&A (details/summary or similar patterns)
     const detailsElements = parsedPage.querySelectorAll('details');
@@ -241,7 +251,7 @@ class AEOAnalyzer {
   static #analyzeDatetimeMarkup(parsedPage: ParsedPage, info: Record<string, any>) {
     const timeElements = parsedPage.querySelectorAll('time[datetime]');
     const dateMeta = parsedPage.querySelector(
-      'meta[property="article:published_time"], meta[property="article:modified_time"]'
+      'meta[property="article:published_time"], meta[property="article:modified_time"]',
     );
 
     info.hasDatetimeMarkup = timeElements.length > 0 || !!dateMeta;
@@ -354,7 +364,7 @@ class AEOAnalyzer {
     if (info.blockedCrawlers.length > 0) {
       const crawlerList = info.blockedCrawlers
         .map((name: string) => {
-          const c = AI_CRAWLERS.find(c => c.name === name);
+          const c = AI_CRAWLERS.find((c) => c.name === name);
           return `${name} (${c?.owner || 'unknown'})`;
         })
         .join(', ');

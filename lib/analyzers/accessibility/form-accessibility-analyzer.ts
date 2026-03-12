@@ -63,8 +63,10 @@ class FormAccessibilityAnalyzer {
     }
 
     // Missing autocomplete (UX and accessibility)
-    const autocompleteInputCount = formData.forms.reduce((sum: number, f: Record<string, any>) =>
-      sum + f.inputs.filter((i: Record<string, any>) => i.shouldHaveAutocomplete).length, 0
+    const autocompleteInputCount = formData.forms.reduce(
+      (sum: number, f: Record<string, any>) =>
+        sum + f.inputs.filter((i: Record<string, any>) => i.shouldHaveAutocomplete).length,
+      0,
     );
     if (formData.inputsWithoutAutocomplete > 0 && autocompleteInputCount > 0) {
       warnings.push({
@@ -125,9 +127,8 @@ class FormAccessibilityAnalyzer {
     // Calculate accessibility score
     const totalChecks = formData.totalInputs * 3; // label, autocomplete, aria
     const failedChecks = formData.inputsWithoutLabels * 2 + formData.inputsWithoutAutocomplete;
-    formData.accessibilityScore = totalChecks > 0
-      ? Math.max(0, Math.round(100 - (failedChecks / totalChecks) * 100))
-      : 100;
+    formData.accessibilityScore =
+      totalChecks > 0 ? Math.max(0, Math.round(100 - (failedChecks / totalChecks) * 100)) : 100;
 
     return { issues, warnings, formData };
   }
@@ -277,9 +278,28 @@ class FormAccessibilityAnalyzer {
   static #shouldHaveAutocomplete(type: string, name: string | null) {
     const autocompleteTypes = ['text', 'email', 'tel', 'url', 'password', 'search'];
     const autocompleteNames = [
-      'name', 'email', 'phone', 'tel', 'address', 'city', 'state', 'zip', 'postal',
-      'country', 'cc', 'card', 'cvv', 'username', 'password', 'fname', 'lname',
-      'firstname', 'lastname', 'street', 'organization', 'company',
+      'name',
+      'email',
+      'phone',
+      'tel',
+      'address',
+      'city',
+      'state',
+      'zip',
+      'postal',
+      'country',
+      'cc',
+      'card',
+      'cvv',
+      'username',
+      'password',
+      'fname',
+      'lname',
+      'firstname',
+      'lastname',
+      'street',
+      'organization',
+      'company',
     ];
 
     if (!autocompleteTypes.includes(type)) {
@@ -291,7 +311,7 @@ class FormAccessibilityAnalyzer {
     }
 
     const nameLower = name.toLowerCase();
-    return autocompleteNames.some(n => nameLower.includes(n));
+    return autocompleteNames.some((n) => nameLower.includes(n));
   }
 
   /**

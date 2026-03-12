@@ -27,7 +27,10 @@ export function validateURL(urlString: string): ValidationResult {
 
     // Only allow HTTP/HTTPS protocols
     if (!['http:', 'https:'].includes(url.protocol)) {
-      return { valid: false, error: `Unsupported protocol: ${url.protocol}. Only http: and https: are allowed.\n  Hint: Use https://${url.hostname} instead.` };
+      return {
+        valid: false,
+        error: `Unsupported protocol: ${url.protocol}. Only http: and https: are allowed.\n  Hint: Use https://${url.hostname} instead.`,
+      };
     }
 
     // Check for valid hostname
@@ -44,10 +47,10 @@ export function validateURL(urlString: string): ValidationResult {
       /^192\.168\./,
       /^::1$/,
       /^fc00:/,
-      /^fe80:/
+      /^fe80:/,
     ];
 
-    const isPrivate = privatePatterns.some(pattern => pattern.test(url.hostname));
+    const isPrivate = privatePatterns.some((pattern) => pattern.test(url.hostname));
     if (isPrivate) {
       console.warn(`\u26A0\uFE0F  Warning: Auditing private/local address: ${url.hostname}`);
     }
@@ -171,7 +174,7 @@ export function containsSuspiciousPatterns(input: string): boolean {
     /vbscript:/i,
   ];
 
-  return suspiciousPatterns.some(pattern => pattern.test(input));
+  return suspiciousPatterns.some((pattern) => pattern.test(input));
 }
 
 /**
@@ -190,7 +193,7 @@ export class RateLimiter {
 
   isAllowed(): boolean {
     const now = Date.now();
-    this.requests = this.requests.filter(time => now - time < this.windowMs);
+    this.requests = this.requests.filter((time) => now - time < this.windowMs);
 
     if (this.requests.length >= this.maxRequests) {
       return false;
@@ -255,35 +258,26 @@ if (require.main === module) {
     'invalid-url',
     'javascript:alert(1)',
     'https://192.168.1.1',
-    'ftp://example.com'
+    'ftp://example.com',
   ];
 
   console.log('URL Validation Tests:');
-  testURLs.forEach(url => {
+  testURLs.forEach((url) => {
     const result = validateURL(url);
     console.log(`  ${url}: ${result.valid ? '\u2705 Valid' : '\u274C ' + result.error}`);
   });
 
   console.log('\nFilename Sanitization Tests:');
-  const testFilenames = [
-    '../../../etc/passwd',
-    'normal-file.txt',
-    'file<with>bad:chars',
-    'a'.repeat(300)
-  ];
+  const testFilenames = ['../../../etc/passwd', 'normal-file.txt', 'file<with>bad:chars', 'a'.repeat(300)];
 
-  testFilenames.forEach(filename => {
+  testFilenames.forEach((filename) => {
     console.log(`  "${filename}" \u2192 "${sanitizeFilename(filename)}"`);
   });
 
   console.log('\nDomain Sanitization Tests:');
-  const testDomains = [
-    'https://www.example.com/',
-    'example.com:8080',
-    'sub.domain.example.com'
-  ];
+  const testDomains = ['https://www.example.com/', 'example.com:8080', 'sub.domain.example.com'];
 
-  testDomains.forEach(domain => {
+  testDomains.forEach((domain) => {
     console.log(`  "${domain}" \u2192 "${sanitizeDomainName(domain)}"`);
   });
 

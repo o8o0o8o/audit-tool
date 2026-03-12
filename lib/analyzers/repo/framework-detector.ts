@@ -93,7 +93,7 @@ class RepoFrameworkDetector {
     };
 
     for (const fw of this.FRAMEWORKS) {
-      const matchedPkg = fw.packages.find(pkg => pkg in allDeps);
+      const matchedPkg = fw.packages.find((pkg) => pkg in allDeps);
       if (!matchedPkg) continue;
 
       const version = allDeps[matchedPkg] || null;
@@ -108,9 +108,7 @@ class RepoFrameworkDetector {
       }
 
       // Filter srcDirs to only those that exist
-      const existingSrcDirs = fw.srcDirs.filter(dir =>
-        fs.existsSync(path.join(repoPath, dir))
-      );
+      const existingSrcDirs = fw.srcDirs.filter((dir) => fs.existsSync(path.join(repoPath, dir)));
 
       // Detect router type for Next.js
       let router = null;
@@ -138,10 +136,10 @@ class RepoFrameworkDetector {
    * @returns {'app'|'pages'|'both'|null}
    */
   static #detectNextRouter(repoPath: string) {
-    const hasApp = this.#isAppRouterDir(path.join(repoPath, 'app')) ||
-                   this.#isAppRouterDir(path.join(repoPath, 'src/app'));
-    const hasPages = this.#isPagesRouterDir(path.join(repoPath, 'pages')) ||
-                     this.#isPagesRouterDir(path.join(repoPath, 'src/pages'));
+    const hasApp =
+      this.#isAppRouterDir(path.join(repoPath, 'app')) || this.#isAppRouterDir(path.join(repoPath, 'src/app'));
+    const hasPages =
+      this.#isPagesRouterDir(path.join(repoPath, 'pages')) || this.#isPagesRouterDir(path.join(repoPath, 'src/pages'));
 
     if (hasApp && hasPages) return 'both';
     if (hasApp) return 'app';
@@ -158,8 +156,8 @@ class RepoFrameworkDetector {
     try {
       const entries = fs.readdirSync(dir);
       // App Router requires a root layout file, or at least page files
-      const hasLayout = entries.some(e => /^layout\.(tsx|jsx|js|ts)$/.test(e));
-      const hasPage = entries.some(e => /^page\.(tsx|jsx|js|ts)$/.test(e));
+      const hasLayout = entries.some((e) => /^layout\.(tsx|jsx|js|ts)$/.test(e));
+      const hasPage = entries.some((e) => /^page\.(tsx|jsx|js|ts)$/.test(e));
       return hasLayout || hasPage;
     } catch {
       return false;
@@ -174,7 +172,7 @@ class RepoFrameworkDetector {
     if (!fs.existsSync(dir)) return false;
     try {
       const entries = fs.readdirSync(dir);
-      return entries.some(e => /\.(tsx|jsx|js|ts)$/.test(e) && !e.startsWith('.'));
+      return entries.some((e) => /\.(tsx|jsx|js|ts)$/.test(e) && !e.startsWith('.'));
     } catch {
       return false;
     }

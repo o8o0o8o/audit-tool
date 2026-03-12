@@ -109,8 +109,8 @@ class JavaScriptRenderingAnalyzer {
     }
 
     // Internal links
-    const rawLinks = rawContent.links?.filter(l => this.isInternalLink(l, url)) || [];
-    const renderedLinks = renderedContent.links?.filter(l => this.isInternalLink(l, url)) || [];
+    const rawLinks = rawContent.links?.filter((l) => this.isInternalLink(l, url)) || [];
+    const renderedLinks = renderedContent.links?.filter((l) => this.isInternalLink(l, url)) || [];
     const newLinks = renderedLinks.length - rawLinks.length;
 
     if (newLinks > 10) {
@@ -169,7 +169,13 @@ class JavaScriptRenderingAnalyzer {
    * @returns {object} Extracted content
    */
   static extractContent(html: string) {
-    const content: { title: string | null; description: string | null; h1: string | null; text: string; links: string[] } = {
+    const content: {
+      title: string | null;
+      description: string | null;
+      h1: string | null;
+      text: string;
+      links: string[];
+    } = {
       title: null,
       description: null,
       h1: null,
@@ -186,8 +192,9 @@ class JavaScriptRenderingAnalyzer {
     }
 
     // Extract meta description
-    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ||
-                      html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i);
+    const descMatch =
+      html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ||
+      html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i);
     if (descMatch) {
       content.description = descMatch[1].trim();
     }
@@ -262,7 +269,7 @@ class JavaScriptRenderingAnalyzer {
       /<div[^>]*class=["'][^"']*app-shell/i,
     ];
 
-    return spaPatterns.some(pattern => pattern.test(html));
+    return spaPatterns.some((pattern) => pattern.test(html));
   }
 
   /**
@@ -271,15 +278,9 @@ class JavaScriptRenderingAnalyzer {
    * @returns {boolean}
    */
   static hasSSRMarkers(html: string) {
-    const ssrMarkers = [
-      'data-reactroot',
-      '__NEXT_DATA__',
-      '__NUXT__',
-      'data-server-rendered',
-      'ng-state',
-    ];
+    const ssrMarkers = ['data-reactroot', '__NEXT_DATA__', '__NUXT__', 'data-server-rendered', 'ng-state'];
 
-    return ssrMarkers.some(marker => html.includes(marker));
+    return ssrMarkers.some((marker) => html.includes(marker));
   }
 
   /**
@@ -288,13 +289,7 @@ class JavaScriptRenderingAnalyzer {
    * @returns {Array}
    */
   static detectLazyLoading(html: string) {
-    const lazyPatterns = [
-      /loading=["']lazy["']/gi,
-      /data-src=/gi,
-      /data-lazy/gi,
-      /lazyload/gi,
-      /lazy-load/gi,
-    ];
+    const lazyPatterns = [/loading=["']lazy["']/gi, /data-src=/gi, /data-lazy/gi, /lazyload/gi, /lazy-load/gi];
 
     const matches: string[] = [];
     for (const pattern of lazyPatterns) {
@@ -314,7 +309,7 @@ class JavaScriptRenderingAnalyzer {
    */
   static countWords(text: string) {
     if (!text) return 0;
-    return text.split(/\s+/).filter(w => w.length > 0).length;
+    return text.split(/\s+/).filter((w) => w.length > 0).length;
   }
 
   /**
@@ -376,8 +371,7 @@ class JavaScriptRenderingAnalyzer {
       if (analysis.info.missingInRaw.mainContent) stats.missingContentInRaw++;
 
       if (analysis.info.jsFramework) {
-        stats.frameworks[analysis.info.jsFramework] =
-          (stats.frameworks[analysis.info.jsFramework] || 0) + 1;
+        stats.frameworks[analysis.info.jsFramework] = (stats.frameworks[analysis.info.jsFramework] || 0) + 1;
       }
 
       totalContentDiff += analysis.info.contentDifferencePercent;
@@ -391,7 +385,7 @@ class JavaScriptRenderingAnalyzer {
     if (stats.jsDependent > stats.pagesAnalyzed * 0.5) {
       issues.push({
         message: 'Site heavily relies on JavaScript rendering',
-        detail: `${stats.jsDependent}/${stats.pagesAnalyzed} pages (${Math.round(stats.jsDependent / stats.pagesAnalyzed * 100)}%) are JavaScript-dependent. Consider implementing SSR.`,
+        detail: `${stats.jsDependent}/${stats.pagesAnalyzed} pages (${Math.round((stats.jsDependent / stats.pagesAnalyzed) * 100)}%) are JavaScript-dependent. Consider implementing SSR.`,
         severity: SEVERITY.HIGH,
       });
     }

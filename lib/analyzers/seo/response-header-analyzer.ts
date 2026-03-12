@@ -82,12 +82,15 @@ class ResponseHeaderAnalyzer {
     if (xRobotsTag) {
       info.xRobotsTag = xRobotsTag;
       // Directives may have user-agent prefix like "googlebot: noindex, nofollow"
-      const directives = xRobotsTag.toLowerCase().split(',').map((d: any) => {
-        const trimmed = d.trim();
-        // Strip user-agent prefix if present (e.g., "googlebot: noindex" → "noindex")
-        const colonIdx = trimmed.indexOf(':');
-        return colonIdx >= 0 ? trimmed.slice(colonIdx + 1).trim() : trimmed;
-      });
+      const directives = xRobotsTag
+        .toLowerCase()
+        .split(',')
+        .map((d: any) => {
+          const trimmed = d.trim();
+          // Strip user-agent prefix if present (e.g., "googlebot: noindex" → "noindex")
+          const colonIdx = trimmed.indexOf(':');
+          return colonIdx >= 0 ? trimmed.slice(colonIdx + 1).trim() : trimmed;
+        });
 
       if (directives.some((d: any) => d === 'noindex')) {
         info.noindexViaHeader = true;
@@ -183,7 +186,7 @@ class ResponseHeaderAnalyzer {
     }
 
     // Check for inconsistent Vary patterns
-    const varyKeys = Object.keys(varyPatterns).filter(k => k !== 'none');
+    const varyKeys = Object.keys(varyPatterns).filter((k) => k !== 'none');
     if (varyKeys.length > 2) {
       warnings.push({
         title: 'Inconsistent Vary header patterns across pages',

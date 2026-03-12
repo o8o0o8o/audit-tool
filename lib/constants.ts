@@ -6,7 +6,7 @@
 import type { SeverityLevel, NetworkCondition, CpuCondition } from './types';
 
 // Known error messages to track
-export const KNOWN_ERRORS: string[] = ["ERR_TOO_MANY_REDIRECTS"];
+export const KNOWN_ERRORS: string[] = ['ERR_TOO_MANY_REDIRECTS'];
 
 // Issue severity levels
 export const SEVERITY = {
@@ -118,23 +118,23 @@ export const NETWORK_CONDITIONS: Record<string, NetworkCondition> = {
     download: ((500 * 1000) / 8) * 0.8,
     upload: ((500 * 1000) / 8) * 0.8,
     latency: 400 * 5,
-    name: "slow3g",
+    name: 'slow3g',
   },
   fast3g: {
     download: ((1.6 * 1000 * 1000) / 8) * 0.9,
     upload: ((750 * 1000) / 8) * 0.9,
     latency: 150 * 3.75,
-    name: "fast3g",
+    name: 'fast3g',
   },
   slow4g: {
     download: ((1.6 * 1000 * 1000) / 8) * 1.5,
     upload: ((750 * 1000) / 8) * 1.5,
     latency: 150,
-    name: "slow4g",
+    name: 'slow4g',
   },
   normal: {
     noThrottle: true,
-    name: "normal",
+    name: 'normal',
   },
 };
 
@@ -142,46 +142,30 @@ export const NETWORK_CONDITIONS: Record<string, NetworkCondition> = {
 export const CPU_CONDITIONS: Record<string, CpuCondition> = {
   normal: {
     noThrottle: true,
-    name: "normal",
+    name: 'normal',
   },
   slow: {
     rate: 4,
-    name: "slow",
+    name: 'slow',
   },
 };
 
 // Meta tags configuration - categorized by importance for better error reporting
 export const META_TAGS_CONFIG = {
-  critical: [
-    "description",
-  ] as const,
-  social_required: [
-    "og:title",
-    "og:description",
-    "og:image",
-    "twitter:card",
-  ] as const,
+  critical: ['description'] as const,
+  social_required: ['og:title', 'og:description', 'og:image', 'twitter:card'] as const,
   recommended: [
-    "viewport",
-    "robots",
-    "og:type",
-    "og:url",
-    "og:site_name",
-    "twitter:title",
-    "twitter:description",
-    "twitter:image",
+    'viewport',
+    'robots',
+    'og:type',
+    'og:url',
+    'og:site_name',
+    'twitter:title',
+    'twitter:description',
+    'twitter:image',
   ] as const,
-  optional: [
-    "twitter:site",
-    "twitter:creator",
-    "author",
-    "theme-color",
-    "og:locale",
-    "og:image:alt",
-  ] as const,
-  deprecated: [
-    "keywords",
-  ] as const,
+  optional: ['twitter:site', 'twitter:creator', 'author', 'theme-color', 'og:locale', 'og:image:alt'] as const,
+  deprecated: ['keywords'] as const,
 };
 
 // Flat list for backwards compatibility
@@ -263,10 +247,7 @@ export function normalizeTextForComparison(text: string): string {
   }
 
   // 5. Collapse whitespace and trim
-  normalized = normalized
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
+  normalized = normalized.trim().replace(/\s+/g, ' ').toLowerCase();
 
   return normalized;
 }

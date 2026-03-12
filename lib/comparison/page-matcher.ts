@@ -162,9 +162,7 @@ class PageMatcher {
       matchedCount,
       originOnlyCount: matchResult.originOnly.length,
       compareOnlyCount: matchResult.compareOnly.length,
-      matchPercentage: totalOrigin > 0
-        ? Math.round((matchedCount / totalOrigin) * 100)
-        : 0,
+      matchPercentage: totalOrigin > 0 ? Math.round((matchedCount / totalOrigin) * 100) : 0,
     };
   }
 }

@@ -3,13 +3,7 @@
  * Helper functions for generating HTML reports
  */
 
-import {
-  METRIC_INFO,
-  SIGNAL_CATEGORIES,
-  getSignalInfo,
-  formatSignalValue,
-  isSignalGood,
-} from './metrics-metadata';
+import { METRIC_INFO, SIGNAL_CATEGORIES, getSignalInfo, formatSignalValue, isSignalGood } from './metrics-metadata';
 import type { PageInfo, SeverityColorConfig, HeadingCount } from '../types';
 
 /**
@@ -20,11 +14,11 @@ import type { PageInfo, SeverityColorConfig, HeadingCount } from '../types';
 function escapeHtml(unsafe: unknown): string {
   if (unsafe === null || unsafe === undefined) return '';
   return String(unsafe)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**
@@ -112,7 +106,7 @@ function getMissingMetaTags(page: PageInfo): string[] {
   // Check critical (description) and essential social tags only
   // Viewport is checked separately by MobileFriendlyAnalyzer
   const importantTags = ['description', 'og:title', 'og:image', 'twitter:card'];
-  return importantTags.filter(tag => !hasMetaTag(page, tag));
+  return importantTags.filter((tag) => !hasMetaTag(page, tag));
 }
 
 /**
@@ -141,7 +135,7 @@ function hasHeadingStructureIssue(headings: HeadingCount[] | null): boolean {
     // If current level has no tags but next level does, that's a skip
     if (current.count === 0 && next.count > 0) {
       // Check if there's any earlier level with tags
-      const hasEarlierTags = headings.slice(0, i).some(h => h.count > 0);
+      const hasEarlierTags = headings.slice(0, i).some((h) => h.count > 0);
       if (hasEarlierTags) {
         return true; // Found a gap
       }
@@ -159,7 +153,13 @@ function hasHeadingStructureIssue(headings: HeadingCount[] | null): boolean {
  * @param {boolean} isInverse - If true, lower values are better
  * @returns {string} Tooltip text or empty string
  */
-function getMetricTooltip(value: unknown, threshold: number, metricName: string, unit: string = '', isInverse: boolean = false): string {
+function getMetricTooltip(
+  value: unknown,
+  threshold: number,
+  metricName: string,
+  unit: string = '',
+  isInverse: boolean = false,
+): string {
   if (value === null || value === undefined || value === 'N/A') return '';
 
   const numValue = parseFloat(String(value));
@@ -553,6 +553,30 @@ function getSignalInfoIcon(signalKey: string) {
   return `<span class="info-icon" title="${tooltip}" data-signal="${signalKey}">ⓘ</span>`;
 }
 
-export { escapeHtml, formatBytes, getStatusColor, getMetricColor, getTextLengthColor, hasMetaTag, getMissingMetaTags, makeUrlClickable, hasHeadingStructureIssue, getMetricTooltip, getTextLengthTooltip, getSeverityBadge, getScoreColor, getTrendIndicator, // New signal-aware functions
-  getSignalTooltipHtml, getSignalStatusIndicator, getSignalCard, getSignalCategorySection, getSignalStyles, getSignalInfoIcon, // Re-export from metrics-metadata
-  METRIC_INFO, SIGNAL_CATEGORIES, getSignalInfo, formatSignalValue, isSignalGood };
+export {
+  escapeHtml,
+  formatBytes,
+  getStatusColor,
+  getMetricColor,
+  getTextLengthColor,
+  hasMetaTag,
+  getMissingMetaTags,
+  makeUrlClickable,
+  hasHeadingStructureIssue,
+  getMetricTooltip,
+  getTextLengthTooltip,
+  getSeverityBadge,
+  getScoreColor,
+  getTrendIndicator, // New signal-aware functions
+  getSignalTooltipHtml,
+  getSignalStatusIndicator,
+  getSignalCard,
+  getSignalCategorySection,
+  getSignalStyles,
+  getSignalInfoIcon, // Re-export from metrics-metadata
+  METRIC_INFO,
+  SIGNAL_CATEGORIES,
+  getSignalInfo,
+  formatSignalValue,
+  isSignalGood,
+};

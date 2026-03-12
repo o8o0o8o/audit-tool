@@ -75,9 +75,10 @@ class MixedContentAnalyzer {
 
     // Report active mixed content (critical - blocked by browsers)
     if (info.activeMixedContent.length > 0) {
-      const examples = info.activeMixedContent.slice(0, 5).map(r =>
-        `${r.type}: ${this.getFileName(r.url)}`
-      ).join(', ');
+      const examples = info.activeMixedContent
+        .slice(0, 5)
+        .map((r) => `${r.type}: ${this.getFileName(r.url)}`)
+        .join(', ');
 
       issues.push({
         message: 'Active mixed content detected (blocked)',
@@ -88,9 +89,10 @@ class MixedContentAnalyzer {
 
     // Report passive mixed content (warning)
     if (info.passiveMixedContent.length > 0) {
-      const examples = info.passiveMixedContent.slice(0, 5).map(r =>
-        `${r.type}: ${this.getFileName(r.url)}`
-      ).join(', ');
+      const examples = info.passiveMixedContent
+        .slice(0, 5)
+        .map((r) => `${r.type}: ${this.getFileName(r.url)}`)
+        .join(', ');
 
       warnings.push({
         message: 'Passive mixed content detected',
@@ -100,7 +102,7 @@ class MixedContentAnalyzer {
     }
 
     // Check for insecure form actions
-    if (htmlMixed.some(m => m.type === 'form')) {
+    if (htmlMixed.some((m) => m.type === 'form')) {
       issues.push({
         message: 'Form submits to insecure HTTP URL',
         detail: 'Form action points to HTTP URL. User data may be transmitted insecurely.',
@@ -109,9 +111,7 @@ class MixedContentAnalyzer {
     }
 
     // Check for HTTP links to same domain
-    const insecureInternalLinks = htmlMixed.filter(m =>
-      m.type === 'link' && this.isSameDomain(m.url, url)
-    );
+    const insecureInternalLinks = htmlMixed.filter((m) => m.type === 'link' && this.isSameDomain(m.url, url));
     if (insecureInternalLinks.length > 0) {
       warnings.push({
         message: 'Internal links use HTTP instead of HTTPS',
@@ -176,7 +176,7 @@ class MixedContentAnalyzer {
     }
 
     // Check links
-    const links = Array.isArray(pageData.links) ? pageData.links : [] as any[];
+    const links = Array.isArray(pageData.links) ? pageData.links : ([] as any[]);
     for (const link of links) {
       const href = link.href || link;
       if (typeof href === 'string' && href.startsWith('http://')) {
@@ -286,7 +286,10 @@ class MixedContentAnalyzer {
 
     // Site-wide issues
     if (stats.pagesWithActiveMixed > 0) {
-      const examples = pagesWithIssues.slice(0, 3).map(p => p.url).join(', ');
+      const examples = pagesWithIssues
+        .slice(0, 3)
+        .map((p) => p.url)
+        .join(', ');
       issues.push({
         message: 'Active mixed content across site',
         detail: `${stats.pagesWithActiveMixed} HTTPS pages load HTTP scripts/styles that are blocked. Total blocked resources: ${stats.totalActiveMixed}. Example pages: ${examples}`,

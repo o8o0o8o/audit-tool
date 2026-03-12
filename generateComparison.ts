@@ -25,7 +25,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
     return 'neutral';
   };
 
-  const deltaSymbol = (value: number) => value > 0 ? '+' : '';
+  const deltaSymbol = (value: number) => (value > 0 ? '+' : '');
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -263,19 +263,19 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         </div>
 
         ${(() => {
-            const scoreDelta = comparison.scoreChange;
-            let bannerClass = 'unchanged';
-            let bannerText = 'No significant change in overall score';
+          const scoreDelta = comparison.scoreChange;
+          let bannerClass = 'unchanged';
+          let bannerText = 'No significant change in overall score';
 
-            if (scoreDelta > 5) {
-                bannerClass = 'improved';
-                bannerText = `🎉 Overall score improved by ${scoreDelta} points!`;
-            } else if (scoreDelta < -5) {
-                bannerClass = 'declined';
-                bannerText = `⚠️ Overall score declined by ${Math.abs(scoreDelta)} points`;
-            }
+          if (scoreDelta > 5) {
+            bannerClass = 'improved';
+            bannerText = `🎉 Overall score improved by ${scoreDelta} points!`;
+          } else if (scoreDelta < -5) {
+            bannerClass = 'declined';
+            bannerText = `⚠️ Overall score declined by ${Math.abs(scoreDelta)} points`;
+          }
 
-            return `<div class="summary-banner ${bannerClass}">${bannerText}</div>`;
+          return `<div class="summary-banner ${bannerClass}">${bannerText}</div>`;
         })()}
 
         <div class="section">
@@ -349,11 +349,14 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             </div>
         </div>
 
-        ${comparison.categoryDeltas ? `
+        ${
+          comparison.categoryDeltas
+            ? `
         <div class="section">
             <h2>Category Scores</h2>
             <div class="category-comparison">
-                ${Object.entries(comparison.categoryDeltas).map(([cat, delta]: [string, number]) => {
+                ${Object.entries(comparison.categoryDeltas)
+                  .map(([cat, delta]: [string, number]) => {
                     const oldScore = (oldAudit.summary.categoryScores as Record<string, number>)[cat] || 0;
                     const newScore = (newAudit.summary.categoryScores as Record<string, number>)[cat] || 0;
                     return `
@@ -369,54 +372,86 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                             </div>
                         </div>
                     `;
-                }).join('')}
+                  })
+                  .join('')}
             </div>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${comparison.improvements.length > 0 ? `
+        ${
+          comparison.improvements.length > 0
+            ? `
         <div class="section">
             <h2>✅ Improvements (${comparison.improvements.length})</h2>
             <ul class="changes-list">
                 ${comparison.improvements.map((imp: string) => `<li class="improvement">${escapeHtml(imp)}</li>`).join('')}
             </ul>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${comparison.regressions.length > 0 ? `
+        ${
+          comparison.regressions.length > 0
+            ? `
         <div class="section">
             <h2>⚠️ Regressions (${comparison.regressions.length})</h2>
             <ul class="changes-list">
                 ${comparison.regressions.map((reg: string) => `<li class="regression">${escapeHtml(reg)}</li>`).join('')}
             </ul>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
         ${(() => {
-            const oldIns = oldAudit.insights;
-            const newIns = newAudit.insights;
-            if (!oldIns && !newIns) return '';
-            const oi: Partial<InsightsSummary> = oldIns || {};
-            const ni: Partial<InsightsSummary> = newIns || {};
-            const insightMetrics = [
-              { label: 'Language Mismatches', old: oi.languageMismatches ?? '-', new: ni.languageMismatches ?? '-', inverse: true },
-              { label: 'Broken Outbound Links', old: oi.brokenOutboundLinks ?? '-', new: ni.brokenOutboundLinks ?? '-', inverse: true },
-              { label: 'Near-Duplicate Pages', old: oi.nearDuplicatePages ?? '-', new: ni.nearDuplicatePages ?? '-', inverse: true },
-              { label: 'Pages Without CTAs', old: oi.pagesWithoutCTAs ?? '-', new: ni.pagesWithoutCTAs ?? '-', inverse: true },
-              { label: 'Avg Unused JS %', old: oi.avgJsUnused ?? '-', new: ni.avgJsUnused ?? '-', inverse: true },
-              { label: 'Avg Unused CSS %', old: oi.avgCssUnused ?? '-', new: ni.avgCssUnused ?? '-', inverse: true },
-            ].filter(m => m.old !== '-' || m.new !== '-');
-            if (insightMetrics.length === 0) return '';
-            return `
+          const oldIns = oldAudit.insights;
+          const newIns = newAudit.insights;
+          if (!oldIns && !newIns) return '';
+          const oi: Partial<InsightsSummary> = oldIns || {};
+          const ni: Partial<InsightsSummary> = newIns || {};
+          const insightMetrics = [
+            {
+              label: 'Language Mismatches',
+              old: oi.languageMismatches ?? '-',
+              new: ni.languageMismatches ?? '-',
+              inverse: true,
+            },
+            {
+              label: 'Broken Outbound Links',
+              old: oi.brokenOutboundLinks ?? '-',
+              new: ni.brokenOutboundLinks ?? '-',
+              inverse: true,
+            },
+            {
+              label: 'Near-Duplicate Pages',
+              old: oi.nearDuplicatePages ?? '-',
+              new: ni.nearDuplicatePages ?? '-',
+              inverse: true,
+            },
+            {
+              label: 'Pages Without CTAs',
+              old: oi.pagesWithoutCTAs ?? '-',
+              new: ni.pagesWithoutCTAs ?? '-',
+              inverse: true,
+            },
+            { label: 'Avg Unused JS %', old: oi.avgJsUnused ?? '-', new: ni.avgJsUnused ?? '-', inverse: true },
+            { label: 'Avg Unused CSS %', old: oi.avgCssUnused ?? '-', new: ni.avgCssUnused ?? '-', inverse: true },
+          ].filter((m) => m.old !== '-' || m.new !== '-');
+          if (insightMetrics.length === 0) return '';
+          return `
         <div class="section">
             <h2>Content & Code Insights</h2>
             <div class="comparison-grid">
-                ${insightMetrics.map(m => {
-                  const oldVal = typeof m.old === 'number' ? m.old : 0;
-                  const newVal = typeof m.new === 'number' ? m.new : 0;
-                  const diff = newVal - oldVal;
-                  const cls = m.inverse ? deltaClass(-diff) : deltaClass(diff);
-                  return `
+                ${insightMetrics
+                  .map((m) => {
+                    const oldVal = typeof m.old === 'number' ? m.old : 0;
+                    const newVal = typeof m.new === 'number' ? m.new : 0;
+                    const diff = newVal - oldVal;
+                    const cls = m.inverse ? deltaClass(-diff) : deltaClass(diff);
+                    return `
                 <div class="metric-card">
                     <div class="metric-label">${m.label}</div>
                     <div class="metric-comparison">
@@ -426,12 +461,15 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                         <span class="delta ${cls}">${deltaSymbol(diff)}${diff}</span>
                     </div>
                 </div>`;
-                }).join('')}
+                  })
+                  .join('')}
             </div>
         </div>`;
         })()}
 
-        ${comparison.performanceDeltas ? `
+        ${
+          comparison.performanceDeltas
+            ? `
         <div class="section">
             <h2>Performance Metrics Change</h2>
             <div class="comparison-grid">
@@ -472,7 +510,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 </div>
             </div>
 
-            ${oldAudit.performance!.p75TTFB && newAudit.performance!.p75TTFB ? `
+            ${
+              oldAudit.performance!.p75TTFB && newAudit.performance!.p75TTFB
+                ? `
             <h3 style="margin-top: 25px; color: #374151;">P75 Percentiles (Core Web Vitals standard)</h3>
             <div class="comparison-grid">
                 <div class="metric-card" style="border-left-color: #8b5cf6;">
@@ -509,11 +549,17 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                     </div>
                 </div>
             </div>
-            ` : ''}
+            `
+                : ''
+            }
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${comparison.fixed && comparison.fixed.length > 0 ? `
+        ${
+          comparison.fixed && comparison.fixed.length > 0
+            ? `
         <div class="section">
             <h2>🔧 Fixed Issues (${comparison.fixed.length})</h2>
             <p style="color: #6b7280; margin-bottom: 15px;">Issues present in the old audit but resolved in the new one.</p>
@@ -521,9 +567,13 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 ${comparison.fixed.map((issue: string) => `<li class="improvement">✓ ${escapeHtml(issue)}</li>`).join('')}
             </ul>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${comparison.newIssues && comparison.newIssues.length > 0 ? `
+        ${
+          comparison.newIssues && comparison.newIssues.length > 0
+            ? `
         <div class="section">
             <h2>🆕 New Issues (${comparison.newIssues.length})</h2>
             <p style="color: #6b7280; margin-bottom: 15px;">Issues not present in the old audit that appeared in the new one.</p>
@@ -531,7 +581,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                 ${comparison.newIssues.map((issue: string) => `<li class="regression">✗ ${escapeHtml(issue)}</li>`).join('')}
             </ul>
         </div>
-        ` : ''}
+        `
+            : ''
+        }
     </div>
 </body>
 </html>

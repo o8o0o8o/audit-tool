@@ -42,15 +42,18 @@ function calculateChartData(jsonData: Record<string, unknown>) {
   // Pre-calculate performance averages
   const pagesArray = Object.values(pages) as PageInfo[];
   const pagesWithPerf = pagesArray.filter((p: PageInfo) => p.TTFB || p.LCP || p.CLS);
-  const avgTTFB = pagesWithPerf.length > 0
-    ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.TTFB || 0), 0) / pagesWithPerf.length)
-    : 0;
-  const avgLCP = pagesWithPerf.length > 0
-    ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.LCP || 0), 0) / pagesWithPerf.length)
-    : 0;
-  const avgCLS = pagesWithPerf.length > 0
-    ? (pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.CLS || 0), 0) / pagesWithPerf.length).toFixed(3)
-    : 0;
+  const avgTTFB =
+    pagesWithPerf.length > 0
+      ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.TTFB || 0), 0) / pagesWithPerf.length)
+      : 0;
+  const avgLCP =
+    pagesWithPerf.length > 0
+      ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.LCP || 0), 0) / pagesWithPerf.length)
+      : 0;
+  const avgCLS =
+    pagesWithPerf.length > 0
+      ? (pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.CLS || 0), 0) / pagesWithPerf.length).toFixed(3)
+      : 0;
 
   // Pre-calculate status code distribution
   const statusCodes: Record<string, number> = {};
@@ -58,7 +61,19 @@ function calculateChartData(jsonData: Record<string, unknown>) {
     const code = page.status || page.statusCode;
     if (!code || isNaN(code)) return;
     const codeGroup = Math.floor(code / 100) * 100;
-    const label = codeGroup + 'xx (' + (codeGroup === 200 ? 'Success' : codeGroup === 300 ? 'Redirect' : codeGroup === 400 ? 'Client Error' : codeGroup === 500 ? 'Server Error' : 'Other') + ')';
+    const label =
+      codeGroup +
+      'xx (' +
+      (codeGroup === 200
+        ? 'Success'
+        : codeGroup === 300
+          ? 'Redirect'
+          : codeGroup === 400
+            ? 'Client Error'
+            : codeGroup === 500
+              ? 'Server Error'
+              : 'Other') +
+      ')';
     statusCodes[label] = (statusCodes[label] || 0) + 1;
   });
 
@@ -81,8 +96,8 @@ function calculateChartData(jsonData: Record<string, unknown>) {
 
   // Pre-calculate indexability breakdown
   const indexability = {
-    'Indexable': 0,
-    'Noindex': 0,
+    Indexable: 0,
+    Noindex: 0,
     'Redirects (3xx)': 0,
     'Client Errors (4xx)': 0,
     'Server Errors (5xx)': 0,
@@ -103,14 +118,29 @@ function calculateChartData(jsonData: Record<string, unknown>) {
   });
 
   // Pre-calculate code coverage data
-  const coverageData: { labels: string[], jsUnused: number[], cssUnused: number[] } = { labels: [], jsUnused: [], cssUnused: [] };
-  const coveragePages = Object.entries(pages).filter(([, p]: [string, unknown]) => (p as PageInfo).codeCoverage?.js?.ratio != null);
+  const coverageData: { labels: string[]; jsUnused: number[]; cssUnused: number[] } = {
+    labels: [],
+    jsUnused: [],
+    cssUnused: [],
+  };
+  const coveragePages = Object.entries(pages).filter(
+    ([, p]: [string, unknown]) => (p as PageInfo).codeCoverage?.js?.ratio != null,
+  );
   if (coveragePages.length > 0) {
     // Show top 10 pages by unused JS
-    const sorted = coveragePages.sort(([, a]: [string, unknown], [, b]: [string, unknown]) => ((b as PageInfo).codeCoverage?.js?.ratio || 0) - ((a as PageInfo).codeCoverage?.js?.ratio || 0)).slice(0, 10);
+    const sorted = coveragePages
+      .sort(
+        ([, a]: [string, unknown], [, b]: [string, unknown]) =>
+          ((b as PageInfo).codeCoverage?.js?.ratio || 0) - ((a as PageInfo).codeCoverage?.js?.ratio || 0),
+      )
+      .slice(0, 10);
     sorted.forEach(([url, p]: [string, unknown]) => {
       const pg = p as PageInfo;
-      try { coverageData.labels.push(new URL(url).pathname); } catch { coverageData.labels.push(url); }
+      try {
+        coverageData.labels.push(new URL(url).pathname);
+      } catch {
+        coverageData.labels.push(url);
+      }
       coverageData.jsUnused.push(pg.codeCoverage?.js?.ratio || 0);
       coverageData.cssUnused.push(pg.codeCoverage?.css?.ratio || 0);
     });
@@ -126,7 +156,13 @@ function calculateChartData(jsonData: Record<string, unknown>) {
   });
 
   // Pre-calculate PageRank distribution
-  const pageRankBuckets: Record<string, number> = { 'Very Low (0-10)': 0, 'Low (10-30)': 0, 'Medium (30-60)': 0, 'High (60-80)': 0, 'Very High (80-100)': 0 };
+  const pageRankBuckets: Record<string, number> = {
+    'Very Low (0-10)': 0,
+    'Low (10-30)': 0,
+    'Medium (30-60)': 0,
+    'High (60-80)': 0,
+    'Very High (80-100)': 0,
+  };
   pagesArray.forEach((page: PageInfo) => {
     const pr = page.internalPageRank;
     if (pr == null) return;
@@ -137,7 +173,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
     else if (pct < 80) pageRankBuckets['High (60-80)']++;
     else pageRankBuckets['Very High (80-100)']++;
   });
-  const hasPageRank = Object.values(pageRankBuckets).some(v => v > 0);
+  const hasPageRank = Object.values(pageRankBuckets).some((v) => v > 0);
 
   // Pre-calculate CTA distribution
   const ctaBuckets: Record<string, number> = { 'No CTAs': 0, '1 CTA': 0, '2-3 CTAs': 0, '4-5 CTAs': 0, '6+ CTAs': 0 };
@@ -150,7 +186,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
     else if (total <= 5) ctaBuckets['4-5 CTAs']++;
     else ctaBuckets['6+ CTAs']++;
   });
-  const hasCtaData = Object.values(ctaBuckets).some(v => v > 0);
+  const hasCtaData = Object.values(ctaBuckets).some((v) => v > 0);
 
   return {
     summary: {
@@ -191,32 +227,36 @@ function createPagesExportData(jsonData: Record<string, unknown>) {
   return Object.entries(pages).map(([url, data]: [string, unknown]) => {
     const d = data as PageInfo;
     return {
-    url,
+      url,
 
-    status: d.status || d.statusCode || '',
+      status: d.status || d.statusCode || '',
 
-    title: d.title || '',
+      title: d.title || '',
 
-    description: d.description || '',
+      description: d.description || '',
 
-    h1Count: d.headings?.h1?.length || (Array.isArray(d.headings) ? (d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count || 0) : 0),
+      h1Count:
+        d.headings?.h1?.length ||
+        (Array.isArray(d.headings)
+          ? d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count || 0
+          : 0),
 
-    canonical: d.canonical || '',
+      canonical: d.canonical || '',
 
-    TTFB: d.TTFB || '',
+      TTFB: d.TTFB || '',
 
-    LCP: d.LCP || '',
+      LCP: d.LCP || '',
 
-    CLS: d.CLS || '',
+      CLS: d.CLS || '',
 
-    pageSize: d.totalResponseSize ? (d.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
+      pageSize: d.totalResponseSize ? (d.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
 
-    requests: d.totalNumberOfRequests || d.numberOfRequests || '',
+      requests: d.totalNumberOfRequests || d.numberOfRequests || '',
 
-    hasErrors: ((d.status ?? 0) >= 400 || (d.errors?.length ?? 0) > 0) ? 'Yes' : 'No',
+      hasErrors: (d.status ?? 0) >= 400 || (d.errors?.length ?? 0) > 0 ? 'Yes' : 'No',
 
-    loadTime: d.loadEvent || '',
-  };
+      loadTime: d.loadEvent || '',
+    };
   });
 }
 

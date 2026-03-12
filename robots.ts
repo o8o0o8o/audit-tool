@@ -63,10 +63,11 @@ async function audit() {
         console.error(`File not found: ${args.sites}`);
         process.exit(1);
       }
-      const urls = fs.readFileSync(args.sites, 'utf-8')
+      const urls = fs
+        .readFileSync(args.sites, 'utf-8')
         .split('\n')
-        .map(l => l.trim())
-        .filter(l => l && !l.startsWith('#') && l.startsWith('http'));
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#') && l.startsWith('http'));
 
       if (urls.length === 0) {
         console.error('No valid URLs found in sites file');
@@ -76,7 +77,7 @@ async function audit() {
       console.log(`\nBatch audit: ${urls.length} sites\n`);
       const results = [];
       for (let i = 0; i < urls.length; i++) {
-        console.log(`\n[${ i + 1}/${urls.length}] Auditing: ${urls[i]}\n`);
+        console.log(`\n[${i + 1}/${urls.length}] Auditing: ${urls[i]}\n`);
         try {
           const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, {
             verbose: args.verbose,
@@ -103,12 +104,17 @@ async function audit() {
       console.log('\n\n' + '='.repeat(60));
       console.log('BATCH AUDIT SUMMARY');
       console.log('='.repeat(60));
-      results.forEach(r => {
-        const icon = r.status === 'ok' ? (r.score >= 70 ? '\x1b[32m\u2713\x1b[0m' : '\x1b[33m!\x1b[0m') : '\x1b[31m\u2717\x1b[0m';
+      results.forEach((r) => {
+        const icon =
+          r.status === 'ok' ? (r.score >= 70 ? '\x1b[32m\u2713\x1b[0m' : '\x1b[33m!\x1b[0m') : '\x1b[31m\u2717\x1b[0m';
         console.log(`  ${icon} ${r.url.padEnd(50)} Score: ${String(r.score).padStart(3)} | Issues: ${r.issues}`);
       });
       console.log('='.repeat(60));
-      const avgScore = Math.round(results.filter(r => r.status === 'ok').reduce((s, r) => s + r.score, 0) / results.filter(r => r.status === 'ok').length) || 0;
+      const avgScore =
+        Math.round(
+          results.filter((r) => r.status === 'ok').reduce((s, r) => s + r.score, 0) /
+            results.filter((r) => r.status === 'ok').length,
+        ) || 0;
       console.log(`  Average score: ${avgScore}/100`);
       console.log('');
       process.exit(0);
@@ -160,44 +166,44 @@ async function audit() {
     // Validate arguments
     const validation = validateArguments(args);
     if (!validation.valid) {
-      console.error("");
+      console.error('');
       console.error(`❌ ${validation.error}`);
-      console.error("");
-      console.error("Usage: node robots.js --origin=<website-url> [OPTIONS]");
-      console.error("       node robots.js --sitemap=<file> [OPTIONS]");
-      console.error("");
-      console.error("Options:");
-      console.error("  --origin=<url>          Website URL to audit (required unless --sitemap is used)");
-      console.error("  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)");
-      console.error("  --compare=<url>         Compare origin with another site (page-by-page comparison)");
-      console.error("  --compare-sitemap=<file> Local sitemap XML file for comparison site");
-      console.error("  --proceed               Resume from saved progress");
-      console.error("  --perf                  Enable performance metrics collection");
-      console.error("  --save-html             Save HTML snapshots of pages");
-      console.error("  --concurrency=<number>  Parallel pages (1-20, default: 5)");
-      console.error("  --repo=<path>           Local git repo for source code analysis");
-      console.error("  --exclude=<pattern>     Exclude URLs matching regex (repeatable)");
-      console.error("  --limit=<number>        Max pages to audit");
-      console.error("  --only-errors           Only include pages with errors in report");
-      console.error("  --ci[=<threshold>]      CI mode: exit 1 if score < threshold (default: 70)");
-      console.error("  --json                  Output JSON summary to stdout");
-      console.error("  --config=<path>         Path to config file");
-      console.error("  --init-config           Generate sample .seoauditrc file");
-      console.error("  --open                  Auto-open HTML report in browser");
-      console.error("  --verbose, -v           Show detailed per-URL logging");
-      console.error("");
-      console.error("Examples:");
-      console.error("  node robots.js --origin=https://example.com");
-      console.error("  node robots.js --origin=https://example.com --perf");
-      console.error("  node robots.js --sitemap=./sitemap.xml --perf");
-      console.error("  node robots.js --origin=https://example.com --repo=../my-website");
-      console.error("  node robots.js --origin=https://example.com --config=my-config.json");
-      console.error("  node robots.js --init-config");
-      console.error("");
-      console.error("Comparison mode:");
-      console.error("  node robots.js --origin=https://staging.example.com --compare=https://www.example.com");
-      console.error("  node robots.js --sitemap=./old.xml --compare-sitemap=./new.xml");
-      console.error("");
+      console.error('');
+      console.error('Usage: node robots.js --origin=<website-url> [OPTIONS]');
+      console.error('       node robots.js --sitemap=<file> [OPTIONS]');
+      console.error('');
+      console.error('Options:');
+      console.error('  --origin=<url>          Website URL to audit (required unless --sitemap is used)');
+      console.error('  --sitemap=<file>        Local sitemap XML file (origin derived from URLs)');
+      console.error('  --compare=<url>         Compare origin with another site (page-by-page comparison)');
+      console.error('  --compare-sitemap=<file> Local sitemap XML file for comparison site');
+      console.error('  --proceed               Resume from saved progress');
+      console.error('  --perf                  Enable performance metrics collection');
+      console.error('  --save-html             Save HTML snapshots of pages');
+      console.error('  --concurrency=<number>  Parallel pages (1-20, default: 5)');
+      console.error('  --repo=<path>           Local git repo for source code analysis');
+      console.error('  --exclude=<pattern>     Exclude URLs matching regex (repeatable)');
+      console.error('  --limit=<number>        Max pages to audit');
+      console.error('  --only-errors           Only include pages with errors in report');
+      console.error('  --ci[=<threshold>]      CI mode: exit 1 if score < threshold (default: 70)');
+      console.error('  --json                  Output JSON summary to stdout');
+      console.error('  --config=<path>         Path to config file');
+      console.error('  --init-config           Generate sample .seoauditrc file');
+      console.error('  --open                  Auto-open HTML report in browser');
+      console.error('  --verbose, -v           Show detailed per-URL logging');
+      console.error('');
+      console.error('Examples:');
+      console.error('  node robots.js --origin=https://example.com');
+      console.error('  node robots.js --origin=https://example.com --perf');
+      console.error('  node robots.js --sitemap=./sitemap.xml --perf');
+      console.error('  node robots.js --origin=https://example.com --repo=../my-website');
+      console.error('  node robots.js --origin=https://example.com --config=my-config.json');
+      console.error('  node robots.js --init-config');
+      console.error('');
+      console.error('Comparison mode:');
+      console.error('  node robots.js --origin=https://staging.example.com --compare=https://www.example.com');
+      console.error('  node robots.js --sitemap=./old.xml --compare-sitemap=./new.xml');
+      console.error('');
       process.exit(1);
     }
 
@@ -214,7 +220,7 @@ async function audit() {
 
     // Print any argument validation warnings
     if (args.warnings && args.warnings.length > 0) {
-      args.warnings.forEach(warning => console.warn(`⚠️  ${warning}`));
+      args.warnings.forEach((warning) => console.warn(`⚠️  ${warning}`));
     }
 
     // Apply presets
@@ -239,9 +245,9 @@ async function audit() {
     if (args.origin) {
       const urlValidation = validateURL(args.origin);
       if (!urlValidation.valid) {
-        console.error("");
+        console.error('');
         console.error(`❌ Invalid URL: ${urlValidation.error}`);
-        console.error("");
+        console.error('');
         process.exit(1);
       }
       console.log(`✅ URL validated: ${args.origin}`);
@@ -251,7 +257,9 @@ async function audit() {
 
     // Smart concurrency info
     const sysInfo = calculateSafeConcurrency();
-    console.log(`🔄 Concurrency: ${args.concurrency} pages at a time (safe max: ${sysInfo.maxSafe} based on ${sysInfo.reason})`);
+    console.log(
+      `🔄 Concurrency: ${args.concurrency} pages at a time (safe max: ${sysInfo.maxSafe} based on ${sysInfo.reason})`,
+    );
     if (args.perf) console.log(`📊 Performance metrics: enabled`);
     if (args.limit) console.log(`🔢 Page limit: ${args.limit}`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
@@ -259,16 +267,16 @@ async function audit() {
     // Check if comparison mode
     if (args.compare || args.compareSitemap) {
       if (!args.origin && !args.sitemap) {
-        console.error("");
-        console.error("❌ Comparison mode requires --origin or --sitemap for the origin site");
-        console.error("");
+        console.error('');
+        console.error('❌ Comparison mode requires --origin or --sitemap for the origin site');
+        console.error('');
         process.exit(1);
       }
 
       if (!args.compare && !args.compareSitemap) {
-        console.error("");
-        console.error("❌ Comparison mode requires --compare or --compare-sitemap for the comparison site");
-        console.error("");
+        console.error('');
+        console.error('❌ Comparison mode requires --compare or --compare-sitemap for the comparison site');
+        console.error('');
         process.exit(1);
       }
 
@@ -276,9 +284,9 @@ async function audit() {
       if (args.compare) {
         const compareValidation = validateURL(args.compare);
         if (!compareValidation.valid) {
-          console.error("");
+          console.error('');
           console.error(`❌ Invalid compare URL: ${compareValidation.error}`);
-          console.error("");
+          console.error('');
           process.exit(1);
         }
       }
@@ -384,7 +392,9 @@ async function audit() {
             const lastAudit = history.audits[history.audits.length - 1];
             seo.data.previousScore = lastAudit.summary?.overallScore || null;
           }
-        } catch { /* no previous history */ }
+        } catch {
+          /* no previous history */
+        }
 
         manager.addAuditSnapshot(seo.data, seo.fileManager.timestamp);
       } else {
@@ -408,7 +418,9 @@ async function audit() {
       const badgePath = path.join(seo.fileManager.resultsDir, 'badge.svg');
       const score = seo.data.analysis?.summary?.overallScore || 0;
       fs.writeFileSync(badgePath, generateBadgeSVG(score, seo.domainName!));
-    } catch { /* badge generation is optional */ }
+    } catch {
+      /* badge generation is optional */
+    }
 
     // Print CLI summary (use file:// URL for clickable path in terminal)
     const absoluteHtmlPath = path.resolve(htmlOutputPath);
@@ -480,21 +492,26 @@ async function audit() {
       const score = seo.data.analysis?.summary?.overallScore || 0;
       const totalPages = Object.keys(seo.data.pageData?.pages || {}).length;
       if (process.platform === 'darwin') {
-        execFile('osascript', ['-e', `display notification "Score: ${score}/100 | ${totalPages} pages crawled" with title "SEO Audit Complete" subtitle "${seo.domainName}"`]);
+        execFile('osascript', [
+          '-e',
+          `display notification "Score: ${score}/100 | ${totalPages} pages crawled" with title "SEO Audit Complete" subtitle "${seo.domainName}"`,
+        ]);
       }
-    } catch { /* notification is optional */ }
+    } catch {
+      /* notification is optional */
+    }
 
     // Append to audit log
     try {
       const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${seo.data.analysis?.summary?.overallScore || 0} | Issues: ${seo.data.analysis?.summary?.totalIssues || 0} | Pages: ${Object.keys(seo.data.pageData?.pages || {}).length}\n`;
       fs.appendFileSync('audit-results/audit.log', logEntry);
-    } catch { /* log is optional */ }
+    } catch {
+      /* log is optional */
+    }
 
     // Auto-open HTML report in browser if --open flag is set
     if (seo.shouldOpenReport) {
-      const openCmd = process.platform === 'darwin' ? 'open'
-        : process.platform === 'win32' ? 'start'
-        : 'xdg-open';
+      const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
       exec(`${openCmd} "${absoluteHtmlPath}"`, (err) => {
         if (err) console.log('Could not auto-open report:', err.message);
       });
@@ -506,7 +523,9 @@ async function audit() {
 
     // Provide actionable hints based on common errors
     if (err.message.includes('ENOTFOUND') || err.message.includes('getaddrinfo')) {
-      console.error('\n💡 Hint: The domain could not be resolved. Check that the URL is correct and the site is online.');
+      console.error(
+        '\n💡 Hint: The domain could not be resolved. Check that the URL is correct and the site is online.',
+      );
     } else if (err.message.includes('ECONNREFUSED')) {
       console.error('\n💡 Hint: Connection refused. The server may be down or blocking requests.');
     } else if (err.message.includes('ETIMEDOUT') || err.message.includes('timeout')) {

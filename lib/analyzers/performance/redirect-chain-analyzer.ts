@@ -51,8 +51,10 @@ class RedirectChainAnalyzer {
       try {
         const fromHost = new URL(fromUrl).hostname;
         const toHost = new URL(toUrl).hostname;
-        if ((fromHost.startsWith('www.') && !toHost.startsWith('www.')) ||
-            (!fromHost.startsWith('www.') && toHost.startsWith('www.'))) {
+        if (
+          (fromHost.startsWith('www.') && !toHost.startsWith('www.')) ||
+          (!fromHost.startsWith('www.') && toHost.startsWith('www.'))
+        ) {
           info.hasWwwRedirect = true;
         }
       } catch {
@@ -124,8 +126,10 @@ class RedirectChainAnalyzer {
       const finalUrl = new URL(info.finalUrl);
 
       // Different domain entirely
-      if (originalUrl.hostname !== finalUrl.hostname &&
-          originalUrl.hostname.replace(/^www\./, '') !== finalUrl.hostname.replace(/^www\./, '')) {
+      if (
+        originalUrl.hostname !== finalUrl.hostname &&
+        originalUrl.hostname.replace(/^www\./, '') !== finalUrl.hostname.replace(/^www\./, '')
+      ) {
         warnings.push({
           message: 'Redirect to different domain',
           detail: `Original: ${originalUrl.hostname} → Final: ${finalUrl.hostname}`,
@@ -197,7 +201,7 @@ class RedirectChainAnalyzer {
 
     // Site-wide issues
     const totalPages = Object.keys(pages).length;
-    const redirectPercentage = totalPages > 0 ? (stats.pagesWithRedirects / totalPages * 100).toFixed(1) : 0;
+    const redirectPercentage = totalPages > 0 ? ((stats.pagesWithRedirects / totalPages) * 100).toFixed(1) : 0;
 
     if (parseFloat(redirectPercentage as string) > 30) {
       issues.push({
@@ -208,7 +212,10 @@ class RedirectChainAnalyzer {
     }
 
     if (pagesWithLongChains.length > 0) {
-      const examples = pagesWithLongChains.slice(0, 5).map((p: any) => `${p.url} (${p.length} hops)`).join(', ');
+      const examples = pagesWithLongChains
+        .slice(0, 5)
+        .map((p: any) => `${p.url} (${p.length} hops)`)
+        .join(', ');
       issues.push({
         message: 'Pages with long redirect chains',
         detail: `${pagesWithLongChains.length} pages have >2 redirects. Examples: ${examples}`,

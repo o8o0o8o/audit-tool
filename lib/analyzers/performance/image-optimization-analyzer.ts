@@ -18,7 +18,7 @@ class ImageOptimizationAnalyzer {
     // Get all images with their properties
     const imageElements = await chromePage.evaluate(() => {
       const imgs = Array.from(document.querySelectorAll('img'));
-      return imgs.map(img => ({
+      return imgs.map((img) => ({
         src: img.src || img.getAttribute('src'),
         loading: img.loading, // 'lazy', 'eager', or undefined
         width: img.width,
@@ -57,7 +57,12 @@ class ImageOptimizationAnalyzer {
         const imgPath = img.src.toLowerCase().split('?')[0]; // strip query params
         if (imgPath.endsWith('.webp') || imgPath.endsWith('.avif')) {
           imageAnalysis.modernFormats++;
-        } else if (imgPath.endsWith('.jpg') || imgPath.endsWith('.jpeg') || imgPath.endsWith('.png') || imgPath.endsWith('.gif')) {
+        } else if (
+          imgPath.endsWith('.jpg') ||
+          imgPath.endsWith('.jpeg') ||
+          imgPath.endsWith('.png') ||
+          imgPath.endsWith('.gif')
+        ) {
           imageAnalysis.legacyFormats++;
         }
 
@@ -99,7 +104,10 @@ class ImageOptimizationAnalyzer {
     }
 
     if (imageAnalysis.oversizedImages.length > 0) {
-      const oversizedSrcs = imageAnalysis.oversizedImages.slice(0, 3).map(i => i.src?.substring(0, 60)).join(', ');
+      const oversizedSrcs = imageAnalysis.oversizedImages
+        .slice(0, 3)
+        .map((i) => i.src?.substring(0, 60))
+        .join(', ');
       imageAnalysis.issues.push({
         severity: SEVERITY.HIGH,
         message: `Some pages have oversized images`,

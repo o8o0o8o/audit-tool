@@ -55,7 +55,12 @@ class FileManager {
    * @param {Object} options - Optional configuration
    * @param {number} options.batchSize - Pages per batch file (default from CRAWL_SETTINGS)
    */
-  constructor(domainName: string, resultsDir = 'audit-results', timestamp: string | null = null, options: FileManagerOptions = {}) {
+  constructor(
+    domainName: string,
+    resultsDir = 'audit-results',
+    timestamp: string | null = null,
+    options: FileManagerOptions = {},
+  ) {
     this.domainName = domainName;
     this.baseResultsDir = resultsDir;
     this.archivePartNumber = 0;
@@ -158,7 +163,10 @@ class FileManager {
         try {
           decompressed = zlib.gunzipSync(fileContent);
         } catch (decompressError: unknown) {
-          throw new Error(`Failed to decompress gzip file "${actualPath}": ${(decompressError as Error).message}. File may be corrupted or not gzip compressed.`, { cause: decompressError });
+          throw new Error(
+            `Failed to decompress gzip file "${actualPath}": ${(decompressError as Error).message}. File may be corrupted or not gzip compressed.`,
+            { cause: decompressError },
+          );
         }
 
         if (!decompressed || decompressed.length === 0) {
@@ -170,14 +178,20 @@ class FileManager {
         } catch (jsonError: unknown) {
           // Provide helpful context about where parsing failed
           const preview = decompressed.toString('utf-8').substring(0, 100);
-          throw new Error(`Failed to parse JSON from "${actualPath}" after decompression: ${(jsonError as Error).message}. Content preview: "${preview}..."`, { cause: jsonError });
+          throw new Error(
+            `Failed to parse JSON from "${actualPath}" after decompression: ${(jsonError as Error).message}. Content preview: "${preview}..."`,
+            { cause: jsonError },
+          );
         }
       } else {
         try {
           return JSON.parse(fileContent.toString('utf-8'));
         } catch (jsonError: unknown) {
           const preview = fileContent.toString('utf-8').substring(0, 100);
-          throw new Error(`Failed to parse JSON from "${actualPath}": ${(jsonError as Error).message}. Content preview: "${preview}..."`, { cause: jsonError });
+          throw new Error(
+            `Failed to parse JSON from "${actualPath}": ${(jsonError as Error).message}. Content preview: "${preview}..."`,
+            { cause: jsonError },
+          );
         }
       }
     } catch (error: unknown) {
@@ -202,7 +216,7 @@ class FileManager {
 
     const uncompressedSizeMB = Buffer.byteLength(jsonString, 'utf-8') / (1024 * 1024);
     const compressedSizeMB = compressedData.length / (1024 * 1024);
-    const compressionRatio = ((1 - (compressedSizeMB / uncompressedSizeMB)) * 100).toFixed(1);
+    const compressionRatio = ((1 - compressedSizeMB / uncompressedSizeMB) * 100).toFixed(1);
 
     fs.writeFileSync(filePath, compressedData);
 
@@ -222,7 +236,7 @@ class FileManager {
     this.archivePartNumber++;
     const archiveFile = path.join(
       this.resultsDir,
-      `SEOAnalysis__${this.domainName}__archive_part${this.archivePartNumber}.json.gz`
+      `SEOAnalysis__${this.domainName}__archive_part${this.archivePartNumber}.json.gz`,
     );
 
     console.log(`\n📦 Archiving ${Object.keys(pagesToArchive).length} processed pages to ${archiveFile}...`);
@@ -234,7 +248,9 @@ class FileManager {
     };
 
     const stats = this.writeJsonFile(archiveFile, archiveData);
-    console.log(`✓ Archive saved: ${stats.uncompressedSizeMB.toFixed(2)} MB → ${stats.compressedSizeMB.toFixed(2)} MB compressed (${stats.compressionRatio}% reduction)\n`);
+    console.log(
+      `✓ Archive saved: ${stats.uncompressedSizeMB.toFixed(2)} MB → ${stats.compressedSizeMB.toFixed(2)} MB compressed (${stats.compressionRatio}% reduction)\n`,
+    );
 
     return archiveFile;
   }
@@ -254,10 +270,7 @@ class FileManager {
     console.log(`Loading ${lastArchivePart} archive file(s)...`);
 
     for (let i = 1; i <= lastArchivePart; i++) {
-      const archiveFile = path.join(
-        this.resultsDir,
-        `SEOAnalysis__${this.domainName}__archive_part${i}.json`
-      );
+      const archiveFile = path.join(this.resultsDir, `SEOAnalysis__${this.domainName}__archive_part${i}.json`);
 
       try {
         console.log(`  - Loading archive part ${i}...`);
@@ -335,8 +348,9 @@ class FileManager {
       return null;
     }
 
-    const runs = fs.readdirSync(domainDir)
-      .filter(dir => {
+    const runs = fs
+      .readdirSync(domainDir)
+      .filter((dir) => {
         const fullPath = path.join(domainDir, dir);
         return fs.statSync(fullPath).isDirectory() && /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/.test(dir);
       })
@@ -361,16 +375,17 @@ class FileManager {
       return [];
     }
 
-    return fs.readdirSync(domainDir)
-      .filter(dir => {
+    return fs
+      .readdirSync(domainDir)
+      .filter((dir) => {
         const fullPath = path.join(domainDir, dir);
         return fs.statSync(fullPath).isDirectory() && /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/.test(dir);
       })
       .sort()
       .reverse() // Most recent first
-      .map(timestamp => ({
+      .map((timestamp) => ({
         timestamp,
-        path: path.join(domainDir, timestamp)
+        path: path.join(domainDir, timestamp),
       }));
   }
 
@@ -536,10 +551,11 @@ class FileManager {
       return [];
     }
 
-    return fs.readdirSync(this.pagesDir)
-      .filter(file => file.startsWith('batch_') && file.endsWith('.json.gz'))
+    return fs
+      .readdirSync(this.pagesDir)
+      .filter((file) => file.startsWith('batch_') && file.endsWith('.json.gz'))
       .sort()
-      .map(file => {
+      .map((file) => {
         const match = file.match(/batch_(\d+)\.json\.gz/);
         return {
           file: `pages/${file}`,
@@ -563,12 +579,12 @@ class FileManager {
     }
 
     // Get the maximum batch index from existing files
-    const maxBatchIndex = Math.max(...batches.map(b => b.batchIndex));
+    const maxBatchIndex = Math.max(...batches.map((b) => b.batchIndex));
 
     // Validate: check for gaps or corruption
     const expectedBatches = new Set(Array.from({ length: maxBatchIndex }, (_, i) => i + 1));
-    const actualBatches = new Set(batches.map(b => b.batchIndex));
-    const missingBatches = [...expectedBatches].filter(i => !actualBatches.has(i));
+    const actualBatches = new Set(batches.map((b) => b.batchIndex));
+    const missingBatches = [...expectedBatches].filter((i) => !actualBatches.has(i));
 
     if (missingBatches.length > 0) {
       console.warn(`⚠️  Gap detected in batch numbering. Missing batches: ${missingBatches.join(', ')}`);

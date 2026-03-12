@@ -73,10 +73,10 @@ class ResourceHintsAnalyzer {
 
     // Check for third-party origins that should have preconnect
     const thirdPartyOrigins = this.extractThirdPartyOrigins(pageData, url);
-    const criticalOrigins = thirdPartyOrigins.filter(o => o.critical);
+    const criticalOrigins = thirdPartyOrigins.filter((o) => o.critical);
     const connectedOrigins = new Set([
-      ...info.preconnect.map(p => this.getOrigin(p.href || p)),
-      ...info.dnsPrefetch.map(p => this.getOrigin(p.href || p)),
+      ...info.preconnect.map((p) => this.getOrigin(p.href || p)),
+      ...info.dnsPrefetch.map((p) => this.getOrigin(p.href || p)),
     ]);
 
     for (const origin of criticalOrigins) {
@@ -95,20 +95,23 @@ class ResourceHintsAnalyzer {
     }
 
     // Check for unnecessary preloads (not used within 3s)
-    const unusedPreloads = info.preload.filter(p => {
+    const unusedPreloads = info.preload.filter((p) => {
       const href = p.href || p;
       return pageData.unusedPreloads?.includes(href);
     });
 
     if (unusedPreloads.length > 0) {
-      info.unnecessaryHints = unusedPreloads.map(p => ({
+      info.unnecessaryHints = unusedPreloads.map((p) => ({
         url: p.href || p,
         type: 'preload',
         reason: 'Not used within 3 seconds',
       }));
       warnings.push({
         message: 'Unused preload hints detected',
-        detail: `${unusedPreloads.length} preloaded resources not used within 3 seconds: ${unusedPreloads.slice(0, 3).map(p => this.getFileName(p.href || p)).join(', ')}. Remove or defer these preloads.`,
+        detail: `${unusedPreloads.length} preloaded resources not used within 3 seconds: ${unusedPreloads
+          .slice(0, 3)
+          .map((p) => this.getFileName(p.href || p))
+          .join(', ')}. Remove or defer these preloads.`,
         severity: SEVERITY.LOW,
       });
     }
@@ -136,12 +139,13 @@ class ResourceHintsAnalyzer {
     }
 
     // Summary
-    const hasAnyHints = info.preload.length + info.prefetch.length +
-                        info.preconnect.length + info.dnsPrefetch.length > 0;
+    const hasAnyHints =
+      info.preload.length + info.prefetch.length + info.preconnect.length + info.dnsPrefetch.length > 0;
     if (!hasAnyHints && pageData.resources?.length > 10) {
       warnings.push({
         message: 'No resource hints detected',
-        detail: 'Page has no preload, prefetch, preconnect, or dns-prefetch hints. Consider adding hints for critical resources.',
+        detail:
+          'Page has no preload, prefetch, preconnect, or dns-prefetch hints. Consider adding hints for critical resources.',
         severity: SEVERITY.LOW,
       });
     }
@@ -184,8 +188,11 @@ class ResourceHintsAnalyzer {
         entry.types.add(resource.type || 'unknown');
 
         // Mark as critical if it's a render-blocking resource or font
-        if (resource.renderBlocking || resource.type === 'font' ||
-            (resource.type === 'script' && !resource.async && !resource.defer)) {
+        if (
+          resource.renderBlocking ||
+          resource.type === 'font' ||
+          (resource.type === 'script' && !resource.async && !resource.defer)
+        ) {
           entry.critical = true;
           entry.reason = resource.type === 'font' ? 'fonts' : 'render-blocking resources';
         }
@@ -262,10 +269,12 @@ class ResourceHintsAnalyzer {
 
     for (const [_url, pageData] of Object.entries(pages)) {
       const hints = pageData.resourceHints || {};
-      const hasHints = (hints.preload?.length || 0) +
-                       (hints.prefetch?.length || 0) +
-                       (hints.preconnect?.length || 0) +
-                       (hints.dnsPrefetch?.length || 0) > 0;
+      const hasHints =
+        (hints.preload?.length || 0) +
+          (hints.prefetch?.length || 0) +
+          (hints.preconnect?.length || 0) +
+          (hints.dnsPrefetch?.length || 0) >
+        0;
 
       if (hasHints) {
         stats.pagesWithHints++;
@@ -280,9 +289,7 @@ class ResourceHintsAnalyzer {
       // Check LCP preload
       const lcpUrl = pageData.lcpUrl || pageData.vitals?.lcpUrl;
       if (lcpUrl) {
-        const isPreloaded = hints.preload?.some((p: any) =>
-          (p.href || p) === lcpUrl || lcpUrl.includes(p.href || p)
-        );
+        const isPreloaded = hints.preload?.some((p: any) => (p.href || p) === lcpUrl || lcpUrl.includes(p.href || p));
         if (isPreloaded) {
           stats.pagesWithLcpPreload++;
         } else if (/\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(lcpUrl)) {

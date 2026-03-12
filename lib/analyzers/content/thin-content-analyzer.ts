@@ -9,11 +9,11 @@ import type { Issue, PageInfo } from '../../types';
 class ThinContentAnalyzer {
   // Minimum thresholds
   static THRESHOLDS = {
-    MIN_WORDS: 100,           // Bare minimum
-    LOW_WORDS: 300,           // Low content
-    RECOMMENDED_WORDS: 600,   // Recommended minimum
+    MIN_WORDS: 100, // Bare minimum
+    LOW_WORDS: 300, // Low content
+    RECOMMENDED_WORDS: 600, // Recommended minimum
     MIN_PARAGRAPHS: 2,
-    MIN_TEXT_RATIO: 10,       // Text to HTML ratio percentage
+    MIN_TEXT_RATIO: 10, // Text to HTML ratio percentage
   };
 
   /**
@@ -104,13 +104,15 @@ class ThinContentAnalyzer {
       /\/page\/\d+\/?$/i,
     ];
 
-    if (nonContentPatterns.some(pattern => pattern.test(url))) return true;
+    if (nonContentPatterns.some((pattern) => pattern.test(url))) return true;
 
     // Exclude homepage — it's navigational, not a long-form content page
     try {
       const path = new URL(url).pathname.replace(/\/+$/, '');
       if (path === '') return true;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     return false;
   }

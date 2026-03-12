@@ -60,10 +60,10 @@ function displayWidth(str: string): number {
   let width = 0;
   for (const char of stripped) {
     const cp = char.codePointAt(0)!;
-    if (cp > 0xFFFF) {
+    if (cp > 0xffff) {
       // Supplementary plane (most emojis) — 2 columns
       width += 2;
-    } else if (cp >= 0x2600 && cp <= 0x26FF) {
+    } else if (cp >= 0x2600 && cp <= 0x26ff) {
       // Miscellaneous Symbols (⚡♿☀ etc.) — 2 columns in most terminals
       width += 2;
     } else {
@@ -153,11 +153,26 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   console.log('╠' + '═'.repeat(W) + '╣');
 
   // Score gauge with letter grade
-  const scoreColor = overallScore >= 80 ? C.BRIGHT_GREEN : overallScore >= 60 ? C.GREEN : overallScore >= 40 ? C.ORANGE : C.RED;
-  const scoreLabel = overallScore >= 90 ? 'Excellent' : overallScore >= 70 ? 'Good' : overallScore >= 50 ? 'Needs Work' : 'Poor';
-  const letterGrade = overallScore >= 95 ? 'A+' : overallScore >= 90 ? 'A' : overallScore >= 80 ? 'B' : overallScore >= 70 ? 'C' : overallScore >= 60 ? 'D' : 'F';
+  const scoreColor =
+    overallScore >= 80 ? C.BRIGHT_GREEN : overallScore >= 60 ? C.GREEN : overallScore >= 40 ? C.ORANGE : C.RED;
+  const scoreLabel =
+    overallScore >= 90 ? 'Excellent' : overallScore >= 70 ? 'Good' : overallScore >= 50 ? 'Needs Work' : 'Poor';
+  const letterGrade =
+    overallScore >= 95
+      ? 'A+'
+      : overallScore >= 90
+        ? 'A'
+        : overallScore >= 80
+          ? 'B'
+          : overallScore >= 70
+            ? 'C'
+            : overallScore >= 60
+              ? 'D'
+              : 'F';
   const gauge = bar(overallScore, 100, 30);
-  line(`${C.BOLD}Score:${C.RESET} ${scoreColor}${C.BOLD}${overallScore}${C.RESET}/100 (${scoreColor}${letterGrade}${C.RESET}) ${scoreColor}${scoreLabel}${C.RESET}`);
+  line(
+    `${C.BOLD}Score:${C.RESET} ${scoreColor}${C.BOLD}${overallScore}${C.RESET}/100 (${scoreColor}${letterGrade}${C.RESET}) ${scoreColor}${scoreLabel}${C.RESET}`,
+  );
   line(`       ${gauge} `);
   emptyLine();
 
@@ -212,9 +227,9 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   divider();
   line(`${C.BOLD}Issues:${C.RESET} ${totalIssues} total`);
   if (criticalCount > 0) line(`  ${C.RED}■${C.RESET} Critical  ${C.BOLD}${criticalCount}${C.RESET}`);
-  if (highCount > 0)     line(`  ${C.ORANGE}■${C.RESET} High      ${C.BOLD}${highCount}${C.RESET}`);
-  if (mediumCount > 0)   line(`  ${C.YELLOW}■${C.RESET} Medium    ${C.BOLD}${mediumCount}${C.RESET}`);
-  if (lowCount > 0)      line(`  ${C.GREEN}■${C.RESET} Low       ${C.BOLD}${lowCount}${C.RESET}`);
+  if (highCount > 0) line(`  ${C.ORANGE}■${C.RESET} High      ${C.BOLD}${highCount}${C.RESET}`);
+  if (mediumCount > 0) line(`  ${C.YELLOW}■${C.RESET} Medium    ${C.BOLD}${mediumCount}${C.RESET}`);
+  if (lowCount > 0) line(`  ${C.GREEN}■${C.RESET} Low       ${C.BOLD}${lowCount}${C.RESET}`);
 
   // Quick wins
   if (quickWins.length > 0) {
@@ -235,7 +250,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     emptyLine();
     divider();
     line(`${C.BOLD}Insights:${C.RESET}`);
-    insightLines.forEach(l => line(`  ${l}`));
+    insightLines.forEach((l) => line(`  ${l}`));
   }
 
   // Top 3 slowest pages (if performance data available)
@@ -279,7 +294,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
 
   // Score prediction based on category headroom
   if (criticalCount > 0 || highCount > 0) {
-    const weights = { seo: 0.30, performance: 0.25, technical: 0.20, accessibility: 0.15, security: 0.10 };
+    const weights = { seo: 0.3, performance: 0.25, technical: 0.2, accessibility: 0.15, security: 0.1 };
     let potentialGain = 0;
     for (const [cat, w] of Object.entries(weights)) {
       const headroom = 100 - (categoryScores[cat] || 100);
@@ -299,7 +314,12 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     divider();
     const prev = results.previousScore;
     const delta = overallScore - prev;
-    const arrow = delta > 0 ? `${C.GREEN}+${delta} ↑${C.RESET}` : delta < 0 ? `${C.RED}${delta} ↓${C.RESET}` : `${C.DIM}±0${C.RESET}`;
+    const arrow =
+      delta > 0
+        ? `${C.GREEN}+${delta} ↑${C.RESET}`
+        : delta < 0
+          ? `${C.RED}${delta} ↓${C.RESET}`
+          : `${C.DIM}±0${C.RESET}`;
     line(`${C.BOLD}vs Previous:${C.RESET} ${prev} → ${overallScore} (${arrow})`);
   }
 
@@ -345,7 +365,7 @@ function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: numb
     for (const { pattern, title } of issuePatterns) {
       if (pattern.test(issueMessage)) {
         const pageCount = Array.isArray(pages) ? pages.length : 1;
-        const existing = quickWins.find(qw => qw.title === title);
+        const existing = quickWins.find((qw) => qw.title === title);
         if (existing) {
           existing.count += pageCount;
         } else {
@@ -356,9 +376,7 @@ function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: numb
     }
   }
 
-  return quickWins
-    .sort((a, b) => b.count - a.count)
-    .slice(0, count);
+  return quickWins.sort((a, b) => b.count - a.count).slice(0, count);
 }
 
 /**
@@ -370,7 +388,8 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
   const totalPages = pageData.total || Object.keys(pageData.pages || {}).length;
 
   const score = summary.overallScore || 0;
-  const grade = score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
+  const grade =
+    score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
 
   return {
     domain: domainName,
@@ -411,7 +430,7 @@ function getInsightLines(pagesArray: PageInfo[]) {
   if (pagesArray.length === 0) return lines;
 
   // Language mismatches
-  const langMismatches = pagesArray.filter(p => p.languageDetection?.match === false).length;
+  const langMismatches = pagesArray.filter((p) => p.languageDetection?.match === false).length;
   if (langMismatches > 0) {
     lines.push(`${C.ORANGE}⚡${C.RESET} ${langMismatches} page(s) with language mismatch`);
   }
@@ -423,7 +442,7 @@ function getInsightLines(pagesArray: PageInfo[]) {
   }
 
   // Code coverage (avg unused JS/CSS)
-  const coveragePages = pagesArray.filter(p => p.codeCoverage?.js?.ratio != null);
+  const coveragePages = pagesArray.filter((p) => p.codeCoverage?.js?.ratio != null);
   if (coveragePages.length > 0) {
     const avgUnusedJs = coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length;
     if (avgUnusedJs > 40) {
@@ -432,23 +451,25 @@ function getInsightLines(pagesArray: PageInfo[]) {
   }
 
   // Near-duplicate / similar content
-  const similarPages = pagesArray.filter(p => p.contentSimilarity?.similarPages?.length > 0).length;
+  const similarPages = pagesArray.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length;
   if (similarPages > 0) {
     lines.push(`${C.YELLOW}📄${C.RESET} ${similarPages} page(s) with near-duplicate content`);
   }
 
   // PageRank highlights (top 3 highest)
-  const rankedPages = pagesArray.filter(p => p.internalPageRank != null).sort((a, b) => b.internalPageRank - a.internalPageRank);
+  const rankedPages = pagesArray
+    .filter((p) => p.internalPageRank != null)
+    .sort((a, b) => b.internalPageRank - a.internalPageRank);
   if (rankedPages.length > 0) {
     const topRank = rankedPages[0].internalPageRank;
-    const lowRankCount = rankedPages.filter(p => p.internalPageRank < topRank * 0.1).length;
+    const lowRankCount = rankedPages.filter((p) => p.internalPageRank < topRank * 0.1).length;
     if (lowRankCount > 0) {
       lines.push(`${C.DIM}📊${C.RESET} ${lowRankCount} page(s) with very low internal PageRank`);
     }
   }
 
   // CTA coverage
-  const noCta = pagesArray.filter(p => p.ctaData?.summary?.total === 0).length;
+  const noCta = pagesArray.filter((p) => p.ctaData?.summary?.total === 0).length;
   if (noCta > 5) {
     lines.push(`${C.DIM}🎯${C.RESET} ${noCta} page(s) have no CTAs`);
   }

@@ -1,7 +1,12 @@
 import type { ChromePage, ParsedPage } from '../../types';
 
 class SecurityAnalyzer {
-  static async analyzeSecurity(chromePage: ChromePage, parsedPage: ParsedPage, url: string, responseHeaders: Record<string, string> = {}) {
+  static async analyzeSecurity(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    url: string,
+    responseHeaders: Record<string, string> = {},
+  ) {
     const securityIssues = {
       missingHeaders: [],
       insecureCookies: 0,
@@ -46,9 +51,10 @@ class SecurityAnalyzer {
       }
 
       // Check HttpOnly for session/auth cookies
-      const isSensitiveCookie = cookie.name.toLowerCase().includes('session') ||
-                                cookie.name.toLowerCase().includes('auth') ||
-                                cookie.name.toLowerCase().includes('token');
+      const isSensitiveCookie =
+        cookie.name.toLowerCase().includes('session') ||
+        cookie.name.toLowerCase().includes('auth') ||
+        cookie.name.toLowerCase().includes('token');
       if (!cookie.httpOnly && isSensitiveCookie) {
         issues.push('missing HttpOnly flag on sensitive cookie');
       }

@@ -15,7 +15,13 @@ import {
   getMetricTooltip,
   getTextLengthTooltip,
 } from '../html-utils';
-import type { PageInfo, ReportSectionData, HeadingCount, AccessibilityAnalysis, ContentQualityAnalysis } from '../../types';
+import type {
+  PageInfo,
+  ReportSectionData,
+  HeadingCount,
+  AccessibilityAnalysis,
+  ContentQualityAnalysis,
+} from '../../types';
 
 interface CrUXMetric {
   percentiles?: { p75?: number };
@@ -125,7 +131,7 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
 function getPagesTable(data: ReportSectionData) {
   const { pages, hasPerformanceMetrics = false } = data;
   const cruxData = (data.jsonData?.cruxData || null) as CrUXData | null;
-  const hasCrux = !!(cruxData?.metrics);
+  const hasCrux = !!cruxData?.metrics;
 
   return `
     <div class="table-filters" style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
@@ -207,7 +213,9 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
         <th class="sortable" data-type="number" data-column="3" title="HTTP response status code. 200=OK, 301/302=redirect, 404=not found, 500+=server error.">Status</th>
         ${getColumnHeader('titleLength', 'Title', `${THRESHOLDS.TITLE_MIN}-${THRESHOLDS.TITLE_MAX} chars`)}
         ${getColumnHeader('descriptionLength', 'Description', `${THRESHOLDS.DESCRIPTION_MIN}-${THRESHOLDS.DESCRIPTION_MAX} chars`)}
-        ${hasPerformanceMetrics ? `
+        ${
+          hasPerformanceMetrics
+            ? `
         ${getPerfColumnHeader('ttfb', 'TTFB', `≤ ${THRESHOLDS.TTFB}ms`, hasCrux)}
         ${getPerfColumnHeader('fcp', 'FCP', `≤ ${THRESHOLDS.FCP}ms`, hasCrux)}
         ${getPerfColumnHeader('lcp', 'LCP', `≤ ${THRESHOLDS.LCP}ms`, hasCrux)}
@@ -216,7 +224,9 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
             INP ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:400;color:#6b7280;">🔬 Lab</span>' : ''}
             <span class="threshold">≤ ${THRESHOLDS.INP || 200}ms</span>
         </th>
-        ` : ''}
+        `
+            : ''
+        }
         ${getColumnHeader('pageSize', 'Page Size', `≤ ${formatBytes(THRESHOLDS.PAGE_SIZE)}`)}
         ${getColumnHeader('requestCount', 'Requests', `≤ ${THRESHOLDS.REQUEST_COUNT}`)}
         ${getColumnHeader('hasCanonical', 'Canonical', 'Self-referencing')}
@@ -351,9 +361,7 @@ function getPerfCell(page: PageInfo, metric: string, labValue: number | undefine
 
   // Lab display
   const hasLab = isCls ? labValue !== undefined : !!labValue;
-  const labDisplay = hasLab
-    ? (isCls ? String(labValue) : `${labValue}${unit}`)
-    : 'N/A';
+  const labDisplay = hasLab ? (isCls ? String(labValue) : `${labValue}${unit}`) : 'N/A';
   const labColor = hasLab ? getMetricColor(labValue!, threshold, true) : '#9ca3af';
 
   // CrUX field display
@@ -388,31 +396,41 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   const titleColor = getTextLengthColor(titleLength, THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX);
   const descColor = getTextLengthColor(descLength, THRESHOLDS.DESCRIPTION_MIN, THRESHOLDS.DESCRIPTION_MAX);
   const titleTooltip = getTextLengthTooltip(titleLength, THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX, 'Title');
-  const descTooltip = getTextLengthTooltip(descLength, THRESHOLDS.DESCRIPTION_MIN, THRESHOLDS.DESCRIPTION_MAX, 'Description');
+  const descTooltip = getTextLengthTooltip(
+    descLength,
+    THRESHOLDS.DESCRIPTION_MIN,
+    THRESHOLDS.DESCRIPTION_MAX,
+    'Description',
+  );
 
   // Handle both old array format and new object format
   const h1Count = Array.isArray(page.headings)
-    ? (page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count || 0)
-    : (page.headings?.h1?.length || 0);
+    ? page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count || 0
+    : page.headings?.h1?.length || 0;
   const h2Count = Array.isArray(page.headings)
-    ? (page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count || 0)
-    : (page.headings?.h2?.length || 0);
+    ? page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count || 0
+    : page.headings?.h2?.length || 0;
 
   // Convert object format to array format for structure check
   const headingsArray: HeadingCount[] | null = Array.isArray(page.headings)
     ? page.headings
-    : page.headings ? [
-        { tag: 'h1', count: page.headings.h1?.length || page.headings.h1Count || 0 },
-        { tag: 'h2', count: page.headings.h2?.length || page.headings.h2Count || 0 },
-        { tag: 'h3', count: page.headings.h3?.length || page.headings.h3Count || 0 },
-        { tag: 'h4', count: page.headings.h4?.length || page.headings.h4Count || 0 },
-        { tag: 'h5', count: page.headings.h5?.length || page.headings.h5Count || 0 },
-        { tag: 'h6', count: page.headings.h6?.length || page.headings.h6Count || 0 },
-      ] : null;
-  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!)
+    : page.headings
+      ? [
+          { tag: 'h1', count: page.headings.h1?.length || page.headings.h1Count || 0 },
+          { tag: 'h2', count: page.headings.h2?.length || page.headings.h2Count || 0 },
+          { tag: 'h3', count: page.headings.h3?.length || page.headings.h3Count || 0 },
+          { tag: 'h4', count: page.headings.h4?.length || page.headings.h4Count || 0 },
+          { tag: 'h5', count: page.headings.h5?.length || page.headings.h5Count || 0 },
+          { tag: 'h6', count: page.headings.h6?.length || page.headings.h6Count || 0 },
+        ]
+      : null;
+  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
   const missingMeta = getMissingMetaTags(page);
   const alternatesCount = page.alternates?.length || 0;
-  const linksWithoutText = (Array.isArray(page.links) ? page.links : []).filter((link: { text?: string }) => !link.text || link.text.trim() === '').length || 0;
+  const linksWithoutText =
+    (Array.isArray(page.links) ? page.links : []).filter(
+      (link: { text?: string }) => !link.text || link.text.trim() === '',
+    ).length || 0;
 
   // Security metrics
   const securityScore = page.security?.securityScore ?? null;
@@ -421,7 +439,15 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   const insecureCookies = page.security?.insecureCookies || 0;
   const formsWithoutCSRF = page.security?.formsWithoutCSRF || 0;
   const inlineScripts = page.security?.inlineScripts || 0;
-  const securityTooltip = buildSecurityTooltip(page, securityScore, missingSecHeaders, mixedContent, insecureCookies, formsWithoutCSRF, inlineScripts);
+  const securityTooltip = buildSecurityTooltip(
+    page,
+    securityScore,
+    missingSecHeaders,
+    mixedContent,
+    insecureCookies,
+    formsWithoutCSRF,
+    inlineScripts,
+  );
 
   // Caching metrics
   const cacheScore = page.caching?.cacheScore ?? null;
@@ -430,10 +456,20 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   const uncachedStatic = page.caching?.staticUncached || 0;
   const cachedStatic = page.caching?.staticCached || 0;
   const hasServiceWorker = page.caching?.hasServiceWorker || false;
-  const cachingTooltip = buildCachingTooltip(page, cacheScore, hasCDN, cdnProvider, cachedStatic, uncachedStatic, hasServiceWorker);
+  const cachingTooltip = buildCachingTooltip(
+    page,
+    cacheScore,
+    hasCDN,
+    cdnProvider,
+    cachedStatic,
+    uncachedStatic,
+    hasServiceWorker,
+  );
 
   // Keywords for filtering
-  const keywords = (page.contentQuality?.topKeywords || []).map((k: { word: string }) => k.word.toLowerCase()).join(',');
+  const keywords = (page.contentQuality?.topKeywords || [])
+    .map((k: { word: string }) => k.word.toLowerCase())
+    .join(',');
   const titleWords = (page.title || '').toLowerCase();
 
   return `
@@ -457,13 +493,13 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             title="${(page.incomingLinksCount ?? 0) > 0 ? 'Click to see ' + page.incomingLinksCount + ' incoming link(s)' : 'No incoming links - page is orphaned (only accessible via sitemap)'}">
             ${page.incomingLinksCount || 0}${(page.incomingLinksCount ?? 0) > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.length || 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : (page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal')}">
+        <td style="color: ${getMetricColor(page.urlAnalysis?.length || 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal'}">
             ${page.urlAnalysis?.length || 0}
         </td>
         <td style="color: ${getMetricColor(page.urlAnalysis?.depth || 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
             ${page.urlAnalysis?.depth || 0}
         </td>
-        <td style="color: ${(page.redirectCount ?? 0) > 2 ? '#ef4444' : ((page.redirectCount ?? 0) > 0 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="${(page.redirectCount ?? 0) > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
+        <td style="color: ${(page.redirectCount ?? 0) > 2 ? '#ef4444' : (page.redirectCount ?? 0) > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.redirectCount ?? 0) > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
             ${page.redirectCount || 0}
         </td>
         <td style="color: ${(page.httpLinksCount ?? 0) > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.httpLinksCount ?? 0) > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
@@ -480,13 +516,17 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             <span style="color: #9ca3af;"> | </span>
             <span>${escapeHtml(page.description?.substring(0, 40) || 'No description')}${(page.description?.length || 0) > 40 ? '...' : ''}</span>
         </td>
-        ${hasPerformanceMetrics ? `
+        ${
+          hasPerformanceMetrics
+            ? `
         ${getPerfCell(page, 'TTFB', page.TTFB, THRESHOLDS.TTFB, 'ms')}
         ${getPerfCell(page, 'FCP', page.FCP, THRESHOLDS.FCP, 'ms')}
         ${getPerfCell(page, 'LCP', page.LCP, THRESHOLDS.LCP, 'ms')}
         ${getPerfCell(page, 'CLS', page.CLS, THRESHOLDS.CLS, '')}
         ${getPerfCell(page, 'INP', page.INP, THRESHOLDS.INP || 200, 'ms')}
-        ` : ''}
+        `
+            : ''
+        }
         <td class="metric-cell" style="color: ${getMetricColor(page.totalResponseSize, THRESHOLDS.PAGE_SIZE, true)};" title="${getMetricTooltip(page.totalResponseSize, THRESHOLDS.PAGE_SIZE, 'Page Size', ' bytes', true)}">
             ${formatBytes(page.totalResponseSize || 0)}
         </td>
@@ -494,66 +534,80 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             ${page.totalNumberOfRequests || 0}
         </td>
         <td style="text-align: center;">
-            ${page.canonical ?
-                (page.canonical === page.url ? '<span style="color: #10b981;" title="Canonical URL matches page URL">✓</span>' : '<span style="color: #f59e0b;" title="Canonical URL differs: ' + escapeHtml(page.canonical) + '">⚠</span>')
-                : '<span style="color: #ef4444;" title="Canonical URL is missing">✗</span>'}
+            ${
+              page.canonical
+                ? page.canonical === page.url
+                  ? '<span style="color: #10b981;" title="Canonical URL matches page URL">✓</span>'
+                  : '<span style="color: #f59e0b;" title="Canonical URL differs: ' +
+                    escapeHtml(page.canonical) +
+                    '">⚠</span>'
+                : '<span style="color: #ef4444;" title="Canonical URL is missing">✗</span>'
+            }
         </td>
-        <td style="color: ${h1Count === 1 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="${h1Count === 1 ? 'Perfect: Page has exactly 1 H1 tag' : (h1Count === 0 ? 'Error: Page is missing H1 tag' : 'Error: Page has ' + h1Count + ' H1 tags (should be exactly 1)')}">
+        <td style="color: ${h1Count === 1 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="${h1Count === 1 ? 'Perfect: Page has exactly 1 H1 tag' : h1Count === 0 ? 'Error: Page is missing H1 tag' : 'Error: Page has ' + h1Count + ' H1 tags (should be exactly 1)'}">
             ${h1Count}
         </td>
         <td style="color: ${h2Count <= THRESHOLDS.H2_COUNT ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="${h2Count <= THRESHOLDS.H2_COUNT ? 'Good: H2 count is within threshold' : 'Warning: Too many H2 tags (' + h2Count + ', recommended: ≤' + THRESHOLDS.H2_COUNT + ')'}">
             ${h2Count}
         </td>
         <td style="text-align: center;">
-            ${hasHStructureIssue ?
-                '<span style="color: #ef4444;" title="Error: Heading hierarchy has gaps (e.g., h1 to h3 without h2)">✗</span>' :
-                '<span style="color: #10b981;" title="Good: Heading hierarchy is correct">✓</span>'}
+            ${
+              hasHStructureIssue
+                ? '<span style="color: #ef4444;" title="Error: Heading hierarchy has gaps (e.g., h1 to h3 without h2)">✗</span>'
+                : '<span style="color: #10b981;" title="Good: Heading hierarchy is correct">✓</span>'
+            }
         </td>
-        <td style="color: ${missingMeta.length === 0 ? '#10b981' : (missingMeta.length <= 2 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${missingMeta.length === 0 ? 'Good: All important meta tags are present' : 'Missing meta tags: ' + missingMeta.join(', ')}">
+        <td style="color: ${missingMeta.length === 0 ? '#10b981' : missingMeta.length <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingMeta.length === 0 ? 'Good: All important meta tags are present' : 'Missing meta tags: ' + missingMeta.join(', ')}">
             ${missingMeta.length}
         </td>
         <td style="color: ${alternatesCount > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${alternatesCount > 0 ? alternatesCount + ' alternate language link(s)' : 'No alternate language links'}">
             ${alternatesCount}
         </td>
-        <td style="color: ${linksWithoutText === 0 ? '#10b981' : (linksWithoutText <= 3 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${linksWithoutText === 0 ? 'Good: All links have text' : 'Warning: ' + linksWithoutText + ' link(s) without text'}">
+        <td style="color: ${linksWithoutText === 0 ? '#10b981' : linksWithoutText <= 3 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${linksWithoutText === 0 ? 'Good: All links have text' : 'Warning: ' + linksWithoutText + ' link(s) without text'}">
             ${linksWithoutText}
         </td>
-        <td style="color: ${securityScore === null ? '#9ca3af' : (securityScore >= 70 ? '#10b981' : (securityScore >= 50 ? '#f59e0b' : '#ef4444'))}; font-weight: 600; text-align: center; white-space: pre-line;" title="${securityTooltip}">
+        <td style="color: ${securityScore === null ? '#9ca3af' : securityScore >= 70 ? '#10b981' : securityScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${securityTooltip}">
             ${securityScore !== null ? securityScore : 'N/A'}
         </td>
-        <td style="color: ${missingSecHeaders === 0 ? '#10b981' : (missingSecHeaders <= 2 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') || '')}">
+        <td style="color: ${missingSecHeaders === 0 ? '#10b981' : missingSecHeaders <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') || '')}">
             ${missingSecHeaders}
         </td>
-        <td style="color: ${insecureCookies === 0 ? '#10b981' : (insecureCookies <= 2 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${insecureCookies === 0 ? 'Good: All cookies are secure' : 'Warning: ' + insecureCookies + ' cookie(s) without Secure/HttpOnly flags'}">
+        <td style="color: ${insecureCookies === 0 ? '#10b981' : insecureCookies <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${insecureCookies === 0 ? 'Good: All cookies are secure' : 'Warning: ' + insecureCookies + ' cookie(s) without Secure/HttpOnly flags'}">
             ${insecureCookies}
         </td>
-        <td style="color: ${mixedContent === 0 ? '#10b981' : (mixedContent <= 3 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${mixedContent === 0 ? 'Good: No mixed content' : 'Warning: ' + mixedContent + ' HTTP resources on HTTPS page'}">
+        <td style="color: ${mixedContent === 0 ? '#10b981' : mixedContent <= 3 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${mixedContent === 0 ? 'Good: No mixed content' : 'Warning: ' + mixedContent + ' HTTP resources on HTTPS page'}">
             ${mixedContent}
         </td>
-        <td style="color: ${formsWithoutCSRF === 0 ? '#10b981' : (formsWithoutCSRF <= 2 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${formsWithoutCSRF === 0 ? 'Good: All forms have CSRF protection' : 'Warning: ' + formsWithoutCSRF + ' form(s) without CSRF tokens'}">
+        <td style="color: ${formsWithoutCSRF === 0 ? '#10b981' : formsWithoutCSRF <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${formsWithoutCSRF === 0 ? 'Good: All forms have CSRF protection' : 'Warning: ' + formsWithoutCSRF + ' form(s) without CSRF tokens'}">
             ${formsWithoutCSRF}
         </td>
-        <td style="color: ${inlineScripts <= 5 ? '#10b981' : (inlineScripts <= 10 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${inlineScripts <= 5 ? 'Good: Minimal inline scripts' : 'Warning: ' + inlineScripts + ' inline scripts (potential XSS risk)'}">
+        <td style="color: ${inlineScripts <= 5 ? '#10b981' : inlineScripts <= 10 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${inlineScripts <= 5 ? 'Good: Minimal inline scripts' : 'Warning: ' + inlineScripts + ' inline scripts (potential XSS risk)'}">
             ${inlineScripts}
         </td>
-        <td style="color: ${cacheScore === null ? '#9ca3af' : (cacheScore >= 70 ? '#10b981' : (cacheScore >= 50 ? '#f59e0b' : '#ef4444'))}; font-weight: 600; text-align: center; white-space: pre-line;" title="${cachingTooltip}">
+        <td style="color: ${cacheScore === null ? '#9ca3af' : cacheScore >= 70 ? '#10b981' : cacheScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${cachingTooltip}">
             ${cacheScore !== null ? cacheScore : 'N/A'}
         </td>
         <td style="text-align: center;">
-            ${hasCDN ?
-                '<span style="color: #10b981;" title="CDN detected' + (cdnProvider ? ': ' + cdnProvider : '') + '">✓</span>' :
-                '<span style="color: #f59e0b;" title="No CDN detected">✗</span>'}
+            ${
+              hasCDN
+                ? '<span style="color: #10b981;" title="CDN detected' +
+                  (cdnProvider ? ': ' + cdnProvider : '') +
+                  '">✓</span>'
+                : '<span style="color: #f59e0b;" title="No CDN detected">✗</span>'
+            }
         </td>
         <td style="color: ${cachedStatic > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${cachedStatic > 0 ? cachedStatic + ' static resources cached' : 'No cached static resources'}">
             ${cachedStatic}
         </td>
-        <td style="color: ${uncachedStatic === 0 ? '#10b981' : (uncachedStatic <= 5 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${uncachedStatic === 0 ? 'Good: All static resources are cached' : 'Warning: ' + uncachedStatic + ' static resources without caching'}">
+        <td style="color: ${uncachedStatic === 0 ? '#10b981' : uncachedStatic <= 5 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${uncachedStatic === 0 ? 'Good: All static resources are cached' : 'Warning: ' + uncachedStatic + ' static resources without caching'}">
             ${uncachedStatic}
         </td>
         <td style="text-align: center;">
-            ${hasServiceWorker ?
-                '<span style="color: #10b981;" title="Service Worker is active">✓</span>' :
-                '<span style="color: #f59e0b;" title="No Service Worker detected">✗</span>'}
+            ${
+              hasServiceWorker
+                ? '<span style="color: #10b981;" title="Service Worker is active">✓</span>'
+                : '<span style="color: #f59e0b;" title="No Service Worker detected">✗</span>'
+            }
         </td>
         ${getImageOptimizationCells(page)}
         ${getAccessibilityCells(page)}
@@ -565,7 +619,15 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
 /**
  * Build the security tooltip
  */
-function buildSecurityTooltip(page: PageInfo, securityScore: number | null, missingSecHeaders: number, mixedContent: number, insecureCookies: number, formsWithoutCSRF: number, inlineScripts: number) {
+function buildSecurityTooltip(
+  page: PageInfo,
+  securityScore: number | null,
+  missingSecHeaders: number,
+  mixedContent: number,
+  insecureCookies: number,
+  formsWithoutCSRF: number,
+  inlineScripts: number,
+) {
   if (securityScore === null) {
     return 'Security analysis not available';
   }
@@ -577,7 +639,9 @@ function buildSecurityTooltip(page: PageInfo, securityScore: number | null, miss
   if (missingSecHeaders === 0) {
     scoreBreakdown.push('✓ All security headers present');
   } else {
-    scoreBreakdown.push('✗ Missing ' + missingSecHeaders + ' security header(s): ' + (page.security?.missingHeaders?.join(', ') || ''));
+    scoreBreakdown.push(
+      '✗ Missing ' + missingSecHeaders + ' security header(s): ' + (page.security?.missingHeaders?.join(', ') || ''),
+    );
   }
 
   if (insecureCookies === 0) {
@@ -619,7 +683,15 @@ function buildSecurityTooltip(page: PageInfo, securityScore: number | null, miss
 /**
  * Build the caching tooltip
  */
-function buildCachingTooltip(page: PageInfo, cacheScore: number | null, hasCDN: boolean, cdnProvider: string | null, cachedStatic: number, uncachedStatic: number, hasServiceWorker: boolean) {
+function buildCachingTooltip(
+  page: PageInfo,
+  cacheScore: number | null,
+  hasCDN: boolean,
+  cdnProvider: string | null,
+  cachedStatic: number,
+  uncachedStatic: number,
+  hasServiceWorker: boolean,
+) {
   if (cacheScore === null) {
     return 'Caching analysis not available';
   }
@@ -641,9 +713,13 @@ function buildCachingTooltip(page: PageInfo, cacheScore: number | null, hasCDN: 
     const cachingRatio = cachedStatic / totalStatic;
     const points = Math.round(cachingRatio * 40);
     if (uncachedStatic === 0) {
-      cacheBreakdown.push('✓ All static resources cached: ' + cachedStatic + '/' + totalStatic + ' (+' + points + ' points)');
+      cacheBreakdown.push(
+        '✓ All static resources cached: ' + cachedStatic + '/' + totalStatic + ' (+' + points + ' points)',
+      );
     } else {
-      cacheBreakdown.push('⚠ Static resources: ' + cachedStatic + ' cached, ' + uncachedStatic + ' uncached (+' + points + '/40 points)');
+      cacheBreakdown.push(
+        '⚠ Static resources: ' + cachedStatic + ' cached, ' + uncachedStatic + ' uncached (+' + points + '/40 points)',
+      );
     }
   } else {
     cacheBreakdown.push('⚠ No static resources detected (0 points)');
@@ -664,7 +740,9 @@ function buildCachingTooltip(page: PageInfo, cacheScore: number | null, hasCDN: 
     const dynamicRatio = dynamicCached / totalDynamic;
     const points = Math.round(dynamicRatio * 10);
     if (points > 0) {
-      cacheBreakdown.push('✓ Dynamic content: ' + dynamicCached + '/' + totalDynamic + ' cached (+' + points + ' points)');
+      cacheBreakdown.push(
+        '✓ Dynamic content: ' + dynamicCached + '/' + totalDynamic + ' cached (+' + points + ' points)',
+      );
     }
   }
 
@@ -710,16 +788,16 @@ function getImageOptimizationCells(page: PageInfo) {
     <td style="color: ${totalImages > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${totalImages} total images">
         ${totalImages}
     </td>
-    <td style="color: ${totalImages > 0 && lazyImages === 0 ? '#ef4444' : (lazyImages > 0 ? '#10b981' : '#9ca3af')}; font-weight: 600; text-align: center;" title="${lazyImages} images with lazy loading (${totalImages} total)">
+    <td style="color: ${totalImages > 0 && lazyImages === 0 ? '#ef4444' : lazyImages > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${lazyImages} images with lazy loading (${totalImages} total)">
         ${lazyImages}/${totalImages}
     </td>
-    <td style="color: ${totalImageSize > 1000000 ? '#ef4444' : (totalImageSize > 500000 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="Total image size: ${Math.round(totalImageSize / 1000)}KB">
+    <td style="color: ${totalImageSize > 1000000 ? '#ef4444' : totalImageSize > 500000 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="Total image size: ${Math.round(totalImageSize / 1000)}KB">
         ${Math.round(totalImageSize / 1000)}
     </td>
-    <td style="color: ${legacyFormats > 0 && modernFormats === 0 ? '#f59e0b' : (modernFormats > 0 ? '#10b981' : '#9ca3af')}; font-weight: 600; text-align: center;" title="${modernFormats} modern format images (WebP/AVIF), ${legacyFormats} legacy format images (JPG/PNG)">
+    <td style="color: ${legacyFormats > 0 && modernFormats === 0 ? '#f59e0b' : modernFormats > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${modernFormats} modern format images (WebP/AVIF), ${legacyFormats} legacy format images (JPG/PNG)">
         ${modernFormats}/${totalImages}
     </td>
-    <td style="color: ${renderBlocking > 5 ? '#ef4444' : (renderBlocking > 0 ? '#f59e0b' : '#10b981')}; font-weight: 600; text-align: center;" title="${renderBlocking} render-blocking resources">
+    <td style="color: ${renderBlocking > 5 ? '#ef4444' : renderBlocking > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${renderBlocking} render-blocking resources">
         ${renderBlocking}
     </td>
     <td style="color: ${uncompressed > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${uncompressed} uncompressed text resources">
@@ -750,15 +828,19 @@ function getAccessibilityCells(page: PageInfo) {
   const positiveTabindex = a11y.keyboard?.positiveTabindex || 0;
 
   return `
-    <td style="color: ${a11yScore >= 70 ? '#10b981' : (a11yScore >= 50 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="Accessibility Score: ${a11yScore}/100">
+    <td style="color: ${a11yScore >= 70 ? '#10b981' : a11yScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Accessibility Score: ${a11yScore}/100">
         ${a11yScore}
     </td>
     <td style="text-align: center;">
-        ${ariaInvalid > 0 ?
-            '<span style="color: #ef4444;" title="' + ariaInvalid + ' invalid ARIA roles">✗</span>' :
-            (ariaValid > 0 ? '<span style="color: #10b981;" title="' + ariaValid + ' valid ARIA roles">✓</span>' : '<span style="color: #9ca3af;">—</span>')}
+        ${
+          ariaInvalid > 0
+            ? '<span style="color: #ef4444;" title="' + ariaInvalid + ' invalid ARIA roles">✗</span>'
+            : ariaValid > 0
+              ? '<span style="color: #10b981;" title="' + ariaValid + ' valid ARIA roles">✓</span>'
+              : '<span style="color: #9ca3af;">—</span>'
+        }
     </td>
-    <td style="color: ${totalInputs > 0 && inputsWithoutLabels === 0 ? '#10b981' : (inputsWithoutLabels > 0 ? '#ef4444' : '#9ca3af')}; font-weight: 600; text-align: center;" title="${inputsWithLabels} inputs with labels, ${inputsWithoutLabels} without">
+    <td style="color: ${totalInputs > 0 && inputsWithoutLabels === 0 ? '#10b981' : inputsWithoutLabels > 0 ? '#ef4444' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${inputsWithLabels} inputs with labels, ${inputsWithoutLabels} without">
         ${inputsWithLabels}/${totalInputs}
     </td>
     <td style="text-align: center;" title="Main: ${hasMain ? 'Yes' : 'No'}, Nav: ${hasNav ? 'Yes' : 'No'}, Header: ${hasHeader ? 'Yes' : 'No'}">
@@ -777,19 +859,19 @@ function getAccessibilityCells(page: PageInfo) {
  */
 function getSegmentColor(segment: string) {
   const colors = {
-    blog: '#3b82f6',       // blue
-    product: '#10b981',    // green
-    category: '#8b5cf6',   // purple
-    tag: '#6366f1',        // indigo
-    search: '#f59e0b',     // amber
-    account: '#64748b',    // slate
-    checkout: '#ec4899',   // pink
-    legal: '#6b7280',      // gray
-    contact: '#06b6d4',    // cyan
-    media: '#f97316',      // orange
-    landing: '#14b8a6',    // teal
-    api: '#ef4444',        // red
-    other: '#9ca3af',      // gray
+    blog: '#3b82f6', // blue
+    product: '#10b981', // green
+    category: '#8b5cf6', // purple
+    tag: '#6366f1', // indigo
+    search: '#f59e0b', // amber
+    account: '#64748b', // slate
+    checkout: '#ec4899', // pink
+    legal: '#6b7280', // gray
+    contact: '#06b6d4', // cyan
+    media: '#f97316', // orange
+    landing: '#14b8a6', // teal
+    api: '#ef4444', // red
+    other: '#9ca3af', // gray
   };
   return (colors as Record<string, string>)[segment] || colors.other;
 }
@@ -827,19 +909,22 @@ function getContentQualityCells(page: PageInfo) {
   const textToHtmlRatio = content.textToHtmlRatio || 0;
   const readability = content.readabilityScore || 0;
   const topKeywords = content.topKeywords || [];
-  const topKeywordsStr = topKeywords.slice(0, 3).map((k: { word: string; density: number }) => `${k.word}(${k.density}%)`).join(', ');
+  const topKeywordsStr = topKeywords
+    .slice(0, 3)
+    .map((k: { word: string; density: number }) => `${k.word}(${k.density}%)`)
+    .join(', ');
 
   return `
-    <td style="color: ${contentScore >= 70 ? '#10b981' : (contentScore >= 50 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="Content Quality Score: ${contentScore}/100">
+    <td style="color: ${contentScore >= 70 ? '#10b981' : contentScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Content Quality Score: ${contentScore}/100">
         ${contentScore}
     </td>
-    <td style="color: ${wordCount >= 600 ? '#10b981' : (wordCount >= 300 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="${wordCount} words (min: 300, recommended: 600)">
+    <td style="color: ${wordCount >= 600 ? '#10b981' : wordCount >= 300 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${wordCount} words (min: 300, recommended: 600)">
         ${wordCount}
     </td>
     <td style="color: ${textToHtmlRatio >= 25 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="Text-to-HTML ratio: ${textToHtmlRatio}% (min: 25%)">
         ${textToHtmlRatio}%
     </td>
-    <td style="color: ${readability >= 60 ? '#10b981' : (readability >= 50 ? '#f59e0b' : '#ef4444')}; font-weight: 600; text-align: center;" title="Flesch Reading Ease: ${readability}/100 (60-70 is standard)">
+    <td style="color: ${readability >= 60 ? '#10b981' : readability >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Flesch Reading Ease: ${readability}/100 (60-70 is standard)">
         ${readability}
     </td>
     <td style="font-size: 11px; text-align: left;" title="Top keywords: ${topKeywords.map((k: { word: string; count: number; density: number }) => `${k.word}: ${k.count} times (${k.density}%)`).join(', ')}">
@@ -858,7 +943,9 @@ function getNewInsightCells(page: PageInfo) {
   const langDisplay = lang?.detectedLanguage?.toUpperCase() || '—';
   const langMatch = lang?.match;
   const langColor = langMatch === false ? '#ef4444' : langMatch === true ? '#10b981' : '#6b7280';
-  const langTitle = lang ? `Detected: ${lang.detectedLanguage || 'unknown'} (${Math.round((lang.detectedConfidence || 0) * 100)}% confidence), Declared: ${lang.declaredLanguage || 'none'}` : '';
+  const langTitle = lang
+    ? `Detected: ${lang.detectedLanguage || 'unknown'} (${Math.round((lang.detectedConfidence || 0) * 100)}% confidence), Declared: ${lang.declaredLanguage || 'none'}`
+    : '';
 
   // PageRank
   const pr = page.internalPageRank;
@@ -881,7 +968,8 @@ function getNewInsightCells(page: PageInfo) {
   // Main content words
   const mainWords = page.contentQuality?.wordCountBySection?.main ?? null;
   const mainDisplay = mainWords != null ? mainWords : '—';
-  const mainColor = mainWords != null ? (mainWords >= 300 ? '#10b981' : mainWords >= 100 ? '#f59e0b' : '#ef4444') : '#6b7280';
+  const mainColor =
+    mainWords != null ? (mainWords >= 300 ? '#10b981' : mainWords >= 100 ? '#f59e0b' : '#ef4444') : '#6b7280';
 
   return `
     <td style="text-align: center; font-size: 12px; color: ${langColor};" title="${escapeHtml(langTitle)}">${langDisplay}</td>

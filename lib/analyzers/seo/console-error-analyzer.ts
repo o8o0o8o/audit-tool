@@ -15,14 +15,14 @@ class ConsoleErrorAnalyzer {
     /cannot\s*read\s*propert/i,
     /is\s*not\s*defined/i,
     /is\s*not\s*a\s*function/i,
-    /loading\s*chunk\s*\d+\s*failed/i,  // Webpack chunk loading failure
-    /hydration/i,  // React hydration errors
+    /loading\s*chunk\s*\d+\s*failed/i, // Webpack chunk loading failure
+    /hydration/i, // React hydration errors
   ];
 
   // Patterns to ignore (noise)
   static #ignorePatterns = [
     /favicon\.ico/i,
-    /fb_xd_fragment/i,  // Facebook SDK noise
+    /fb_xd_fragment/i, // Facebook SDK noise
     /recaptcha/i,
     /googletagmanager/i,
     /google-analytics/i,
@@ -43,7 +43,7 @@ class ConsoleErrorAnalyzer {
     const pageerrors: Record<string, any>[] = [];
 
     // Console message handler
-    const consoleHandler = (msg: import("playwright").ConsoleMessage) => {
+    const consoleHandler = (msg: import('playwright').ConsoleMessage) => {
       const type = msg.type();
       const text = msg.text();
       const location = msg.location();
@@ -152,7 +152,7 @@ class ConsoleErrorAnalyzer {
     if (criticalErrors.length > 0) {
       const examples = criticalErrors
         .slice(0, 3)
-        .map(e => `"${e.text.substring(0, 100)}${e.text.length > 100 ? '...' : ''}"`)
+        .map((e) => `"${e.text.substring(0, 100)}${e.text.length > 100 ? '...' : ''}"`)
         .join('<br>');
 
       issues.push({
@@ -166,7 +166,7 @@ class ConsoleErrorAnalyzer {
     if (otherErrors.length > 0) {
       const examples = otherErrors
         .slice(0, 2)
-        .map(e => `"${e.text.substring(0, 80)}..."`)
+        .map((e) => `"${e.text.substring(0, 80)}..."`)
         .join('<br>');
 
       issues.push({
@@ -190,7 +190,7 @@ class ConsoleErrorAnalyzer {
       errorCount: allErrors.length,
       criticalErrorCount: criticalErrors.length,
       warningCount: consoleWarnings.length,
-      errors: allErrors.slice(0, 10).map(e => ({
+      errors: allErrors.slice(0, 10).map((e) => ({
         text: e.text,
         type: e.type,
         url: e.url,
@@ -218,19 +218,17 @@ class ConsoleErrorAnalyzer {
     const commonErrors = new Map();
 
     for (const [_url, page] of Object.entries(pages)) {
-
       if (page.consoleAnalysis?.hasErrors) {
         pagesWithErrors++;
-  
+
         totalErrors += page.consoleAnalysis.errorCount ?? 0;
 
-  
         if (page.consoleAnalysis.hasCriticalErrors) {
           pagesWithCriticalErrors++;
         }
 
         // Track common errors
-  
+
         for (const error of page.consoleAnalysis.errors || []) {
           // Normalize error text for grouping
           const normalized = error.text

@@ -37,7 +37,7 @@ class MobileFriendlyAnalyzer {
       const smallTextElements = [];
       const fontSizeDistribution = {};
 
-      textElements.forEach(el => {
+      textElements.forEach((el) => {
         const text = el.textContent.trim();
         if (text.length === 0) return;
         // Skip if this element's text is same as parent's (nested elements)
@@ -56,16 +56,16 @@ class MobileFriendlyAnalyzer {
 
         // Track distribution
         const bucket = fontSize < 12 ? '<12' : fontSize < 14 ? '12-13' : fontSize < 16 ? '14-15' : '16+';
-        (fontSizeDistribution as Record<string, number>)[bucket] = ((fontSizeDistribution as Record<string, number>)[bucket] || 0) + 1;
+        (fontSizeDistribution as Record<string, number>)[bucket] =
+          ((fontSizeDistribution as Record<string, number>)[bucket] || 0) + 1;
       });
 
       metrics.fontSizeDistribution = fontSizeDistribution;
       metrics.smallTextCount = smallTextElements.length;
 
       if (smallTextElements.length > 0) {
-        const percent = textElements.length > 0
-          ? ((smallTextElements.length / textElements.length) * 100).toFixed(1)
-          : 0;
+        const percent =
+          textElements.length > 0 ? ((smallTextElements.length / textElements.length) * 100).toFixed(1) : 0;
         issues.push(`${smallTextElements.length} text elements (${percent}%) have font size smaller than 12px`);
       }
 
@@ -76,17 +76,19 @@ class MobileFriendlyAnalyzer {
       if (!isNaN(bodyLineHeight) && !isNaN(bodyFontSize)) {
         const lineHeightRatio = bodyLineHeight / bodyFontSize;
         if (lineHeightRatio < 1.4) {
-          warnings.push(`Body line-height ratio (${lineHeightRatio.toFixed(2)}) is below recommended 1.4 for readability`);
+          warnings.push(
+            `Body line-height ratio (${lineHeightRatio.toFixed(2)}) is below recommended 1.4 for readability`,
+          );
         }
         metrics.lineHeightRatio = lineHeightRatio;
       }
 
       // 3. Check touch target sizes (minimum 48x48px recommended)
       const interactiveElements = Array.from(
-        document.querySelectorAll('a, button, input, select, textarea, [onclick], [role="button"]')
+        document.querySelectorAll('a, button, input, select, textarea, [onclick], [role="button"]'),
       );
 
-      const smallTargets = interactiveElements.filter(el => {
+      const smallTargets = interactiveElements.filter((el) => {
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0 && (rect.width < 48 || rect.height < 48);
       });
@@ -114,8 +116,7 @@ class MobileFriendlyAnalyzer {
         const verticalDistance = Math.abs(rect1.bottom - rect2.top);
         const horizontalDistance = Math.abs(rect1.right - rect2.left);
 
-        if ((verticalDistance < 8 && horizontalDistance < 100) ||
-            (horizontalDistance < 8 && verticalDistance < 100)) {
+        if ((verticalDistance < 8 && horizontalDistance < 100) || (horizontalDistance < 8 && verticalDistance < 100)) {
           tooClose.push(`${interactiveElements[i].tagName} and ${interactiveElements[i + 1].tagName}`);
         }
       }
@@ -126,26 +127,29 @@ class MobileFriendlyAnalyzer {
       metrics.tooClosePairs = tooClose.length;
 
       // 6. Check for fixed positioning elements that might cover content
-      const fixedElements = Array.from(document.querySelectorAll('*')).filter(el => {
+      const fixedElements = Array.from(document.querySelectorAll('*')).filter((el) => {
         const style = window.getComputedStyle(el);
         return style.position === 'fixed' && (el as HTMLElement).offsetHeight > 0;
       });
 
       let fixedAreaPercent = 0;
-      fixedElements.forEach(el => {
+      fixedElements.forEach((el) => {
         const rect = el.getBoundingClientRect();
-        fixedAreaPercent += (rect.width * rect.height) / (window.innerWidth * window.innerHeight) * 100;
+        fixedAreaPercent += ((rect.width * rect.height) / (window.innerWidth * window.innerHeight)) * 100;
       });
 
       if (fixedAreaPercent > 30) {
-        warnings.push(`Fixed elements cover ${fixedAreaPercent.toFixed(1)}% of viewport (may obstruct content on mobile)`);
+        warnings.push(
+          `Fixed elements cover ${fixedAreaPercent.toFixed(1)}% of viewport (may obstruct content on mobile)`,
+        );
       }
       metrics.fixedElementsCount = fixedElements.length;
       metrics.fixedAreaPercent = fixedAreaPercent;
 
       // 7. Check for text that doesn't wrap properly
-      const overflowingText = Array.from(document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div'))
-        .filter(el => el.scrollWidth > el.clientWidth + 5);
+      const overflowingText = Array.from(document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div')).filter(
+        (el) => el.scrollWidth > el.clientWidth + 5,
+      );
 
       if (overflowingText.length > 0) {
         warnings.push(`${overflowingText.length} elements have text overflow (may be cut off on mobile)`);
@@ -154,9 +158,7 @@ class MobileFriendlyAnalyzer {
 
       // 8. Check for proper media queries (responsive images)
       const images = Array.from(document.querySelectorAll('img'));
-      const responsiveImages = images.filter(img =>
-        img.srcset || img.sizes || img.closest('picture')
-      );
+      const responsiveImages = images.filter((img) => img.srcset || img.sizes || img.closest('picture'));
       const nonResponsiveImages = images.length - responsiveImages.length;
 
       if (images.length > 0 && nonResponsiveImages > images.length * 0.5) {

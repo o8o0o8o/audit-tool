@@ -57,7 +57,9 @@ class AnalyticsTrackingAnalyzer {
     if (uaMatches) {
       analyticsData.hasUniversalAnalytics = true;
       analyticsData.trackingIds.ua = [...new Set(uaMatches)];
-      analyticsData.warnings.push('Using legacy Universal Analytics (UA). UA was sunset in July 2024 — migrate to GA4 immediately');
+      analyticsData.warnings.push(
+        'Using legacy Universal Analytics (UA). UA was sunset in July 2024 — migrate to GA4 immediately',
+      );
 
       if (analyticsData.trackingIds.ua.length > 1) {
         analyticsData.warnings.push(`Multiple UA tracking IDs found: ${analyticsData.trackingIds.ua.join(', ')}`);
@@ -65,8 +67,9 @@ class AnalyticsTrackingAnalyzer {
     }
 
     // Check for analytics.js or ga.js
-    const hasAnalyticsJs = parsedPage.querySelector('script[src*="google-analytics.com/analytics.js"]') ||
-                          parsedPage.querySelector('script[src*="google-analytics.com/ga.js"]');
+    const hasAnalyticsJs =
+      parsedPage.querySelector('script[src*="google-analytics.com/analytics.js"]') ||
+      parsedPage.querySelector('script[src*="google-analytics.com/ga.js"]');
     if (hasAnalyticsJs && !analyticsData.hasUniversalAnalytics) {
       analyticsData.warnings.push('Google Analytics script loaded but no UA tracking ID found');
     }
@@ -171,7 +174,7 @@ class AnalyticsTrackingAnalyzer {
     ];
 
     for (const tool of consentTools) {
-      const hasConsentTool = tool.patterns.some(pattern => htmlContent.includes(pattern));
+      const hasConsentTool = tool.patterns.some((pattern) => htmlContent.includes(pattern));
       if (hasConsentTool) {
         analyticsData.hasCookieConsent = true;
         analyticsData.consentTool = tool.name;
@@ -181,12 +184,7 @@ class AnalyticsTrackingAnalyzer {
 
     // Check for generic cookie consent patterns
     if (!analyticsData.hasCookieConsent) {
-      const genericConsentPatterns = [
-        /cookie.*consent/i,
-        /gdpr.*consent/i,
-        /accept.*cookie/i,
-        /cookie.*banner/i,
-      ];
+      const genericConsentPatterns = [/cookie.*consent/i, /gdpr.*consent/i, /accept.*cookie/i, /cookie.*banner/i];
 
       for (const pattern of genericConsentPatterns) {
         if (pattern.test(htmlContent)) {
@@ -204,13 +202,20 @@ class AnalyticsTrackingAnalyzer {
     }
 
     // Validation: Check if analytics are present but no cookie consent
-    const hasAnyTracking = analyticsData.hasGA4 || analyticsData.hasUniversalAnalytics ||
-                          analyticsData.hasGTM || analyticsData.hasFacebookPixel ||
-                          analyticsData.hasLinkedInTag || analyticsData.hasTwitterPixel ||
-                          analyticsData.hasTikTokPixel || analyticsData.hasPinterestTag;
+    const hasAnyTracking =
+      analyticsData.hasGA4 ||
+      analyticsData.hasUniversalAnalytics ||
+      analyticsData.hasGTM ||
+      analyticsData.hasFacebookPixel ||
+      analyticsData.hasLinkedInTag ||
+      analyticsData.hasTwitterPixel ||
+      analyticsData.hasTikTokPixel ||
+      analyticsData.hasPinterestTag;
 
     if (hasAnyTracking && !analyticsData.hasCookieConsent) {
-      analyticsData.issues.push('Tracking scripts detected but no cookie consent mechanism found (GDPR/CCPA compliance issue)');
+      analyticsData.issues.push(
+        'Tracking scripts detected but no cookie consent mechanism found (GDPR/CCPA compliance issue)',
+      );
     }
 
     if (hasAnyTracking && !analyticsData.hasPrivacyPolicy) {
@@ -227,10 +232,12 @@ class AnalyticsTrackingAnalyzer {
     const hasAnalyticsInHead = Array.from(headScripts).some((script: any) => {
       const src = script.getAttribute('src') || '';
       const content = script.textContent || '';
-      return src.includes('googletagmanager.com') ||
-             src.includes('google-analytics.com') ||
-             content.includes('gtag(') ||
-             content.includes('ga(');
+      return (
+        src.includes('googletagmanager.com') ||
+        src.includes('google-analytics.com') ||
+        content.includes('gtag(') ||
+        content.includes('ga(')
+      );
     });
 
     if (hasAnyTracking && !hasAnalyticsInHead && !analyticsData.hasGTM) {

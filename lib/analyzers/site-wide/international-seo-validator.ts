@@ -104,13 +104,17 @@ class InternationalSEOValidator {
 
     // Report 1: Missing lang attribute
     if (stats.missingLangAttribute.length > 0) {
-      const urlList = stats.missingLangAttribute.slice(0, 10).map(u => `<li><a href="${u}">${u}</a></li>`).join('');
-      const moreCount = stats.missingLangAttribute.length > 10 ? ` (showing 10 of ${stats.missingLangAttribute.length})` : '';
+      const urlList = stats.missingLangAttribute
+        .slice(0, 10)
+        .map((u) => `<li><a href="${u}">${u}</a></li>`)
+        .join('');
+      const moreCount =
+        stats.missingLangAttribute.length > 10 ? ` (showing 10 of ${stats.missingLangAttribute.length})` : '';
 
       issues.push({
         title: `Pages missing HTML lang attribute`,
         description: `${stats.missingLangAttribute.length} page(s) are missing the lang attribute on the <html> tag${moreCount}:<ul>${urlList}</ul>`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     }
 
@@ -123,7 +127,7 @@ class InternationalSEOValidator {
       issues.push({
         title: `Inconsistent international URL structure`,
         description: `Multiple URL structures detected for international content. Stick to one approach (subdirectory, subdomain, or ccTLD):<ul>${structureList}</ul>`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
@@ -132,31 +136,35 @@ class InternationalSEOValidator {
       issues.push({
         title: `Many pages missing x-default hreflang`,
         description: `${stats.missingXDefault} page(s) with hreflang are missing the x-default tag. This should point to a default/fallback version for unmatched languages.`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
     // Report 4: Missing self-referential hreflang
     if (stats.missingSelfReferential.length > 10) {
-      const urlList = stats.missingSelfReferential.slice(0, 5).map(u => `<li><a href="${u}">${u}</a></li>`).join('');
+      const urlList = stats.missingSelfReferential
+        .slice(0, 5)
+        .map((u) => `<li><a href="${u}">${u}</a></li>`)
+        .join('');
 
       issues.push({
         title: `Pages missing self-referential hreflang`,
         description: `${stats.missingSelfReferential.length} page(s) don't include self-referential hreflang tags (each page should reference itself):<ul>${urlList}</ul>`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
     // Report 5: Non-UTF-8 charset
     if (stats.inconsistentCharset.length > 0) {
-      const charsetList = stats.inconsistentCharset.slice(0, 5).map(item =>
-        `<li><a href="${item.url}">${item.url}</a> (${item.charset})</li>`
-      ).join('');
+      const charsetList = stats.inconsistentCharset
+        .slice(0, 5)
+        .map((item) => `<li><a href="${item.url}">${item.url}</a> (${item.charset})</li>`)
+        .join('');
 
       issues.push({
         title: `Pages using non-UTF-8 charset`,
         description: `${stats.inconsistentCharset.length} page(s) use non-UTF-8 charset. UTF-8 is recommended for international sites:<ul>${charsetList}</ul>`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
@@ -174,7 +182,7 @@ class InternationalSEOValidator {
       const minLength = Math.min(...lengths);
 
       // If there's a >50% difference, warn about content parity
-      if (maxLength > 0 && (minLength / maxLength) < 0.5) {
+      if (maxLength > 0 && minLength / maxLength < 0.5) {
         const lengthList = Array.from(avgLengths.entries())
           .map(([lang, len]) => `<li>${lang}: ${len} chars average per page</li>`)
           .join('');
@@ -182,7 +190,7 @@ class InternationalSEOValidator {
         issues.push({
           title: `Significant content length disparity across languages`,
           description: `Some language versions have significantly less content than others. This may indicate incomplete translations or thin content:<ul>${lengthList}</ul>`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -195,7 +203,7 @@ class InternationalSEOValidator {
         issues.push({
           title: `Many pages missing hreflang on multilanguage site`,
           description: `${stats.pagesWithoutHreflang} page(s) (${percentWithout}%) don't have hreflang tags, but the site is multilanguage. Add hreflang to all language versions.`,
-          severity: SEVERITY.HIGH
+          severity: SEVERITY.HIGH,
         });
       }
     }
@@ -205,7 +213,7 @@ class InternationalSEOValidator {
       warnings.push({
         title: `Many pages missing language switcher`,
         description: `${stats.noLanguageSwitcher.length} page(s) have hreflang but no visible language switcher. This impacts user experience.`,
-        severity: SEVERITY.LOW
+        severity: SEVERITY.LOW,
       });
     }
 
@@ -220,13 +228,13 @@ class InternationalSEOValidator {
         languages: Array.from(stats.languages.entries()).map(([lang, data]) => ({
           language: lang,
           pageCount: data.count,
-          avgContentLength: Math.round((stats.contentLengthByLang.get(lang) || 0) / data.count)
+          avgContentLength: Math.round((stats.contentLengthByLang.get(lang) || 0) / data.count),
         })),
         urlStructures: Array.from(stats.urlStructures.entries()).map(([type, count]) => ({ type, count })),
         hreflangCoverage: totalPages > 0 ? Math.round((stats.pagesWithHreflang / totalPages) * 100) : 0,
         pagesWithHreflang: stats.pagesWithHreflang,
         pagesWithoutHreflang: stats.pagesWithoutHreflang,
-      }
+      },
     };
   }
 
@@ -289,7 +297,7 @@ class InternationalSEOValidator {
             issues.push({
               title: `Multiple pages linked for the same hreflang on a single page`,
               description: `Page <a href="${url}">${url}</a> links to multiple URLs for hreflang="${alt.hreflang}": <a href="${group.get(alt.hreflang)}">${group.get(alt.hreflang)}</a> and <a href="${alt.href}">${alt.href}</a>`,
-              severity: SEVERITY.HIGH
+              severity: SEVERITY.HIGH,
             });
           }
           group.set(alt.hreflang, alt.href);
@@ -327,11 +335,11 @@ class InternationalSEOValidator {
         const uniqueUrls = [...new Set(urls)];
         if (uniqueUrls.length > 1) {
           duplicateLangCount++;
-          const urlList = uniqueUrls.map(u => `<li><a href="${u}">${u}</a></li>`).join('');
+          const urlList = uniqueUrls.map((u) => `<li><a href="${u}">${u}</a></li>`).join('');
           issues.push({
             title: `Duplicate hreflang assignment within language group`,
             description: `${uniqueUrls.length} different URLs claim hreflang="${lang}" in the same language group:<ul>${urlList}</ul>`,
-            severity: SEVERITY.HIGH
+            severity: SEVERITY.HIGH,
           });
         }
       }
@@ -379,14 +387,14 @@ class InternationalSEOValidator {
 
         if (missingUrls.length > 0) {
           incompleteLinkCount++;
-          const missingList = missingUrls.map((url, i) =>
-            `<li><a href="${url}">${url}</a> (${missingLangs[i]})</li>`
-          ).join('');
+          const missingList = missingUrls
+            .map((url, i) => `<li><a href="${url}">${url}</a> (${missingLangs[i]})</li>`)
+            .join('');
 
           issues.push({
             title: `Incomplete bidirectional hreflang links`,
             description: `Page <a href="${groupUrl}">${groupUrl}</a> (${lang}) is missing hreflang links to ${missingUrls.length} page(s) in its language group:<ul>${missingList}</ul>`,
-            severity: SEVERITY.HIGH
+            severity: SEVERITY.HIGH,
           });
         }
       }
@@ -408,8 +416,8 @@ class InternationalSEOValidator {
       stats: {
         languageGroups: languageGroups.length,
         duplicateLangCount,
-        incompleteLinkCount
-      }
+        incompleteLinkCount,
+      },
     };
   }
 }

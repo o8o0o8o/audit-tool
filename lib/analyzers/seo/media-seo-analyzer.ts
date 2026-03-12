@@ -138,8 +138,8 @@ class MediaSEOAnalyzer {
 
       // Check for track elements (captions)
       const tracks = video.querySelectorAll('track');
-      const captionTrack = Array.from(tracks).find((t: any) =>
-        t.getAttribute('kind') === 'captions' || t.getAttribute('kind') === 'subtitles'
+      const captionTrack = Array.from(tracks).find(
+        (t: any) => t.getAttribute('kind') === 'captions' || t.getAttribute('kind') === 'subtitles',
       );
 
       // Check for source elements
@@ -276,7 +276,7 @@ class MediaSEOAnalyzer {
           }
         }
 
-        result.isValid = result.issues.filter(i => i.includes('required')).length === 0;
+        result.isValid = result.issues.filter((i) => i.includes('required')).length === 0;
         break;
       }
     }
@@ -298,15 +298,12 @@ class MediaSEOAnalyzer {
     let totalVideosWithoutCaptions = 0;
 
     for (const [_url, page] of Object.entries(pages)) {
-
       if ((page.mediaData?.totalVideos ?? 0) > 0) {
         pagesWithVideo++;
-
 
         if (page.mediaData?.hasVideoSchema) {
           pagesWithVideoSchema++;
         }
-
 
         totalVideosWithoutCaptions += page.mediaData?.videosWithoutCaptions || 0;
       }
@@ -323,7 +320,8 @@ class MediaSEOAnalyzer {
     if (totalVideosWithoutCaptions > 3) {
       warnings.push({
         message: `${totalVideosWithoutCaptions} videos across site lack captions`,
-        detail: 'Adding captions improves accessibility (WCAG requirement) and allows search engines to index video content.',
+        detail:
+          'Adding captions improves accessibility (WCAG requirement) and allows search engines to index video content.',
         severity: SEVERITY.MEDIUM,
       });
     }

@@ -103,13 +103,17 @@ function getConfigValidation(repo: Record<string, unknown>) {
     ...warnings.map((w) => ({ ...w, type: 'warning' })),
   ];
 
-  const rows = allFindings.map(f => `
+  const rows = allFindings
+    .map(
+      (f) => `
     <tr>
       <td style="padding: 10px 12px;">${getSeverityBadge(f.severity as string)}</td>
       <td style="padding: 10px 12px; font-weight: 500;">${escapeHtml(f.message)}</td>
       <td style="padding: 10px 12px; font-size: 13px; color: #4b5563;">${escapeHtml((f.detail as string) || '')}</td>
     </tr>
-  `).join('');
+  `,
+    )
+    .join('');
 
   return `
     <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
@@ -140,26 +144,30 @@ function getRouteCoverage(repo: Record<string, unknown>) {
   if (!stats) return '';
 
   const details = (repo.routeDetails || {}) as Record<string, unknown>;
-  const coveragePercent = stats.totalRoutes > 0
-    ? Math.round((stats.coveredRoutes / stats.totalRoutes) * 100)
-    : 0;
+  const coveragePercent = stats.totalRoutes > 0 ? Math.round((stats.coveredRoutes / stats.totalRoutes) * 100) : 0;
 
-  const coverageColor = coveragePercent >= 80 ? '#10b981' :
-                        coveragePercent >= 50 ? '#f59e0b' : '#ef4444';
+  const coverageColor = coveragePercent >= 80 ? '#10b981' : coveragePercent >= 50 ? '#f59e0b' : '#ef4444';
 
   // Uncovered routes table
   let uncoveredHtml = '';
   const uncovered = (details.uncoveredRoutes || []) as Array<Record<string, unknown>>;
   if (uncovered.length > 0) {
-    const uncoveredRows = uncovered.slice(0, 20).map((r: Record<string, unknown>) => `
+    const uncoveredRows = uncovered
+      .slice(0, 20)
+      .map(
+        (r: Record<string, unknown>) => `
       <tr>
         <td style="padding: 8px 12px;"><code>${escapeHtml(r.pattern)}</code></td>
         <td style="padding: 8px 12px; font-size: 13px; color: #6b7280;"><code>${escapeHtml(r.file)}</code></td>
-        <td style="padding: 8px 12px;">${r.isDynamic
-          ? '<span style="color: #7c3aed; font-size: 12px;">dynamic</span>'
-          : '<span style="color: #2563eb; font-size: 12px;">static</span>'}</td>
+        <td style="padding: 8px 12px;">${
+          r.isDynamic
+            ? '<span style="color: #7c3aed; font-size: 12px;">dynamic</span>'
+            : '<span style="color: #2563eb; font-size: 12px;">static</span>'
+        }</td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     uncoveredHtml = `
       <div style="margin-top: 15px;">
@@ -223,23 +231,28 @@ function getSourceMapping(repo: Record<string, unknown>) {
 
   const entries = Object.entries(mapping);
 
-  const rows = entries.map(([issueKey, locations]: [string, unknown]) => {
-    const locs = locations as Array<Record<string, unknown>>;
-    const locationHtml = locs.slice(0, 5).map((loc: Record<string, unknown>) => {
-      const fileRef = (loc.line as number) > 1
-        ? `<code>${escapeHtml(loc.file)}:${loc.line}</code>`
-        : `<code>${escapeHtml(loc.file)}</code>`;
-      return `
+  const rows = entries
+    .map(([issueKey, locations]: [string, unknown]) => {
+      const locs = locations as Array<Record<string, unknown>>;
+      const locationHtml = locs
+        .slice(0, 5)
+        .map((loc: Record<string, unknown>) => {
+          const fileRef =
+            (loc.line as number) > 1
+              ? `<code>${escapeHtml(loc.file)}:${loc.line}</code>`
+              : `<code>${escapeHtml(loc.file)}</code>`;
+          return `
         <div style="margin-bottom: 6px;">
           <div>${fileRef}</div>
           <div style="font-size: 12px; color: #6b7280;">${escapeHtml(loc.suggestion)}</div>
         </div>
       `;
-    }).join('');
+        })
+        .join('');
 
-    const moreCount = locs.length > 5 ? locs.length - 5 : 0;
+      const moreCount = locs.length > 5 ? locs.length - 5 : 0;
 
-    return `
+      return `
       <tr style="border-bottom: 1px solid #e5e7eb;">
         <td style="padding: 12px; vertical-align: top; font-weight: 500; max-width: 300px;">${escapeHtml(issueKey)}</td>
         <td style="padding: 12px; vertical-align: top;">
@@ -248,7 +261,8 @@ function getSourceMapping(repo: Record<string, unknown>) {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   return `
     <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">

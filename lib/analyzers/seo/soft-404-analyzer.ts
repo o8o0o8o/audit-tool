@@ -271,7 +271,8 @@ class Soft404Analyzer {
     if (potentialSoft404Count > 0) {
       warnings.push({
         message: `${potentialSoft404Count} potential soft 404 pages need review`,
-        detail: 'Some pages show signs of being soft 404s. Review these pages to ensure they return appropriate status codes.',
+        detail:
+          'Some pages show signs of being soft 404s. Review these pages to ensure they return appropriate status codes.',
         severity: SEVERITY.LOW,
       });
     }

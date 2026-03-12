@@ -112,9 +112,7 @@ class EEATAnalyzer {
         const schemas = Array.isArray(data) ? data : [data];
         for (const schema of schemas) {
           if (schema.author) {
-            const author = typeof schema.author === 'string'
-              ? schema.author
-              : schema.author.name;
+            const author = typeof schema.author === 'string' ? schema.author : schema.author.name;
             if (author) {
               result.author = author;
               if (schema.author.jobTitle) {

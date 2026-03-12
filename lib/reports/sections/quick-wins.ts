@@ -44,30 +44,44 @@ function getQuickWins(data: ReportSectionData) {
  * @returns {string} HTML string for the quick win card
  */
 function getQuickWinCard(win: QuickWinFull, index: number) {
-  const exampleHtml = win.example ? `
+  const exampleHtml = win.example
+    ? `
     <details class="code-example-wrapper">
       <summary style="cursor: pointer; font-size: 12px; color: #3b82f6; font-weight: 600; margin-bottom: 4px;">Show code example</summary>
       <div class="code-example">${escapeHtml(win.example)}</div>
     </details>
-  ` : '';
+  `
+    : '';
 
-  const affectedPagesHtml = win.examples && win.examples.length > 0 ? `
+  const affectedPagesHtml =
+    win.examples && win.examples.length > 0
+      ? `
     <div class="affected-pages">
       <strong>Affected pages:</strong>
       <div style="margin-top: 5px;">
-        ${win.examples.slice(0, 3).map((ex: string) => `<div style="margin: 2px 0; opacity: 0.85;">${escapeHtml(ex)}</div>`).join('')}
+        ${win.examples
+          .slice(0, 3)
+          .map((ex: string) => `<div style="margin: 2px 0; opacity: 0.85;">${escapeHtml(ex)}</div>`)
+          .join('')}
         ${win.affectedPages > 3 ? `<div style="opacity: 0.7;">... and ${win.affectedPages - 3} more</div>` : ''}
       </div>
     </div>
-  ` : '';
+  `
+      : '';
 
-  const resourcesHtml = win.resources && win.resources.length > 0 ? `
+  const resourcesHtml =
+    win.resources && win.resources.length > 0
+      ? `
     <div class="resource-links">
-      ${win.resources.map((res: { text: string; url: string }) =>
-        `<a href="${res.url}" target="_blank" rel="noopener noreferrer" class="resource-link">${escapeHtml(res.text)}</a>`
-      ).join('')}
+      ${win.resources
+        .map(
+          (res: { text: string; url: string }) =>
+            `<a href="${res.url}" target="_blank" rel="noopener noreferrer" class="resource-link">${escapeHtml(res.text)}</a>`,
+        )
+        .join('')}
     </div>
-  ` : '';
+  `
+      : '';
 
   return `
     <div class="win-card">

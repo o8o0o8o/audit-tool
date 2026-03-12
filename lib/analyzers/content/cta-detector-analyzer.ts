@@ -25,7 +25,7 @@ class CTADetectorAnalyzer {
 
       // Detect forms
       const forms = document.querySelectorAll('form');
-      forms.forEach(form => {
+      forms.forEach((form) => {
         const rect = form.getBoundingClientRect();
         const action = form.getAttribute('action') || '';
         const method = (form.getAttribute('method') || 'get').toLowerCase();
@@ -44,10 +44,13 @@ class CTADetectorAnalyzer {
       });
 
       // Detect buttons with CTA text patterns
-      const ctaPatterns = /\b(buy|order|subscribe|sign\s*up|register|get\s+started|try|download|contact|book|schedule|request|start|join|add\s+to\s+cart|checkout|donate|apply|enroll)\b/i;
+      const ctaPatterns =
+        /\b(buy|order|subscribe|sign\s*up|register|get\s+started|try|download|contact|book|schedule|request|start|join|add\s+to\s+cart|checkout|donate|apply|enroll)\b/i;
 
-      const buttons = document.querySelectorAll('button, [role="button"], a.btn, a.button, .cta, [class*="cta"], input[type="submit"]');
-      buttons.forEach(btn => {
+      const buttons = document.querySelectorAll(
+        'button, [role="button"], a.btn, a.button, .cta, [class*="cta"], input[type="submit"]',
+      );
+      buttons.forEach((btn) => {
         // Skip buttons inside forms (already counted)
         if (btn.closest('form') && btn.tagName !== 'A') return;
 
@@ -69,7 +72,7 @@ class CTADetectorAnalyzer {
 
       // Detect phone links
       const phoneLinks = document.querySelectorAll('a[href^="tel:"]');
-      phoneLinks.forEach(link => {
+      phoneLinks.forEach((link) => {
         const rect = link.getBoundingClientRect();
         results.push({
           type: 'phone',
@@ -82,7 +85,7 @@ class CTADetectorAnalyzer {
 
       // Detect email links
       const emailLinks = document.querySelectorAll('a[href^="mailto:"]');
-      emailLinks.forEach(link => {
+      emailLinks.forEach((link) => {
         const rect = link.getBoundingClientRect();
         results.push({
           type: 'email',
@@ -97,11 +100,11 @@ class CTADetectorAnalyzer {
     });
 
     // Analyze findings
-    const formCount = ctas.filter(c => c.type === 'form').length;
-    const ctaButtonCount = ctas.filter(c => c.type === 'cta-button').length;
-    const phoneCount = ctas.filter(c => c.type === 'phone').length;
-    const emailCount = ctas.filter(c => c.type === 'email').length;
-    const aboveFoldCTAs = ctas.filter(c => c.aboveFold && (c.type === 'cta-button' || c.type === 'form'));
+    const formCount = ctas.filter((c) => c.type === 'form').length;
+    const ctaButtonCount = ctas.filter((c) => c.type === 'cta-button').length;
+    const phoneCount = ctas.filter((c) => c.type === 'phone').length;
+    const emailCount = ctas.filter((c) => c.type === 'email').length;
+    const aboveFoldCTAs = ctas.filter((c) => c.aboveFold && (c.type === 'cta-button' || c.type === 'form'));
 
     // No CTA above the fold
     if (aboveFoldCTAs.length === 0 && ctas.length > 0) {
@@ -127,7 +130,7 @@ class CTADetectorAnalyzer {
         total: ctas.length,
         forms: formCount,
         ctaButtons: ctaButtonCount,
-        buttons: ctas.filter(c => c.type === 'button').length,
+        buttons: ctas.filter((c) => c.type === 'button').length,
         phoneLinks: phoneCount,
         emailLinks: emailCount,
         aboveFoldCount: aboveFoldCTAs.length,

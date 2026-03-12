@@ -11,8 +11,13 @@ const REQUIRED_MANIFEST_FIELDS = ['name', 'icons', 'start_url', 'display'];
 
 // Recommended manifest fields
 const RECOMMENDED_MANIFEST_FIELDS = [
-  'short_name', 'description', 'theme_color', 'background_color',
-  'orientation', 'scope', 'lang',
+  'short_name',
+  'description',
+  'theme_color',
+  'background_color',
+  'orientation',
+  'scope',
+  'lang',
 ];
 
 // Required icon sizes for different platforms
@@ -96,7 +101,8 @@ class PWAAnalyzer {
     } else {
       warnings.push({
         message: 'No service worker detected',
-        detail: 'Service workers enable offline support, push notifications, and background sync. Consider implementing one.',
+        detail:
+          'Service workers enable offline support, push notifications, and background sync. Consider implementing one.',
         severity: SEVERITY.LOW,
       });
       info.installabilityIssues.push('No service worker');
@@ -125,11 +131,12 @@ class PWAAnalyzer {
     }
 
     // Determine installability
-    info.isInstallable = info.hasManifest &&
-                         info.manifestValid &&
-                         info.hasServiceWorker &&
-                         info.httpsRequired &&
-                         info.installabilityIssues.length === 0;
+    info.isInstallable =
+      info.hasManifest &&
+      info.manifestValid &&
+      info.hasServiceWorker &&
+      info.httpsRequired &&
+      info.installabilityIssues.length === 0;
 
     if (!info.isInstallable && info.installabilityIssues.length > 0) {
       warnings.push({
@@ -168,7 +175,7 @@ class PWAAnalyzer {
     info.manifestValid = true;
 
     // Check required fields
-    const missingRequired = REQUIRED_MANIFEST_FIELDS.filter(field => !manifestData[field]);
+    const missingRequired = REQUIRED_MANIFEST_FIELDS.filter((field) => !manifestData[field]);
     if (missingRequired.length > 0) {
       issues.push({
         message: 'Manifest missing required fields',
@@ -181,7 +188,7 @@ class PWAAnalyzer {
 
     // Check recommended fields
     const missingRecommended = RECOMMENDED_MANIFEST_FIELDS.filter(
-      field => !manifestData[field] && !missingRequired.includes(field)
+      (field) => !manifestData[field] && !missingRequired.includes(field),
     );
     if (missingRecommended.length > 0) {
       warnings.push({
@@ -201,9 +208,7 @@ class PWAAnalyzer {
         .filter((size: number) => !isNaN(size));
 
       // Check for required sizes
-      const missingRequiredSizes = REQUIRED_ICON_SIZES.filter(
-        size => !iconSizes.includes(size)
-      );
+      const missingRequiredSizes = REQUIRED_ICON_SIZES.filter((size) => !iconSizes.includes(size));
 
       if (missingRequiredSizes.length > 0) {
         issues.push({
@@ -215,13 +220,12 @@ class PWAAnalyzer {
       }
 
       // Check for maskable icon
-      const hasMaskable = manifestData.icons.some(
-        (icon: Record<string, string>) => icon.purpose?.includes('maskable')
-      );
+      const hasMaskable = manifestData.icons.some((icon: Record<string, string>) => icon.purpose?.includes('maskable'));
       if (!hasMaskable) {
         warnings.push({
           message: 'No maskable icon',
-          detail: 'Add a maskable icon for adaptive icon support on Android. Use purpose: "maskable" or "any maskable".',
+          detail:
+            'Add a maskable icon for adaptive icon support on Android. Use purpose: "maskable" or "any maskable".',
           severity: SEVERITY.LOW,
         });
       }
@@ -247,7 +251,11 @@ class PWAAnalyzer {
     }
 
     // Check start_url
-    if (manifestData.start_url && !manifestData.start_url.startsWith('/') && !manifestData.start_url.startsWith('http')) {
+    if (
+      manifestData.start_url &&
+      !manifestData.start_url.startsWith('/') &&
+      !manifestData.start_url.startsWith('http')
+    ) {
       warnings.push({
         message: 'Relative start_url in manifest',
         detail: 'Consider using an absolute path for start_url to ensure consistent behavior.',
@@ -304,9 +312,8 @@ class PWAAnalyzer {
     for (const [_url, pageData] of Object.entries(pages)) {
       if (pageData.manifest || pageData.webManifest) {
         stats.pagesWithManifest++;
-        const manifestUrl = typeof pageData.manifest === 'string'
-          ? pageData.manifest
-          : pageData.manifest?.href || pageData.webManifest;
+        const manifestUrl =
+          typeof pageData.manifest === 'string' ? pageData.manifest : pageData.manifest?.href || pageData.webManifest;
         if (manifestUrl) stats.manifestUrls.add(manifestUrl);
       }
 

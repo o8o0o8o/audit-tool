@@ -8,23 +8,119 @@ import type { Issue, PageInfo } from '../../types';
 
 // Stop words to ignore in anchor text analysis
 const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-  'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-  'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-  'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought',
-  'used', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it',
-  'we', 'they', 'what', 'which', 'who', 'whom', 'whose', 'where', 'when',
-  'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most',
-  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same',
-  'so', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there',
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'but',
+  'in',
+  'on',
+  'at',
+  'to',
+  'for',
+  'of',
+  'with',
+  'by',
+  'from',
+  'as',
+  'is',
+  'was',
+  'are',
+  'were',
+  'been',
+  'be',
+  'have',
+  'has',
+  'had',
+  'do',
+  'does',
+  'did',
+  'will',
+  'would',
+  'could',
+  'should',
+  'may',
+  'might',
+  'must',
+  'shall',
+  'can',
+  'need',
+  'dare',
+  'ought',
+  'used',
+  'this',
+  'that',
+  'these',
+  'those',
+  'i',
+  'you',
+  'he',
+  'she',
+  'it',
+  'we',
+  'they',
+  'what',
+  'which',
+  'who',
+  'whom',
+  'whose',
+  'where',
+  'when',
+  'why',
+  'how',
+  'all',
+  'each',
+  'every',
+  'both',
+  'few',
+  'more',
+  'most',
+  'other',
+  'some',
+  'such',
+  'no',
+  'nor',
+  'not',
+  'only',
+  'own',
+  'same',
+  'so',
+  'than',
+  'too',
+  'very',
+  'just',
+  'also',
+  'now',
+  'here',
+  'there',
 ]);
 
 // Generic anchor texts that provide no SEO value
 const GENERIC_ANCHORS = [
-  'click here', 'here', 'read more', 'more', 'learn more', 'continue',
-  'continue reading', 'link', 'this link', 'click', 'go', 'visit',
-  'see more', 'view more', 'details', 'more details', 'more info',
-  'info', 'information', 'website', 'page', 'this page', 'this',
+  'click here',
+  'here',
+  'read more',
+  'more',
+  'learn more',
+  'continue',
+  'continue reading',
+  'link',
+  'this link',
+  'click',
+  'go',
+  'visit',
+  'see more',
+  'view more',
+  'details',
+  'more details',
+  'more info',
+  'info',
+  'information',
+  'website',
+  'page',
+  'this page',
+  'this',
 ];
 
 class AnchorTextAnalyzer {
@@ -144,7 +240,10 @@ class AnchorTextAnalyzer {
       .sort((a, b) => b[1] - a[1]);
 
     if (overused.length > 0) {
-      const examples = overused.slice(0, 3).map(([a, c]) => `"${a}" (${c}x)`).join(', ');
+      const examples = overused
+        .slice(0, 3)
+        .map(([a, c]) => `"${a}" (${c}x)`)
+        .join(', ');
       warnings.push({
         message: 'Potentially over-optimized anchor text',
         detail: `Same anchor text used excessively: ${examples}. Vary anchor text to appear natural.`,
@@ -153,13 +252,15 @@ class AnchorTextAnalyzer {
     }
 
     // Same anchor pointing to different pages
-    const confusingAnchors = Object.entries(info.duplicateAnchors)
-      .filter(([anchor, urls]: [string, any]) => urls.length > 1 && !GENERIC_ANCHORS.includes(anchor));
+    const confusingAnchors = Object.entries(info.duplicateAnchors).filter(
+      ([anchor, urls]: [string, any]) => urls.length > 1 && !GENERIC_ANCHORS.includes(anchor),
+    );
 
     if (confusingAnchors.length > 0) {
-      const examples = confusingAnchors.slice(0, 2).map(([a, urls]: [string, any]) =>
-        `"${a}" → ${urls.length} different URLs`
-      ).join(', ');
+      const examples = confusingAnchors
+        .slice(0, 2)
+        .map(([a, urls]: [string, any]) => `"${a}" → ${urls.length} different URLs`)
+        .join(', ');
       warnings.push({
         message: 'Same anchor text links to different pages',
         detail: `Confusing for users and search engines: ${examples}. Use unique anchors for different destinations.`,
@@ -168,8 +269,9 @@ class AnchorTextAnalyzer {
     }
 
     // Very short anchors (1-2 words excluding stop words)
-    const shortAnchors = Object.keys(info.anchorDistribution)
-      .filter(anchor => this.getSignificantWordCount(anchor) < 2 && !GENERIC_ANCHORS.includes(anchor));
+    const shortAnchors = Object.keys(info.anchorDistribution).filter(
+      (anchor) => this.getSignificantWordCount(anchor) < 2 && !GENERIC_ANCHORS.includes(anchor),
+    );
 
     if (shortAnchors.length > info.internalLinks * 0.3 && info.internalLinks > 5) {
       warnings.push({
@@ -189,7 +291,7 @@ class AnchorTextAnalyzer {
    */
   static getSignificantWordCount(text: string) {
     const words = text.toLowerCase().split(/\s+/);
-    return words.filter(w => w.length > 2 && !STOP_WORDS.has(w)).length;
+    return words.filter((w) => w.length > 2 && !STOP_WORDS.has(w)).length;
   }
 
   /**
@@ -293,9 +395,8 @@ class AnchorTextAnalyzer {
 
     // Calculate diversity
     const uniqueAnchors = Object.keys(stats.siteWideAnchorDistribution).length;
-    stats.anchorDiversity = stats.totalInternalLinks > 0
-      ? parseFloat((uniqueAnchors / stats.totalInternalLinks * 100).toFixed(1))
-      : 0;
+    stats.anchorDiversity =
+      stats.totalInternalLinks > 0 ? parseFloat(((uniqueAnchors / stats.totalInternalLinks) * 100).toFixed(1)) : 0;
 
     // Top anchors
     stats.topAnchors = (Object.entries(stats.siteWideAnchorDistribution) as [string, number][])
@@ -304,9 +405,8 @@ class AnchorTextAnalyzer {
       .map(([anchor, count]) => ({ anchor, count }));
 
     // Site-wide issues
-    const genericPercent = stats.totalInternalLinks > 0
-      ? (stats.totalGenericAnchors / stats.totalInternalLinks * 100).toFixed(1)
-      : 0;
+    const genericPercent =
+      stats.totalInternalLinks > 0 ? ((stats.totalGenericAnchors / stats.totalInternalLinks) * 100).toFixed(1) : 0;
 
     if (parseFloat(genericPercent as string) > 20) {
       warnings.push({
@@ -339,8 +439,9 @@ class AnchorTextAnalyzer {
     }
 
     if (overOptimizedTargets.length > 0) {
-      const examples = overOptimizedTargets.slice(0, 3)
-        .map(t => `"${t.anchor}" → ${t.target} (${t.percentage}% of ${t.count} links)`)
+      const examples = overOptimizedTargets
+        .slice(0, 3)
+        .map((t) => `"${t.anchor}" → ${t.target} (${t.percentage}% of ${t.count} links)`)
         .join('; ');
       warnings.push({
         message: 'Anchor text over-optimization detected',

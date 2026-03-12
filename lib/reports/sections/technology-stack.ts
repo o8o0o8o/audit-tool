@@ -96,7 +96,7 @@ function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
 
   // Sort by count and convert Sets to arrays
   const sorted = Array.from(allTechs.values())
-    .map(t => ({
+    .map((t) => ({
       ...t,
       detectedBy: Array.from(t.detectedBy),
     }))
@@ -120,18 +120,18 @@ function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
  */
 function getCategoryIcon(category: string) {
   const icons: Record<string, string> = {
-    'CMS': '📝',
+    CMS: '📝',
     'JavaScript Frameworks': '⚛️',
     'CSS Frameworks': '🎨',
     'Analytics & Tracking': '📊',
     'Marketing & CRM': '📣',
     'CDN & Hosting': '☁️',
     'E-commerce & Payments': '💳',
-    'Security': '🔒',
+    Security: '🔒',
     'Media & Video': '🎬',
-    'Fonts': '🔤',
+    Fonts: '🔤',
     'SEO Tools': '🔍',
-    'Other': '🔧',
+    Other: '🔧',
   };
   return icons[category] || '📦';
 }
@@ -141,18 +141,18 @@ function getCategoryIcon(category: string) {
  */
 function getCategoryColor(category: string) {
   const colors: Record<string, string> = {
-    'CMS': '#8b5cf6',
+    CMS: '#8b5cf6',
     'JavaScript Frameworks': '#3b82f6',
     'CSS Frameworks': '#06b6d4',
     'Analytics & Tracking': '#f59e0b',
     'Marketing & CRM': '#ec4899',
     'CDN & Hosting': '#10b981',
     'E-commerce & Payments': '#f43f5e',
-    'Security': '#6366f1',
+    Security: '#6366f1',
     'Media & Video': '#f97316',
-    'Fonts': '#84cc16',
+    Fonts: '#84cc16',
     'SEO Tools': '#14b8a6',
-    'Other': '#6b7280',
+    Other: '#6b7280',
   };
   return colors[category] || '#6b7280';
 }
@@ -165,15 +165,19 @@ function getCategoryColor(category: string) {
  */
 function compareTechnologies(current: AggregatedTech, previousAudit: AuditSnapshot | null) {
   if (!previousAudit || !previousAudit.technologies) {
-    return { newTechs: [] as string[], removedTechs: [] as string[], unchanged: current.technologies.map((t) => t.name) };
+    return {
+      newTechs: [] as string[],
+      removedTechs: [] as string[],
+      unchanged: current.technologies.map((t) => t.name),
+    };
   }
 
   const currentNames = new Set<string>(current.technologies.map((t) => t.name));
   const previousNames = new Set<string>(previousAudit.technologies.map((t: string) => t));
 
-  const newTechs = [...currentNames].filter(t => !previousNames.has(t));
-  const removedTechs = [...previousNames].filter(t => !currentNames.has(t));
-  const unchanged = [...currentNames].filter(t => previousNames.has(t));
+  const newTechs = [...currentNames].filter((t) => !previousNames.has(t));
+  const removedTechs = [...previousNames].filter((t) => !currentNames.has(t));
+  const unchanged = [...currentNames].filter((t) => previousNames.has(t));
 
   return { newTechs, removedTechs, unchanged };
 }
@@ -205,7 +209,7 @@ function getTechnologyStack(data: ReportSectionData) {
 
   // Helper: check if a technology has meaningful presence (>0% of pages)
   const hasPresence = (name: string) => {
-    const tech = aggregated.technologies.find(t => t.name === name);
+    const tech = aggregated.technologies.find((t) => t.name === name);
     return tech && pages.length > 0 && Math.round((tech.count / pages.length) * 100) > 0;
   };
 
@@ -216,63 +220,69 @@ function getTechnologyStack(data: ReportSectionData) {
       const color = getCategoryColor(category);
       const icon = getCategoryIcon(category);
 
-      const techBadges = techs.map((name: string) => {
-        const tech = aggregated.technologies.find(t => t.name === name);
-        const count = tech ? tech.count : 0;
-        const percentage = pages.length > 0 ? Math.round((count / pages.length) * 100) : 0;
-        // Hide technologies that round to 0% — likely false positives or negligible
-        if (percentage === 0) return '';
+      const techBadges = techs
+        .map((name: string) => {
+          const tech = aggregated.technologies.find((t) => t.name === name);
+          const count = tech ? tech.count : 0;
+          const percentage = pages.length > 0 ? Math.round((count / pages.length) * 100) : 0;
+          // Hide technologies that round to 0% — likely false positives or negligible
+          if (percentage === 0) return '';
 
-        // Build detection method tooltip HTML
-        let detectionHtml = '';
-        if (tech && tech.detectedByDetails && tech.detectedByDetails.length > 0) {
-          for (const method of tech.detectedByDetails) {
-            detectionHtml += `<div>&bull; ${escapeHtml(formatDetectionMethod(method))}</div>`;
+          // Build detection method tooltip HTML
+          let detectionHtml = '';
+          if (tech && tech.detectedByDetails && tech.detectedByDetails.length > 0) {
+            for (const method of tech.detectedByDetails) {
+              detectionHtml += `<div>&bull; ${escapeHtml(formatDetectionMethod(method))}</div>`;
+            }
+          } else if (tech && tech.detectedBy && (tech.detectedBy as string[]).length > 0) {
+            const methodLabels: Record<string, string> = {
+              html: 'HTML content pattern',
+              script: 'Script source URL',
+              meta: 'Meta tag',
+              header: 'HTTP response header',
+              cookie: 'Cookie',
+              global: 'JavaScript global variable',
+            };
+            for (const methodType of tech.detectedBy) {
+              detectionHtml += `<div>&bull; ${escapeHtml(methodLabels[methodType] || methodType)}</div>`;
+            }
+          } else {
+            detectionHtml = '<div>&bull; Pattern matching</div>';
           }
-        } else if (tech && tech.detectedBy && (tech.detectedBy as string[]).length > 0) {
-          const methodLabels: Record<string, string> = {
-            html: 'HTML content pattern',
-            script: 'Script source URL',
-            meta: 'Meta tag',
-            header: 'HTTP response header',
-            cookie: 'Cookie',
-            global: 'JavaScript global variable',
-          };
-          for (const methodType of tech.detectedBy) {
-            detectionHtml += `<div>&bull; ${escapeHtml(methodLabels[methodType] || methodType)}</div>`;
-          }
-        } else {
-          detectionHtml = '<div>&bull; Pattern matching</div>';
-        }
 
-        // Encode tooltip content as data attribute
-        const tooltipContent = `<strong>${escapeHtml(name)}</strong><br><span class="tt-label">${count} pages (${percentage}%)</span><br><br><span class="tt-label">Detected by:</span>${detectionHtml}`;
+          // Encode tooltip content as data attribute
+          const tooltipContent = `<strong>${escapeHtml(name)}</strong><br><span class="tt-label">${count} pages (${percentage}%)</span><br><br><span class="tt-label">Detected by:</span>${detectionHtml}`;
 
-        // Get detection type icons
-        const detectionIcons = ((tech?.detectedBy || []) as string[]).map((type: string) => {
-          const icons: Record<string, string> = {
-            html: '📄',
-            script: '📜',
-            meta: '🏷️',
-            header: '📨',
-            cookie: '🍪',
-            global: '🌐',
-          };
-          return icons[type] || '🔍';
-        }).join('');
+          // Get detection type icons
+          const detectionIcons = ((tech?.detectedBy || []) as string[])
+            .map((type: string) => {
+              const icons: Record<string, string> = {
+                html: '📄',
+                script: '📜',
+                meta: '🏷️',
+                header: '📨',
+                cookie: '🍪',
+                global: '🌐',
+              };
+              return icons[type] || '🔍';
+            })
+            .join('');
 
-        // Check if this is a new technology compared to previous audit
-        const isNew = (comparison.newTechs as string[]).includes(name);
-        const newBadge = isNew ? `<span style="font-size: 9px; color: white; background: #10b981; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: 600;">NEW</span>` : '';
+          // Check if this is a new technology compared to previous audit
+          const isNew = (comparison.newTechs as string[]).includes(name);
+          const newBadge = isNew
+            ? `<span style="font-size: 9px; color: white; background: #10b981; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: 600;">NEW</span>`
+            : '';
 
-        return `
+          return `
           <div class="tech-badge" data-tip="${escapeHtml(tooltipContent)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${isNew ? '#d1fae5' : color + '15'}; border: 1px solid ${isNew ? '#10b981' : color + '40'}; border-radius: 6px; margin: 4px; cursor: help;">
             <span style="font-weight: 600; color: ${color};">${escapeHtml(name)}</span>${newBadge}
             <span style="font-size: 11px; color: #6b7280; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${percentage}%</span>
             ${detectionIcons ? `<span style="font-size: 10px; opacity: 0.7;">${detectionIcons}</span>` : ''}
           </div>
         `;
-      }).join('');
+        })
+        .join('');
 
       // Skip category if all techs were filtered out (0 count)
       const filteredBadges = techBadges.trim();
@@ -292,12 +302,13 @@ function getTechnologyStack(data: ReportSectionData) {
           </div>
         </div>
       `;
-    }).join('');
+    })
+    .join('');
 
   // Summary stats — only count techs/categories with meaningful presence (>0% of pages)
-  const detectedTechs = aggregated.technologies.filter(t => hasPresence(t.name));
+  const detectedTechs = aggregated.technologies.filter((t) => hasPresence(t.name));
   const detectedCategories = Object.entries(aggregated.byCategory).filter(([, techs]: [string, string[]]) =>
-    techs.some((name: string) => hasPresence(name))
+    techs.some((name: string) => hasPresence(name)),
   );
   const totalCategories = detectedCategories.length;
 
@@ -324,28 +335,40 @@ function getTechnologyStack(data: ReportSectionData) {
         ${categoryHtml}
       </div>
 
-      ${comparison.removedTechs.length > 0 ? `
+      ${
+        comparison.removedTechs.length > 0
+          ? `
       <div style="margin-top: 20px; padding: 15px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #ef4444;">
         <h4 style="margin: 0 0 10px; color: #991b1b;">🗑️ No Longer Detected (${comparison.removedTechs.length})</h4>
         <p style="margin: 0 0 12px; color: #991b1b; font-size: 14px;">
           These technologies were detected in the previous audit but are no longer present:
         </p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          ${comparison.removedTechs.map(name => `
+          ${comparison.removedTechs
+            .map(
+              (name) => `
             <span style="display: inline-block; padding: 4px 10px; background: #fee2e2; border: 1px solid #fecaca; border-radius: 4px; color: #991b1b; font-size: 13px; text-decoration: line-through;">${escapeHtml(name)}</span>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
 
-      ${comparison.newTechs.length > 0 ? `
+      ${
+        comparison.newTechs.length > 0
+          ? `
       <div style="margin-top: 20px; padding: 15px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
         <h4 style="margin: 0 0 10px; color: #065f46;">✨ Newly Detected (${comparison.newTechs.length})</h4>
         <p style="margin: 0; color: #065f46; font-size: 14px;">
-          ${comparison.newTechs.map(t => escapeHtml(t)).join(', ')}
+          ${comparison.newTechs.map((t) => escapeHtml(t)).join(', ')}
         </p>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
 
       <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
         <h4 style="margin: 0 0 10px; color: #1e40af;">💡 About Technology Detection</h4>

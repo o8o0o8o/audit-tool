@@ -23,11 +23,7 @@ const _NOFOLLOW_RECOMMENDED = [
 ];
 
 // Trusted domains that don't need nofollow
-const _TRUSTED_DOMAINS = [
-  /^(?:www\.)?(?:google|microsoft|apple|github)\./i,
-  /\.gov$/i,
-  /\.edu$/i,
-];
+const _TRUSTED_DOMAINS = [/^(?:www\.)?(?:google|microsoft|apple|github)\./i, /\.gov$/i, /\.edu$/i];
 
 class ExternalLinksAnalyzer {
   /**
@@ -53,7 +49,7 @@ class ExternalLinksAnalyzer {
       socialLinks: [] as string[],
     };
 
-    const links = Array.isArray(pageData.links) ? pageData.links : [] as any[];
+    const links = Array.isArray(pageData.links) ? pageData.links : ([] as any[]);
     const pageOrigin = this.getOrigin(url);
 
     for (const link of links) {
@@ -116,7 +112,7 @@ class ExternalLinksAnalyzer {
       }
 
       // Check for suspicious links
-      const isSuspicious = SUSPICIOUS_PATTERNS.some(pattern => pattern.test(href));
+      const isSuspicious = SUSPICIOUS_PATTERNS.some((pattern) => pattern.test(href));
       if (isSuspicious) {
         info.suspiciousLinks.push({ href, anchor: link.text || link.anchor });
 
@@ -170,7 +166,9 @@ class ExternalLinksAnalyzer {
 
     const topDomainFollowed = topDomains.reduce((sum, [_, data]) => sum + (data as Record<string, any>).followed, 0);
     if (topDomainFollowed > info.followedLinks * 0.5 && info.followedLinks > 10) {
-      const domainList = topDomains.map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed})`).join(', ');
+      const domainList = topDomains
+        .map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed})`)
+        .join(', ');
       warnings.push({
         message: 'Link equity concentrated to few domains',
         detail: `Most followed links go to: ${domainList}. Diversify external linking.`,
@@ -182,7 +180,10 @@ class ExternalLinksAnalyzer {
     if (info.brokenLinks.length > 0) {
       issues.push({
         message: 'Broken external links',
-        detail: `${info.brokenLinks.length} external links return errors: ${info.brokenLinks.slice(0, 3).map(l => l.href).join(', ')}`,
+        detail: `${info.brokenLinks.length} external links return errors: ${info.brokenLinks
+          .slice(0, 3)
+          .map((l) => l.href)
+          .join(', ')}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -229,7 +230,7 @@ class ExternalLinksAnalyzer {
       /shareasale|cj\.com|rakuten|awin|impact\.com/i,
     ];
 
-    return affiliatePatterns.some(pattern => pattern.test(href));
+    return affiliatePatterns.some((pattern) => pattern.test(href));
   }
 
   /**
@@ -246,7 +247,7 @@ class ExternalLinksAnalyzer {
       /pinterest\.com/i,
     ];
 
-    return socialPatterns.some(pattern => pattern.test(href));
+    return socialPatterns.some((pattern) => pattern.test(href));
   }
 
   /**
@@ -338,7 +339,7 @@ class ExternalLinksAnalyzer {
             }
             return { url, status: 0, error: (error as Error).message };
           }
-        })
+        }),
       );
 
       for (const settled of batchResults) {
@@ -370,7 +371,7 @@ class ExternalLinksAnalyzer {
       const brokenList = results.broken
         .sort((a, b) => b.totalPages - a.totalPages)
         .slice(0, 10)
-        .map(b => `${b.url} (HTTP ${b.status}, found on ${b.totalPages} page(s))`)
+        .map((b) => `${b.url} (HTTP ${b.status}, found on ${b.totalPages} page(s))`)
         .join('; ');
 
       issues.push({
@@ -482,9 +483,8 @@ class ExternalLinksAnalyzer {
     }
 
     // Check followed/nofollow ratio
-    const followedRatio = stats.totalExternalLinks > 0
-      ? (stats.totalFollowed / stats.totalExternalLinks * 100).toFixed(1)
-      : 0;
+    const followedRatio =
+      stats.totalExternalLinks > 0 ? ((stats.totalFollowed / stats.totalExternalLinks) * 100).toFixed(1) : 0;
 
     if (parseFloat(String(followedRatio)) > 80 && stats.totalExternalLinks > 50) {
       warnings.push({
@@ -500,7 +500,8 @@ class ExternalLinksAnalyzer {
       .slice(0, 10);
 
     if (topDomains.length > 0) {
-      const domainSummary = topDomains.slice(0, 5)
+      const domainSummary = topDomains
+        .slice(0, 5)
         .map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed} followed)`)
         .join(', ');
 

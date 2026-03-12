@@ -114,7 +114,11 @@ class CrUXAPI {
    * @param {string} formFactor - 'PHONE', 'DESKTOP', or 'ALL_FORM_FACTORS'
    * @returns {Promise<object|null>} CrUX data or null if not available
    */
-  static async fetchCrUXData(urlOrOrigin: string, apiKey: string | null = null, formFactor: string = 'ALL_FORM_FACTORS'): Promise<CrUXFieldData | null> {
+  static async fetchCrUXData(
+    urlOrOrigin: string,
+    apiKey: string | null = null,
+    formFactor: string = 'ALL_FORM_FACTORS',
+  ): Promise<CrUXFieldData | null> {
     // Both CrUX and PSI APIs require an API key
     const key = apiKey || process.env.CRUX_API_KEY || null;
 
@@ -143,7 +147,11 @@ class CrUXAPI {
    * Used for per-page field data in perf mode.
    * Returns null quickly if no URL-level data exists.
    */
-  static async fetchCrUXForUrl(url: string, apiKey: string | null = null, formFactor: string = 'ALL_FORM_FACTORS'): Promise<CrUXFieldData | null> {
+  static async fetchCrUXForUrl(
+    url: string,
+    apiKey: string | null = null,
+    formFactor: string = 'ALL_FORM_FACTORS',
+  ): Promise<CrUXFieldData | null> {
     const key = apiKey || process.env.CRUX_API_KEY || null;
     if (!key) return null;
     return this.#queryCrUX(url, 'url', key, formFactor);
@@ -153,7 +161,12 @@ class CrUXAPI {
    * Query CrUX API
    * @private
    */
-  static async #queryCrUX(target: string, targetType: string, apiKey: string, formFactor: string): Promise<CrUXFieldData | null> {
+  static async #queryCrUX(
+    target: string,
+    targetType: string,
+    apiKey: string,
+    formFactor: string,
+  ): Promise<CrUXFieldData | null> {
     return new Promise((resolve) => {
       const requestBody = JSON.stringify({
         [targetType]: target,
@@ -166,9 +179,7 @@ class CrUXAPI {
         ],
       });
 
-      const url = apiKey
-        ? `${this.#API_ENDPOINT}?key=${apiKey}`
-        : this.#API_ENDPOINT;
+      const url = apiKey ? `${this.#API_ENDPOINT}?key=${apiKey}` : this.#API_ENDPOINT;
 
       const options = {
         method: 'POST',
@@ -197,7 +208,9 @@ class CrUXAPI {
               try {
                 const errBody = JSON.parse(data) as { error?: { message?: string }; message?: string };
                 errorMsg += `: ${errBody.error?.message || errBody.message || data.slice(0, 200)}`;
-              } catch { errorMsg += `: ${data.slice(0, 200)}`; }
+              } catch {
+                errorMsg += `: ${data.slice(0, 200)}`;
+              }
               console.error(`   CrUX API error (${targetType}=${target}): ${errorMsg}`);
               resolve(null);
             }
@@ -315,7 +328,9 @@ class CrUXAPI {
 
       const request = https.get(psiUrl, { timeout: 15000 }, (res: IncomingMessage) => {
         let data = '';
-        res.on('data', (chunk: Buffer | string) => { data += chunk; });
+        res.on('data', (chunk: Buffer | string) => {
+          data += chunk;
+        });
         res.on('end', () => {
           try {
             if (res.statusCode !== 200) {
@@ -331,7 +346,10 @@ class CrUXAPI {
         });
       });
       request.on('error', () => resolve(null));
-      request.on('timeout', () => { request.destroy(); resolve(null); });
+      request.on('timeout', () => {
+        request.destroy();
+        resolve(null);
+      });
     });
   }
 

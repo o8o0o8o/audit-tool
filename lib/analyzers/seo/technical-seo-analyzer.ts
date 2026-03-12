@@ -62,7 +62,7 @@ class TechnicalSEOAnalyzer {
       const framework = technicalData.jsFramework;
       // Check for potential JS rendering issues
       const frameworkLower = framework.toLowerCase();
-      if (['react', 'vue', 'angular'].some(f => frameworkLower.includes(f))) {
+      if (['react', 'vue', 'angular'].some((f) => frameworkLower.includes(f))) {
         const hasSSR = this.checkForSSR(parsedPage);
         if (!hasSSR) {
           warnings.push({
@@ -435,8 +435,8 @@ class TechnicalSEOAnalyzer {
 
     // Check charset (already partially covered by international-seo-analyzer,
     // but this checks from a rendering/technical perspective)
-    const hasCharset = parsedPage.querySelector('meta[charset]') ||
-      parsedPage.querySelector('meta[http-equiv="Content-Type"]');
+    const hasCharset =
+      parsedPage.querySelector('meta[charset]') || parsedPage.querySelector('meta[http-equiv="Content-Type"]');
     if (!hasCharset) {
       warnings.push({
         message: 'Missing character encoding declaration',
@@ -548,27 +548,23 @@ class TechnicalSEOAnalyzer {
     let lazyLoadingPages = 0;
 
     for (const [_url, page] of Object.entries(pages)) {
-
       if (page.technical) {
-  
         if (page.technical.metaRefresh) metaRefreshCount++;
-  
+
         if (page.technical.jsFramework) {
-    
           const fw = page.technical.jsFramework;
           frameworks.set(fw, (frameworks.get(fw) || 0) + 1);
         }
-  
+
         if (page.technical.cms) {
-    
           const cms = page.technical.cms;
           cmsCount.set(cms, (cmsCount.get(cms) || 0) + 1);
         }
-  
+
         if (page.technical.amp) ampPages++;
-  
+
         if (page.technical.pwa) pwaEnabled++;
-  
+
         if (page.technical.lazyLoading) lazyLoadingPages++;
       }
     }
@@ -588,7 +584,9 @@ class TechnicalSEOAnalyzer {
     if (frameworks.size > 1) {
       warnings.push({
         message: 'Multiple JavaScript frameworks detected',
-        detail: `Found: ${Array.from(frameworks.entries()).map(([f, c]) => `${f} (${c})`).join(', ')}. Consider standardizing.`,
+        detail: `Found: ${Array.from(frameworks.entries())
+          .map(([f, c]) => `${f} (${c})`)
+          .join(', ')}. Consider standardizing.`,
         severity: SEVERITY.LOW,
       });
     }

@@ -129,7 +129,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   eeatScore: {
     name: 'E-E-A-T Score',
     fullName: 'Experience, Expertise, Authoritativeness, Trustworthiness',
-    description: 'Google evaluates E-E-A-T to assess content quality. Higher scores indicate better author attribution, trust signals, and expertise indicators.',
+    description:
+      'Google evaluates E-E-A-T to assess content quality. Higher scores indicate better author attribution, trust signals, and expertise indicators.',
     unit: '',
     threshold: 50,
     goodLabel: '≥50',
@@ -139,7 +140,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   authorPresent: {
     name: 'Author Info',
     fullName: 'Author Attribution',
-    description: 'Presence of author name, bio, or schema markup. Author attribution helps establish content credibility and expertise.',
+    description:
+      'Presence of author name, bio, or schema markup. Author attribution helps establish content credibility and expertise.',
     type: 'boolean',
     goodLabel: 'Present',
     badLabel: 'Missing',
@@ -155,7 +157,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   trustSignals: {
     name: 'Trust Signals',
     fullName: 'Trust & Authority Signals',
-    description: 'Indicators of trustworthiness: contact info, privacy policy, terms of service, about page, physical address.',
+    description:
+      'Indicators of trustworthiness: contact info, privacy policy, terms of service, about page, physical address.',
     type: 'count',
     goodLabel: '≥3 signals',
     badLabel: '<3 signals',
@@ -172,7 +175,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   wordCount: {
     name: 'Word Count',
     fullName: 'Content Word Count',
-    description: 'Total words in the main content. Thin content (<300 words) may not rank well. Aim for 600+ words for substantial topics.',
+    description:
+      'Total words in the main content. Thin content (<300 words) may not rank well. Aim for 600+ words for substantial topics.',
     unit: 'words',
     min: 100,
     recommended: 600,
@@ -182,7 +186,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   textToHtmlRatio: {
     name: 'Text Ratio',
     fullName: 'Text to HTML Ratio',
-    description: 'Percentage of visible text vs total HTML code. Low ratios (<10%) may indicate thin content or code bloat.',
+    description:
+      'Percentage of visible text vs total HTML code. Low ratios (<10%) may indicate thin content or code bloat.',
     unit: '%',
     threshold: 10,
     recommended: 25,
@@ -209,7 +214,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   contentScore: {
     name: 'Content Score',
     fullName: 'Overall Content Quality Score',
-    description: 'Combined score based on word count, text ratio, structure, and readability. Higher is better (0-100).',
+    description:
+      'Combined score based on word count, text ratio, structure, and readability. Higher is better (0-100).',
     unit: '',
     threshold: 50,
     goodLabel: '≥50',
@@ -220,7 +226,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   lastModified: {
     name: 'Last Modified',
     fullName: 'Last Modified Date',
-    description: 'When the page was last updated (from HTTP headers or schema). Fresh content may rank better for time-sensitive queries.',
+    description:
+      'When the page was last updated (from HTTP headers or schema). Fresh content may rank better for time-sensitive queries.',
     type: 'date',
     note: 'Important for news, articles, and time-sensitive content',
   },
@@ -251,7 +258,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   hasStructuredData: {
     name: 'Schema',
     fullName: 'Structured Data (Schema.org)',
-    description: 'JSON-LD or microdata markup that helps search engines understand page content and enables rich results.',
+    description:
+      'JSON-LD or microdata markup that helps search engines understand page content and enables rich results.',
     type: 'boolean',
     goodLabel: 'Present',
     badLabel: 'Missing',
@@ -260,13 +268,15 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   schemaTypes: {
     name: 'Schema Types',
     fullName: 'Structured Data Types',
-    description: 'Types of schema markup found (Article, Product, FAQPage, etc.). Different types enable different rich results.',
+    description:
+      'Types of schema markup found (Article, Product, FAQPage, etc.). Different types enable different rich results.',
     type: 'list',
   },
   schemaErrors: {
     name: 'Schema Errors',
     fullName: 'Structured Data Validation Errors',
-    description: 'Missing required fields or invalid values in schema markup. Errors prevent rich results from appearing.',
+    description:
+      'Missing required fields or invalid values in schema markup. Errors prevent rich results from appearing.',
     type: 'count',
     isInverse: true,
     goodLabel: '0 errors',
@@ -275,7 +285,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   schemaWarnings: {
     name: 'Schema Warnings',
     fullName: 'Structured Data Recommendations',
-    description: 'Optional but recommended fields missing from schema. Adding these may improve rich result appearance.',
+    description:
+      'Optional but recommended fields missing from schema. Adding these may improve rich result appearance.',
     type: 'count',
     isInverse: true,
     goodLabel: '0 warnings',
@@ -295,7 +306,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   jsFramework: {
     name: 'JS Framework',
     fullName: 'JavaScript Framework',
-    description: 'Detected framework (React, Vue, Angular, etc.). Client-side rendering may have indexing issues without SSR.',
+    description:
+      'Detected framework (React, Vue, Angular, etc.). Client-side rendering may have indexing issues without SSR.',
     type: 'string',
     note: 'Ensure SSR/prerendering for JS frameworks',
   },
@@ -323,7 +335,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   pwa: {
     name: 'PWA',
     fullName: 'Progressive Web App',
-    description: 'Site has PWA capabilities (manifest, service worker). Enables app-like experience and offline access.',
+    description:
+      'Site has PWA capabilities (manifest, service worker). Enables app-like experience and offline access.',
     type: 'boolean',
   },
   hasLazyLoading: {
@@ -345,7 +358,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   hasTrackingParams: {
     name: 'Tracking Params',
     fullName: 'URL Tracking Parameters',
-    description: 'URL contains tracking parameters (utm_, fbclid, etc.). Should be handled with canonical tags to avoid duplicate content.',
+    description:
+      'URL contains tracking parameters (utm_, fbclid, etc.). Should be handled with canonical tags to avoid duplicate content.',
     type: 'boolean',
     isInverse: true,
     goodLabel: 'Clean URL',
@@ -373,7 +387,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   internalLinks: {
     name: 'Internal Links',
     fullName: 'Internal Link Count',
-    description: 'Number of links to other pages on the same site. Internal linking distributes PageRank and helps crawling.',
+    description:
+      'Number of links to other pages on the same site. Internal linking distributes PageRank and helps crawling.',
     type: 'count',
     note: 'Aim for natural internal linking',
   },
@@ -386,7 +401,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   hasIncomingLinks: {
     name: 'Incoming Links',
     fullName: 'Has Incoming Internal Links',
-    description: 'Whether other pages link to this page. Orphan pages (no incoming links) may not be discovered by crawlers.',
+    description:
+      'Whether other pages link to this page. Orphan pages (no incoming links) may not be discovered by crawlers.',
     type: 'boolean',
     goodLabel: 'Has links',
     badLabel: 'Orphan page',
@@ -415,7 +431,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   isIndexable: {
     name: 'Indexable',
     fullName: 'Page Indexability',
-    description: 'Whether search engines can index this page. Blocked by noindex, robots.txt, or canonical to another URL.',
+    description:
+      'Whether search engines can index this page. Blocked by noindex, robots.txt, or canonical to another URL.',
     type: 'boolean',
     goodLabel: 'Indexable',
     badLabel: 'Not indexable',
@@ -431,7 +448,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   canonicalMatch: {
     name: 'Canonical Match',
     fullName: 'Canonical URL Matches Page URL',
-    description: 'Canonical URL should match the page URL (or intentionally point elsewhere). Mismatches cause indexing issues.',
+    description:
+      'Canonical URL should match the page URL (or intentionally point elsewhere). Mismatches cause indexing issues.',
     type: 'boolean',
     goodLabel: 'Match',
     badLabel: 'Mismatch',
@@ -448,7 +466,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   hasHreflang: {
     name: 'Hreflang',
     fullName: 'Hreflang Tags',
-    description: 'Language/region targeting tags for international sites. Helps serve correct language version in search results.',
+    description:
+      'Language/region targeting tags for international sites. Helps serve correct language version in search results.',
     type: 'boolean',
     goodLabel: 'Present',
     note: 'Required for multi-language sites',
@@ -522,7 +541,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   hasOpenGraph: {
     name: 'Open Graph',
     fullName: 'Open Graph Tags',
-    description: 'Facebook/social sharing meta tags (og:title, og:image, etc.). Controls how content appears when shared.',
+    description:
+      'Facebook/social sharing meta tags (og:title, og:image, etc.). Controls how content appears when shared.',
     type: 'boolean',
     goodLabel: 'Present',
     badLabel: 'Missing',
@@ -647,7 +667,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   internalPageRank: {
     name: 'PageRank',
     fullName: 'Internal PageRank',
-    description: 'Relative importance of the page based on internal link structure. Higher values indicate pages that receive more link equity.',
+    description:
+      'Relative importance of the page based on internal link structure. Higher values indicate pages that receive more link equity.',
     unit: '',
     note: 'Calculated using iterative PageRank algorithm on internal links',
   },
@@ -660,7 +681,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   languageMatch: {
     name: 'Language Match',
     fullName: 'Language Declaration Match',
-    description: 'Whether detected content language matches the declared html lang attribute. Mismatches confuse search engines.',
+    description:
+      'Whether detected content language matches the declared html lang attribute. Mismatches confuse search engines.',
     type: 'boolean',
     goodLabel: 'Match',
     badLabel: 'Mismatch',
@@ -668,7 +690,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   ctaCount: {
     name: 'CTAs',
     fullName: 'Call-to-Action Count',
-    description: 'Number of CTAs (buttons, forms, phone/email links) found on the page. Important for conversion optimization.',
+    description:
+      'Number of CTAs (buttons, forms, phone/email links) found on the page. Important for conversion optimization.',
     type: 'count',
     note: 'Includes buttons, forms, tel: and mailto: links',
   },
@@ -683,7 +706,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   jsUnused: {
     name: 'Unused JS',
     fullName: 'Unused JavaScript Percentage',
-    description: 'Percentage of loaded JavaScript that is not executed. High unused JS wastes bandwidth and slows page load.',
+    description:
+      'Percentage of loaded JavaScript that is not executed. High unused JS wastes bandwidth and slows page load.',
     unit: '%',
     threshold: 50,
     isInverse: true,
@@ -705,7 +729,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   brokenOutboundLinks: {
     name: 'Broken Outbound',
     fullName: 'Broken Outbound Links',
-    description: 'External links that return error status codes (4xx, 5xx). Broken outbound links hurt user trust and may affect SEO.',
+    description:
+      'External links that return error status codes (4xx, 5xx). Broken outbound links hurt user trust and may affect SEO.',
     type: 'count',
     isInverse: true,
     goodLabel: '0 broken',
@@ -714,7 +739,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   mainContentWords: {
     name: 'Main Words',
     fullName: 'Main Content Word Count',
-    description: 'Words in the main content area (excluding nav, header, footer, sidebar). Better reflects actual content depth.',
+    description:
+      'Words in the main content area (excluding nav, header, footer, sidebar). Better reflects actual content depth.',
     unit: 'words',
     min: 200,
     goodLabel: '≥200 words',
@@ -723,7 +749,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   boilerplateRatio: {
     name: 'Boilerplate %',
     fullName: 'Boilerplate Content Ratio',
-    description: 'Percentage of page content in navigation, header, footer, and sidebar vs main content. High ratios indicate thin unique content.',
+    description:
+      'Percentage of page content in navigation, header, footer, and sidebar vs main content. High ratios indicate thin unique content.',
     unit: '%',
     threshold: 60,
     isInverse: true,
@@ -733,7 +760,8 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
   contentSimilarity: {
     name: 'Similar Content',
     fullName: 'Near-Duplicate Content',
-    description: 'Pages with highly similar content based on keyword fingerprint analysis. May cause keyword cannibalization.',
+    description:
+      'Pages with highly similar content based on keyword fingerprint analysis. May cause keyword cannibalization.',
     type: 'count',
     isInverse: true,
     goodLabel: '0 similar',
@@ -824,7 +852,7 @@ export const CATEGORY_CONFIG = {
 export const SIGNAL_CATEGORIES: Record<string, SignalCategory> = {
   coreWebVitals: {
     name: 'Core Web Vitals',
-    description: 'Google\'s metrics for user experience',
+    description: "Google's metrics for user experience",
     signals: ['ttfb', 'fcp', 'lcp', 'cls', 'inp'],
   },
   pageSizeAndRequests: {
@@ -915,7 +943,15 @@ export const SIGNAL_CATEGORIES: Record<string, SignalCategory> = {
   contentInsights: {
     name: 'Content Insights',
     description: 'Advanced content analysis including language, similarity, and CTAs',
-    signals: ['languageDetected', 'languageMatch', 'ctaCount', 'ctaAboveFold', 'contentSimilarity', 'mainContentWords', 'boilerplateRatio'],
+    signals: [
+      'languageDetected',
+      'languageMatch',
+      'ctaCount',
+      'ctaAboveFold',
+      'contentSimilarity',
+      'mainContentWords',
+      'boilerplateRatio',
+    ],
   },
   codeCoverage: {
     name: 'Code Coverage',
@@ -947,10 +983,12 @@ export function getSignalsByCategory(categoryKey: string) {
   const category = SIGNAL_CATEGORIES[categoryKey];
   if (!category) return [];
 
-  return category.signals.map((signalKey: string) => ({
-    key: signalKey,
-    ...METRIC_INFO[signalKey],
-  })).filter((s: { key: string; name?: string }) => s.name); // Filter out any missing signals
+  return category.signals
+    .map((signalKey: string) => ({
+      key: signalKey,
+      ...METRIC_INFO[signalKey],
+    }))
+    .filter((s: { key: string; name?: string }) => s.name); // Filter out any missing signals
 }
 
 /**
@@ -980,7 +1018,7 @@ export function formatSignalValue(key: string, value: unknown): string {
   if (!info) return String(value);
 
   if (info.type === 'boolean') {
-    return value ? (info.goodLabel || 'Yes') : (info.badLabel || 'No');
+    return value ? info.goodLabel || 'Yes' : info.badLabel || 'No';
   }
 
   const numValue = typeof value === 'number' ? value : Number(value);
@@ -1050,4 +1088,3 @@ export function isSignalGood(key: string, value: unknown): boolean | null {
 
   return null;
 }
-

@@ -58,7 +58,7 @@ class ContentSimilarityAnalyzer {
 
         const similarity = ContentSimilarityAnalyzer.#jaccardSimilarity(
           fingerprints[i].fingerprint as Set<string>,
-          fingerprints[j].fingerprint as Set<string>
+          fingerprints[j].fingerprint as Set<string>,
         );
 
         if (similarity >= SIMILARITY_THRESHOLD) {
@@ -81,7 +81,10 @@ class ContentSimilarityAnalyzer {
       const totalAffected = similarGroups.reduce((sum, g) => sum + g.pageCount, 0);
 
       for (const group of similarGroups.slice(0, 10)) {
-        const urlList = group.urls.slice(0, 5).map(u => `<li><a href="${u}">${u}</a></li>`).join('');
+        const urlList = group.urls
+          .slice(0, 5)
+          .map((u) => `<li><a href="${u}">${u}</a></li>`)
+          .join('');
         issues.push({
           title: `${group.pageCount} pages have very similar content`,
           description: `Near-duplicate content detected across these pages:<ul>${urlList}</ul>${group.urls.length > 5 ? `<p>...and ${group.urls.length - 5} more</p>` : ''}<p>Consider consolidating with canonical tags or differentiating the content.</p>`,
@@ -91,7 +94,7 @@ class ContentSimilarityAnalyzer {
 
       if (totalAffected > pages.length * 0.3 && totalAffected > 10) {
         warnings.push({
-          title: `${Math.round(totalAffected / pages.length * 100)}% of pages have near-duplicate content`,
+          title: `${Math.round((totalAffected / pages.length) * 100)}% of pages have near-duplicate content`,
           description: `${totalAffected} of ${pages.length} pages share very similar content across ${similarGroups.length} groups. This can dilute ranking signals.`,
           severity: SEVERITY.HIGH,
         });
@@ -103,7 +106,7 @@ class ContentSimilarityAnalyzer {
       for (const url of group.urls) {
         if (allPages[url]) {
           allPages[url].contentSimilarity = {
-            similarPages: group.urls.filter(u => u !== url),
+            similarPages: group.urls.filter((u) => u !== url),
             groupSize: group.pageCount,
           };
         }

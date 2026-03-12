@@ -16,7 +16,13 @@ class CriticalPathAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: NetworkRequest[], metrics: Record<string, any>, url: string) {
+  static async analyze(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    requests: NetworkRequest[],
+    metrics: Record<string, any>,
+    url: string,
+  ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -35,11 +41,17 @@ class CriticalPathAnalyzer {
 
     // 1. Find render-blocking CSS
     criticalPathData.blockingCSS = this.#findBlockingCSS(parsedPage, requests);
-    criticalPathData.criticalCSSSize = criticalPathData.blockingCSS.reduce((sum: number, r: any) => sum + (r.size || 0), 0);
+    criticalPathData.criticalCSSSize = criticalPathData.blockingCSS.reduce(
+      (sum: number, r: any) => sum + (r.size || 0),
+      0,
+    );
 
     // 2. Find render-blocking JavaScript
     criticalPathData.blockingJS = this.#findBlockingJS(parsedPage, requests);
-    criticalPathData.criticalJSSize = criticalPathData.blockingJS.reduce((sum: number, r: any) => sum + (r.size || 0), 0);
+    criticalPathData.criticalJSSize = criticalPathData.blockingJS.reduce(
+      (sum: number, r: any) => sum + (r.size || 0),
+      0,
+    );
 
     // 3. Get timing metrics
     const timings = await this.#getTimingMetrics(chromePage);
@@ -48,9 +60,7 @@ class CriticalPathAnalyzer {
     criticalPathData.firstPaint = timings.firstPaint;
 
     // 4. Calculate document size
-    const docRequest = Object.entries(requests).find(([reqUrl]) =>
-      reqUrl === url || reqUrl === url + '/'
-    );
+    const docRequest = Object.entries(requests).find(([reqUrl]) => reqUrl === url || reqUrl === url + '/');
     if (docRequest) {
       criticalPathData.documentSize = (docRequest[1] as Record<string, any>).size || 0;
     }
@@ -77,7 +87,8 @@ class CriticalPathAnalyzer {
     }
 
     // Large blocking CSS
-    if (criticalPathData.criticalCSSSize > 100000) { // 100KB
+    if (criticalPathData.criticalCSSSize > 100000) {
+      // 100KB
       issues.push({
         message: 'Large render-blocking CSS',
         detail: `<a href="${url}">${url}</a> blocks rendering with ${(criticalPathData.criticalCSSSize / 1024).toFixed(0)}KB of CSS. Extract and inline critical CSS.`,
@@ -90,7 +101,10 @@ class CriticalPathAnalyzer {
     if (headBlockingJS.length > 0) {
       issues.push({
         message: 'Render-blocking JavaScript in <head>',
-        detail: `<a href="${url}">${url}</a> has ${headBlockingJS.length} blocking script(s) in <head>: ${headBlockingJS.slice(0, 3).map((s: any) => s.src?.split('/').pop() || 'inline').join(', ')}. Move to end of body or add async/defer.`,
+        detail: `<a href="${url}">${url}</a> has ${headBlockingJS.length} blocking script(s) in <head>: ${headBlockingJS
+          .slice(0, 3)
+          .map((s: any) => s.src?.split('/').pop() || 'inline')
+          .join(', ')}. Move to end of body or add async/defer.`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -105,7 +119,8 @@ class CriticalPathAnalyzer {
     }
 
     // Large inline CSS (may indicate critical CSS, but check size)
-    if (criticalPathData.inlineCSSSize > 50000) { // 50KB inline is too much
+    if (criticalPathData.inlineCSSSize > 50000) {
+      // 50KB inline is too much
       warnings.push({
         message: 'Large inline CSS',
         detail: `${(criticalPathData.inlineCSSSize / 1024).toFixed(0)}KB of inline CSS. Critical CSS should be ~14KB or less for optimal performance.`,
@@ -114,7 +129,8 @@ class CriticalPathAnalyzer {
     }
 
     // Large HTML document
-    if (criticalPathData.documentSize > 100000) { // 100KB
+    if (criticalPathData.documentSize > 100000) {
+      // 100KB
       warnings.push({
         message: 'Large HTML document',
         detail: `HTML document is ${(criticalPathData.documentSize / 1024).toFixed(0)}KB. Large documents increase time to first byte and parsing time.`,
@@ -154,7 +170,7 @@ class CriticalPathAnalyzer {
         continue;
       }
 
-      const size = href ? ((requests as unknown as Record<string, Record<string, any>>)[href]?.size || 0) : 0;
+      const size = href ? (requests as unknown as Record<string, Record<string, any>>)[href]?.size || 0 : 0;
 
       blocking.push({
         href,
@@ -196,7 +212,9 @@ class CriticalPathAnalyzer {
       }
 
       const inHead = (head as unknown as Element | null)?.contains(script as unknown as Node) || false;
-      const size = src ? ((requests as unknown as Record<string, Record<string, any>>)[src]?.size || 0) : (script.textContent?.length || 0);
+      const size = src
+        ? (requests as unknown as Record<string, Record<string, any>>)[src]?.size || 0
+        : script.textContent?.length || 0;
 
       blocking.push({
         src: src || '(inline)',
@@ -219,11 +237,11 @@ class CriticalPathAnalyzer {
       return await chromePage.evaluate(() => {
         const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
         const paintEntries = performance.getEntriesByType('paint');
-        const firstPaint = paintEntries.find(e => e.name === 'first-paint');
+        const firstPaint = paintEntries.find((e) => e.name === 'first-paint');
 
         return {
-          htmlParseTime: navEntry ? (navEntry.domInteractive - navEntry.responseEnd) : 0,
-          domContentLoaded: navEntry ? (navEntry.domContentLoadedEventEnd - navEntry.startTime) : 0,
+          htmlParseTime: navEntry ? navEntry.domInteractive - navEntry.responseEnd : 0,
+          domContentLoaded: navEntry ? navEntry.domContentLoadedEventEnd - navEntry.startTime : 0,
           firstPaint: firstPaint?.startTime || 0,
         };
       });
@@ -251,7 +269,9 @@ class CriticalPathAnalyzer {
     }
 
     // Inline scripts (excluding JSON-LD)
-    const scripts = parsedPage.querySelectorAll('script:not([src]):not([type="application/ld+json"]):not([type="application/json"])');
+    const scripts = parsedPage.querySelectorAll(
+      'script:not([src]):not([type="application/ld+json"]):not([type="application/json"])',
+    );
     for (const script of scripts) {
       const size = script.textContent?.length || 0;
       inlineJSSize += size;

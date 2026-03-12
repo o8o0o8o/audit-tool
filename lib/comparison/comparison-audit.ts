@@ -229,7 +229,7 @@ class ComparisonAudit {
       this.#options.perf,
       this.#options.saveHtml,
       this.#options.concurrency,
-      this.#options.sitemap
+      this.#options.sitemap,
     );
 
     await seo.audit();
@@ -259,7 +259,7 @@ class ComparisonAudit {
       this.#options.perf,
       this.#options.saveHtml,
       this.#options.concurrency,
-      this.#options.compareSitemap
+      this.#options.compareSitemap,
     );
 
     await seo.audit();
@@ -304,8 +304,9 @@ class ComparisonAudit {
       return pages;
     }
 
-    const batchFiles = fs.readdirSync(pagesDir)
-      .filter(f => f.startsWith('batch_') && f.endsWith('.json.gz'))
+    const batchFiles = fs
+      .readdirSync(pagesDir)
+      .filter((f) => f.startsWith('batch_') && f.endsWith('.json.gz'))
       .sort();
 
     const allPages: Record<string, PageInfo> = {};
@@ -313,7 +314,9 @@ class ComparisonAudit {
       try {
         const filePath = path.join(pagesDir, batchFile);
         const compressed = fs.readFileSync(filePath);
-        const batchData = JSON.parse(zlib.gunzipSync(compressed).toString('utf-8')) as { pages?: Record<string, PageInfo> };
+        const batchData = JSON.parse(zlib.gunzipSync(compressed).toString('utf-8')) as {
+          pages?: Record<string, PageInfo>;
+        };
         if (batchData.pages) {
           Object.assign(allPages, batchData.pages);
         }
@@ -396,8 +399,10 @@ class ComparisonAudit {
           delta: {
             overall: (originSummary.overallScore || 0) - (compareSummary.overallScore || 0),
             seo: (originSummary.categoryScores?.seo || 0) - (compareSummary.categoryScores?.seo || 0),
-            performance: (originSummary.categoryScores?.performance || 0) - (compareSummary.categoryScores?.performance || 0),
-            accessibility: (originSummary.categoryScores?.accessibility || 0) - (compareSummary.categoryScores?.accessibility || 0),
+            performance:
+              (originSummary.categoryScores?.performance || 0) - (compareSummary.categoryScores?.performance || 0),
+            accessibility:
+              (originSummary.categoryScores?.accessibility || 0) - (compareSummary.categoryScores?.accessibility || 0),
             security: (originSummary.categoryScores?.security || 0) - (compareSummary.categoryScores?.security || 0),
             technical: (originSummary.categoryScores?.technical || 0) - (compareSummary.categoryScores?.technical || 0),
           },
@@ -475,8 +480,8 @@ class ComparisonAudit {
         changed: (origin.canonical || '') !== (compare.canonical || ''),
       },
       h1: {
-        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : (origin.h1 || ''),
-        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : (compare.h1 || ''),
+        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : origin.h1 || '',
+        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : compare.h1 || '',
         changed: String(origin.h1 || '') !== String(compare.h1 || ''),
       },
     };
@@ -486,9 +491,9 @@ class ComparisonAudit {
     const compareIssues = new Set(compare.issues?.map((i: Issue) => i.message || String(i)) || []);
 
     const issues = {
-      fixed: [...compareIssues].filter(i => !originIssues.has(i)), // In compare but not origin = fixed
-      new: [...originIssues].filter(i => !compareIssues.has(i)), // In origin but not compare = new
-      persistent: [...originIssues].filter(i => compareIssues.has(i)), // In both
+      fixed: [...compareIssues].filter((i) => !originIssues.has(i)), // In compare but not origin = fixed
+      new: [...originIssues].filter((i) => !compareIssues.has(i)), // In origin but not compare = new
+      persistent: [...originIssues].filter((i) => compareIssues.has(i)), // In both
     };
 
     return {
@@ -528,7 +533,9 @@ class ComparisonAudit {
    * @param {Array} pages - Array of unmatched page objects
    * @returns {object} Formatted pages keyed by path
    */
-  #formatUnmatchedPages(pages: Array<{ path: string; url: string; page: PageInfo }>): Record<string, UnmatchedPageInfo> {
+  #formatUnmatchedPages(
+    pages: Array<{ path: string; url: string; page: PageInfo }>,
+  ): Record<string, UnmatchedPageInfo> {
     const result: Record<string, UnmatchedPageInfo> = {};
     for (const page of pages) {
       result[page.path] = {
@@ -857,7 +864,9 @@ class ComparisonAudit {
       </div>
     </div>
 
-    ${Object.keys(data.originOnly).length > 0 ? `
+    ${
+      Object.keys(data.originOnly).length > 0
+        ? `
     <div class="card">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
         <h2>Pages Only in Origin (${Object.keys(data.originOnly).length})</h2>
@@ -867,9 +876,13 @@ class ComparisonAudit {
         ${this.#getUnmatchedPagesTable(data.originOnly)}
       </div>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
 
-    ${Object.keys(data.compareOnly).length > 0 ? `
+    ${
+      Object.keys(data.compareOnly).length > 0
+        ? `
     <div class="card">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
         <h2>Pages Only in Compare (${Object.keys(data.compareOnly).length})</h2>
@@ -879,7 +892,9 @@ class ComparisonAudit {
         ${this.#getUnmatchedPagesTable(data.compareOnly)}
       </div>
     </div>
-    ` : ''}
+    `
+        : ''
+    }
   </div>
 
   <script>
@@ -994,27 +1009,30 @@ class ComparisonAudit {
    * Get page comparison rows HTML
    */
   #getPageRows(pageComparisons: Record<string, PageDelta>) {
-    return Object.values(pageComparisons).map((page: PageDelta) => {
-      const fixedCount = page.issues.fixed.length;
-      const newCount = page.issues.new.length;
-      const status = newCount > fixedCount ? 'regressed' : fixedCount > newCount ? 'improved' : 'unchanged';
+    return Object.values(pageComparisons)
+      .map((page: PageDelta) => {
+        const fixedCount = page.issues.fixed.length;
+        const newCount = page.issues.new.length;
+        const status = newCount > fixedCount ? 'regressed' : fixedCount > newCount ? 'improved' : 'unchanged';
 
-      const changesCount = Object.values(page.changes).filter((c: { origin: string; compare: string; changed: boolean }) => c.changed).length;
+        const changesCount = Object.values(page.changes).filter(
+          (c: { origin: string; compare: string; changed: boolean }) => c.changed,
+        ).length;
 
-      const getDeltaClass = (val: number, inverse: boolean = false) => {
-        if (val === 0 || val === undefined) return 'same';
-        if (inverse) return val < 0 ? 'worse' : 'better';
-        return val > 0 ? 'worse' : 'better';
-      };
+        const getDeltaClass = (val: number, inverse: boolean = false) => {
+          if (val === 0 || val === undefined) return 'same';
+          if (inverse) return val < 0 ? 'worse' : 'better';
+          return val > 0 ? 'worse' : 'better';
+        };
 
-      const formatDelta = (val: number | undefined | null, unit: string = '') => {
-        if (val === undefined || val === null) return '-';
-        const sign = val > 0 ? '+' : '';
-        if (Math.abs(val) > 1000) return `${sign}${(val/1000).toFixed(1)}s`;
-        return `${sign}${val.toFixed(val < 1 ? 3 : 0)}${unit}`;
-      };
+        const formatDelta = (val: number | undefined | null, unit: string = '') => {
+          if (val === undefined || val === null) return '-';
+          const sign = val > 0 ? '+' : '';
+          if (Math.abs(val) > 1000) return `${sign}${(val / 1000).toFixed(1)}s`;
+          return `${sign}${val.toFixed(val < 1 ? 3 : 0)}${unit}`;
+        };
 
-      return `
+        return `
         <tr data-status="${status}">
           <td class="path-cell" title="${this.#escapeHtml(page.path)}">${this.#escapeHtml(page.path)}</td>
           <td>${page.status.origin} / ${page.status.compare}</td>
@@ -1026,21 +1044,26 @@ class ComparisonAudit {
           <td><span class="badge badge-gray">${changesCount}</span></td>
         </tr>
       `;
-    }).join('');
+      })
+      .join('');
   }
 
   /**
    * Get unmatched pages table HTML
    */
   #getUnmatchedPagesTable(pages: Record<string, UnmatchedPageInfo>) {
-    const rows = Object.entries(pages).map(([path, page]: [string, UnmatchedPageInfo]) => `
+    const rows = Object.entries(pages)
+      .map(
+        ([path, page]: [string, UnmatchedPageInfo]) => `
       <tr>
         <td class="path-cell">${this.#escapeHtml(path)}</td>
         <td>${this.#escapeHtml(page.title || '-')}</td>
         <td>${page.status}</td>
         <td>${page.issues}</td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     return `
       <table>
@@ -1098,7 +1121,9 @@ class ComparisonAudit {
     };
     console.log(formatScore('Overall:', scores.origin.overall, scores.compare.overall, scores.delta.overall));
     console.log(formatScore('SEO:', scores.origin.seo, scores.compare.seo, scores.delta.seo));
-    console.log(formatScore('Performance:', scores.origin.performance, scores.compare.performance, scores.delta.performance));
+    console.log(
+      formatScore('Performance:', scores.origin.performance, scores.compare.performance, scores.delta.performance),
+    );
     console.log(formatScore('Security:', scores.origin.security, scores.compare.security, scores.delta.security));
 
     console.log('\nISSUE SUMMARY (Origin → Compare)');

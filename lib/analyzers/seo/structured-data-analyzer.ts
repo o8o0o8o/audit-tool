@@ -14,70 +14,70 @@ class StructuredDataAnalyzer {
 
       // Schema validation rules for common types
       const schemaRules: Record<string, { required: string[]; recommended: string[] }> = {
-        'Article': {
+        Article: {
           required: ['headline', 'author', 'datePublished'],
-          recommended: ['image', 'publisher', 'dateModified', 'description']
+          recommended: ['image', 'publisher', 'dateModified', 'description'],
         },
-        'NewsArticle': {
+        NewsArticle: {
           required: ['headline', 'author', 'datePublished'],
-          recommended: ['image', 'publisher', 'dateModified', 'description']
+          recommended: ['image', 'publisher', 'dateModified', 'description'],
         },
-        'BlogPosting': {
+        BlogPosting: {
           required: ['headline', 'author', 'datePublished'],
-          recommended: ['image', 'publisher', 'dateModified', 'description']
+          recommended: ['image', 'publisher', 'dateModified', 'description'],
         },
-        'Product': {
+        Product: {
           required: ['name', 'description'],
-          recommended: ['image', 'offers', 'aggregateRating', 'brand', 'sku']
+          recommended: ['image', 'offers', 'aggregateRating', 'brand', 'sku'],
         },
-        'Organization': {
+        Organization: {
           required: ['name'],
-          recommended: ['url', 'logo', 'contactPoint', 'sameAs', 'address']
+          recommended: ['url', 'logo', 'contactPoint', 'sameAs', 'address'],
         },
-        'LocalBusiness': {
+        LocalBusiness: {
           required: ['name', 'address'],
-          recommended: ['telephone', 'url', 'openingHours', 'image', 'priceRange']
+          recommended: ['telephone', 'url', 'openingHours', 'image', 'priceRange'],
         },
-        'WebPage': {
+        WebPage: {
           required: ['name'],
-          recommended: ['description', 'url', 'breadcrumb']
+          recommended: ['description', 'url', 'breadcrumb'],
         },
-        'WebSite': {
+        WebSite: {
           required: ['name', 'url'],
-          recommended: ['description', 'potentialAction']
+          recommended: ['description', 'potentialAction'],
         },
-        'BreadcrumbList': {
+        BreadcrumbList: {
           required: ['itemListElement'],
-          recommended: []
+          recommended: [],
         },
-        'Person': {
+        Person: {
           required: ['name'],
-          recommended: ['url', 'image', 'jobTitle', 'sameAs']
+          recommended: ['url', 'image', 'jobTitle', 'sameAs'],
         },
-        'Event': {
+        Event: {
           required: ['name', 'startDate', 'location'],
-          recommended: ['description', 'image', 'endDate', 'organizer', 'offers']
+          recommended: ['description', 'image', 'endDate', 'organizer', 'offers'],
         },
-        'VideoObject': {
+        VideoObject: {
           required: ['name', 'description', 'thumbnailUrl', 'uploadDate'],
-          recommended: ['duration', 'contentUrl', 'embedUrl', 'publisher']
+          recommended: ['duration', 'contentUrl', 'embedUrl', 'publisher'],
         },
-        'ImageObject': {
+        ImageObject: {
           required: ['url'],
-          recommended: ['name', 'caption', 'creator']
+          recommended: ['name', 'caption', 'creator'],
         },
-        'Recipe': {
+        Recipe: {
           required: ['name', 'recipeIngredient', 'recipeInstructions'],
-          recommended: ['image', 'author', 'datePublished', 'description', 'prepTime', 'cookTime', 'nutrition']
+          recommended: ['image', 'author', 'datePublished', 'description', 'prepTime', 'cookTime', 'nutrition'],
         },
-        'FAQPage': {
+        FAQPage: {
           required: ['mainEntity'],
-          recommended: []
+          recommended: [],
         },
-        'HowTo': {
+        HowTo: {
           required: ['name', 'step'],
-          recommended: ['description', 'image', 'totalTime', 'supply', 'tool']
-        }
+          recommended: ['description', 'image', 'totalTime', 'supply', 'tool'],
+        },
       };
 
       // Helper function to validate a schema object
@@ -112,9 +112,7 @@ class StructuredDataAnalyzer {
       };
 
       // Check for JSON-LD
-      const jsonLdScripts = Array.from(
-        document.querySelectorAll('script[type="application/ld+json"]')
-      );
+      const jsonLdScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
 
       for (const script of jsonLdScripts) {
         try {
@@ -135,14 +133,12 @@ class StructuredDataAnalyzer {
               const validation = validateSchema(schema, type);
               if (validation) {
                 if (validation.errors.length > 0) {
-
                   schemaInfo.errors = validation.errors;
-                  result.validationErrors.push(...validation.errors.map(e => `${type}: ${e}`));
+                  result.validationErrors.push(...validation.errors.map((e) => `${type}: ${e}`));
                 }
                 if (validation.warnings.length > 0) {
-
                   schemaInfo.warnings = validation.warnings;
-                  result.validationWarnings.push(...validation.warnings.map(w => `${type}: ${w}`));
+                  result.validationWarnings.push(...validation.warnings.map((w) => `${type}: ${w}`));
                 }
               }
 
@@ -161,14 +157,12 @@ class StructuredDataAnalyzer {
                   const validation = validateSchema(graphItem, graphType);
                   if (validation) {
                     if (validation.errors.length > 0) {
-    
                       graphSchemaInfo.errors = validation.errors;
-                      result.validationErrors.push(...validation.errors.map(e => `${graphType}: ${e}`));
+                      result.validationErrors.push(...validation.errors.map((e) => `${graphType}: ${e}`));
                     }
                     if (validation.warnings.length > 0) {
-    
                       graphSchemaInfo.warnings = validation.warnings;
-                      result.validationWarnings.push(...validation.warnings.map(w => `${graphType}: ${w}`));
+                      result.validationWarnings.push(...validation.warnings.map((w) => `${graphType}: ${w}`));
                     }
                   }
 

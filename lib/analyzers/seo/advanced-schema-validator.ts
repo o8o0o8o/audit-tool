@@ -59,21 +59,21 @@ class AdvancedSchemaValidator {
    */
   static getValidator(type: string) {
     const validators: Record<string, any> = {
-      'Article': this.validateArticle,
-      'NewsArticle': this.validateArticle,
-      'BlogPosting': this.validateArticle,
-      'Product': this.validateProduct,
-      'FAQPage': this.validateFAQ,
-      'HowTo': this.validateHowTo,
-      'BreadcrumbList': this.validateBreadcrumb,
-      'LocalBusiness': this.validateLocalBusiness,
-      'Organization': this.validateOrganization,
-      'Person': this.validatePerson,
-      'Review': this.validateReview,
-      'Event': this.validateEvent,
-      'Recipe': this.validateRecipe,
-      'VideoObject': this.validateVideo,
-      'WebPage': this.validateWebPage,
+      Article: this.validateArticle,
+      NewsArticle: this.validateArticle,
+      BlogPosting: this.validateArticle,
+      Product: this.validateProduct,
+      FAQPage: this.validateFAQ,
+      HowTo: this.validateHowTo,
+      BreadcrumbList: this.validateBreadcrumb,
+      LocalBusiness: this.validateLocalBusiness,
+      Organization: this.validateOrganization,
+      Person: this.validatePerson,
+      Review: this.validateReview,
+      Event: this.validateEvent,
+      Recipe: this.validateRecipe,
+      VideoObject: this.validateVideo,
+      WebPage: this.validateWebPage,
     };
 
     return validators[type];

@@ -16,4 +16,17 @@ import { getTechnologyStack } from './technology-stack';
 import { getSourceCodeAnalysis } from './source-code-analysis';
 import { getContentInsights } from './content-insights';
 
-export { getStyles, getScripts, getExecutiveSummary, getIssuesDetail, getPerformanceStats, getHistoricalProgress, getChartsSection, getConfigInfo, getPagesTable, getTechnologyStack, getSourceCodeAnalysis, getContentInsights };
+export {
+  getStyles,
+  getScripts,
+  getExecutiveSummary,
+  getIssuesDetail,
+  getPerformanceStats,
+  getHistoricalProgress,
+  getChartsSection,
+  getConfigInfo,
+  getPagesTable,
+  getTechnologyStack,
+  getSourceCodeAnalysis,
+  getContentInsights,
+};

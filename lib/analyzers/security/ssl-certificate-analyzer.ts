@@ -30,9 +30,7 @@ const EXPIRY_WARNING_DAYS = 30;
 const EXPIRY_CRITICAL_DAYS = 7;
 
 // Weak cipher patterns
-const WEAK_CIPHERS = [
-  'RC4', 'DES', 'MD5', 'NULL', 'EXPORT', 'anon', '3DES',
-];
+const WEAK_CIPHERS = ['RC4', 'DES', 'MD5', 'NULL', 'EXPORT', 'anon', '3DES'];
 
 class SSLCertificateAnalyzer {
   /**
@@ -74,7 +72,10 @@ class SSLCertificateAnalyzer {
       info.hasSSL = true;
 
       // Get certificate details
-      const certDetails: CertificateDetails = await this.getCertificateDetails(parsedUrl.hostname, Number(parsedUrl.port) || 443);
+      const certDetails: CertificateDetails = await this.getCertificateDetails(
+        parsedUrl.hostname,
+        Number(parsedUrl.port) || 443,
+      );
 
       if (certDetails.error) {
         issues.push({
@@ -140,9 +141,7 @@ class SSLCertificateAnalyzer {
 
       // Check cipher strength
       if (certDetails.cipher) {
-        const isWeak = WEAK_CIPHERS.some(weak =>
-          certDetails.cipher!.name?.toUpperCase().includes(weak)
-        );
+        const isWeak = WEAK_CIPHERS.some((weak) => certDetails.cipher!.name?.toUpperCase().includes(weak));
         if (isWeak) {
           issues.push({
             message: 'Weak cipher suite detected',
@@ -154,8 +153,8 @@ class SSLCertificateAnalyzer {
 
       // Check for self-signed certificate
       if (certDetails.issuer && certDetails.subject) {
-        const isSelfSigned = certDetails.issuer.CN === certDetails.subject.CN &&
-                             certDetails.issuer.O === certDetails.subject.O;
+        const isSelfSigned =
+          certDetails.issuer.CN === certDetails.subject.CN && certDetails.issuer.O === certDetails.subject.O;
         if (isSelfSigned) {
           issues.push({
             message: 'Self-signed certificate detected',
@@ -186,7 +185,7 @@ class SSLCertificateAnalyzer {
       // Check if hostname matches certificate
       const hostname = parsedUrl.hostname;
       const certHostnames = [certDetails.subject?.CN, ...(certDetails.altNames || [])];
-      const hostnameMatches = certHostnames.some(cn => this.hostnameMatches(hostname, cn!));
+      const hostnameMatches = certHostnames.some((cn) => this.hostnameMatches(hostname, cn!));
 
       if (!hostnameMatches) {
         issues.push({
@@ -195,7 +194,6 @@ class SSLCertificateAnalyzer {
           severity: SEVERITY.CRITICAL,
         });
       }
-
     } catch (error: unknown) {
       issues.push({
         message: 'Failed to analyze SSL certificate',
@@ -244,8 +242,7 @@ class SSLCertificateAnalyzer {
         // Count chain length
         let chainLength = 1;
         let currentCert = cert;
-        while (currentCert.issuerCertificate &&
-               currentCert.issuerCertificate !== currentCert) {
+        while (currentCert.issuerCertificate && currentCert.issuerCertificate !== currentCert) {
           chainLength++;
           currentCert = currentCert.issuerCertificate;
           if (chainLength > 10) break; // Prevent infinite loop
@@ -259,11 +256,9 @@ class SSLCertificateAnalyzer {
           daysUntilExpiry,
           issuer: cert.issuer as Record<string, unknown>,
           subject: cert.subject as Record<string, unknown>,
-          altNames: cert.subjectaltname
-            ? cert.subjectaltname.split(', ').map(s => s.replace('DNS:', ''))
-            : [],
+          altNames: cert.subjectaltname ? cert.subjectaltname.split(', ').map((s) => s.replace('DNS:', '')) : [],
           protocol: socket.getProtocol ? socket.getProtocol() : null,
-          cipher: socket.getCipher ? socket.getCipher() as unknown as Record<string, unknown> : null,
+          cipher: socket.getCipher ? (socket.getCipher() as unknown as Record<string, unknown>) : null,
           chainLength,
           fingerprint: cert.fingerprint,
           serialNumber: cert.serialNumber,

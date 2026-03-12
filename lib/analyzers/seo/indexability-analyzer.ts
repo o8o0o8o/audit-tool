@@ -1,7 +1,13 @@
 import type { ChromePage, ParsedPage } from '../../types';
 
 class IndexabilityAnalyzer {
-  static async analyzeIndexability(chromePage: ChromePage, parsedPage: ParsedPage, url: string, statusCode: number, responseHeaders: Record<string, string> = {}) {
+  static async analyzeIndexability(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    url: string,
+    statusCode: number,
+    responseHeaders: Record<string, string> = {},
+  ) {
     const indexabilityData = {
       isIndexable: true,
       blockingFactors: [] as string[],
@@ -34,7 +40,7 @@ class IndexabilityAnalyzer {
       }
       if (contentValue.includes('nofollow')) {
         indexabilityData.hasNofollowTag = true;
-        indexabilityData.warnings.push('Meta robots: nofollow (links won\'t be followed)');
+        indexabilityData.warnings.push("Meta robots: nofollow (links won't be followed)");
       }
       if (contentValue.includes('none')) {
         indexabilityData.isIndexable = false;
@@ -94,7 +100,9 @@ class IndexabilityAnalyzer {
               indexabilityData.warnings.push('Canonical has hostname mismatch (e.g. www vs non-www)');
             }
           }
-        } catch { /* URL parsing failed, skip additional checks */ }
+        } catch {
+          /* URL parsing failed, skip additional checks */
+        }
       }
     }
 

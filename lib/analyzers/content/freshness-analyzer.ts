@@ -211,17 +211,15 @@ class FreshnessAnalyzer {
     let score: number;
 
     // Get the most recent date we have
-    const dates = [
-      freshnessData.lastModified,
-      freshnessData.dateModified,
-      freshnessData.datePublished,
-    ].filter(Boolean).map(d => new Date(d));
+    const dates = [freshnessData.lastModified, freshnessData.dateModified, freshnessData.datePublished]
+      .filter(Boolean)
+      .map((d) => new Date(d));
 
     if (dates.length === 0) {
       return 50; // No data, neutral score
     }
 
-    const mostRecent = new Date(Math.max(...dates.map(d => d.getTime())));
+    const mostRecent = new Date(Math.max(...dates.map((d) => d.getTime())));
     const ageInDays = Math.floor((now.getTime() - mostRecent.getTime()) / (1000 * 60 * 60 * 24));
 
     // Scoring based on age
@@ -287,7 +285,7 @@ class FreshnessAnalyzer {
     if (pagesWithoutDates > totalPages * 0.5) {
       warnings.push({
         message: 'Most pages lack freshness signals',
-        detail: `${pagesWithoutDates} of ${totalPages} pages (${((pagesWithoutDates/totalPages)*100).toFixed(1)}%) have no date information. Consider adding Last-Modified headers or Schema.org dates`,
+        detail: `${pagesWithoutDates} of ${totalPages} pages (${((pagesWithoutDates / totalPages) * 100).toFixed(1)}%) have no date information. Consider adding Last-Modified headers or Schema.org dates`,
         severity: SEVERITY.LOW,
       });
     }
@@ -295,19 +293,16 @@ class FreshnessAnalyzer {
     if (stalePages > totalPages * 0.3) {
       issues.push({
         message: 'Many pages have stale content',
-        detail: `${stalePages} of ${totalPages} pages (${((stalePages/totalPages)*100).toFixed(1)}%) haven't been updated in over a year`,
+        detail: `${stalePages} of ${totalPages} pages (${((stalePages / totalPages) * 100).toFixed(1)}%) haven't been updated in over a year`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     // Calculate site-wide freshness metrics
-    const avgScore = freshnessScores.length > 0
-      ? freshnessScores.reduce((a, b) => a + b, 0) / freshnessScores.length
-      : 50;
+    const avgScore =
+      freshnessScores.length > 0 ? freshnessScores.reduce((a, b) => a + b, 0) / freshnessScores.length : 50;
 
-    const avgAge = ages.length > 0
-      ? ages.reduce((a, b) => a + b, 0) / ages.length
-      : null;
+    const avgAge = ages.length > 0 ? ages.reduce((a, b) => a + b, 0) / ages.length : null;
 
     return {
       issues,

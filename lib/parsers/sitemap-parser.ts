@@ -44,7 +44,7 @@ class SitemapParser {
       errors: [], // Array of { message, detail, severity }
     };
 
-    console.log("Analyzing sitemaps...");
+    console.log('Analyzing sitemaps...');
 
     for (const sitemapUrl of sitemapUrls) {
       try {
@@ -59,7 +59,7 @@ class SitemapParser {
 
         const sitemap = await sitemapResponse.text();
         const parsedSitemap = parse(sitemap);
-        const urls = parsedSitemap.querySelectorAll("url");
+        const urls = parsedSitemap.querySelectorAll('url');
 
         if (urls.length) {
           // Regular sitemap with URLs
@@ -67,12 +67,12 @@ class SitemapParser {
           this.processSitemap(urls, origin, sitemapUrl, result);
         } else {
           // Sitemap index file - process each nested sitemap independently
-          const nestedSitemaps = parsedSitemap.querySelectorAll("sitemap");
+          const nestedSitemaps = parsedSitemap.querySelectorAll('sitemap');
           console.log(`Sitemap index detected with ${nestedSitemaps.length} nested sitemaps`);
 
           for (const sitemap of nestedSitemaps) {
             try {
-              const sitemapPage = sitemap.querySelector("loc")?.innerText?.trim();
+              const sitemapPage = sitemap.querySelector('loc')?.innerText?.trim();
               if (!sitemapPage) {
                 console.log(`  Skipping nested sitemap with empty loc`);
                 continue;
@@ -92,26 +92,26 @@ class SitemapParser {
                 result.errors.push({
                   message: `Failed to fetch nested sitemap`,
                   detail: `HTTP ${sitemapPageResponse.status} for ${sitemapPage}`,
-                  severity: SEVERITY.MEDIUM
+                  severity: SEVERITY.MEDIUM,
                 });
                 continue;
               }
 
               const sitemapPageText = await sitemapPageResponse.text();
               const parsedSitemapPage = parse(sitemapPageText);
-              const nestedUrls = parsedSitemapPage.querySelectorAll("url");
+              const nestedUrls = parsedSitemapPage.querySelectorAll('url');
 
               console.log(`  Processing ${nestedUrls.length} URLs from nested sitemap`);
               this.processSitemap(nestedUrls, origin, sitemapPage, result);
             } catch (nestedError: unknown) {
-              const nestedSitemapUrl = sitemap.querySelector("loc")?.innerText?.trim() || 'unknown';
+              const nestedSitemapUrl = sitemap.querySelector('loc')?.innerText?.trim() || 'unknown';
               const nestedErr = nestedError as Error;
               const errorMessage = `Error processing nested sitemap ${nestedSitemapUrl}: ${nestedErr.name} ${nestedErr.message}`;
               console.log(`  ${errorMessage}`);
               result.errors.push({
                 message: `Failed to process nested sitemap`,
                 detail: errorMessage,
-                severity: SEVERITY.MEDIUM
+                severity: SEVERITY.MEDIUM,
               });
               // Continue processing remaining sitemaps
             }
@@ -123,7 +123,7 @@ class SitemapParser {
         result.errors.push({
           message,
           detail: '',
-          severity: SEVERITY.HIGH
+          severity: SEVERITY.HIGH,
         });
         console.log(message);
       }
@@ -146,14 +146,14 @@ class SitemapParser {
     const processedUrls: Record<string, SitemapParsedUrl> = {};
 
     for (const site of urls) {
-      const loc = site.querySelector("loc")?.innerText?.trim();
+      const loc = site.querySelector('loc')?.innerText?.trim();
 
       // Skip entries without valid loc
       if (!loc) {
         result.errors.push({
           message: `Empty or missing <loc> in sitemap`,
           detail: `Sitemap ${currentSitemap} contains an entry without a valid <loc> element`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
         continue;
       }
@@ -165,16 +165,16 @@ class SitemapParser {
         result.errors.push({
           message: `Invalid URL format in sitemap`,
           detail: `URL "${loc}" in sitemap ${currentSitemap} is not a valid URL`,
-          severity: SEVERITY.HIGH
+          severity: SEVERITY.HIGH,
         });
         continue;
       }
 
       const processedData: SitemapParsedUrl = {
         loc,
-        lastmod: site.querySelector("lastmod")?.innerText,
-        changefreq: site.querySelector("changefreq")?.innerText,
-        priority: site.querySelector("priority")?.innerText,
+        lastmod: site.querySelector('lastmod')?.innerText,
+        changefreq: site.querySelector('changefreq')?.innerText,
+        priority: site.querySelector('priority')?.innerText,
       };
 
       // Validate lastmod date format (ISO 8601)
@@ -184,7 +184,7 @@ class SitemapParser {
           result.errors.push({
             message: `Invalid lastmod date format in sitemap`,
             detail: `URL ${processedData.loc} has invalid lastmod "${processedData.lastmod}" in sitemap ${currentSitemap}`,
-            severity: SEVERITY.LOW
+            severity: SEVERITY.LOW,
           });
         }
       }
@@ -194,7 +194,7 @@ class SitemapParser {
         result.errors.push({
           message: `Invalid changefreq value in sitemap`,
           detail: `URL ${processedData.loc} has invalid changefreq "${processedData.changefreq}" in sitemap ${currentSitemap}`,
-          severity: SEVERITY.LOW
+          severity: SEVERITY.LOW,
         });
       }
 
@@ -205,7 +205,7 @@ class SitemapParser {
           result.errors.push({
             message: `Invalid priority value in sitemap`,
             detail: `URL ${processedData.loc} has invalid priority "${processedData.priority}" in sitemap ${currentSitemap} (must be between 0.0 and 1.0)`,
-            severity: SEVERITY.LOW
+            severity: SEVERITY.LOW,
           });
         }
       }
@@ -213,8 +213,8 @@ class SitemapParser {
       unique.add(processedData.loc);
 
       // Extract alternate language links
-      for (const alternate of site.querySelectorAll("xhtml:link")) {
-        if (alternate.attributes.rel === "alternate") {
+      for (const alternate of site.querySelectorAll('xhtml:link')) {
+        if (alternate.attributes.rel === 'alternate') {
           if (!processedData.alternates) {
             processedData.alternates = {};
           }
@@ -236,7 +236,7 @@ class SitemapParser {
       result.errors.push({
         message: `Sitemap is reached the limit ${THRESHOLDS.SITEMAP_LIMIT} ${currentSitemap}`,
         detail: '',
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
@@ -247,9 +247,9 @@ class SitemapParser {
       for (const site of locs) {
         if (seen.has(site) && !reported.has(site)) {
           result.errors.push({
-            message: "There are duplications in sitemap " + currentSitemap,
+            message: 'There are duplications in sitemap ' + currentSitemap,
             detail: `Duplicate url: ${site} in sitemap: ${currentSitemap}`,
-            severity: SEVERITY.HIGH
+            severity: SEVERITY.HIGH,
           });
           reported.add(site);
         }
@@ -267,12 +267,12 @@ class SitemapParser {
         result.errors.push({
           message: `Incorrect origin ${site} in sitemap ${currentSitemap}`,
           detail: '',
-          severity: SEVERITY.HIGH
+          severity: SEVERITY.HIGH,
         });
       }
 
       // Track trailing slash usage
-      if (site.endsWith("/")) {
+      if (site.endsWith('/')) {
         withTrailingSlash.push(site);
       } else {
         withoutTrailingSlash.push(site);
@@ -283,7 +283,7 @@ class SitemapParser {
       result.errors.push({
         message: `Trailing slash inconsistencies in sitemap ${currentSitemap}: withTrailingSlash = ${withTrailingSlash.length}, withoutTrailingLSlash = ${withoutTrailingSlash.length}`,
         detail: '',
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
 
@@ -324,7 +324,7 @@ if (isMainModule || isDirectRun) {
     }
 
     console.log(`\nFound ${robotsResult.sitemaps.length} sitemap(s) in robots.txt:`);
-    robotsResult.sitemaps.forEach(s => console.log('  -', s));
+    robotsResult.sitemaps.forEach((s) => console.log('  -', s));
 
     console.log('\n--- Parsing Sitemaps ---\n');
     const result = await SitemapParser.parseSitemaps(testUrl, robotsResult.sitemaps);
@@ -349,7 +349,7 @@ if (isMainModule || isDirectRun) {
     const sampleUrls = Object.keys(result.urls).slice(0, 5);
     if (sampleUrls.length) {
       console.log('\nSample URLs (first 5):');
-      sampleUrls.forEach(url => console.log(`  - ${url}`));
+      sampleUrls.forEach((url) => console.log(`  - ${url}`));
     }
   })();
 }

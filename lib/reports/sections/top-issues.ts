@@ -55,11 +55,11 @@ const ISSUE_EDUCATION = {
     why: 'Time to First Byte over 800ms signals slow server response, harming Core Web Vitals and user experience.',
     learnMore: 'https://web.dev/articles/ttfb',
   },
-  'lcp': {
+  lcp: {
     why: 'Largest Contentful Paint over 2.5s means users wait too long to see the main content. It is a Core Web Vital.',
     learnMore: 'https://web.dev/articles/lcp',
   },
-  'cls': {
+  cls: {
     why: 'Cumulative Layout Shift over 0.1 means elements move unexpectedly, frustrating users. It is a Core Web Vital.',
     learnMore: 'https://web.dev/articles/cls',
   },
@@ -75,7 +75,7 @@ const ISSUE_EDUCATION = {
     why: 'Broken links (404s) waste crawl budget, harm user experience, and lose any link equity passed to the page.',
     learnMore: 'https://developers.google.com/search/docs/crawling-indexing/http-network-errors',
   },
-  'noindex': {
+  noindex: {
     why: 'Pages with noindex are excluded from search results. Ensure this is intentional for each page.',
     learnMore: 'https://developers.google.com/search/docs/crawling-indexing/block-indexing',
   },
@@ -119,11 +119,11 @@ const ISSUE_EDUCATION = {
     why: 'Pages with highly similar content waste crawl budget and may be filtered from search results as duplicates.',
     learnMore: 'https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls',
   },
-  'pagerank': {
+  pagerank: {
     why: 'Pages with very low internal PageRank receive little link equity, making them harder to rank in search results.',
     learnMore: 'https://developers.google.com/search/docs/fundamentals/seo-starter-guide',
   },
-  'cta': {
+  cta: {
     why: 'Pages without calls-to-action miss conversion opportunities. Every content page should guide users toward a next step.',
     learnMore: null,
   },
@@ -168,7 +168,7 @@ const CRAWLER_ERROR_PATTERNS = [
  * @returns {boolean}
  */
 function isCrawlerError(issue: string) {
-  return CRAWLER_ERROR_PATTERNS.some(pattern => issue.includes(pattern));
+  return CRAWLER_ERROR_PATTERNS.some((pattern) => issue.includes(pattern));
 }
 
 /**
@@ -186,7 +186,7 @@ function getTopIssues(data: ReportSectionData) {
     ...(bySeverity.critical || []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
     ...(bySeverity.high || []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
     ...(bySeverity.medium || []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
-    ...(bySeverity.low || []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' }))
+    ...(bySeverity.low || []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
   ].filter((item: { issue: string; severity: string; severityLabel: string }) => !isCrawlerError(item.issue)); // Filter out crawler errors
 
   const topIssues = allIssues.slice(0, 10);
@@ -216,35 +216,55 @@ function getTopIssues(data: ReportSectionData) {
  * @param {Object} jsonData - Full JSON data for accessing details
  * @returns {string} HTML string for the issue card
  */
-function getIssueCard(item: { issue: string; severity: string; severityLabel: string }, index: number, jsonData: Record<string, unknown>) {
+function getIssueCard(
+  item: { issue: string; severity: string; severityLabel: string },
+  index: number,
+  jsonData: Record<string, unknown>,
+) {
   // Strip severity suffix from issue key (format: "Error message [severity]")
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
   const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
   const detailsMap = (analysisObj.details || {}) as Record<string, Record<string, unknown>>;
-  const details = detailsMap[issueKey] || {} as Record<string, unknown>;
+  const details = detailsMap[issueKey] || ({} as Record<string, unknown>);
   const examples = (details.examples || []) as string[];
   const affectedCount = examples.length;
 
   const totalCount = (details.count as number) || affectedCount;
   const VISIBLE_COUNT = 5;
-  const examplesHtml = examples.length > 0 ? `
+  const examplesHtml =
+    examples.length > 0
+      ? `
     <div class="affected-pages">
       <strong>Affected locations (${totalCount}):</strong>
       <div class="issue-examples-list" style="margin-top: 5px;">
-        ${examples.slice(0, VISIBLE_COUNT).map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`).join('')}
-        ${examples.length > VISIBLE_COUNT ? `
+        ${examples
+          .slice(0, VISIBLE_COUNT)
+          .map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`)
+          .join('')}
+        ${
+          examples.length > VISIBLE_COUNT
+            ? `
           <div class="issue-examples-hidden" id="issue-more-${index}" style="display:none;">
-            ${examples.slice(VISIBLE_COUNT).map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`).join('')}
+            ${examples
+              .slice(VISIBLE_COUNT)
+              .map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`)
+              .join('')}
           </div>
           <button class="issue-toggle-btn" onclick="var el=document.getElementById('issue-more-${index}');var showing=el.style.display!=='none';el.style.display=showing?'none':'block';this.textContent=showing?'Show all ${examples.length} examples...':'Show less';">Show all ${examples.length} examples...</button>
           ${totalCount > examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>` : ''}
-        ` : totalCount > examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>` : ''}
+        `
+            : totalCount > examples.length
+              ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>`
+              : ''
+        }
       </div>
     </div>
-  ` : '';
+  `
+      : '';
 
   const education = findEducation(issueKey);
-  const educationHtml = education ? `
+  const educationHtml = education
+    ? `
     <div class="issue-education">
       <details>
         <summary class="education-toggle">Why this matters</summary>
@@ -252,7 +272,8 @@ function getIssueCard(item: { issue: string; severity: string; severityLabel: st
         ${education.learnMore ? `<a href="${education.learnMore}" target="_blank" rel="noopener noreferrer" class="education-link">Learn more &rarr;</a>` : ''}
       </details>
     </div>
-  ` : '';
+  `
+    : '';
 
   return `
     <div class="issue-card">

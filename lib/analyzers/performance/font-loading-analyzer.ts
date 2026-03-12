@@ -56,13 +56,15 @@ class FontLoadingAnalyzer {
     // Generate issues
 
     // Large total font size
-    if (fontData.totalFontSize > 500000) { // 500KB
+    if (fontData.totalFontSize > 500000) {
+      // 500KB
       issues.push({
         message: 'Excessive web font payload',
         detail: `<a href="${url}">${url}</a> loads ${(fontData.totalFontSize / 1024).toFixed(0)}KB of fonts. Consider subsetting fonts or reducing font variants.`,
         severity: SEVERITY.HIGH,
       });
-    } else if (fontData.totalFontSize > 250000) { // 250KB
+    } else if (fontData.totalFontSize > 250000) {
+      // 250KB
       warnings.push({
         message: 'Large web font payload',
         detail: `<a href="${url}">${url}</a> loads ${(fontData.totalFontSize / 1024).toFixed(0)}KB of fonts. Consider optimizing.`,
@@ -129,8 +131,7 @@ class FontLoadingAnalyzer {
     const fontExtensions = ['.woff2', '.woff', '.ttf', '.otf', '.eot'];
 
     for (const [reqUrl, req] of Object.entries(requests) as [string, any][]) {
-      const isFont = fontExtensions.some(ext => reqUrl.toLowerCase().includes(ext)) ||
-                     req.resourceType === 'font';
+      const isFont = fontExtensions.some((ext) => reqUrl.toLowerCase().includes(ext)) || req.resourceType === 'font';
 
       if (isFont) {
         const size = req.size || 0;
@@ -252,7 +253,7 @@ class FontLoadingAnalyzer {
           'sans-serif',
         ];
 
-        return systemFontIndicators.some(font => fontFamily.includes(font));
+        return systemFontIndicators.some((font) => fontFamily.includes(font));
       });
     } catch {
       return false;
@@ -289,7 +290,7 @@ class FontLoadingAnalyzer {
     const preconnects = parsedPage.querySelectorAll('link[rel="preconnect"]');
     for (const link of preconnects) {
       const href = link.getAttribute('href') || '';
-      if (fontServiceDomains.some(d => href.includes(d))) {
+      if (fontServiceDomains.some((d) => href.includes(d))) {
         hasPreconnect = true;
         break;
       }
@@ -312,7 +313,6 @@ class FontLoadingAnalyzer {
 
     for (const [_url, page] of Object.entries(pages) as [string, any][]) {
       if (page.fontData) {
-
         if (page.fontData.webFontCount > 0 && !page.fontData.hasFontDisplay) {
           pagesWithoutFontDisplay++;
         }

@@ -155,16 +155,29 @@ class VitalsCollector {
           lcpElement: null as string | null,
           lcpUrl: null as string | null,
           lcpSize: null as { width: number; height: number } | null,
-          clsEntries: [] as Array<{ value: number; startTime: number; sources: Array<{ node: string | null; currentRect: { x: number; y: number; width: number; height: number } | null }> }>,
+          clsEntries: [] as Array<{
+            value: number;
+            startTime: number;
+            sources: Array<{
+              node: string | null;
+              currentRect: { x: number; y: number; width: number; height: number } | null;
+            }>;
+          }>,
           clsLargestShift: null as number | null,
           clsShiftCount: 0,
           inpEvent: null as string | null,
 
           // Advanced metrics
-          TBT: 0,         // Total Blocking Time
-          TTI: 0,         // Time to Interactive
-          longTasks: [] as Array<{ startTime: number; duration: number; blockingTime: number; name: string; attribution: Array<{ name: string; containerType: string; containerSrc: string }> }>,
-          speedIndex: 0,  // Speed Index (estimated)
+          TBT: 0, // Total Blocking Time
+          TTI: 0, // Time to Interactive
+          longTasks: [] as Array<{
+            startTime: number;
+            duration: number;
+            blockingTime: number;
+            name: string;
+            attribution: Array<{ name: string; containerType: string; containerSrc: string }>;
+          }>,
+          speedIndex: 0, // Speed Index (estimated)
 
           // Additional timing
           domContentLoaded: 0,
@@ -173,7 +186,10 @@ class VitalsCollector {
         };
 
         let lcpFired = false;
-        let clsObserver: PerformanceObserver | undefined = undefined, lcpObserver: PerformanceObserver | undefined = undefined, inpObserver: PerformanceObserver | undefined, longTaskObserver: PerformanceObserver | undefined;
+        let clsObserver: PerformanceObserver | undefined = undefined,
+          lcpObserver: PerformanceObserver | undefined = undefined,
+          inpObserver: PerformanceObserver | undefined,
+          longTaskObserver: PerformanceObserver | undefined;
 
         // CLS Session Window tracking
         let clsSessionValue = 0;
@@ -185,7 +201,13 @@ class VitalsCollector {
         const inpEntries: Array<{ name: string; duration: number; interactionId: number; startTime: number }> = [];
 
         // Long tasks for TBT calculation
-        const longTasks: Array<{ startTime: number; duration: number; blockingTime: number; name: string; attribution: Array<{ name: string; containerType: string; containerSrc: string }> }> = [];
+        const longTasks: Array<{
+          startTime: number;
+          duration: number;
+          blockingTime: number;
+          name: string;
+          attribution: Array<{ name: string; containerType: string; containerSrc: string }>;
+        }> = [];
         let tbtTotal = 0;
 
         // Helper to finalize
@@ -198,28 +220,34 @@ class VitalsCollector {
           // Calculate INP (p98 or worst)
           if (inpEntries.length > 0) {
             inpEntries.sort((a, b) => b.duration - a.duration); // descending
-            const inpIndex = inpEntries.length >= 50
-              ? Math.floor(inpEntries.length * 0.02) // p98 = top 2% index in descending array
-              : 0;
+            const inpIndex =
+              inpEntries.length >= 50
+                ? Math.floor(inpEntries.length * 0.02) // p98 = top 2% index in descending array
+                : 0;
             metrics.INP = inpEntries[inpIndex]?.duration || 0;
             metrics.inpEvent = inpEntries[inpIndex]?.name || null;
           }
 
           // Use max session window for CLS
           metrics.CLS = clsMaxSessionValue;
-          metrics.clsEntries = clsMaxSessionEntries.map(e => {
-            const entry = e as PerformanceEntry & { value: number; sources?: Array<{ node?: { nodeName?: string }; currentRect?: DOMRectReadOnly }> };
+          metrics.clsEntries = clsMaxSessionEntries.map((e) => {
+            const entry = e as PerformanceEntry & {
+              value: number;
+              sources?: Array<{ node?: { nodeName?: string }; currentRect?: DOMRectReadOnly }>;
+            };
             return {
               value: entry.value,
               startTime: entry.startTime,
               sources: (entry.sources || []).map((s) => ({
                 node: s.node?.nodeName || null,
-                currentRect: s.currentRect ? {
-                  x: Math.round(s.currentRect.x),
-                  y: Math.round(s.currentRect.y),
-                  width: Math.round(s.currentRect.width),
-                  height: Math.round(s.currentRect.height),
-                } : null,
+                currentRect: s.currentRect
+                  ? {
+                      x: Math.round(s.currentRect.x),
+                      y: Math.round(s.currentRect.y),
+                      width: Math.round(s.currentRect.width),
+                      height: Math.round(s.currentRect.height),
+                    }
+                  : null,
               })),
             };
           });
@@ -301,7 +329,7 @@ class VitalsCollector {
           }
 
           return quietWindowStart;
-        }
+        };
 
         // Calculate Speed Index estimate
         // Simplified: weighted average of FCP and LCP
@@ -310,14 +338,15 @@ class VitalsCollector {
           // Rough approximation: SI is typically between FCP and LCP
           // Real SI requires video capture, this is an estimate
           return fcp * 0.4 + lcp * 0.6;
-        }
+        };
 
         // 1. Navigation Timing & TTFB
         const navObserver = new PerformanceObserver((list) => {
           const entries = list.getEntries();
           if (entries.length > 0) {
             const nav = entries[0] as PerformanceNavigationTiming;
-            const activationStart = (nav as PerformanceNavigationTiming & { activationStart?: number }).activationStart || 0;
+            const activationStart =
+              (nav as PerformanceNavigationTiming & { activationStart?: number }).activationStart || 0;
             metrics.TTFB = Math.max(nav.responseStart - activationStart, 0);
             metrics.domContentLoaded = nav.domContentLoadedEventEnd - activationStart;
             metrics.domComplete = nav.domComplete - activationStart;
@@ -328,28 +357,30 @@ class VitalsCollector {
             navObserver.disconnect();
           }
         });
-        navObserver.observe({ type: "navigation", buffered: true });
+        navObserver.observe({ type: 'navigation', buffered: true });
 
         // 2. FCP
         const fcpObserver = new PerformanceObserver((list) => {
           const entries = list.getEntries();
-          const fcpEntry = entries.find(e => e.name === 'first-contentful-paint');
+          const fcpEntry = entries.find((e) => e.name === 'first-contentful-paint');
           if (fcpEntry) {
             metrics.FCP = fcpEntry.startTime;
             fcpObserver.disconnect();
           }
         });
-        fcpObserver.observe({ type: "paint", buffered: true });
+        fcpObserver.observe({ type: 'paint', buffered: true });
 
         // 3. LCP with sub-parts
         lcpObserver = new PerformanceObserver((list) => {
           const entries = list.getEntries();
-          const lastLCP = entries.at(-1) as PerformanceEntry & {
-            element?: HTMLElement;
-            url?: string;
-            loadTime?: number;
-            startTime: number;
-          } | undefined;
+          const lastLCP = entries.at(-1) as
+            | (PerformanceEntry & {
+                element?: HTMLElement;
+                url?: string;
+                loadTime?: number;
+                startTime: number;
+              })
+            | undefined;
           if (lastLCP) {
             metrics.LCP = lastLCP.startTime;
 
@@ -374,11 +405,12 @@ class VitalsCollector {
             if (lastLCP.url) {
               // For resource-based LCP (images, videos)
               const resourceEntries = performance.getEntriesByType('resource');
-              const lcpResource = resourceEntries.find(r => r.name === lastLCP.url);
+              const lcpResource = resourceEntries.find((r) => r.name === lastLCP.url);
 
               if (lcpResource) {
                 metrics.lcpResourceDelay = Math.max(lcpResource.startTime - metrics.TTFB, 0);
-                metrics.lcpResourceLoad = (lcpResource as PerformanceResourceTiming).responseEnd - lcpResource.startTime;
+                metrics.lcpResourceLoad =
+                  (lcpResource as PerformanceResourceTiming).responseEnd - lcpResource.startTime;
                 metrics.lcpRenderDelay = lastLCP.startTime - (lcpResource as PerformanceResourceTiming).responseEnd;
               }
             } else {
@@ -394,7 +426,7 @@ class VitalsCollector {
             }
           }
         });
-        lcpObserver.observe({ type: "largest-contentful-paint", buffered: true });
+        lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
 
         // 4. CLS with element attribution
         clsObserver = new PerformanceObserver((list) => {
@@ -406,9 +438,11 @@ class VitalsCollector {
             const firstEntry = clsSessionEntries[0];
             const lastEntry = clsSessionEntries[clsSessionEntries.length - 1];
 
-            if (clsSessionEntries.length > 0 &&
-                clsEntry.startTime - lastEntry.startTime < 1000 &&
-                clsEntry.startTime - firstEntry.startTime < 5000) {
+            if (
+              clsSessionEntries.length > 0 &&
+              clsEntry.startTime - lastEntry.startTime < 1000 &&
+              clsEntry.startTime - firstEntry.startTime < 5000
+            ) {
               clsSessionValue += clsEntry.value;
               clsSessionEntries.push(entry);
             } else {
@@ -422,7 +456,7 @@ class VitalsCollector {
             }
           }
         });
-        clsObserver.observe({ type: "layout-shift", buffered: true });
+        clsObserver.observe({ type: 'layout-shift', buffered: true });
 
         // 5. INP
         try {
@@ -439,7 +473,7 @@ class VitalsCollector {
               }
             }
           });
-          inpObserver.observe({ type: "event", buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
+          inpObserver.observe({ type: 'event', buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
         } catch {
           // INP not supported
         }
@@ -449,7 +483,9 @@ class VitalsCollector {
           // Try Long Animation Frames first (newer, more accurate)
           longTaskObserver = new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
-              const taskEntry = entry as PerformanceEntry & { attribution?: Array<{ name: string; containerType: string; containerSrc?: string }> };
+              const taskEntry = entry as PerformanceEntry & {
+                attribution?: Array<{ name: string; containerType: string; containerSrc?: string }>;
+              };
               const blockingTime = Math.max(taskEntry.duration - 50, 0);
               tbtTotal += blockingTime;
 
@@ -459,20 +495,21 @@ class VitalsCollector {
                 blockingTime,
                 name: taskEntry.name || 'long-task',
                 // Attribution if available
-                attribution: taskEntry.attribution?.map((a) => ({
-                  name: a.name,
-                  containerType: a.containerType,
-                  containerSrc: a.containerSrc?.substring(0, 100) || '',
-                })) || [],
+                attribution:
+                  taskEntry.attribution?.map((a) => ({
+                    name: a.name,
+                    containerType: a.containerType,
+                    containerSrc: a.containerSrc?.substring(0, 100) || '',
+                  })) || [],
               });
             }
           });
 
           // Try 'long-animation-frame' first, fall back to 'longtask'
           try {
-            longTaskObserver.observe({ type: "long-animation-frame", buffered: true });
+            longTaskObserver.observe({ type: 'long-animation-frame', buffered: true });
           } catch {
-            longTaskObserver.observe({ type: "longtask", buffered: true });
+            longTaskObserver.observe({ type: 'longtask', buffered: true });
           }
         } catch {
           // Long task observation not supported
@@ -502,11 +539,12 @@ class VitalsCollector {
       lcpPass: vitals.LCP <= THRESHOLDS.LCP,
       clsPass: vitals.CLS <= THRESHOLDS.CLS,
       inpPass: vitals.INP <= THRESHOLDS.INP,
-      allPass: vitals.TTFB <= THRESHOLDS.TTFB &&
-               vitals.FCP <= THRESHOLDS.FCP &&
-               vitals.LCP <= THRESHOLDS.LCP &&
-               vitals.CLS <= THRESHOLDS.CLS &&
-               (vitals.INP === 0 || vitals.INP <= THRESHOLDS.INP),
+      allPass:
+        vitals.TTFB <= THRESHOLDS.TTFB &&
+        vitals.FCP <= THRESHOLDS.FCP &&
+        vitals.LCP <= THRESHOLDS.LCP &&
+        vitals.CLS <= THRESHOLDS.CLS &&
+        (vitals.INP === 0 || vitals.INP <= THRESHOLDS.INP),
     };
   }
 
@@ -683,10 +721,10 @@ class VitalsCollector {
       .slice(0, 5);
 
     // Generate recommendations
-    if (elements.some(e => e.node === 'IMG')) {
+    if (elements.some((e) => e.node === 'IMG')) {
       recommendations.push('Set explicit width/height attributes on images');
     }
-    if (elements.some(e => e.node === 'IFRAME')) {
+    if (elements.some((e) => e.node === 'IFRAME')) {
       recommendations.push('Reserve space for iframes/embeds with CSS aspect-ratio');
     }
     if (elements.length > 0) {
@@ -727,7 +765,7 @@ class VitalsCollector {
     if (totalBlockingTime > 300) {
       recommendations.push('Break up long JavaScript tasks using requestIdleCallback or setTimeout');
     }
-    if (scripts.some(s => s.script.includes('third-party') || s.script.includes('analytics'))) {
+    if (scripts.some((s) => s.script.includes('third-party') || s.script.includes('analytics'))) {
       recommendations.push('Defer or lazy-load third-party scripts');
     }
     if (longTasks.length > 10) {
@@ -744,4 +782,14 @@ class VitalsCollector {
 }
 
 export { VitalsCollector };
-export type { CollectedVitals, LCPSubParts, CLSEntry, LongTaskEntry, VitalsThresholdResult, FormattedMetric, LCPAnalysis, CLSAnalysis, LongTaskAnalysis };
+export type {
+  CollectedVitals,
+  LCPSubParts,
+  CLSEntry,
+  LongTaskEntry,
+  VitalsThresholdResult,
+  FormattedMetric,
+  LCPAnalysis,
+  CLSAnalysis,
+  LongTaskAnalysis,
+};

@@ -135,7 +135,7 @@ class WebComponentAnalyzer {
           const tagName = el.tagName.toLowerCase();
           // Custom elements must contain a hyphen
           if (tagName.includes('-')) {
-            const existing = customElements.find(c => c.tagName === tagName);
+            const existing = customElements.find((c) => c.tagName === tagName);
             if (existing) {
               existing.count++;
             } else {
@@ -221,7 +221,7 @@ class WebComponentAnalyzer {
               findShadowRoots(shadowRoot, depth + 1);
             }
           }
-        }
+        };
 
         findShadowRoots(document);
 
@@ -324,7 +324,8 @@ class WebComponentAnalyzer {
     if (pagesWithContentInShadow > 0) {
       issues.push({
         message: `${pagesWithContentInShadow} pages have important content in Shadow DOM`,
-        detail: 'Links and headings in Shadow DOM may not be crawlable by search engines. Move critical content to Light DOM.',
+        detail:
+          'Links and headings in Shadow DOM may not be crawlable by search engines. Move critical content to Light DOM.',
         severity: SEVERITY.HIGH,
       });
     }

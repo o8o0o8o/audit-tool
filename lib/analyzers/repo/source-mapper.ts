@@ -80,55 +80,67 @@ class SourceMapper {
     switch (framework) {
       case 'Next.js':
         // Check layout files for metadata export with title
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
-          positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
-          negative: /title\s*[=:]/, // should have title in metadata
-          suggestion: 'Add a title field to the metadata export or generateMetadata function',
-          context: 'metadata export',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
+            positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
+            negative: /title\s*[=:]/, // should have title in metadata
+            suggestion: 'Add a title field to the metadata export or generateMetadata function',
+            context: 'metadata export',
+          }),
+        );
         // Check page files that might need their own title
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /^page\.(tsx|jsx|js|ts)$/, {
-          positive: null, // all page files
-          negative: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
-          suggestion: 'Export metadata or generateMetadata with a title for this page',
-          context: 'page without metadata export',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /^page\.(tsx|jsx|js|ts)$/, {
+            positive: null, // all page files
+            negative: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
+            suggestion: 'Export metadata or generateMetadata with a title for this page',
+            context: 'page without metadata export',
+          }),
+        );
         break;
 
       case 'Nuxt':
-        locations.push(...this.#findInFiles(repoPath, ['pages'], /\.(vue)$/, {
-          positive: null,
-          negative: /useHead\s*\(|useSeoMeta\s*\(|<Title>|definePageMeta/,
-          suggestion: 'Add useHead({ title: "..." }) or useSeoMeta({ title: "..." }) to this page',
-          context: 'page without head management',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['pages'], /\.(vue)$/, {
+            positive: null,
+            negative: /useHead\s*\(|useSeoMeta\s*\(|<Title>|definePageMeta/,
+            suggestion: 'Add useHead({ title: "..." }) or useSeoMeta({ title: "..." }) to this page',
+            context: 'page without head management',
+          }),
+        );
         break;
 
       case 'Gatsby':
-        locations.push(...this.#findInFiles(repoPath, ['src/pages', 'src/templates'], /\.(tsx|jsx|js)$/, {
-          positive: null,
-          negative: /export\s+(const|function)\s+Head\b|Helmet|useStaticQuery/,
-          suggestion: 'Add a Head export with a <title> tag or use react-helmet',
-          context: 'page without Head export',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['src/pages', 'src/templates'], /\.(tsx|jsx|js)$/, {
+            positive: null,
+            negative: /export\s+(const|function)\s+Head\b|Helmet|useStaticQuery/,
+            suggestion: 'Add a Head export with a <title> tag or use react-helmet',
+            context: 'page without Head export',
+          }),
+        );
         break;
 
       case 'Astro':
-        locations.push(...this.#findInFiles(repoPath, ['src/pages'], /\.astro$/, {
-          positive: null,
-          negative: /<title>|<title\s/,
-          suggestion: 'Add a <title> tag in the frontmatter or layout head',
-          context: 'page without title tag',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['src/pages'], /\.astro$/, {
+            positive: null,
+            negative: /<title>|<title\s/,
+            suggestion: 'Add a <title> tag in the frontmatter or layout head',
+            context: 'page without title tag',
+          }),
+        );
         break;
 
       default:
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /\.(html|htm)$/, {
-          positive: null,
-          negative: /<title>/i,
-          suggestion: 'Add a <title> tag in the <head> section',
-          context: 'HTML file without title',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /\.(html|htm)$/, {
+            positive: null,
+            negative: /<title>/i,
+            suggestion: 'Add a <title> tag in the <head> section',
+            context: 'HTML file without title',
+          }),
+        );
     }
 
     return locations;
@@ -139,39 +151,47 @@ class SourceMapper {
 
     switch (framework) {
       case 'Next.js':
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
-          positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
-          negative: /description\s*[=:]/,
-          suggestion: 'Add a description field to the metadata export',
-          context: 'metadata export without description',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
+            positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
+            negative: /description\s*[=:]/,
+            suggestion: 'Add a description field to the metadata export',
+            context: 'metadata export without description',
+          }),
+        );
         break;
 
       case 'Nuxt':
-        locations.push(...this.#findInFiles(repoPath, ['pages'], /\.(vue)$/, {
-          positive: /useHead\s*\(|useSeoMeta\s*\(/,
-          negative: /description/,
-          suggestion: 'Add description to useHead() or useSeoMeta() call',
-          context: 'head composable without description',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['pages'], /\.(vue)$/, {
+            positive: /useHead\s*\(|useSeoMeta\s*\(/,
+            negative: /description/,
+            suggestion: 'Add description to useHead() or useSeoMeta() call',
+            context: 'head composable without description',
+          }),
+        );
         break;
 
       case 'Astro':
-        locations.push(...this.#findInFiles(repoPath, ['src/layouts'], /\.astro$/, {
-          positive: /<head[\s>]/,
-          negative: /meta\s+name=["']description["']/i,
-          suggestion: 'Add <meta name="description" content="..."> to the layout head',
-          context: 'layout head without meta description',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['src/layouts'], /\.astro$/, {
+            positive: /<head[\s>]/,
+            negative: /meta\s+name=["']description["']/i,
+            suggestion: 'Add <meta name="description" content="..."> to the layout head',
+            context: 'layout head without meta description',
+          }),
+        );
         break;
 
       default:
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /\.(html|htm)$/, {
-          positive: null,
-          negative: /meta\s+name=["']description["']/i,
-          suggestion: 'Add <meta name="description" content="..."> to the <head>',
-          context: 'HTML file without meta description',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /\.(html|htm)$/, {
+            positive: null,
+            negative: /meta\s+name=["']description["']/i,
+            suggestion: 'Add <meta name="description" content="..."> to the <head>',
+            context: 'HTML file without meta description',
+          }),
+        );
     }
 
     return locations;
@@ -183,30 +203,36 @@ class SourceMapper {
     switch (framework) {
       case 'Next.js':
         // In App Router, canonical is set via metadata.alternates.canonical
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
-          positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
-          negative: /canonical|alternates/,
-          suggestion: 'Add alternates.canonical to the metadata export',
-          context: 'metadata export without canonical',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
+            positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
+            negative: /canonical|alternates/,
+            suggestion: 'Add alternates.canonical to the metadata export',
+            context: 'metadata export without canonical',
+          }),
+        );
         break;
 
       case 'Nuxt':
-        locations.push(...this.#findInFiles(repoPath, ['pages'], /\.(vue)$/, {
-          positive: /useHead\s*\(/,
-          negative: /canonical/,
-          suggestion: 'Add a canonical link to useHead({ link: [{ rel: "canonical", href: "..." }] })',
-          context: 'useHead without canonical',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['pages'], /\.(vue)$/, {
+            positive: /useHead\s*\(/,
+            negative: /canonical/,
+            suggestion: 'Add a canonical link to useHead({ link: [{ rel: "canonical", href: "..." }] })',
+            context: 'useHead without canonical',
+          }),
+        );
         break;
 
       default:
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /\.(html|htm|astro)$/, {
-          positive: /<head[\s>]/,
-          negative: /rel=["']canonical["']/i,
-          suggestion: 'Add <link rel="canonical" href="..."> to the head',
-          context: 'file without canonical link',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /\.(html|htm|astro)$/, {
+            positive: /<head[\s>]/,
+            negative: /rel=["']canonical["']/i,
+            suggestion: 'Add <link rel="canonical" href="..."> to the head',
+            context: 'file without canonical link',
+          }),
+        );
     }
 
     return locations;
@@ -215,19 +241,24 @@ class SourceMapper {
   static #mapH1Issues(repoPath: string, framework: string, srcDirs: string[]) {
     const locations = [];
     const componentPattern = framework === 'Nuxt' ? /\.vue$/ : /\.(tsx|jsx|js|ts|astro)$/;
-    const searchDirs = framework === 'Nuxt' ? ['pages', 'components'] :
-                       framework === 'Astro' ? ['src/pages', 'src/components'] :
-                       srcDirs;
+    const searchDirs =
+      framework === 'Nuxt'
+        ? ['pages', 'components']
+        : framework === 'Astro'
+          ? ['src/pages', 'src/components']
+          : srcDirs;
 
     // Find files with multiple h1 tags
-    locations.push(...this.#findInFiles(repoPath, searchDirs, componentPattern, {
-      positive: /<h1[\s>]/i,
-      negative: null, // We want files WITH h1 tags
-      suggestion: 'Ensure only one <h1> tag per page. Use <h2>-<h6> for sub-sections',
-      context: 'file containing h1 tag(s)',
-      countPattern: /<h1[\s>]/gi,
-      minCount: 2, // Only flag if multiple h1s in one file
-    }));
+    locations.push(
+      ...this.#findInFiles(repoPath, searchDirs, componentPattern, {
+        positive: /<h1[\s>]/i,
+        negative: null, // We want files WITH h1 tags
+        suggestion: 'Ensure only one <h1> tag per page. Use <h2>-<h6> for sub-sections',
+        context: 'file containing h1 tag(s)',
+        countPattern: /<h1[\s>]/gi,
+        minCount: 2, // Only flag if multiple h1s in one file
+      }),
+    );
 
     return locations;
   }
@@ -236,19 +267,24 @@ class SourceMapper {
     const locations = [];
 
     // Search for existing structured data to show where it's implemented (or missing)
-    const layoutPattern = framework === 'Next.js' ? /^layout\.(tsx|jsx|js|ts)$/ :
-                         framework === 'Astro' ? /\.astro$/ :
-                         framework === 'Nuxt' ? /\.vue$/ : /\.(html|htm)$/;
-    const layoutDirs = framework === 'Astro' ? ['src/layouts'] :
-                      framework === 'Nuxt' ? ['layouts'] :
-                      srcDirs;
+    const layoutPattern =
+      framework === 'Next.js'
+        ? /^layout\.(tsx|jsx|js|ts)$/
+        : framework === 'Astro'
+          ? /\.astro$/
+          : framework === 'Nuxt'
+            ? /\.vue$/
+            : /\.(html|htm)$/;
+    const layoutDirs = framework === 'Astro' ? ['src/layouts'] : framework === 'Nuxt' ? ['layouts'] : srcDirs;
 
-    locations.push(...this.#findInFiles(repoPath, layoutDirs, layoutPattern, {
-      positive: null,
-      negative: /application\/ld\+json|useSchemaOrg|JsonLd/,
-      suggestion: 'Add structured data (JSON-LD) to improve search result appearance',
-      context: 'layout without structured data',
-    }));
+    locations.push(
+      ...this.#findInFiles(repoPath, layoutDirs, layoutPattern, {
+        positive: null,
+        negative: /application\/ld\+json|useSchemaOrg|JsonLd/,
+        suggestion: 'Add structured data (JSON-LD) to improve search result appearance',
+        context: 'layout without structured data',
+      }),
+    );
 
     return locations;
   }
@@ -258,30 +294,36 @@ class SourceMapper {
 
     switch (framework) {
       case 'Next.js':
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
-          positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
-          negative: /openGraph|og:/,
-          suggestion: 'Add openGraph to the metadata export for social sharing',
-          context: 'metadata export without Open Graph',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /^layout\.(tsx|jsx|js|ts)$/, {
+            positive: /export\s+(const|let|var)\s+metadata\b|export\s+(async\s+)?function\s+generateMetadata\b/,
+            negative: /openGraph|og:/,
+            suggestion: 'Add openGraph to the metadata export for social sharing',
+            context: 'metadata export without Open Graph',
+          }),
+        );
         break;
 
       case 'Nuxt':
-        locations.push(...this.#findInFiles(repoPath, ['pages'], /\.vue$/, {
-          positive: /useHead\s*\(|useSeoMeta\s*\(/,
-          negative: /ogTitle|og:title|ogDescription/,
-          suggestion: 'Add ogTitle and ogDescription to useSeoMeta()',
-          context: 'head composable without OG tags',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, ['pages'], /\.vue$/, {
+            positive: /useHead\s*\(|useSeoMeta\s*\(/,
+            negative: /ogTitle|og:title|ogDescription/,
+            suggestion: 'Add ogTitle and ogDescription to useSeoMeta()',
+            context: 'head composable without OG tags',
+          }),
+        );
         break;
 
       default:
-        locations.push(...this.#findInFiles(repoPath, srcDirs, /\.(html|htm|astro)$/, {
-          positive: /<head[\s>]/,
-          negative: /og:title|property=["']og:/i,
-          suggestion: 'Add Open Graph meta tags for social sharing',
-          context: 'file without OG tags',
-        }));
+        locations.push(
+          ...this.#findInFiles(repoPath, srcDirs, /\.(html|htm|astro)$/, {
+            positive: /<head[\s>]/,
+            negative: /og:title|property=["']og:/i,
+            suggestion: 'Add Open Graph meta tags for social sharing',
+            context: 'file without OG tags',
+          }),
+        );
     }
 
     return locations;
@@ -292,11 +334,13 @@ class SourceMapper {
     const componentPattern = framework === 'Nuxt' ? /\.vue$/ : /\.(tsx|jsx|js|ts|astro)$/;
 
     // Find files with images missing alt text
-    locations.push(...this.#findInFilesWithLineSearch(repoPath, srcDirs, componentPattern, {
-      linePattern: /<img\s(?![^>]*\balt\s*=)[^>]*>|<Image\s(?![^>]*\balt\s*=)[^>]*>/,
-      suggestion: 'Add descriptive alt text to all <img> and <Image> elements',
-      context: 'image without alt attribute',
-    }));
+    locations.push(
+      ...this.#findInFilesWithLineSearch(repoPath, srcDirs, componentPattern, {
+        linePattern: /<img\s(?![^>]*\balt\s*=)[^>]*>|<Image\s(?![^>]*\balt\s*=)[^>]*>/,
+        suggestion: 'Add descriptive alt text to all <img> and <Image> elements',
+        context: 'image without alt attribute',
+      }),
+    );
 
     return locations;
   }
@@ -366,9 +410,7 @@ class SourceMapper {
         if (criteria.negative && criteria.negative.test(content)) return;
 
         // File matches criteria - find relevant line number
-        const line = criteria.positive
-          ? this.#findLineNumber(content, criteria.positive)
-          : 1;
+        const line = criteria.positive ? this.#findLineNumber(content, criteria.positive) : 1;
 
         results.push({
           file: relPath,
@@ -385,7 +427,12 @@ class SourceMapper {
   /**
    * Find files with specific line-level pattern matches (e.g., img without alt)
    */
-  static #findInFilesWithLineSearch(repoPath: string, dirs: string[], filePattern: RegExp, criteria: Record<string, any>) {
+  static #findInFilesWithLineSearch(
+    repoPath: string,
+    dirs: string[],
+    filePattern: RegExp,
+    criteria: Record<string, any>,
+  ) {
     const results: Record<string, any>[] = [];
     const seen = new Set();
     const maxResults = 20;
@@ -457,9 +504,17 @@ class SourceMapper {
     }
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.') || entry.name === 'node_modules' ||
-          entry.name === 'dist' || entry.name === 'build' || entry.name === 'out' ||
-          entry.name === 'coverage' || entry.name === '__tests__' || entry.name === '__mocks__') continue;
+      if (
+        entry.name.startsWith('.') ||
+        entry.name === 'node_modules' ||
+        entry.name === 'dist' ||
+        entry.name === 'build' ||
+        entry.name === 'out' ||
+        entry.name === 'coverage' ||
+        entry.name === '__tests__' ||
+        entry.name === '__mocks__'
+      )
+        continue;
 
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {

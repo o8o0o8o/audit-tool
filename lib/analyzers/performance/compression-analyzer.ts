@@ -22,9 +22,7 @@ const COMPRESSIBLE_TYPES = [
 ];
 
 // File extensions that should be compressed
-const COMPRESSIBLE_EXTENSIONS = [
-  '.html', '.htm', '.css', '.js', '.json', '.xml', '.svg', '.txt', '.map',
-];
+const COMPRESSIBLE_EXTENSIONS = ['.html', '.htm', '.css', '.js', '.json', '.xml', '.svg', '.txt', '.map'];
 
 // Minimum size worth compressing (bytes)
 const MIN_SIZE_FOR_COMPRESSION = 1024; // 1KB
@@ -102,15 +100,14 @@ class CompressionAnalyzer {
     }
 
     // Generate warnings for uncompressed resources
-    const uncompressedLarge = info.resources.filter((r: any) =>
-      r.shouldCompress && !r.isCompressed && r.size > 10000
-    );
+    const uncompressedLarge = info.resources.filter((r: any) => r.shouldCompress && !r.isCompressed && r.size > 10000);
 
     if (uncompressedLarge.length > 0) {
       const totalSavings = uncompressedLarge.reduce((sum: number, r: any) => sum + r.potentialSavings, 0);
-      const examples = uncompressedLarge.slice(0, 3).map((r: any) =>
-        `${this.getFileName(r.url)} (${this.formatBytes(r.size)})`
-      ).join(', ');
+      const examples = uncompressedLarge
+        .slice(0, 3)
+        .map((r: any) => `${this.getFileName(r.url)} (${this.formatBytes(r.size)})`)
+        .join(', ');
 
       issues.push({
         message: 'Large resources not compressed',
@@ -144,15 +141,10 @@ class CompressionAnalyzer {
 
     const isCompressible = this.isCompressible(url, contentType);
     const shouldCompress = isCompressible && size > MIN_SIZE_FOR_COMPRESSION;
-    const isCompressed = encoding && (
-      encoding.includes('gzip') ||
-      encoding.includes('br') ||
-      encoding.includes('deflate')
-    );
+    const isCompressed =
+      encoding && (encoding.includes('gzip') || encoding.includes('br') || encoding.includes('deflate'));
 
-    const potentialSavings = shouldCompress && !isCompressed
-      ? Math.round(size * 0.7)
-      : 0;
+    const potentialSavings = shouldCompress && !isCompressed ? Math.round(size * 0.7) : 0;
 
     return {
       url,
@@ -176,7 +168,7 @@ class CompressionAnalyzer {
     // Check content type
     if (contentType) {
       const normalizedType = contentType.toLowerCase().split(';')[0].trim();
-      if (COMPRESSIBLE_TYPES.some(t => normalizedType.includes(t))) {
+      if (COMPRESSIBLE_TYPES.some((t) => normalizedType.includes(t))) {
         return true;
       }
     }
@@ -184,7 +176,7 @@ class CompressionAnalyzer {
     // Check file extension
     try {
       const pathname = new URL(url).pathname.toLowerCase();
-      if (COMPRESSIBLE_EXTENSIONS.some(ext => pathname.endsWith(ext))) {
+      if (COMPRESSIBLE_EXTENSIONS.some((ext) => pathname.endsWith(ext))) {
         return true;
       }
     } catch {

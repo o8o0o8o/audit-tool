@@ -11,14 +11,22 @@ import type { ReportSectionData, AnalysisDetail, FixRecommendation } from '../..
 // ── Crawler error filtering ──────────────────────────────────────────────────
 
 const CRAWLER_ERROR_PATTERNS = [
-  'TimeoutError', 'Target page, context or browser has been closed',
-  'page.goto:', 'net::ERR_', 'NS_ERROR_', 'Navigation failed',
-  'Protocol error', 'Session closed', 'Connection refused',
-  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT',
+  'TimeoutError',
+  'Target page, context or browser has been closed',
+  'page.goto:',
+  'net::ERR_',
+  'NS_ERROR_',
+  'Navigation failed',
+  'Protocol error',
+  'Session closed',
+  'Connection refused',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
 ];
 
 function isCrawlerError(issue: string) {
-  return CRAWLER_ERROR_PATTERNS.some(p => issue.includes(p));
+  return CRAWLER_ERROR_PATTERNS.some((p) => issue.includes(p));
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -153,7 +161,9 @@ function getIssuesDetail(data: ReportSectionData) {
 function renderFilterPill(value: string, label: string, count: number, active = false) {
   const sev = SEVERITY_STYLES[value];
   const activeStyle = active ? 'background:#1f2937;color:white;border-color:#1f2937;' : '';
-  const dotHtml = sev ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sev.dot};margin-right:4px;"></span>` : '';
+  const dotHtml = sev
+    ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sev.dot};margin-right:4px;"></span>`
+    : '';
   return `<button class="sev-pill${active ? ' active' : ''}" onclick="filterIssueSev('${value}',this)" style="${activeStyle}">${dotHtml}${label} <span style="opacity:0.7;">${count}</span></button>`;
 }
 
@@ -184,32 +194,60 @@ function renderIssueRow(issue: IssueEntry, idx: number) {
 
 // ── Expanded detail ──────────────────────────────────────────────────────────
 
-function renderIssueDetail(key: string, detail: AnalysisDetail, fix: FixRecommendation | null, examples: string[], count: number, idx: number) {
+function renderIssueDetail(
+  key: string,
+  detail: AnalysisDetail,
+  fix: FixRecommendation | null,
+  examples: string[],
+  count: number,
+  idx: number,
+) {
   const VISIBLE = 5;
 
-  const fixHtml = fix ? `
+  const fixHtml = fix
+    ? `
     <div style="margin-bottom:12px;">
       <div style="font-size:12px;font-weight:600;color:#059669;margin-bottom:4px;">How to fix</div>
       <div style="font-size:13px;color:#374151;line-height:1.5;">${escapeHtml(fix.fix)}</div>
       ${fix.example ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:#3b82f6;font-weight:500;">Code example</summary><pre style="margin-top:4px;padding:8px;background:#1f2937;color:#e5e7eb;border-radius:4px;font-size:12px;overflow-x:auto;white-space:pre-wrap;">${escapeHtml(fix.example)}</pre></details>` : ''}
     </div>
-  ` : '';
+  `
+    : '';
 
-  const pagesHtml = examples.length > 0 ? `
+  const pagesHtml =
+    examples.length > 0
+      ? `
     <div>
       <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:4px;">Affected pages (${count})</div>
       <div style="display:flex;flex-direction:column;gap:2px;">
-        ${examples.slice(0, VISIBLE).map(ex => `<div style="font-size:12px;color:#374151;padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`).join('')}
-        ${examples.length > VISIBLE ? `
+        ${examples
+          .slice(0, VISIBLE)
+          .map(
+            (ex) =>
+              `<div style="font-size:12px;color:#374151;padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
+          )
+          .join('')}
+        ${
+          examples.length > VISIBLE
+            ? `
           <div id="issue-more-${idx}" style="display:none;">
-            ${examples.slice(VISIBLE).map(ex => `<div style="font-size:12px;color:#374151;padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`).join('')}
+            ${examples
+              .slice(VISIBLE)
+              .map(
+                (ex) =>
+                  `<div style="font-size:12px;color:#374151;padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
+              )
+              .join('')}
           </div>
           <button onclick="event.stopPropagation();var el=document.getElementById('issue-more-${idx}');var s=el.style.display!=='none';el.style.display=s?'none':'block';this.textContent=s?'Show all ${examples.length}...':'Show less';" style="background:none;border:none;color:#3b82f6;cursor:pointer;font-size:12px;padding:2px 0;text-align:left;">Show all ${examples.length}...</button>
-        ` : ''}
+        `
+            : ''
+        }
         ${count > examples.length ? `<div style="font-size:11px;color:#9ca3af;">${count} total, ${examples.length} shown</div>` : ''}
       </div>
     </div>
-  ` : '';
+  `
+      : '';
 
   return `
     <div style="padding:12px 12px 12px 44px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">

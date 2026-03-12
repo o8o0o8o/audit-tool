@@ -157,7 +157,7 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
       issue,
       ...data,
       // Priority score: critical/high severity + high count + significant change
-      priorityScore: getSeverityWeight(data.severity) * data.latestCount * (1 + Math.abs(data.change) / 10)
+      priorityScore: getSeverityWeight(data.severity) * data.latestCount * (1 + Math.abs(data.change) / 10),
     }))
     .filter((item: IssueTrendItem) => item.latestCount > 0 || item.trend === 'fixed') // Only show active or recently fixed
     .sort((a: IssueTrendItem, b: IssueTrendItem) => b.priorityScore - a.priorityScore)
@@ -167,14 +167,15 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
     return '';
   }
 
-  const issueRows = sortedIssues.map((item: IssueTrendItem, index: number) => {
-    const trendIcon = getTrendIcon(item.trend);
-    const severityColor = getSeverityColor(item.severity);
-    const changeText = getChangeText(item);
-    const firstCount = item.counts[0] || 0;
-    const latestCount = item.latestCount;
+  const issueRows = sortedIssues
+    .map((item: IssueTrendItem, index: number) => {
+      const trendIcon = getTrendIcon(item.trend);
+      const severityColor = getSeverityColor(item.severity);
+      const changeText = getChangeText(item);
+      const firstCount = item.counts[0] || 0;
+      const latestCount = item.latestCount;
 
-    return `
+      return `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -201,7 +202,8 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   return `
     <div style="margin-top: 30px;">
@@ -245,7 +247,7 @@ function getSeverityColor(severity: string) {
     critical: '#dc2626',
     high: '#ea580c',
     medium: '#f59e0b',
-    low: '#6b7280'
+    low: '#6b7280',
   };
   return colors[severity?.toLowerCase()] || '#6b7280';
 }
@@ -256,7 +258,7 @@ function getTrendIcon(trend: string) {
     worsening: '<span style="color: #ef4444; font-size: 16px;">↑</span>',
     stable: '<span style="color: #6b7280; font-size: 16px;">→</span>',
     new: '<span style="color: #f59e0b; font-size: 14px;">🆕</span>',
-    fixed: '<span style="color: #10b981; font-size: 14px;">✓</span>'
+    fixed: '<span style="color: #10b981; font-size: 14px;">✓</span>',
   };
   return icons[trend] || icons.stable;
 }
@@ -267,7 +269,7 @@ function getTrendColor(trend: string) {
     worsening: '#ef4444',
     stable: '#6b7280',
     new: '#f59e0b',
-    fixed: '#10b981'
+    fixed: '#10b981',
   };
   return colors[trend] || '#6b7280';
 }
@@ -290,7 +292,13 @@ function truncateIssue(issue: string, maxLength: number) {
 /**
  * Generate a delta card (shows change with color coding)
  */
-function getDeltaCard(title: string, value: number, isPositive: boolean, subtitle: string, invertSign: boolean = false) {
+function getDeltaCard(
+  title: string,
+  value: number,
+  isPositive: boolean,
+  subtitle: string,
+  invertSign: boolean = false,
+) {
   const displayValue = invertSign ? value : value;
   const gradient = isPositive
     ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
@@ -308,7 +316,13 @@ function getDeltaCard(title: string, value: number, isPositive: boolean, subtitl
 /**
  * Generate an info card (static value)
  */
-function getInfoCard(title: string, value: string | number, gradientStart: string, gradientEnd: string, subtitle: string) {
+function getInfoCard(
+  title: string,
+  value: string | number,
+  gradientStart: string,
+  gradientEnd: string,
+  subtitle: string,
+) {
   return `
     <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: 8px; text-align: center;">
       <div style="font-size: 14px; opacity: 0.9; margin-bottom: 10px;">${title}</div>
@@ -335,24 +349,26 @@ function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit:
     { key: 'technical', name: 'Technical', icon: '🔧' },
   ];
 
-  const cards = categories.map(cat => {
-    const current = currentCats[cat.key] || 0;
-    const prev = prevCats[cat.key];
-    if (prev === undefined) return '';
+  const cards = categories
+    .map((cat) => {
+      const current = currentCats[cat.key] || 0;
+      const prev = prevCats[cat.key];
+      if (prev === undefined) return '';
 
-    const delta = current - prev;
-    const color = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
-    const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
-    const sign = delta > 0 ? '+' : '';
+      const delta = current - prev;
+      const color = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
+      const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+      const sign = delta > 0 ? '+' : '';
 
-    return `
+      return `
       <div style="text-align: center; padding: 12px;">
         <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">${cat.icon} ${cat.name}</div>
         <div style="font-size: 20px; font-weight: 700; color: #1f2937;">${current}</div>
         <div style="font-size: 13px; color: ${color}; font-weight: 600;">${sign}${delta} ${arrow}</div>
       </div>
     `;
-  }).filter(Boolean);
+    })
+    .filter(Boolean);
 
   if (cards.length === 0) return '';
 

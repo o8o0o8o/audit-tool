@@ -221,20 +221,20 @@ class ReportDataProcessor {
       const fullTrendData = historyManager.generateTrendData();
 
       // Map to expected field names for compatibility
-      const trendData = fullTrendData ? {
-        labels: fullTrendData.labels,
-        scores: fullTrendData.overallScores,
-        issues: fullTrendData.totalIssues,
-        critical: fullTrendData.criticalIssues,
-        high: fullTrendData.highIssues,
-        categoryScores: fullTrendData.categoryScores,
-        performance: fullTrendData.performance,
-        issueTrends: fullTrendData.issueTrends,
-      } : null;
-
-      const previousAudit = audits.length >= 2
-        ? audits[audits.length - 2]
+      const trendData = fullTrendData
+        ? {
+            labels: fullTrendData.labels,
+            scores: fullTrendData.overallScores,
+            issues: fullTrendData.totalIssues,
+            critical: fullTrendData.criticalIssues,
+            high: fullTrendData.highIssues,
+            categoryScores: fullTrendData.categoryScores,
+            performance: fullTrendData.performance,
+            issueTrends: fullTrendData.issueTrends,
+          }
         : null;
+
+      const previousAudit = audits.length >= 2 ? audits[audits.length - 2] : null;
 
       return { trendData, previousAudit, audits };
     } catch (e: unknown) {
@@ -287,12 +287,27 @@ class ReportDataProcessor {
       };
     }
 
-    const ttfbValues = pagesWithMetrics.map((p: PageInfo) => p.TTFB).filter((v): v is number => v !== undefined && v !== null);
-    const fcpValues = pagesWithMetrics.map((p: PageInfo) => p.FCP).filter((v): v is number => v !== undefined && v !== null);
-    const lcpValues = pagesWithMetrics.map((p: PageInfo) => p.LCP).filter((v): v is number => v !== undefined && v !== null);
-    const clsValues = pagesWithMetrics.map((p: PageInfo) => p.CLS).filter((v): v is number => v !== undefined && v !== null);
-    const pageSizeValues = pagesWithMetrics.map((p: PageInfo) => p.totalResponseSize as number | undefined).filter((v): v is number => v !== undefined && v !== null);
-    const requestCountValues = pagesWithMetrics.map((p: PageInfo) => (p.totalNumberOfRequests as number) || Object.keys((p.requests as Record<string, unknown>) || {}).length).filter((v): v is number => v !== undefined && v !== null);
+    const ttfbValues = pagesWithMetrics
+      .map((p: PageInfo) => p.TTFB)
+      .filter((v): v is number => v !== undefined && v !== null);
+    const fcpValues = pagesWithMetrics
+      .map((p: PageInfo) => p.FCP)
+      .filter((v): v is number => v !== undefined && v !== null);
+    const lcpValues = pagesWithMetrics
+      .map((p: PageInfo) => p.LCP)
+      .filter((v): v is number => v !== undefined && v !== null);
+    const clsValues = pagesWithMetrics
+      .map((p: PageInfo) => p.CLS)
+      .filter((v): v is number => v !== undefined && v !== null);
+    const pageSizeValues = pagesWithMetrics
+      .map((p: PageInfo) => p.totalResponseSize as number | undefined)
+      .filter((v): v is number => v !== undefined && v !== null);
+    const requestCountValues = pagesWithMetrics
+      .map(
+        (p: PageInfo) =>
+          (p.totalNumberOfRequests as number) || Object.keys((p.requests as Record<string, unknown>) || {}).length,
+      )
+      .filter((v): v is number => v !== undefined && v !== null);
 
     return {
       ttfb: this.calculateStats(ttfbValues),
@@ -357,7 +372,9 @@ class ReportDataProcessor {
     const jsonData = this.loadAuditData(file, domainName);
     const historyData = this.loadHistory(domainName);
 
-    const pageData = (jsonData.pageData || { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & { incomingLinks?: Record<string, string[]> };
+    const pageData = (jsonData.pageData || { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
+      incomingLinks?: Record<string, string[]>;
+    };
     const pages: PageInfo[] = Object.values(pageData.pages || {});
     const timing = (jsonData.timing || {}) as Record<string, unknown>;
     const analysis = (jsonData.analysis || {}) as Record<string, unknown>;

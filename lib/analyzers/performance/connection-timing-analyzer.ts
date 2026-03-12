@@ -96,7 +96,10 @@ class ConnectionTimingAnalyzer {
     if (slowAnalysis.slowDns.length > 3) {
       warnings.push({
         message: 'Multiple slow DNS lookups',
-        detail: `${slowAnalysis.slowDns.length} resources had DNS lookups over 50ms. Add <link rel="dns-prefetch"> for: ${slowAnalysis.slowDns.slice(0, 3).map(d => d.origin).join(', ')}`,
+        detail: `${slowAnalysis.slowDns.length} resources had DNS lookups over 50ms. Add <link rel="dns-prefetch"> for: ${slowAnalysis.slowDns
+          .slice(0, 3)
+          .map((d) => d.origin)
+          .join(', ')}`,
         severity: SEVERITY.LOW,
       });
     }
@@ -130,9 +133,7 @@ class ConnectionTimingAnalyzer {
         return {
           dns: Math.round(nav.domainLookupEnd - nav.domainLookupStart),
           tcp: Math.round(nav.connectEnd - nav.connectStart),
-          tls: nav.secureConnectionStart > 0
-            ? Math.round(nav.connectEnd - nav.secureConnectionStart)
-            : 0,
+          tls: nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0,
           ttfb: Math.round(nav.responseStart - nav.requestStart),
           download: Math.round(nav.responseEnd - nav.responseStart),
           total: Math.round(nav.responseEnd - nav.startTime),
@@ -153,7 +154,7 @@ class ConnectionTimingAnalyzer {
       return await chromePage.evaluate(() => {
         const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
 
-        return resources.map(r => {
+        return resources.map((r) => {
           let origin;
           try {
             origin = new URL(r.name).origin;
@@ -167,9 +168,7 @@ class ConnectionTimingAnalyzer {
             initiatorType: r.initiatorType,
             dns: Math.round(r.domainLookupEnd - r.domainLookupStart),
             tcp: Math.round(r.connectEnd - r.connectStart),
-            tls: r.secureConnectionStart > 0
-              ? Math.round(r.connectEnd - r.secureConnectionStart)
-              : 0,
+            tls: r.secureConnectionStart > 0 ? Math.round(r.connectEnd - r.secureConnectionStart) : 0,
             ttfb: Math.round(r.responseStart - r.requestStart),
             download: Math.round(r.responseEnd - r.responseStart),
             total: Math.round(r.duration),
@@ -275,7 +274,7 @@ class ConnectionTimingAnalyzer {
     try {
       return await chromePage.evaluate((targetOrigins) => {
         const preconnects = document.querySelectorAll('link[rel="preconnect"]');
-        const preconnectOrigins = Array.from(preconnects).map(l => {
+        const preconnectOrigins = Array.from(preconnects).map((l) => {
           try {
             return new URL((l as HTMLLinkElement).href).origin;
           } catch {
@@ -283,7 +282,7 @@ class ConnectionTimingAnalyzer {
           }
         });
 
-        return targetOrigins.some(o => preconnectOrigins.includes(o));
+        return targetOrigins.some((o) => preconnectOrigins.includes(o));
       }, origins);
     } catch {
       return false;
@@ -327,7 +326,8 @@ class ConnectionTimingAnalyzer {
     if (totalUniqueOrigins.size > 50) {
       warnings.push({
         message: `Site connects to ${totalUniqueOrigins.size} unique origins`,
-        detail: 'Large number of third-party connections increases page load time. Review and consolidate external services.',
+        detail:
+          'Large number of third-party connections increases page load time. Review and consolidate external services.',
         severity: SEVERITY.MEDIUM,
       });
     }

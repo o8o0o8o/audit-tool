@@ -17,7 +17,11 @@ const CRITICAL_PATHS = [
   { pattern: /^\/.*\.(css|js)$/i, name: 'CSS/JS files', severity: SEVERITY.HIGH },
   { pattern: /^\/(assets|static|public)\//i, name: 'Static assets', severity: SEVERITY.MEDIUM },
   { pattern: /^\/_next\//i, name: 'Next.js assets', severity: SEVERITY.HIGH },
-  { pattern: /^\/wp-content\/(themes|plugins)\/.*\.(css|js)$/i, name: 'WordPress theme/plugin assets', severity: SEVERITY.HIGH },
+  {
+    pattern: /^\/wp-content\/(themes|plugins)\/.*\.(css|js)$/i,
+    name: 'WordPress theme/plugin assets',
+    severity: SEVERITY.HIGH,
+  },
 ];
 
 // Sensitive paths that shouldn't be exposed in robots.txt
@@ -70,8 +74,8 @@ class RobotsParser {
     const result: RobotsResult = {
       sitemaps: [] as string[],
       userAgents: {} as Record<string, { allow: string[]; disallow: string[] }>,
-      crawlDelay: {} as Record<string, number>,      // user-agent -> delay in seconds
-      host: null,          // Host directive (Yandex)
+      crawlDelay: {} as Record<string, number>, // user-agent -> delay in seconds
+      host: null, // Host directive (Yandex)
       errors: [] as Array<{ message: string; detail: string | null; severity: string }>,
       metadata: {
         size: 0,
@@ -82,10 +86,10 @@ class RobotsParser {
     };
 
     try {
-      console.log("Analyzing robots.txt...");
+      console.log('Analyzing robots.txt...');
 
       const startTime = Date.now();
-      const robotsResponse = await fetch(origin + "/robots.txt");
+      const robotsResponse = await fetch(origin + '/robots.txt');
       result.metadata.responseTime = Date.now() - startTime;
       result.metadata.statusCode = robotsResponse.status;
       result.metadata.contentType = robotsResponse.headers.get('content-type');
@@ -116,34 +120,34 @@ class RobotsParser {
           this.#checkConflictingRules(result);
         } else {
           result.errors.push({
-            message: "robots.txt is empty",
-            detail: "An empty robots.txt provides no crawling guidance. Consider adding rules or sitemaps.",
-            severity: SEVERITY.HIGH
+            message: 'robots.txt is empty',
+            detail: 'An empty robots.txt provides no crawling guidance. Consider adding rules or sitemaps.',
+            severity: SEVERITY.HIGH,
           });
         }
       } else if (robotsResponse.status === 404) {
         result.errors.push({
-          message: "robots.txt not found (404)",
-          detail: "Without robots.txt, search engines will crawl all accessible pages. Consider creating one to control crawling.",
-          severity: SEVERITY.MEDIUM
+          message: 'robots.txt not found (404)',
+          detail:
+            'Without robots.txt, search engines will crawl all accessible pages. Consider creating one to control crawling.',
+          severity: SEVERITY.MEDIUM,
         });
       } else {
         result.errors.push({
           message: `Error fetching robots.txt (HTTP ${robotsResponse.status})`,
           detail: `Server returned status ${robotsResponse.status}. This may cause crawlers to retry or skip your site.`,
-          severity: SEVERITY.CRITICAL
+          severity: SEVERITY.CRITICAL,
         });
       }
 
       // Check for sitemap and add fallback if needed
       this.#checkSitemaps(origin, result);
-
     } catch (error: unknown) {
       const message = `Error during processing robots.txt: ${(error as Error).message}`;
       result.errors.push({
         message,
         detail: (error as Error).cause ? String((error as Error).cause) : null,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
       console.log(message);
     }
@@ -157,7 +161,7 @@ class RobotsParser {
    * @returns {string} Content without BOM
    */
   static #removeBOM(content: string) {
-    if (content.charCodeAt(0) === 0xFEFF) {
+    if (content.charCodeAt(0) === 0xfeff) {
       return content.slice(1);
     }
     return content;
@@ -171,9 +175,9 @@ class RobotsParser {
     const contentType = result.metadata.contentType;
     if (contentType && !contentType.includes('text/plain')) {
       result.errors.push({
-        message: "robots.txt has incorrect Content-Type",
+        message: 'robots.txt has incorrect Content-Type',
         detail: `Expected "text/plain" but got "${contentType}". Some crawlers may ignore the file.`,
-        severity: SEVERITY.LOW
+        severity: SEVERITY.LOW,
       });
     }
   }
@@ -185,15 +189,15 @@ class RobotsParser {
   static #validateFileSize(result: RobotsResult) {
     if (result.metadata.size > MAX_ROBOTS_SIZE) {
       result.errors.push({
-        message: "robots.txt exceeds size limit",
+        message: 'robots.txt exceeds size limit',
         detail: `File is ${Math.round(result.metadata.size / 1024)}KB but Google's limit is 500KB. Rules beyond this limit may be ignored.`,
-        severity: SEVERITY.HIGH
+        severity: SEVERITY.HIGH,
       });
     } else if (result.metadata.size > MAX_ROBOTS_SIZE * 0.8) {
       result.errors.push({
-        message: "robots.txt is approaching size limit",
-        detail: `File is ${Math.round(result.metadata.size / 1024)}KB (${Math.round(result.metadata.size / MAX_ROBOTS_SIZE * 100)}% of Google's 500KB limit).`,
-        severity: SEVERITY.LOW
+        message: 'robots.txt is approaching size limit',
+        detail: `File is ${Math.round(result.metadata.size / 1024)}KB (${Math.round((result.metadata.size / MAX_ROBOTS_SIZE) * 100)}% of Google's 500KB limit).`,
+        severity: SEVERITY.LOW,
       });
     }
   }
@@ -207,7 +211,7 @@ class RobotsParser {
     let currentUserAgent = null;
     let lineNumber = 0;
 
-    for (const rawLine of content.split("\n")) {
+    for (const rawLine of content.split('\n')) {
       lineNumber++;
 
       // Remove comments and trim
@@ -222,9 +226,9 @@ class RobotsParser {
       if (colonIndex === -1) {
         // Invalid line format
         result.errors.push({
-          message: "Invalid line in robots.txt",
+          message: 'Invalid line in robots.txt',
           detail: `Line ${lineNumber}: "${rawLine.trim()}" - missing colon separator`,
-          severity: SEVERITY.LOW
+          severity: SEVERITY.LOW,
         });
         continue;
       }
@@ -256,18 +260,19 @@ class RobotsParser {
             // Check for blocking all crawlers
             if (value === '/') {
               result.errors.push({
-                message: "User-agent blocked from crawling entire site",
+                message: 'User-agent blocked from crawling entire site',
                 detail: `User-agent "${currentUserAgent}" is completely blocked by "Disallow: /". This prevents indexing.`,
-                severity: currentUserAgent === '*' || IMPORTANT_BOTS.includes(currentUserAgent.toLowerCase())
-                  ? SEVERITY.CRITICAL
-                  : SEVERITY.HIGH
+                severity:
+                  currentUserAgent === '*' || IMPORTANT_BOTS.includes(currentUserAgent.toLowerCase())
+                    ? SEVERITY.CRITICAL
+                    : SEVERITY.HIGH,
               });
             }
           } else {
             result.errors.push({
-              message: "Disallow rule without User-agent",
+              message: 'Disallow rule without User-agent',
               detail: `Line ${lineNumber}: Disallow rule "${value}" appears before any User-agent declaration`,
-              severity: SEVERITY.MEDIUM
+              severity: SEVERITY.MEDIUM,
             });
           }
           break;
@@ -277,9 +282,9 @@ class RobotsParser {
             result.userAgents[currentUserAgent].allow.push(value);
           } else {
             result.errors.push({
-              message: "Allow rule without User-agent",
+              message: 'Allow rule without User-agent',
               detail: `Line ${lineNumber}: Allow rule "${value}" appears before any User-agent declaration`,
-              severity: SEVERITY.MEDIUM
+              severity: SEVERITY.MEDIUM,
             });
           }
           break;
@@ -293,9 +298,9 @@ class RobotsParser {
               // Warn about high crawl delays
               if (delay > 10) {
                 result.errors.push({
-                  message: "High crawl-delay may slow indexing",
+                  message: 'High crawl-delay may slow indexing',
                   detail: `User-agent "${currentUserAgent}" has crawl-delay of ${delay}s. Note: Googlebot ignores this directive.`,
-                  severity: SEVERITY.MEDIUM
+                  severity: SEVERITY.MEDIUM,
                 });
               }
             }
@@ -315,9 +320,9 @@ class RobotsParser {
           // Unknown directive
           if (field && !['request-rate', 'visit-time'].includes(field)) {
             result.errors.push({
-              message: "Unknown directive in robots.txt",
+              message: 'Unknown directive in robots.txt',
               detail: `Line ${lineNumber}: "${field}" is not a standard robots.txt directive`,
-              severity: SEVERITY.LOW
+              severity: SEVERITY.LOW,
             });
           }
       }
@@ -332,13 +337,13 @@ class RobotsParser {
   static #checkSitemaps(origin: string, result: RobotsResult) {
     if (!result.sitemaps.length) {
       result.errors.push({
-        message: "No sitemap declared in robots.txt",
-        detail: "Adding a Sitemap directive helps search engines discover your content faster.",
-        severity: SEVERITY.MEDIUM
+        message: 'No sitemap declared in robots.txt',
+        detail: 'Adding a Sitemap directive helps search engines discover your content faster.',
+        severity: SEVERITY.MEDIUM,
       });
 
-      const sitemapUrl = origin + "/sitemap.xml";
-      console.log("No sitemap in robots.txt, using fallback: " + sitemapUrl);
+      const sitemapUrl = origin + '/sitemap.xml';
+      console.log('No sitemap in robots.txt, using fallback: ' + sitemapUrl);
       result.sitemaps.push(sitemapUrl);
     } else {
       // Validate sitemap URLs
@@ -346,9 +351,9 @@ class RobotsParser {
         // Check protocol mismatch
         if (origin.startsWith('https://') && sitemapUrl.startsWith('http://')) {
           result.errors.push({
-            message: "Sitemap URL uses HTTP instead of HTTPS",
+            message: 'Sitemap URL uses HTTP instead of HTTPS',
             detail: `Sitemap "${sitemapUrl}" should use HTTPS to match the site protocol.`,
-            severity: SEVERITY.MEDIUM
+            severity: SEVERITY.MEDIUM,
           });
         }
 
@@ -357,9 +362,9 @@ class RobotsParser {
           new URL(sitemapUrl);
         } catch {
           result.errors.push({
-            message: "Invalid sitemap URL in robots.txt",
+            message: 'Invalid sitemap URL in robots.txt',
             detail: `"${sitemapUrl}" is not a valid URL`,
-            severity: SEVERITY.HIGH
+            severity: SEVERITY.HIGH,
           });
         }
       }
@@ -374,9 +379,9 @@ class RobotsParser {
     for (const [userAgent, rules] of Object.entries(result.userAgents)) {
       if (!rules.allow.length && !rules.disallow.length) {
         result.errors.push({
-          message: "User-agent has no rules",
+          message: 'User-agent has no rules',
           detail: `User-agent "${userAgent}" is declared but has no Allow or Disallow rules`,
-          severity: SEVERITY.LOW
+          severity: SEVERITY.LOW,
         });
       }
     }
@@ -384,9 +389,9 @@ class RobotsParser {
     // Check if wildcard user-agent exists
     if (!result.userAgents['*']) {
       result.errors.push({
-        message: "No wildcard user-agent defined",
+        message: 'No wildcard user-agent defined',
         detail: 'Consider adding "User-agent: *" rules as a fallback for crawlers not explicitly listed',
-        severity: SEVERITY.LOW
+        severity: SEVERITY.LOW,
       });
     }
   }
@@ -406,8 +411,11 @@ class RobotsParser {
         if (!disallowPath) continue;
 
         // Check wildcard JS/CSS blocks (e.g. /*.js$, /*.css$) — only report the generic CSS/JS issue
-        const isWildcardJsCss = disallowPath === '/*.css' || disallowPath === '/*.js' ||
-          disallowPath === '/*.css$' || disallowPath === '/*.js$';
+        const isWildcardJsCss =
+          disallowPath === '/*.css' ||
+          disallowPath === '/*.js' ||
+          disallowPath === '/*.css$' ||
+          disallowPath === '/*.js$';
 
         for (const critical of CRITICAL_PATHS) {
           // For wildcard rules, only report the generic CSS/JS entry, not framework-specific ones
@@ -417,15 +425,17 @@ class RobotsParser {
 
           if (critical.pattern.test(disallowPath) || isWildcardJsCss) {
             // Check if there's an overriding Allow rule
-            const hasAllowOverride = rules.allow.some((allowPath: string) =>
-              allowPath && (critical.pattern.test(allowPath) || allowPath.includes('.css') || allowPath.includes('.js'))
+            const hasAllowOverride = rules.allow.some(
+              (allowPath: string) =>
+                allowPath &&
+                (critical.pattern.test(allowPath) || allowPath.includes('.css') || allowPath.includes('.js')),
             );
 
             if (!hasAllowOverride) {
               result.errors.push({
                 message: `${critical.name} may be blocked`,
                 detail: `User-agent "${userAgent}" has "Disallow: ${disallowPath}" which blocks ${critical.name}. This prevents proper page rendering for SEO.`,
-                severity: critical.severity
+                severity: critical.severity,
               });
             }
           }
@@ -455,9 +465,9 @@ class RobotsParser {
 
     if (exposedPaths.size > 0) {
       result.errors.push({
-        message: "Sensitive paths exposed in robots.txt",
+        message: 'Sensitive paths exposed in robots.txt',
         detail: `The following paths reveal potentially sensitive directories: ${Array.from(exposedPaths).join(', ')}. Attackers can use robots.txt to discover hidden areas.`,
-        severity: SEVERITY.MEDIUM
+        severity: SEVERITY.MEDIUM,
       });
     }
   }
@@ -478,9 +488,9 @@ class RobotsParser {
         for (const problematic of PROBLEMATIC_PATTERNS) {
           if (disallowPath.includes(problematic.pattern) || disallowPath === problematic.pattern) {
             result.errors.push({
-              message: "Potentially problematic disallow pattern",
+              message: 'Potentially problematic disallow pattern',
               detail: `User-agent "${userAgent}": "Disallow: ${disallowPath}" - ${problematic.description}`,
-              severity: SEVERITY.LOW
+              severity: SEVERITY.LOW,
             });
           }
         }
@@ -509,9 +519,9 @@ class RobotsParser {
       if (hasDollarSign) patterns.push('$ (end anchor)');
 
       result.errors.push({
-        message: "Pattern matching characters used in robots.txt",
+        message: 'Pattern matching characters used in robots.txt',
         detail: `Using ${patterns.join(' and ')}. While Google and Bing support these, some crawlers may not.`,
-        severity: SEVERITY.LOW
+        severity: SEVERITY.LOW,
       });
     }
   }
@@ -552,7 +562,7 @@ class RobotsParser {
       result.errors.push({
         message: `Important bots blocked by wildcard rules`,
         detail: `${botsBlockedByWildcard.join(', ')} are blocked by "User-agent: * / Disallow: /" and have no specific override rules`,
-        severity: SEVERITY.CRITICAL
+        severity: SEVERITY.CRITICAL,
       });
     }
   }
@@ -586,9 +596,9 @@ class RobotsParser {
 
       if (conflicts.length > 0) {
         result.errors.push({
-          message: "Conflicting rules in robots.txt",
+          message: 'Conflicting rules in robots.txt',
           detail: `User-agent "${userAgent}": ${conflicts.join('; ')}. The longer/more specific path takes precedence.`,
-          severity: SEVERITY.MEDIUM
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -659,7 +669,7 @@ class RobotsParser {
     // Convert robots.txt pattern to regex
     let regexPattern = normalizedPattern
       .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
-      .replace(/\*/g, '.*?');  // * becomes .*? (non-greedy to prevent backtracking)
+      .replace(/\*/g, '.*?'); // * becomes .*? (non-greedy to prevent backtracking)
 
     // $ at end means end of string
     if (regexPattern.endsWith('$')) {
@@ -696,7 +706,7 @@ if (require.main === module) {
     console.log(`  Response Time: ${result.metadata.responseTime}ms`);
 
     console.log('\n🗺️  Sitemaps found:', result.sitemaps.length);
-    result.sitemaps.forEach(s => console.log('  -', s));
+    result.sitemaps.forEach((s) => console.log('  -', s));
 
     console.log('\n🤖 User-Agents:', Object.keys(result.userAgents).length);
     Object.entries(result.userAgents).forEach(([ua, rules]) => {
@@ -715,13 +725,18 @@ if (require.main === module) {
     }
 
     console.log('\n⚠️  Issues Found:', result.errors.length);
-    const bySeverity: Record<string, Array<{ message: string; detail: string | null; severity: string }>> = { critical: [], high: [], medium: [], low: [] };
-    result.errors.forEach(err => bySeverity[err.severity].push(err));
+    const bySeverity: Record<string, Array<{ message: string; detail: string | null; severity: string }>> = {
+      critical: [],
+      high: [],
+      medium: [],
+      low: [],
+    };
+    result.errors.forEach((err) => bySeverity[err.severity].push(err));
 
     for (const [severity, errors] of Object.entries(bySeverity)) {
       if (errors.length > 0) {
         console.log(`\n  ${severity.toUpperCase()} (${errors.length}):`);
-        errors.forEach(err => {
+        errors.forEach((err) => {
           console.log(`    - ${err.message}`);
           if (err.detail) console.log(`      ${err.detail}`);
         });
@@ -731,7 +746,7 @@ if (require.main === module) {
     // Test path matching
     console.log('\n🔍 Path Check Examples:');
     const testPaths = ['/', '/admin', '/search', '/assets/style.css'];
-    testPaths.forEach(path => {
+    testPaths.forEach((path) => {
       const allowed = RobotsParser.isPathAllowed(path, 'Googlebot', result);
       console.log(`  ${path}: ${allowed ? '✅ Allowed' : '❌ Blocked'}`);
     });

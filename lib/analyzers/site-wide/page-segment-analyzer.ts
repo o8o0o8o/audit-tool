@@ -9,16 +9,32 @@ import { SEVERITY } from '../../constants';
 class PageSegmentAnalyzer {
   // Common URL patterns for different page types
   static SEGMENT_PATTERNS = [
-    { type: 'blog', patterns: ['/blog/', '/news/', '/article/', '/articles/', '/post/', '/posts/', '/journal/'], label: 'Blog/News' },
+    {
+      type: 'blog',
+      patterns: ['/blog/', '/news/', '/article/', '/articles/', '/post/', '/posts/', '/journal/'],
+      label: 'Blog/News',
+    },
     { type: 'product', patterns: ['/product/', '/products/', '/item/', '/items/', '/p/', '/shop/'], label: 'Products' },
-    { type: 'category', patterns: ['/category/', '/categories/', '/collection/', '/collections/', '/c/', '/catalog/'], label: 'Categories' },
+    {
+      type: 'category',
+      patterns: ['/category/', '/categories/', '/collection/', '/collections/', '/c/', '/catalog/'],
+      label: 'Categories',
+    },
     { type: 'tag', patterns: ['/tag/', '/tags/', '/t/', '/topic/', '/topics/'], label: 'Tags' },
     { type: 'search', patterns: ['/search', '?q=', '?s=', '?query=', '?search='], label: 'Search Pages' },
-    { type: 'account', patterns: ['/account/', '/login', '/register', '/signup', '/profile/', '/user/', '/my-'], label: 'Account' },
+    {
+      type: 'account',
+      patterns: ['/account/', '/login', '/register', '/signup', '/profile/', '/user/', '/my-'],
+      label: 'Account',
+    },
     { type: 'checkout', patterns: ['/checkout/', '/cart/', '/basket/', '/order/', '/payment/'], label: 'Checkout' },
     { type: 'legal', patterns: ['/privacy', '/terms', '/legal/', '/policy/', '/disclaimer', '/gdpr'], label: 'Legal' },
     { type: 'contact', patterns: ['/contact', '/about', '/faq', '/help/', '/support/'], label: 'Info Pages' },
-    { type: 'media', patterns: ['/video/', '/videos/', '/gallery/', '/media/', '/podcast/', '/podcasts/'], label: 'Media' },
+    {
+      type: 'media',
+      patterns: ['/video/', '/videos/', '/gallery/', '/media/', '/podcast/', '/podcasts/'],
+      label: 'Media',
+    },
     { type: 'landing', patterns: ['/lp/', '/landing/', '/promo/', '/campaign/'], label: 'Landing Pages' },
     { type: 'api', patterns: ['/api/', '/graphql', '/rest/', '/_next/', '/_nuxt/'], label: 'API/Technical' },
   ];
@@ -97,7 +113,7 @@ class PageSegmentAnalyzer {
     }
 
     // Calculate averages
-    Object.keys(segments).forEach(type => {
+    Object.keys(segments).forEach((type) => {
       const segment = segments[type];
       if (segment.count > 0) {
         segment.avgWordCount = Math.round(segment.totalWordCount / segment.count);
@@ -111,7 +127,7 @@ class PageSegmentAnalyzer {
 
     // Remove empty segments
     const activeSegments: Record<string, any> = {};
-    Object.keys(segments).forEach(type => {
+    Object.keys(segments).forEach((type) => {
       if (segments[type].count > 0) {
         activeSegments[type] = segments[type];
       }
@@ -251,7 +267,14 @@ class PageSegmentAnalyzer {
 
     // Issue 2: Thin content in specific segments
     Object.values(segments).forEach((segment: Record<string, any>) => {
-      if (segment.count > 5 && segment.avgWordCount < 100 && segment.type !== 'search' && segment.type !== 'api' && segment.type !== 'account' && segment.type !== 'checkout') {
+      if (
+        segment.count > 5 &&
+        segment.avgWordCount < 100 &&
+        segment.type !== 'search' &&
+        segment.type !== 'api' &&
+        segment.type !== 'account' &&
+        segment.type !== 'checkout'
+      ) {
         issues.push({
           message: `${segment.label} have thin content`,
           detail: `${segment.count} page(s) in ${segment.label} segment have an average of only ${segment.avgWordCount} words. Consider adding more content.`,
@@ -263,9 +286,10 @@ class PageSegmentAnalyzer {
 
     // Issue 3: High error rate in segment
     Object.values(segments).forEach((segment: Record<string, any>) => {
-      const errorRate = segment.count > 0
-        ? ((segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']) / segment.count) * 100
-        : 0;
+      const errorRate =
+        segment.count > 0
+          ? ((segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']) / segment.count) * 100
+          : 0;
 
       if (errorRate > 20 && segment.count > 5) {
         issues.push({
@@ -278,9 +302,7 @@ class PageSegmentAnalyzer {
     });
 
     // Issue 4: Unbalanced site structure
-    const otherPercentage = segments.other
-      ? (segments.other.count / totalPages) * 100
-      : 0;
+    const otherPercentage = segments.other ? (segments.other.count / totalPages) * 100 : 0;
 
     if (otherPercentage > 70 && totalPages > 20) {
       issues.push({

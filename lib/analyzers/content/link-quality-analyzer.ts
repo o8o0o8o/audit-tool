@@ -1,7 +1,13 @@
 import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class LinkQualityAnalyzer {
-  static async analyzeLinkQuality(chromePage: ChromePage, parsedPage: ParsedPage, url: string, origin: string, allPages: Record<string, PageInfo>) {
+  static async analyzeLinkQuality(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    url: string,
+    origin: string,
+    allPages: Record<string, PageInfo>,
+  ) {
     const linkAnalysis = {
       totalLinks: 0,
       internalLinks: 0,
@@ -24,28 +30,31 @@ class LinkQualityAnalyzer {
     };
 
     // Get all links with detailed information
-    const linkElements = await chromePage.evaluate(({ currentUrl: _currentUrl, origin }) => {
-      const links = Array.from(document.querySelectorAll('a[href]'));
-      return links.map(link => {
-        const href = (link as HTMLAnchorElement).href;
-        const anchorText = link.textContent?.trim() || link.getAttribute('aria-label') || '';
-        const rel = (link as HTMLAnchorElement).rel || '';
-        const isNofollow = rel.includes('nofollow');
-        const isExternal = href && !href.startsWith(origin) && !href.startsWith('/') && !href.startsWith('#');
-        const isInternal = href && (href.startsWith(origin) || href.startsWith('/')) && !href.startsWith('#');
+    const linkElements = await chromePage.evaluate(
+      ({ currentUrl: _currentUrl, origin }) => {
+        const links = Array.from(document.querySelectorAll('a[href]'));
+        return links.map((link) => {
+          const href = (link as HTMLAnchorElement).href;
+          const anchorText = link.textContent?.trim() || link.getAttribute('aria-label') || '';
+          const rel = (link as HTMLAnchorElement).rel || '';
+          const isNofollow = rel.includes('nofollow');
+          const isExternal = href && !href.startsWith(origin) && !href.startsWith('/') && !href.startsWith('#');
+          const isInternal = href && (href.startsWith(origin) || href.startsWith('/')) && !href.startsWith('#');
 
-        return {
-          href,
-          anchorText,
-          rel,
-          isNofollow,
-          isExternal,
-          isInternal,
-          target: (link as HTMLAnchorElement).target,
-          classList: Array.from(link.classList),
-        };
-      });
-    }, { currentUrl: url, origin });
+          return {
+            href,
+            anchorText,
+            rel,
+            isNofollow,
+            isExternal,
+            isInternal,
+            target: (link as HTMLAnchorElement).target,
+            classList: Array.from(link.classList),
+          };
+        });
+      },
+      { currentUrl: url, origin },
+    );
 
     linkAnalysis.totalLinks = linkElements.length;
 
@@ -77,7 +86,7 @@ class LinkQualityAnalyzer {
       if (!link.anchorText || link.anchorText.length === 0) {
         linkAnalysis.emptyAnchorLinks.push({
           href: link.href,
-          rel: link.rel
+          rel: link.rel,
         });
       } else {
         // Track anchor text
@@ -86,15 +95,29 @@ class LinkQualityAnalyzer {
 
         // Check for generic anchor text
         const genericPhrases = [
-          'click here', 'read more', 'learn more', 'more info', 'more information',
-          'here', 'this', 'link', 'website', 'page', 'more', 'continue reading',
-          'find out more', 'see more', 'view more', 'download', 'click'
+          'click here',
+          'read more',
+          'learn more',
+          'more info',
+          'more information',
+          'here',
+          'this',
+          'link',
+          'website',
+          'page',
+          'more',
+          'continue reading',
+          'find out more',
+          'see more',
+          'view more',
+          'download',
+          'click',
         ];
 
         if (genericPhrases.includes(link.anchorText.toLowerCase())) {
           linkAnalysis.genericAnchorLinks.push({
             href: link.href,
-            anchorText: link.anchorText
+            anchorText: link.anchorText,
           });
         }
       }
@@ -105,7 +128,7 @@ class LinkQualityAnalyzer {
         if (targetPage.indexability && !targetPage.indexability.isIndexable) {
           linkAnalysis.linksToNonIndexable.push({
             href: link.href,
-            reason: targetPage.indexability.blockingFactors.join(', ')
+            reason: targetPage.indexability.blockingFactors.join(', '),
           });
         }
 
@@ -113,7 +136,7 @@ class LinkQualityAnalyzer {
         if (targetPage.crawlability && targetPage.crawlability.redirectChain.length > 0) {
           linkAnalysis.redirectLinks.push({
             href: link.href,
-            redirectsTo: targetPage.crawlability.redirectChain[targetPage.crawlability.redirectChain.length - 1]
+            redirectsTo: targetPage.crawlability.redirectChain[targetPage.crawlability.redirectChain.length - 1],
           });
         }
       }
@@ -127,7 +150,7 @@ class LinkQualityAnalyzer {
           linkAnalysis.brokenLinks.push({
             href: link.href,
             statusCode: targetPage.statusCode,
-            anchorText: link.anchorText
+            anchorText: link.anchorText,
           });
         }
       }
@@ -144,7 +167,7 @@ class LinkQualityAnalyzer {
     if (duplicateAnchors.length > 0) {
       linkAnalysis.warnings.push({
         message: 'Duplicate anchor text',
-        details: duplicateAnchors
+        details: duplicateAnchors,
       });
     }
 
@@ -153,7 +176,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Empty anchor text',
         count: linkAnalysis.emptyAnchorLinks.length,
-        severity: 'medium'
+        severity: 'medium',
       });
     }
 
@@ -161,7 +184,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Generic anchor text',
         count: linkAnalysis.genericAnchorLinks.length,
-        severity: 'low'
+        severity: 'low',
       });
     }
 
@@ -169,7 +192,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Broken internal links',
         count: linkAnalysis.brokenLinks.length,
-        severity: 'high'
+        severity: 'high',
       });
     }
 
@@ -177,7 +200,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Links to non-indexable pages',
         count: linkAnalysis.linksToNonIndexable.length,
-        severity: 'medium'
+        severity: 'medium',
       });
     }
 
@@ -185,14 +208,14 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Links pointing to redirects',
         count: linkAnalysis.redirectLinks.length,
-        details: linkAnalysis.redirectLinks.slice(0, 5).map(l => `${l.href} -> ${l.redirectsTo}`),
-        severity: linkAnalysis.redirectLinks.length > 5 ? 'medium' : 'low'
+        details: linkAnalysis.redirectLinks.slice(0, 5).map((l) => `${l.href} -> ${l.redirectsTo}`),
+        severity: linkAnalysis.redirectLinks.length > 5 ? 'medium' : 'low',
       });
     }
 
     // Check for nofollow on internal links
-    const internalNofollowLinks = linkElements.filter(l => l.isInternal && l.isNofollow);
-    (linkAnalysis as Record<string, any>).internalNofollowLinks = internalNofollowLinks.map(l => ({
+    const internalNofollowLinks = linkElements.filter((l) => l.isInternal && l.isNofollow);
+    (linkAnalysis as Record<string, any>).internalNofollowLinks = internalNofollowLinks.map((l) => ({
       href: l.href,
       anchorText: l.anchorText,
     }));
@@ -201,8 +224,8 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Internal links with nofollow',
         count: internalNofollowLinks.length,
-        details: internalNofollowLinks.slice(0, 5).map(l => l.href),
-        severity: internalNofollowLinks.length > 3 ? 'medium' : 'low'
+        details: internalNofollowLinks.slice(0, 5).map((l) => l.href),
+        severity: internalNofollowLinks.length > 3 ? 'medium' : 'low',
       });
     }
 
@@ -211,7 +234,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Too many on-page links',
         count: linkAnalysis.totalLinks,
-        severity: linkAnalysis.totalLinks > 300 ? 'high' : 'medium'
+        severity: linkAnalysis.totalLinks > 300 ? 'high' : 'medium',
       });
     }
 

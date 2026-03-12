@@ -84,48 +84,48 @@ function parseArgs(args: string[]): ParsedArgs {
   };
 
   for (const arg of args) {
-    if (arg === "--version" || arg === "-V") {
+    if (arg === '--version' || arg === '-V') {
       parsed.version = true;
-    } else if (arg === "--help" || arg === "-h") {
+    } else if (arg === '--help' || arg === '-h') {
       parsed.help = true;
-    } else if (arg === "--open") {
+    } else if (arg === '--open') {
       parsed.open = true;
-    } else if (arg === "--verbose" || arg === "-v") {
+    } else if (arg === '--verbose' || arg === '-v') {
       parsed.verbose = true;
-    } else if (arg === "--quiet" || arg === "-q") {
+    } else if (arg === '--quiet' || arg === '-q') {
       parsed.quiet = true;
-    } else if (arg.startsWith("--preset=")) {
-      const preset = arg.substring("--preset=".length).toLowerCase();
+    } else if (arg.startsWith('--preset=')) {
+      const preset = arg.substring('--preset='.length).toLowerCase();
       if (['quick', 'standard', 'deep'].includes(preset)) {
         parsed.preset = preset as ParsedArgs['preset'];
       } else {
         parsed.warnings.push(`Unknown preset "${preset}". Use: quick, standard, or deep.`);
       }
-    } else if (arg.startsWith("--ci=")) {
-      const val = parseInt(arg.substring("--ci=".length), 10);
+    } else if (arg.startsWith('--ci=')) {
+      const val = parseInt(arg.substring('--ci='.length), 10);
       parsed.ci = isNaN(val) ? 70 : Math.max(0, Math.min(100, val));
-    } else if (arg === "--ci") {
+    } else if (arg === '--ci') {
       parsed.ci = 70; // Default threshold
-    } else if (arg === "--json") {
+    } else if (arg === '--json') {
       parsed.json = true;
-    } else if (arg.startsWith("--origin=")) {
-      parsed.origin = arg.substring("--origin=".length);
-    } else if (arg.startsWith("--compare=")) {
-      parsed.compare = arg.substring("--compare=".length);
-    } else if (arg.startsWith("--sitemap=")) {
-      parsed.sitemap = arg.substring("--sitemap=".length);
-    } else if (arg.startsWith("--compare-sitemap=")) {
-      parsed.compareSitemap = arg.substring("--compare-sitemap=".length);
-    } else if (arg === "--proceed") {
+    } else if (arg.startsWith('--origin=')) {
+      parsed.origin = arg.substring('--origin='.length);
+    } else if (arg.startsWith('--compare=')) {
+      parsed.compare = arg.substring('--compare='.length);
+    } else if (arg.startsWith('--sitemap=')) {
+      parsed.sitemap = arg.substring('--sitemap='.length);
+    } else if (arg.startsWith('--compare-sitemap=')) {
+      parsed.compareSitemap = arg.substring('--compare-sitemap='.length);
+    } else if (arg === '--proceed') {
       parsed.proceed = true;
-    } else if (arg === "--perf") {
+    } else if (arg === '--perf') {
       parsed.perf = true;
-    } else if (arg === "--save-html") {
+    } else if (arg === '--save-html') {
       parsed.saveHtml = true;
-    } else if (arg === "--screenshots") {
+    } else if (arg === '--screenshots') {
       parsed.screenshots = true;
-    } else if (arg.startsWith("--concurrency=")) {
-      const rawValue = arg.substring("--concurrency=".length);
+    } else if (arg.startsWith('--concurrency=')) {
+      const rawValue = arg.substring('--concurrency='.length);
       const value = parseInt(rawValue, 10);
       if (isNaN(value)) {
         parsed.warnings.push(`Invalid concurrency value "${rawValue}" - must be a number. Using default (5).`);
@@ -143,8 +143,8 @@ function parseArgs(args: string[]): ParsedArgs {
         if (value > maxSafe) {
           parsed.warnings.push(
             `Concurrency ${value} exceeds safe limit of ${maxSafe} based on ${reason}. ` +
-            `Using ${maxSafe} to prevent system instability. ` +
-            `(Free memory: ${freeMemoryMB}MB)`
+              `Using ${maxSafe} to prevent system instability. ` +
+              `(Free memory: ${freeMemoryMB}MB)`,
           );
           parsed.concurrency = maxSafe;
         } else {
@@ -152,8 +152,8 @@ function parseArgs(args: string[]): ParsedArgs {
         }
         parsed.concurrencyExplicit = true;
       }
-    } else if (arg.startsWith("--heap-size=")) {
-      const rawValue = arg.substring("--heap-size=".length);
+    } else if (arg.startsWith('--heap-size=')) {
+      const rawValue = arg.substring('--heap-size='.length);
       const value = parseInt(rawValue, 10);
       if (isNaN(value)) {
         parsed.warnings.push(`Invalid heap-size value "${rawValue}" - must be a number. Using default.`);
@@ -166,47 +166,56 @@ function parseArgs(args: string[]): ParsedArgs {
       } else {
         parsed.heapSize = value;
       }
-    } else if (arg.startsWith("--config=")) {
-      parsed.config = arg.substring("--config=".length);
-    } else if (arg === "--init-config") {
+    } else if (arg.startsWith('--config=')) {
+      parsed.config = arg.substring('--config='.length);
+    } else if (arg === '--init-config') {
       parsed.initConfig = true;
-    } else if (arg.startsWith("--repo=")) {
-      parsed.repo = arg.substring("--repo=".length);
-    } else if (arg === "--dry-run") {
+    } else if (arg.startsWith('--repo=')) {
+      parsed.repo = arg.substring('--repo='.length);
+    } else if (arg === '--dry-run') {
       parsed.dryRun = true;
-    } else if (arg === "--generate-ci") {
+    } else if (arg === '--generate-ci') {
       parsed.generateCi = true;
-    } else if (arg === "--validate-config") {
+    } else if (arg === '--validate-config') {
       parsed.validateConfig = true;
-    } else if (arg.startsWith("--webhook=")) {
-      parsed.webhook = arg.substring("--webhook=".length);
-    } else if (arg.startsWith("--sites=")) {
-      parsed.sites = arg.substring("--sites=".length);
-    } else if (arg.startsWith("--slack=")) {
-      parsed.slack = arg.substring("--slack=".length);
-    } else if (arg.startsWith("--watch=")) {
-      const val = parseInt(arg.substring("--watch=".length), 10);
+    } else if (arg.startsWith('--webhook=')) {
+      parsed.webhook = arg.substring('--webhook='.length);
+    } else if (arg.startsWith('--sites=')) {
+      parsed.sites = arg.substring('--sites='.length);
+    } else if (arg.startsWith('--slack=')) {
+      parsed.slack = arg.substring('--slack='.length);
+    } else if (arg.startsWith('--watch=')) {
+      const val = parseInt(arg.substring('--watch='.length), 10);
       parsed.watch = isNaN(val) ? 60 : Math.max(1, val);
-    } else if (arg === "--watch") {
+    } else if (arg === '--watch') {
       parsed.watch = 60; // Default 60 minutes
-    } else if (arg.startsWith("--brand-logo=")) {
-      parsed.brandLogo = arg.substring("--brand-logo=".length);
-    } else if (arg.startsWith("--brand-name=")) {
-      parsed.brandName = arg.substring("--brand-name=".length);
-    } else if (arg === "--only-errors") {
+    } else if (arg.startsWith('--brand-logo=')) {
+      parsed.brandLogo = arg.substring('--brand-logo='.length);
+    } else if (arg.startsWith('--brand-name=')) {
+      parsed.brandName = arg.substring('--brand-name='.length);
+    } else if (arg === '--only-errors') {
       parsed.onlyErrors = true;
-    } else if (arg.startsWith("--exclude=")) {
-      const pattern = arg.substring("--exclude=".length);
+    } else if (arg.startsWith('--exclude=')) {
+      const pattern = arg.substring('--exclude='.length);
       if (pattern) parsed.exclude.push(pattern);
-    } else if (arg.startsWith("--limit=")) {
-      const rawValue = arg.substring("--limit=".length);
+    } else if (arg.startsWith('--limit=')) {
+      const rawValue = arg.substring('--limit='.length);
       const value = parseInt(rawValue, 10);
       if (isNaN(value) || value < 1) {
         parsed.warnings.push(`Invalid limit value "${rawValue}" - must be a positive number. Ignoring.`);
       } else {
         parsed.limit = value;
       }
-    } else if (arg !== "--origin" && arg !== "--compare" && arg !== "--sitemap" && arg !== "--compare-sitemap" && arg !== "--concurrency" && arg !== "--heap-size" && arg !== "--config" && arg !== "--repo") {
+    } else if (
+      arg !== '--origin' &&
+      arg !== '--compare' &&
+      arg !== '--sitemap' &&
+      arg !== '--compare-sitemap' &&
+      arg !== '--concurrency' &&
+      arg !== '--heap-size' &&
+      arg !== '--config' &&
+      arg !== '--repo'
+    ) {
       // Unknown flag - ignore silently (could be a typo)
     }
   }

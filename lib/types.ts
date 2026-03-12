@@ -38,7 +38,7 @@ export interface PageInfo {
   description?: string;
   descriptionLength?: number;
   canonical?: string;
-  redirectChain?: Array<{url: string; status: number | string; timing?: number}>;
+  redirectChain?: Array<{ url: string; status: number | string; timing?: number }>;
   redirectCount?: number;
   hasRedirects?: boolean;
   error?: string;
@@ -425,15 +425,18 @@ export interface TimingData {
   tls?: TimingPhaseData;
   ttfb?: TimingPhaseData;
   uniqueOrigins?: string[];
-  originTimings?: Record<string, {
-    isFirstParty: boolean;
-    requestCount: number;
-    totalDns: number;
-    totalTcp: number;
-    totalTls: number;
-    totalSize: number;
-    protocol: string;
-  }>;
+  originTimings?: Record<
+    string,
+    {
+      isFirstParty: boolean;
+      requestCount: number;
+      totalDns: number;
+      totalTcp: number;
+      totalTls: number;
+      totalSize: number;
+      protocol: string;
+    }
+  >;
   resourceTimings?: {
     url: string;
     origin: string;

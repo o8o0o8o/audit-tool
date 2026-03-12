@@ -103,20 +103,26 @@ class SocialMediaAnalyzer {
     } else {
       const validCards = ['summary', 'summary_large_image', 'app', 'player'];
       if (!validCards.includes(twitterTags['twitter:card'])) {
-        socialData.issues.push(`Invalid twitter:card value: ${twitterTags['twitter:card']} (must be: ${validCards.join(', ')})`);
+        socialData.issues.push(
+          `Invalid twitter:card value: ${twitterTags['twitter:card']} (must be: ${validCards.join(', ')})`,
+        );
       }
     }
 
     if (!twitterTags['twitter:title']) {
       socialData.warnings.push('Missing twitter:title (falls back to og:title, but explicit is better)');
     } else if (twitterTags['twitter:title'].length > 70) {
-      socialData.warnings.push(`twitter:title is ${twitterTags['twitter:title'].length} chars (recommended: <70 chars)`);
+      socialData.warnings.push(
+        `twitter:title is ${twitterTags['twitter:title'].length} chars (recommended: <70 chars)`,
+      );
     }
 
     if (!twitterTags['twitter:description']) {
       socialData.warnings.push('Missing twitter:description (falls back to og:description)');
     } else if (twitterTags['twitter:description'].length > 200) {
-      socialData.warnings.push(`twitter:description is ${twitterTags['twitter:description'].length} chars (recommended: <200 chars)`);
+      socialData.warnings.push(
+        `twitter:description is ${twitterTags['twitter:description'].length} chars (recommended: <200 chars)`,
+      );
     }
 
     if (!twitterTags['twitter:image']) {

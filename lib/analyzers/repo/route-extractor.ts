@@ -52,7 +52,7 @@ class RouteExtractor {
 
       if (router === 'both') {
         // When both routers exist, App Router takes precedence for overlapping patterns
-        const appPatterns = new Set(routes.map(r => r.pattern));
+        const appPatterns = new Set(routes.map((r) => r.pattern));
         for (const route of pagesRoutes) {
           if (!appPatterns.has(route.pattern)) {
             routes.push(route);
@@ -393,14 +393,14 @@ class RouteExtractor {
               pattern = pathPrefix;
             } else {
               // Flat route segments within a directory
-              const segments = basename.split('.').map(s => this.#remixSegmentToPattern(s));
-              const joined = segments.filter(s => s).join('/');
+              const segments = basename.split('.').map((s) => this.#remixSegmentToPattern(s));
+              const joined = segments.filter((s) => s).join('/');
               pattern = joined ? `${pathPrefix}/${joined}` : pathPrefix;
             }
           } else {
             // Flat routes at top level: blog.$slug.tsx -> /blog/[slug]
-            const segments = basename.split('.').map(s => this.#remixSegmentToPattern(s));
-            const joined = segments.filter(s => s).join('/');
+            const segments = basename.split('.').map((s) => this.#remixSegmentToPattern(s));
+            const joined = segments.filter((s) => s).join('/');
             pattern = '/' + joined;
           }
 

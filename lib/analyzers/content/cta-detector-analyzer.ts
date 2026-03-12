@@ -20,7 +20,16 @@ class CTADetectorAnalyzer {
     const warnings: Issue[] = [];
 
     const ctas = await chromePage.evaluate(() => {
-      const results: Record<string, any>[] = [];
+      const results: {
+        type: string;
+        text: string;
+        href?: string | null;
+        action?: string;
+        method?: string;
+        inputCount?: number;
+        rect: { top: number; left: number; width: number; height: number };
+        aboveFold: boolean;
+      }[] = [];
       const viewport = { width: window.innerWidth, height: window.innerHeight };
 
       // Detect forms

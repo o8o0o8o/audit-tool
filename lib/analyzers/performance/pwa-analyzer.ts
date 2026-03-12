@@ -6,6 +6,21 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface ManifestContent {
+  name?: string;
+  short_name?: string;
+  description?: string;
+  icons?: { sizes?: string; purpose?: string; src?: string; type?: string }[];
+  start_url?: string;
+  display?: string;
+  theme_color?: string;
+  background_color?: string;
+  orientation?: string;
+  scope?: string;
+  lang?: string;
+  [key: string]: unknown;
+}
+
 // Required manifest fields for installability
 const REQUIRED_MANIFEST_FIELDS = ['name', 'icons', 'start_url', 'display'];
 
@@ -38,7 +53,7 @@ class PWAAnalyzer {
       hasManifest: false,
       manifestUrl: null as string | null,
       manifestValid: false,
-      manifestFields: {} as Record<string, any>,
+      manifestFields: {} as Record<string, unknown>,
       hasServiceWorker: false,
       serviceWorkerScope: null as string | null,
       isInstallable: false,
@@ -156,8 +171,17 @@ class PWAAnalyzer {
    * @param {Array} issues - Issues array
    * @param {Array} warnings - Warnings array
    */
-  static analyzeManifest(manifest: Record<string, any>, info: Record<string, any>, issues: Issue[], warnings: Issue[]) {
-    let manifestData;
+  static analyzeManifest(
+    manifest: ManifestContent | string,
+    info: {
+      manifestFields: Record<string, unknown> | string[];
+      manifestValid: boolean;
+      installabilityIssues: string[];
+    },
+    issues: Issue[],
+    warnings: Issue[],
+  ) {
+    let manifestData: ManifestContent;
 
     try {
       manifestData = typeof manifest === 'string' ? JSON.parse(manifest) : manifest;
@@ -201,11 +225,11 @@ class PWAAnalyzer {
     // Check icons
     if (manifestData.icons && Array.isArray(manifestData.icons)) {
       const iconSizes = manifestData.icons
-        .map((icon: any) => {
+        .map((icon) => {
           const sizes = icon.sizes?.split('x') || [];
           return parseInt(sizes[0], 10);
         })
-        .filter((size: number) => !isNaN(size));
+        .filter((size) => !isNaN(size));
 
       // Check for required sizes
       const missingRequiredSizes = REQUIRED_ICON_SIZES.filter((size) => !iconSizes.includes(size));
@@ -220,7 +244,7 @@ class PWAAnalyzer {
       }
 
       // Check for maskable icon
-      const hasMaskable = manifestData.icons.some((icon: Record<string, string>) => icon.purpose?.includes('maskable'));
+      const hasMaskable = manifestData.icons.some((icon) => icon.purpose?.includes('maskable'));
       if (!hasMaskable) {
         warnings.push({
           message: 'No maskable icon',

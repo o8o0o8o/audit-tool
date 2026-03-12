@@ -13,20 +13,23 @@ class IndexabilityValidator {
    * @param {Object} sitemapUrls - Object with URLs from sitemap { url: true }
    * @returns {Object} { issues: [], noindexPages: [], redirectPages: [], slowPages: [] }
    */
-  static validateIndexabilityCrawlability(allPages: Record<string, PageInfo>, sitemapUrls: Record<string, any> = {}) {
+  static validateIndexabilityCrawlability(
+    allPages: Record<string, PageInfo>,
+    sitemapUrls: Record<string, unknown> = {},
+  ) {
     console.log('\nChecking indexability and crawlability across pages...');
 
     const stats = {
       indexable: 0,
       nonIndexable: 0,
-      noindexPages: [] as Record<string, any>[],
+      noindexPages: [] as { url: string; reason: string }[],
       nofollowPages: [] as string[],
-      redirectChains: [] as Record<string, any>[],
+      redirectChains: [] as { url: string; chain: string[]; length: number }[],
       authRequired: [] as string[],
       statusErrors: new Map<number, string[]>(),
-      canonicalConflicts: [] as Record<string, any>[],
-      crawlabilityWarnings: [] as Record<string, any>[],
-      indexabilityWarnings: [] as Record<string, any>[],
+      canonicalConflicts: [] as { url: string; canonical: string | undefined }[],
+      crawlabilityWarnings: [] as { url: string; warnings: string[] }[],
+      indexabilityWarnings: [] as { url: string; warnings: string[] }[],
     };
 
     const issues: Issue[] = [];

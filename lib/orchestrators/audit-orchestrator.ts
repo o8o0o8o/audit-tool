@@ -672,7 +672,7 @@ class AuditOrchestrator {
    * @returns {*} Function result or empty result on timeout
    * @private
    */
-  static #runWithTimeout(fn: () => Record<string, any>, name: string, timeoutMs: number): ValidationResult {
+  static #runWithTimeout(fn: () => Record<string, unknown>, name: string, timeoutMs: number): ValidationResult {
     const startTime = Date.now();
 
     // For synchronous validators, we can't truly timeout, but we can track duration

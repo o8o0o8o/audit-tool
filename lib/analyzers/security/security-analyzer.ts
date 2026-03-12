@@ -1,5 +1,11 @@
 import type { ChromePage, ParsedPage } from '../../types';
 
+interface InsecureCookieDetail {
+  name: string;
+  domain: string;
+  issues: string[];
+}
+
 class SecurityAnalyzer {
   static async analyzeSecurity(
     chromePage: ChromePage,
@@ -65,7 +71,7 @@ class SecurityAnalyzer {
         securityIssues.insecureCookies++;
         // Store first 10 details for reporting
         if (securityIssues.insecureCookieDetails.length < 10) {
-          (securityIssues.insecureCookieDetails as Record<string, any>[]).push({
+          (securityIssues.insecureCookieDetails as InsecureCookieDetail[]).push({
             name: cookie.name,
             domain: cookie.domain,
             issues: issues,
@@ -91,7 +97,7 @@ class SecurityAnalyzer {
       const method = form.getAttribute('method')?.toLowerCase();
       if (method === 'post') {
         // Check for CSRF token (common patterns)
-        const hasCSRFToken = Array.from(form.querySelectorAll('input')).some((input: any) => {
+        const hasCSRFToken = Array.from(form.querySelectorAll('input')).some((input) => {
           const name = input.getAttribute('name')?.toLowerCase() || '';
           return name.includes('csrf') || name.includes('token') || name.includes('_token');
         });

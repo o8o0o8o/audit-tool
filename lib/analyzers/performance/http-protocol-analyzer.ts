@@ -22,7 +22,11 @@ class HTTPProtocolAnalyzer {
       supportsHttp2: false,
       supportsHttp3: false,
       resourceProtocols: {} as Record<string, number>,
-      multiplexingBenefit: null as Record<string, any> | null,
+      multiplexingBenefit: null as {
+        resourceCount: number;
+        http1EstimatedRounds: number;
+        estimatedSavings: string;
+      } | null,
       altSvc: null as string | null,
     };
 
@@ -117,7 +121,8 @@ class HTTPProtocolAnalyzer {
    */
   static detectProtocol(pageData: PageInfo) {
     // Check various sources
-    if ((pageData.response as any)?.protocol) return (pageData.response as any).protocol;
+    if ((pageData.response as { protocol?: string })?.protocol)
+      return (pageData.response as { protocol?: string }).protocol!;
     if (pageData.timing?.protocol) return pageData.timing.protocol;
 
     // Check performance entries
@@ -151,11 +156,11 @@ class HTTPProtocolAnalyzer {
    * @param {Array} resources
    * @returns {number}
    */
-  static countUniqueOrigins(resources: Record<string, any>[]) {
+  static countUniqueOrigins(resources: { url?: string }[]) {
     const origins = new Set();
     for (const resource of resources) {
       try {
-        const origin = new URL(resource.url).origin;
+        const origin = new URL(resource.url!).origin;
         origins.add(origin);
       } catch {}
     }
@@ -168,7 +173,7 @@ class HTTPProtocolAnalyzer {
    * @param {boolean} supportsHttp2
    * @returns {object}
    */
-  static calculateMultiplexingBenefit(resources: Record<string, any>[], supportsHttp2: boolean) {
+  static calculateMultiplexingBenefit(resources: unknown[], supportsHttp2: boolean) {
     const totalResources = resources.length;
     const maxHttp1Connections = 6;
 

@@ -6,6 +6,17 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface ResourceAnalysisEntry {
+  url: string;
+  contentType: string;
+  encoding: string;
+  size: number;
+  isCompressible: boolean;
+  shouldCompress: boolean;
+  isCompressed: boolean | '' | null | undefined;
+  potentialSavings: number;
+}
+
 // File types that should be compressed
 const COMPRESSIBLE_TYPES = [
   'text/html',
@@ -43,7 +54,7 @@ class CompressionAnalyzer {
       uncompressedResources: 0,
       potentialSavings: 0,
       compressionTypes: { gzip: 0, br: 0, deflate: 0, none: 0 },
-      resources: [] as Record<string, any>[],
+      resources: [] as ResourceAnalysisEntry[],
     };
 
     // Check HTML compression
@@ -100,13 +111,13 @@ class CompressionAnalyzer {
     }
 
     // Generate warnings for uncompressed resources
-    const uncompressedLarge = info.resources.filter((r: any) => r.shouldCompress && !r.isCompressed && r.size > 10000);
+    const uncompressedLarge = info.resources.filter((r) => r.shouldCompress && !r.isCompressed && r.size > 10000);
 
     if (uncompressedLarge.length > 0) {
-      const totalSavings = uncompressedLarge.reduce((sum: number, r: any) => sum + r.potentialSavings, 0);
+      const totalSavings = uncompressedLarge.reduce((sum: number, r) => sum + r.potentialSavings, 0);
       const examples = uncompressedLarge
         .slice(0, 3)
-        .map((r: any) => `${this.getFileName(r.url)} (${this.formatBytes(r.size)})`)
+        .map((r) => `${this.getFileName(r.url)} (${this.formatBytes(r.size)})`)
         .join(', ');
 
       issues.push({
@@ -133,11 +144,11 @@ class CompressionAnalyzer {
    * @param {object} resource - Resource data
    * @returns {object} Resource analysis
    */
-  static analyzeResource(resource: Record<string, any>) {
-    const url = resource.url || '';
-    const contentType = resource.contentType || resource.mimeType || '';
-    const encoding = resource.contentEncoding || '';
-    const size = resource.size || resource.transferSize || 0;
+  static analyzeResource(resource: Record<string, unknown>) {
+    const url = (resource.url as string) || '';
+    const contentType = (resource.contentType as string) || (resource.mimeType as string) || '';
+    const encoding = (resource.contentEncoding as string) || '';
+    const size = (resource.size as number) || (resource.transferSize as number) || 0;
 
     const isCompressible = this.isCompressible(url, contentType);
     const shouldCompress = isCompressible && size > MIN_SIZE_FOR_COMPRESSION;
@@ -203,7 +214,7 @@ class CompressionAnalyzer {
       compressionTypes: { gzip: 0, br: 0, deflate: 0, none: 0 },
     };
 
-    const uncompressedPages: Record<string, any>[] = [];
+    const uncompressedPages: { url: string; size: number }[] = [];
 
     for (const [url, pageData] of Object.entries(pages)) {
       const htmlEncoding = pageData.contentEncoding || pageData.headers?.['content-encoding'];

@@ -57,29 +57,29 @@ class ConnectionTimingAnalyzer {
     // Generate issues
 
     // Slow document DNS
-    if (navTiming?.dns! > 100) {
+    if (navTiming && navTiming.dns > 100) {
       issues.push({
         message: 'Slow DNS lookup for main document',
-        detail: `<a href="${url}">${url}</a> DNS lookup took ${navTiming!.dns}ms. Consider DNS prefetching or changing DNS provider.`,
-        severity: navTiming!.dns! > 200 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
+        detail: `<a href="${url}">${url}</a> DNS lookup took ${navTiming.dns}ms. Consider DNS prefetching or changing DNS provider.`,
+        severity: navTiming.dns > 200 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
       });
     }
 
     // Slow document TLS
-    if (navTiming?.tls! > 100) {
+    if (navTiming && navTiming.tls > 100) {
       warnings.push({
         message: 'Slow TLS negotiation',
-        detail: `<a href="${url}">${url}</a> TLS negotiation took ${navTiming!.tls}ms. Ensure TLS 1.3 is enabled and session resumption is configured.`,
+        detail: `<a href="${url}">${url}</a> TLS negotiation took ${navTiming.tls}ms. Ensure TLS 1.3 is enabled and session resumption is configured.`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     // Slow document TTFB
-    if (navTiming?.ttfb! > 600) {
+    if (navTiming && navTiming.ttfb > 600) {
       issues.push({
         message: 'Slow server response time (TTFB)',
-        detail: `<a href="${url}">${url}</a> server response took ${navTiming!.ttfb}ms. Optimize server-side processing, use caching, or consider a CDN.`,
-        severity: navTiming!.ttfb! > 1000 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
+        detail: `<a href="${url}">${url}</a> server response took ${navTiming.ttfb}ms. Optimize server-side processing, use caching, or consider a CDN.`,
+        severity: navTiming.ttfb > 1000 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
       });
     }
 

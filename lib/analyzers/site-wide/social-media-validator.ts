@@ -22,8 +22,8 @@ class SocialMediaValidator {
       socialImages: new Map(), // image URL -> count
       missingOgImage: [] as string[],
       missingTwitterCard: [] as string[],
-      relativeImageUrls: [] as Record<string, any>[],
-      imageDimensionIssues: [] as Record<string, any>[],
+      relativeImageUrls: [] as { url: string; image: string }[],
+      imageDimensionIssues: [] as { url: string; image: string; dimensions: string }[],
       totalIssues: 0,
       totalWarnings: 0,
     };

@@ -6,6 +6,10 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, ParsedPage, PageInfo } from '../../types';
 
+interface FreshnessIssue extends Issue {
+  type: string;
+}
+
 class FreshnessAnalyzer {
   /**
    * Analyze content freshness signals
@@ -14,8 +18,8 @@ class FreshnessAnalyzer {
    * @param {Object} parsedPage - Parsed HTML page
    * @returns {Object} Analysis results with freshness data and issues
    */
-  static analyze(pageData: PageInfo, response: Record<string, any> | null, parsedPage: ParsedPage) {
-    const issues: Record<string, any>[] = [];
+  static analyze(pageData: PageInfo, response: { headers?: Record<string, string> } | null, parsedPage: ParsedPage) {
+    const issues: FreshnessIssue[] = [];
     const freshnessData = {
       lastModified: null as string | null,
       datePublished: null as string | null,
@@ -50,7 +54,7 @@ class FreshnessAnalyzer {
 
         if (schema.datePublished) {
           try {
-            const pubDate = new Date(schema.datePublished);
+            const pubDate = new Date(schema.datePublished as string);
             if (!isNaN(pubDate.getTime())) {
               freshnessData.datePublished = pubDate.toISOString();
             }
@@ -60,7 +64,7 @@ class FreshnessAnalyzer {
         }
         if (schema.dateModified) {
           try {
-            const modDate = new Date(schema.dateModified);
+            const modDate = new Date(schema.dateModified as string);
             if (!isNaN(modDate.getTime())) {
               freshnessData.dateModified = modDate.toISOString();
             }
@@ -207,12 +211,15 @@ class FreshnessAnalyzer {
    * @param {Date} now - Current date
    * @returns {number} Freshness score
    */
-  static calculateFreshnessScore(freshnessData: Record<string, any>, now: Date) {
+  static calculateFreshnessScore(
+    freshnessData: { lastModified: string | null; dateModified: string | null; datePublished: string | null },
+    now: Date,
+  ) {
     let score: number;
 
     // Get the most recent date we have
     const dates = [freshnessData.lastModified, freshnessData.dateModified, freshnessData.datePublished]
-      .filter(Boolean)
+      .filter((d): d is string => d !== null && d !== undefined)
       .map((d) => new Date(d));
 
     if (dates.length === 0) {

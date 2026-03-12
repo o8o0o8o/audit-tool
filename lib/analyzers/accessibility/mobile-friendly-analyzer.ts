@@ -5,7 +5,7 @@ class MobileFriendlyAnalyzer {
     return await page.evaluate(() => {
       const issues: string[] = [];
       const warnings: string[] = [];
-      const metrics: Record<string, any> = {};
+      const metrics: Record<string, number | boolean | string | Record<string, number>> = {};
 
       // 1. Check viewport meta tag
       const viewport = document.querySelector('meta[name="viewport"]');

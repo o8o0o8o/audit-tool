@@ -1,5 +1,18 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
-import type { ChromePage, NetworkRequest } from '../../types';
+import type { ChromePage, NetworkRequest, Issue } from '../../types';
+
+interface CompressionIssue {
+  severity: string;
+  url: string;
+  size: number;
+}
+
+interface MinificationIssue {
+  severity: string;
+  url: string;
+  type: string;
+  size: number;
+}
 
 class ResourceOptimizationAnalyzer {
   static async analyzeResourceOptimization(chromePage: ChromePage, requests: NetworkRequest[], url: string) {
@@ -10,20 +23,20 @@ class ResourceOptimizationAnalyzer {
         uncompressed: 0,
         totalSize: 0,
         compressedSize: 0,
-        issues: [] as Record<string, any>[],
+        issues: [] as CompressionIssue[],
       },
       minification: {
         minifiedJS: 0,
         unminifiedJS: 0,
         minifiedCSS: 0,
         unminifiedCSS: 0,
-        issues: [] as Record<string, any>[],
+        issues: [] as MinificationIssue[],
       },
       renderBlocking: {
         blockingScripts: 0,
         blockingStyles: 0,
         totalBlocking: 0,
-        issues: [] as Record<string, any>[],
+        issues: [] as Issue[],
       },
       protocol: {
         http1: 0,
@@ -33,7 +46,7 @@ class ResourceOptimizationAnalyzer {
     };
 
     // Analyze all requests
-    for (const [resourceUrl, reqData] of Object.entries(requests) as [string, any][]) {
+    for (const [resourceUrl, reqData] of Object.entries(requests) as [string, NetworkRequest][]) {
       const headers = reqData.headers || {};
       const size = reqData.size || 0;
       const resourceType = reqData.resourceType;
@@ -106,8 +119,8 @@ class ResourceOptimizationAnalyzer {
     const renderBlockingInfo = await chromePage.evaluate(() => {
       const blockingScripts = Array.from(
         document.querySelectorAll('script:not([async]):not([defer]):not([type="module"])'),
-      ).filter((script: any) => {
-        const src = script.src || '';
+      ).filter((script) => {
+        const src = (script as HTMLScriptElement).src || '';
         return src && !src.includes('data:');
       });
 
@@ -137,9 +150,10 @@ class ResourceOptimizationAnalyzer {
     }
 
     // Collect all issues at the top level for reportIssues()
-    (resourceAnalysis as Record<string, any>).issues = [...resourceAnalysis.renderBlocking.issues];
+    const result = resourceAnalysis as typeof resourceAnalysis & { issues: Issue[] };
+    result.issues = [...resourceAnalysis.renderBlocking.issues];
 
-    return resourceAnalysis;
+    return result;
   }
 }
 

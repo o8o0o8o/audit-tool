@@ -19,8 +19,13 @@ class StructuredDataValidator {
       pagesWithSchema: 0,
       pagesWithoutSchema: 0,
       schemaTypes: new Map(), // type -> count
-      organizationSchemas: [] as Record<string, any>[],
-      websiteSchemas: [] as Record<string, any>[],
+      organizationSchemas: [] as {
+        url: string;
+        name: unknown;
+        type?: string;
+        schema: Record<string, unknown> | undefined;
+      }[],
+      websiteSchemas: [] as { url: string; name: unknown; schema: Record<string, unknown> | undefined }[],
       articlePages: [] as string[],
       productPages: [] as string[],
       duplicateArticles: new Map(), // headline -> URLs
@@ -146,7 +151,7 @@ class StructuredDataValidator {
     for (const [headline, urls] of schemaStats.duplicateArticles) {
       if (urls.length > 1) {
         duplicateArticleCount++;
-        const urlList = urls.map((url: any) => `<li><a href="${url}">${url}</a></li>`).join('');
+        const urlList = urls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('');
         issues.push({
           title: `Duplicate Article schema with same headline`,
           description: `Article headline "${headline}" appears on ${urls.length} different pages:<ul>${urlList}</ul>`,
@@ -160,7 +165,7 @@ class StructuredDataValidator {
     for (const [productName, urls] of schemaStats.duplicateProducts) {
       if (urls.length > 1) {
         duplicateProductCount++;
-        const urlList = urls.map((url: any) => `<li><a href="${url}">${url}</a></li>`).join('');
+        const urlList = urls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('');
         issues.push({
           title: `Duplicate Product schema with same name`,
           description: `Product name "${productName}" appears on ${urls.length} different pages:<ul>${urlList}</ul>`,

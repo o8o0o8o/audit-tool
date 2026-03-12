@@ -18,7 +18,7 @@ class RedirectChainAnalyzer {
     const warnings: Issue[] = [];
     const info = {
       redirectCount: 0,
-      redirectChain: [] as Record<string, any>[],
+      redirectChain: [] as { url: string; status: number | string; timing?: number }[],
       finalUrl: url,
       hasHttpToHttps: false,
       hasWwwRedirect: false,
@@ -70,7 +70,7 @@ class RedirectChainAnalyzer {
     }
 
     // Check for redirect chain length
-    const chainStr = redirectChain.map((r: any) => `${r.url} (${r.status})`).join(' → ');
+    const chainStr = redirectChain.map((r) => `${r.url} (${r.status})`).join(' → ');
     if (redirectChain.length > 3) {
       issues.push({
         message: 'Long redirect chain detected',
@@ -112,7 +112,7 @@ class RedirectChainAnalyzer {
     }
     const loopUrls = [...urlCounts.entries()].filter(([, count]) => count > 1);
     if (loopUrls.length > 0) {
-      const chainStr = redirectChain.map((r: any) => `${r.url} (${r.status})`).join(' → ');
+      const chainStr = redirectChain.map((r) => `${r.url} (${r.status})`).join(' → ');
       issues.push({
         message: 'Redirect loop detected',
         detail: `Redirect chain: ${chainStr}`,
@@ -161,7 +161,7 @@ class RedirectChainAnalyzer {
       wwwRedirects: 0,
     };
 
-    const pagesWithLongChains: Record<string, any>[] = [];
+    const pagesWithLongChains: { url: string; length: number }[] = [];
 
     for (const [url, pageData] of Object.entries(pages)) {
       const chain = pageData.redirectChain || [];
@@ -214,7 +214,7 @@ class RedirectChainAnalyzer {
     if (pagesWithLongChains.length > 0) {
       const examples = pagesWithLongChains
         .slice(0, 5)
-        .map((p: any) => `${p.url} (${p.length} hops)`)
+        .map((p) => `${p.url} (${p.length} hops)`)
         .join(', ');
       issues.push({
         message: 'Pages with long redirect chains',

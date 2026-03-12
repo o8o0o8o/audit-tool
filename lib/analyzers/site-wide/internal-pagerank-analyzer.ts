@@ -16,7 +16,11 @@ class InternalPageRankAnalyzer {
    * @param {string} origin - Site origin URL
    * @returns {object} Analysis results with issues and page scores
    */
-  static analyze(allPages: Record<string, PageInfo>, incomingLinks: Record<string, any>, origin: string) {
+  static analyze(
+    allPages: Record<string, PageInfo>,
+    incomingLinks: Record<string, string[] | unknown>,
+    origin: string,
+  ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.keys(allPages);

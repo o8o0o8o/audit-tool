@@ -12,6 +12,8 @@ import type {
   IssueTrend,
   PageInfo,
   AuditResults,
+  QuickWinFull,
+  SeverityLevel,
 } from './lib/types';
 import { FileManager } from './lib/storage/file-manager';
 import { sanitizeDomainName } from './validators';
@@ -158,7 +160,7 @@ class HistoryManager {
     }
   }
 
-  addAuditSnapshot(auditData: Partial<AuditResults> & Record<string, any>, runTimestamp: string | null = null) {
+  addAuditSnapshot(auditData: Partial<AuditResults>, runTimestamp: string | null = null) {
     const history = this.loadHistory();
 
     const snapshot = {
@@ -182,10 +184,10 @@ class HistoryManager {
       performance: this.extractPerformanceSummary(auditData),
       technologies: this.extractTechnologiesSummary(auditData),
       insights: this.extractInsightsSummary(auditData),
-      quickWins: (auditData.analysis?.summary?.quickWins || []).map((qw: any) => ({
+      quickWins: ((auditData.analysis?.summary?.quickWins || []) as QuickWinFull[]).map((qw) => ({
         issue: qw.issue,
         affectedPages: qw.affectedPages,
-        severity: qw.severity,
+        severity: (qw.severity || 'medium') as SeverityLevel,
       })),
     };
 
@@ -198,7 +200,7 @@ class HistoryManager {
     return snapshot;
   }
 
-  extractIssuesSummary(auditData: Partial<AuditResults> & Record<string, any>): Record<string, IssueSummary> {
+  extractIssuesSummary(auditData: Partial<AuditResults>): Record<string, IssueSummary> {
     const details = auditData.analysis?.details || {};
     const summary: Record<string, IssueSummary> = {};
 
@@ -212,7 +214,7 @@ class HistoryManager {
     return summary;
   }
 
-  extractPerformanceSummary(auditData: Partial<AuditResults> & Record<string, any>): PerformanceSummary | null {
+  extractPerformanceSummary(auditData: Partial<AuditResults>): PerformanceSummary | null {
     const pages = auditData.pageData?.pages || {};
     const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter((p) => p.vitals || p.TTFB);
 
@@ -244,7 +246,7 @@ class HistoryManager {
     };
   }
 
-  extractInsightsSummary(auditData: Partial<AuditResults> & Record<string, any>): InsightsSummary | null {
+  extractInsightsSummary(auditData: Partial<AuditResults>): InsightsSummary | null {
     const pages = Object.values(auditData.pageData?.pages || {}) as PageInfo[];
     if (pages.length === 0) return null;
 
@@ -278,7 +280,7 @@ class HistoryManager {
     };
   }
 
-  extractTechnologiesSummary(auditData: Partial<AuditResults> & Record<string, any>): string[] {
+  extractTechnologiesSummary(auditData: Partial<AuditResults>): string[] {
     const pages = auditData.pageData?.pages || {};
     const allTechs = new Set<string>();
 

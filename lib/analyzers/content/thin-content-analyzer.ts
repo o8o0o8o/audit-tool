@@ -34,7 +34,8 @@ class ThinContentAnalyzer {
     };
 
     // Get content quality data if available
-    const cq = pageData.contentQuality || ({} as Record<string, any>);
+    const cq =
+      pageData.contentQuality || ({} as { wordCount?: number; paragraphCount?: number; textToHtmlRatio?: number });
 
     metrics.wordCount = cq.wordCount || 0;
     metrics.paragraphCount = cq.paragraphCount || 0;
@@ -42,8 +43,8 @@ class ThinContentAnalyzer {
 
     // Skip non-content pages
     if (this.isNonContentPage(url)) {
-      (metrics as Record<string, any>).isNonContentPage = true;
-      return { issues, warnings, metrics };
+      const extendedMetrics = { ...metrics, isNonContentPage: true };
+      return { issues, warnings, metrics: extendedMetrics };
     }
 
     // Check word count
@@ -120,7 +121,7 @@ class ThinContentAnalyzer {
   /**
    * Calculate content quality score (0-100)
    */
-  static calculateContentScore(metrics: Record<string, any>) {
+  static calculateContentScore(metrics: { wordCount: number; paragraphCount: number; textToHtmlRatio: number }) {
     let score = 0;
 
     // Word count scoring (0-50 points)

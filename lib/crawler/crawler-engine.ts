@@ -1466,7 +1466,7 @@ class CrawlerEngine {
     // Other metrics
     pageData.requests = requests;
     pageData.metrics = metrics;
-    pageData.blockers = blockers as Record<string, any>;
+    pageData.blockers = blockers as Record<string, unknown>;
     pageData.totalResponseSize = totalResponseSize;
     pageData.responseHeaders = (responseHeaders || {}) as Record<string, string>;
     pageData.response = { headers: pageData.responseHeaders };
@@ -1870,7 +1870,7 @@ class CrawlerEngine {
         audioCount: pageData.mediaData.audios?.length || 0,
         issues: pageData.mediaData.issues,
         warnings: pageData.mediaData.warnings,
-      } as any;
+      } as unknown as typeof pageData.mediaData;
     }
 
     // 22. Strip web component data
@@ -2226,7 +2226,7 @@ class CrawlerEngine {
 
         // Performance
         CachingAnalyzer.analyzeCaching(chromePage, analyzerRequests, url),
-        ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, analyzerRequests, url),
+        ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, requests, url),
         ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
         FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
         ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, this.#options.origin),
@@ -2447,20 +2447,20 @@ class CrawlerEngine {
       anchorResult,
       externalLinksResult,
       responseHeaderResult,
-    ] = syncResults as Array<AnalyzerResult & { freshnessData?: any; info?: any }>;
+    ] = syncResults as Array<AnalyzerResult & { freshnessData?: unknown; info?: unknown }>;
 
     // Apply data results
-    pageData.freshnessData = freshnessResult.freshnessData;
-    pageData.redirectAnalysis = redirectResult.info;
-    pageData.compressionData = compressionResult.info;
-    pageData.resourceHintsData = hintsResult.info;
-    pageData.mixedContentData = mixedResult.info;
-    pageData.protocolData = protocolResult.info;
-    pageData.pwaData = pwaResult.info;
-    pageData.aboveFoldData = aboveFoldResult.info;
-    pageData.anchorTextData = anchorResult.info;
-    pageData.externalLinksData = externalLinksResult.info;
-    pageData.responseHeaderAnalysis = responseHeaderResult.info;
+    pageData.freshnessData = freshnessResult.freshnessData as typeof pageData.freshnessData;
+    pageData.redirectAnalysis = redirectResult.info as typeof pageData.redirectAnalysis;
+    pageData.compressionData = compressionResult.info as typeof pageData.compressionData;
+    pageData.resourceHintsData = hintsResult.info as typeof pageData.resourceHintsData;
+    pageData.mixedContentData = mixedResult.info as typeof pageData.mixedContentData;
+    pageData.protocolData = protocolResult.info as typeof pageData.protocolData;
+    pageData.pwaData = pwaResult.info as typeof pageData.pwaData;
+    pageData.aboveFoldData = aboveFoldResult.info as typeof pageData.aboveFoldData;
+    pageData.anchorTextData = anchorResult.info as typeof pageData.anchorTextData;
+    pageData.externalLinksData = externalLinksResult.info as typeof pageData.externalLinksData;
+    pageData.responseHeaderAnalysis = responseHeaderResult.info as typeof pageData.responseHeaderAnalysis;
 
     // Report issues from Group 2
     syncResults.forEach((result) => this.#reportIssues(result as AnalyzerResult));

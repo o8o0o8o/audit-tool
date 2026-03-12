@@ -478,3 +478,4 @@ function getInsightLines(pagesArray: PageInfo[]) {
 }
 
 export { printAuditSummary, getJsonSummary };
+export type { AuditResultsExtended };

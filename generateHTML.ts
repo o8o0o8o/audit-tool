@@ -149,7 +149,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}SEO Audit Report</h1>
               <p class="subtitle">${escapeHtml(safeDomainName)}</p>
               <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
-              ${(timing as Record<string, any>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, any>).elapsedTimeFormatted)}</p>` : ''}
+              ${(timing as Record<string, unknown>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, unknown>).elapsedTimeFormatted as string)}</p>` : ''}
               <div class="stats">
                   <div class="stat">
                       <span class="stat-label">Pages Crawled:</span>

@@ -197,7 +197,7 @@ class Soft404Analyzer {
         // Get text from main content areas, excluding nav/footer
         const main = document.querySelector('main, article, .content, #content, .main');
         if (main) {
-          return (main as Record<string, any>).innerText.substring(0, 5000); // Limit for performance
+          return (main as HTMLElement).innerText.substring(0, 5000); // Limit for performance
         }
         return document.body?.innerText?.substring(0, 5000) || '';
       });

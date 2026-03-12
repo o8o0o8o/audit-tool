@@ -6,9 +6,47 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** Dynamic config object with known section types */
-
-type ConfigRecord = Record<string, any>;
+/** Typed config object - supports partial user configs and merged results */
+interface ConfigRecord {
+  thresholds?: Record<string, number>;
+  crawl?: {
+    concurrency?: number;
+    timeout?: number;
+    retryAttempts?: number;
+    userAgent?: string | null;
+    batchSize?: number;
+    maxDiscoveredUrls?: number;
+    [key: string]: unknown;
+  };
+  queryParams?: {
+    mode?: string;
+    whitelist?: string[];
+    blacklist?: string[];
+    [key: string]: unknown;
+  };
+  excludeUrls?: string[];
+  includeUrls?: string[];
+  analysis?: {
+    similarityThreshold?: number;
+    jsUnusedThreshold?: number;
+    cssUnusedThreshold?: number;
+    maxOutboundChecks?: number;
+    outboundTimeout?: number;
+    [key: string]: unknown;
+  };
+  report?: {
+    showQuickWins?: boolean;
+    maxQuickWins?: number;
+    showPerformanceCharts?: boolean;
+    [key: string]: unknown;
+  };
+  apiKeys?: {
+    crux?: string | null;
+    [key: string]: unknown;
+  };
+  network?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 const CONFIG_FILE_NAMES = ['.seoauditrc', '.seoauditrc.json', 'seoaudit.config.json'];
 
@@ -507,7 +545,7 @@ function validateMergedConfig(config: ConfigRecord) {
  * @param {Array<string>} options.replaceArrays - Array keys to replace instead of merge
  * @returns {Object} Merged object
  */
-function deepMerge(target: ConfigRecord, source: ConfigRecord, options: ConfigRecord = {}) {
+function deepMerge(target: ConfigRecord, source: ConfigRecord, options: { replaceArrays?: string[] } = {}) {
   const result: ConfigRecord = { ...target };
   const replaceArrays = options.replaceArrays || ['whitelist']; // These arrays replace, not merge
 
@@ -537,7 +575,11 @@ function deepMerge(target: ConfigRecord, source: ConfigRecord, options: ConfigRe
         result[key] = [...sourceVal];
       }
     } else if (sourceVal && typeof sourceVal === 'object') {
-      result[key] = deepMerge(targetVal || {}, sourceVal, options);
+      result[key] = deepMerge(
+        (targetVal && typeof targetVal === 'object' ? targetVal : {}) as ConfigRecord,
+        sourceVal as ConfigRecord,
+        options,
+      );
     } else {
       result[key] = sourceVal;
     }
@@ -551,11 +593,14 @@ function deepMerge(target: ConfigRecord, source: ConfigRecord, options: ConfigRe
  * @param {Object} config - Configuration object
  * @param {Object} constants - Constants module to update
  */
-function applyConfigToConstants(config: ConfigRecord, constants: ConfigRecord) {
+function applyConfigToConstants(config: ConfigRecord, constants: Record<string, unknown>) {
   if (config.thresholds) {
-    for (const [key, value] of Object.entries(config.thresholds)) {
-      if (constants.THRESHOLDS && key in constants.THRESHOLDS) {
-        constants.THRESHOLDS[key] = value;
+    const thresholds = constants['THRESHOLDS'];
+    if (thresholds && typeof thresholds === 'object') {
+      for (const [key, value] of Object.entries(config.thresholds)) {
+        if (key in thresholds) {
+          (thresholds as Record<string, unknown>)[key] = value;
+        }
       }
     }
   }

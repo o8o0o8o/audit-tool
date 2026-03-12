@@ -6,6 +6,17 @@
 import { SEVERITY } from '../../constants';
 import type { ChromePage, Issue, PageInfo } from '../../types';
 
+interface ConsoleEntry {
+  type: string;
+  text: string;
+  url?: string;
+  line?: number;
+  column?: number;
+  timestamp: number;
+  name?: string;
+  stack?: string;
+}
+
 class ConsoleErrorAnalyzer {
   // Patterns to categorize console errors
   static #criticalPatterns = [
@@ -38,9 +49,9 @@ class ConsoleErrorAnalyzer {
    * @returns {Object} Console tracking object with methods
    */
   static createConsoleTracker(chromePage: ChromePage) {
-    const errors: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
-    const pageerrors: Record<string, any>[] = [];
+    const errors: ConsoleEntry[] = [];
+    const warnings: ConsoleEntry[] = [];
+    const pageerrors: ConsoleEntry[] = [];
 
     // Console message handler
     const consoleHandler = (msg: import('playwright').ConsoleMessage) => {
@@ -119,18 +130,21 @@ class ConsoleErrorAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  static analyze(consoleData: Record<string, any>, url: string) {
+  static analyze(consoleData: unknown, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    const { errors, warnings: consoleWarnings, pageerrors } = consoleData;
+    const data = consoleData as { errors?: ConsoleEntry[]; warnings?: ConsoleEntry[]; pageerrors?: ConsoleEntry[] };
+    const errors = data.errors || [];
+    const consoleWarnings = data.warnings || [];
+    const pageerrors = data.pageerrors || [];
 
     // Combine errors and page errors
     const allErrors = [...errors, ...pageerrors];
 
     // Categorize errors
-    const criticalErrors: Record<string, any>[] = [];
-    const otherErrors: Record<string, any>[] = [];
+    const criticalErrors: ConsoleEntry[] = [];
+    const otherErrors: ConsoleEntry[] = [];
 
     for (const error of allErrors) {
       let isCritical = false;
@@ -193,7 +207,7 @@ class ConsoleErrorAnalyzer {
       errors: allErrors.slice(0, 10).map((e) => ({
         text: e.text,
         type: e.type,
-        url: e.url,
+        url: e.url || '',
         isCritical: criticalErrors.includes(e),
       })),
       hasErrors: allErrors.length > 0,

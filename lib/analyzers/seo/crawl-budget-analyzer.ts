@@ -16,8 +16,8 @@ class CrawlBudgetAnalyzer {
    */
   static analyze(
     pages: Record<string, PageInfo>,
-    _sitemaps: Record<string, any> = {},
-    _robots: Record<string, any> = {},
+    _sitemaps: Record<string, unknown> = {},
+    _robots: Record<string, unknown> = {},
   ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
@@ -51,12 +51,12 @@ class CrawlBudgetAnalyzer {
       recommendations: [] as string[],
     };
 
-    const pagesList = Object.entries(pages) as [string, any][];
+    const pagesList = Object.entries(pages);
     stats.totalPages = pagesList.length;
 
     // Track issues
     const redirectedUrls: string[] = [];
-    const errorUrls: Record<string, any>[] = [];
+    const errorUrls: { url: string; status: number | string }[] = [];
     const duplicateTitles = new Map();
     const canonicalTargets = new Map();
     const blockedUrls: string[] = [];
@@ -71,18 +71,18 @@ class CrawlBudgetAnalyzer {
       }
 
       // Check redirects
-      if (pageData.redirectChain?.length > 0 || pageData.statusCode === 301 || pageData.statusCode === 302) {
+      if ((pageData.redirectChain?.length ?? 0) > 0 || pageData.statusCode === 301 || pageData.statusCode === 302) {
         stats.redirects++;
         redirectedUrls.push(url);
       }
 
       // Check errors
-      const statusCode = pageData.statusCode || pageData.status;
-      if (statusCode >= 400 && statusCode < 500) {
+      const statusCode = pageData.statusCode ?? pageData.status;
+      if (statusCode !== undefined && statusCode >= 400 && statusCode < 500) {
         stats.errors['4xx']++;
         stats.errors.total++;
         errorUrls.push({ url, status: statusCode });
-      } else if (statusCode >= 500) {
+      } else if (statusCode !== undefined && statusCode >= 500) {
         stats.errors['5xx']++;
         stats.errors.total++;
         errorUrls.push({ url, status: statusCode });

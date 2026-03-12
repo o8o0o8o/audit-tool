@@ -229,7 +229,7 @@ class AnalyticsTrackingAnalyzer {
 
     // Validation: Check script placement in <head>
     const headScripts = parsedPage.querySelectorAll('head script');
-    const hasAnalyticsInHead = Array.from(headScripts).some((script: any) => {
+    const hasAnalyticsInHead = Array.from(headScripts).some((script) => {
       const src = script.getAttribute('src') || '';
       const content = script.textContent || '';
       return (

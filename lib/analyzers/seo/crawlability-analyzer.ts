@@ -22,7 +22,7 @@ class CrawlabilityAnalyzer {
 
     const capturedRedirectChain = pageData.redirectChain || [];
     if (capturedRedirectChain.length > 0) {
-      crawlabilityData.redirectChain = capturedRedirectChain.map((r: any) => r.url);
+      crawlabilityData.redirectChain = capturedRedirectChain.map((r: { url: string }) => r.url);
 
       if (capturedRedirectChain.length > 3) {
         crawlabilityData.warnings.push(`Long redirect chain (${capturedRedirectChain.length} redirects)`);

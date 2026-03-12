@@ -25,18 +25,25 @@ class OutboundLinkChecker {
    * @param {object} config - Analysis config (maxOutboundChecks, outboundTimeout)
    * @returns {object} Analysis results
    */
-  static async analyze(pageData: PageInfo, url: string, origin: string, config: Record<string, any> = {}) {
+  static async analyze(
+    pageData: PageInfo,
+    url: string,
+    origin: string,
+    config: { maxOutboundChecks?: number; outboundTimeout?: number } = {},
+  ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
       totalChecked: 0,
-      broken: [] as Record<string, any>[],
-      redirected: [] as Record<string, any>[],
+      broken: [] as { url: string; status: number }[],
+      redirected: [] as { url: string; redirectTo: string | null | undefined; status: number | undefined }[],
       timeouts: [] as string[],
       healthy: 0,
     };
 
-    const links = Array.isArray(pageData.links) ? pageData.links : ([] as any[]);
+    const links: { href?: string; url?: string }[] = Array.isArray(pageData.links)
+      ? (pageData.links as { href?: string; url?: string }[])
+      : [];
     let originHost;
     try {
       originHost = new URL(origin).hostname;

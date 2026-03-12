@@ -26,12 +26,12 @@ class PaginationAnalyzer {
       relNext: null as string | null,
       hasCanonical: false,
       canonicalPointsToSelf: false,
-      paginationLinks: [] as Record<string, any>[],
+      paginationLinks: [] as { page: number; href: string }[],
       currentPage: null as number | null,
       totalPages: null as number | null,
       infiniteScrollDetected: false,
       loadMoreDetected: false,
-      issues: [] as Record<string, any>[],
+      issues: [] as Issue[],
     };
 
     // 1. Check for rel="prev" and rel="next" (deprecated but still used)
@@ -201,7 +201,7 @@ class PaginationAnalyzer {
         const result = {
           detected: false,
           type: null as string | null,
-          links: [] as Record<string, any>[],
+          links: [] as { page: number; href: string }[],
           currentPage: null as number | null,
           totalPages: null as number | null,
         };
@@ -242,7 +242,7 @@ class PaginationAnalyzer {
 
           if (!isNaN(pageNum)) {
             pageNumbers.push(pageNum);
-            (result.links as Record<string, any>[]).push({ page: pageNum, href });
+            result.links.push({ page: pageNum, href });
           }
         }
 
@@ -266,7 +266,13 @@ class PaginationAnalyzer {
         return result;
       });
     } catch {
-      return { detected: false, type: null, links: [] as Record<string, any>[], currentPage: null, totalPages: null };
+      return {
+        detected: false,
+        type: null,
+        links: [] as { page: number; href: string }[],
+        currentPage: null,
+        totalPages: null,
+      };
     }
   }
 

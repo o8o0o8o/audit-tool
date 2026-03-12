@@ -14,7 +14,7 @@ class LinkDepthAnalyzer {
    * @param {string} origin - Site origin URL
    * @returns {Object} Analysis results with issues and metrics
    */
-  static analyze(pages: Record<string, PageInfo>, incomingLinks: Record<string, any>, origin: string) {
+  static analyze(pages: Record<string, PageInfo>, incomingLinks: Record<string, string[] | unknown>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -48,7 +48,7 @@ class LinkDepthAnalyzer {
       const hasInternalLinks =
         (page.internalLinksCount ?? 0) > 0 ||
         (Array.isArray(page.links) &&
-          page.links.some((link: any) => {
+          page.links.some((link: { href: string }) => {
             try {
               const linkUrl = new URL(link.href, origin);
               return linkUrl.origin === new URL(origin).origin;

@@ -25,6 +25,12 @@ interface CertificateDetails {
   serialNumber?: string;
 }
 
+interface SSLFinding {
+  message: string;
+  detail: string;
+  severity: string;
+}
+
 // Days before expiry to warn
 const EXPIRY_WARNING_DAYS = 30;
 const EXPIRY_CRITICAL_DAYS = 7;
@@ -39,8 +45,8 @@ class SSLCertificateAnalyzer {
    * @returns {Promise<object>} Analysis results
    */
   static async analyze(url: string) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+    const issues: SSLFinding[] = [];
+    const warnings: SSLFinding[] = [];
     const info = {
       hasSSL: false,
       certificate: null,

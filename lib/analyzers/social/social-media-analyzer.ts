@@ -5,8 +5,8 @@ class SocialMediaAnalyzer {
     const socialData = {
       hasOpenGraph: false,
       hasTwitterCard: false,
-      openGraph: {} as Record<string, any>,
-      twitterCard: {} as Record<string, any>,
+      openGraph: {} as Record<string, string | null>,
+      twitterCard: {} as Record<string, string | null>,
       issues: [] as string[],
       warnings: [] as string[],
     };

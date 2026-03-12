@@ -29,6 +29,7 @@ class EEATAnalyzer {
       trustSignals: [] as string[],
       expertiseSignals: [] as string[],
       score: 0,
+      isYMYL: undefined as boolean | undefined,
     };
 
     if (!parsedPage) {
@@ -69,7 +70,7 @@ class EEATAnalyzer {
     // 6. YMYL Detection (Your Money Your Life)
     const isYMYL = this.detectYMYL(url, parsedPage);
     if (isYMYL) {
-      (signals as Record<string, any>).isYMYL = true;
+      signals.isYMYL = true;
 
       // YMYL pages need stronger E-E-A-T signals
       if (!signals.author) {
@@ -396,7 +397,20 @@ class EEATAnalyzer {
   /**
    * Calculate E-E-A-T score (0-100)
    */
-  static calculateScore(signals: Record<string, any>) {
+  static calculateScore(signals: {
+    author: string | null;
+    authorCredentials: string[];
+    publishDate: string | null;
+    updateDate: string | null;
+    hasAboutPage: boolean;
+    hasContactInfo: boolean;
+    hasPrivacyPolicy: boolean;
+    hasTermsOfService: boolean;
+    trustSignals: string[];
+    expertiseSignals: string[];
+    score: number;
+    isYMYL?: boolean;
+  }) {
     let score = 30; // Base score
 
     // Author (+20)

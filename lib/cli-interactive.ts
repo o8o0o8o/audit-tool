@@ -92,11 +92,36 @@ async function interactiveMode() {
 
   console.log('\nSEO Audit Tool - Interactive Setup\n');
 
-  const args: Record<string, any> = {
-    origin: null as string | null,
-    sitemap: null as string | null,
-    compare: null as string | null,
-    compareSitemap: null as string | null,
+  const args: {
+    origin: string | null;
+    sitemap: string | null;
+    compare: string | null;
+    compareSitemap: string | null;
+    proceed: boolean;
+    perf: boolean;
+    saveHtml: boolean;
+    screenshots: boolean;
+    concurrency: number;
+    concurrencyExplicit: boolean;
+    heapSize: number | null;
+    config: string | null;
+    initConfig: boolean;
+    repo: string | null;
+    exclude: string[];
+    limit: number | null;
+    onlyErrors: boolean;
+    dryRun: boolean;
+    preset: string | null;
+    help: boolean;
+    open: boolean;
+    verbose: boolean;
+    quiet: boolean;
+    warnings: string[];
+  } = {
+    origin: null,
+    sitemap: null,
+    compare: null,
+    compareSitemap: null,
     proceed: false,
     perf: false,
     saveHtml: false,
@@ -107,7 +132,7 @@ async function interactiveMode() {
     config: null,
     initConfig: false,
     repo: null,
-    exclude: [] as string[],
+    exclude: [],
     limit: null,
     onlyErrors: false,
     dryRun: false,
@@ -116,7 +141,7 @@ async function interactiveMode() {
     open: false,
     verbose: false,
     quiet: false,
-    warnings: [] as string[],
+    warnings: [],
   };
 
   // URL or sitemap

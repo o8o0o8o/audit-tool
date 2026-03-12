@@ -14,7 +14,7 @@ class ContentSimilarityAnalyzer {
    * @param {object} allPages - All page data { url: pageData }
    * @returns {object} Analysis results
    */
-  static analyze(allPages: Record<string, PageInfo>, config: Record<string, any> = {}) {
+  static analyze(allPages: Record<string, PageInfo>, config: Record<string, unknown> = {}) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.entries(allPages);
@@ -46,7 +46,7 @@ class ContentSimilarityAnalyzer {
     // Compare pairs using Jaccard similarity on fingerprint sets
     const similarGroups = [];
     const grouped = new Set();
-    const SIMILARITY_THRESHOLD = config.similarityThreshold || 0.7;
+    const SIMILARITY_THRESHOLD = (config.similarityThreshold as number) || 0.7;
 
     for (let i = 0; i < fingerprints.length; i++) {
       if (grouped.has(fingerprints[i].url)) continue;
@@ -124,12 +124,12 @@ class ContentSimilarityAnalyzer {
    * @returns {Set<string>} Fingerprint set
    * @private
    */
-  static #buildFingerprint(keywords: Record<string, any>[], wordCount: number) {
-    const fingerprint = new Set();
+  static #buildFingerprint(keywords: { word: string; count: number; density: number }[], wordCount: number) {
+    const fingerprint = new Set<string>();
 
     for (const kw of keywords) {
       // Create weighted tokens based on keyword prominence
-      const density = parseFloat(kw.density) || 0;
+      const density = typeof kw.density === 'number' ? kw.density : parseFloat(String(kw.density)) || 0;
       fingerprint.add(kw.word);
 
       // High-density keywords get additional weight tokens

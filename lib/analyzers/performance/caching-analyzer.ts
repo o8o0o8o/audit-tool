@@ -1,7 +1,11 @@
 import type { ChromePage, NetworkRequest } from '../../types';
 
 class CachingAnalyzer {
-  static async analyzeCaching(chromePage: ChromePage, requests: NetworkRequest[], url: string) {
+  static async analyzeCaching(
+    chromePage: ChromePage,
+    requests: NetworkRequest[] | Record<string, NetworkRequest>,
+    url: string,
+  ) {
     const cachingAnalysis = {
       hasCDN: false,
       cdnProvider: null as string | null,
@@ -26,8 +30,8 @@ class CachingAnalyzer {
     };
 
     // Check response headers for CDN indicators
-    for (const [reqUrl, reqData] of Object.entries(requests) as [string, any][]) {
-      const headers = reqData.headers || {};
+    for (const [reqUrl, reqData] of Object.entries(requests)) {
+      const headers = (reqData as NetworkRequest).headers || {};
 
       // Check CDN headers
       for (const header of cdnIndicators.headers) {
@@ -55,14 +59,14 @@ class CachingAnalyzer {
     }
 
     // 2. Check HTML page caching
-    const pageResponse = (requests as unknown as Record<string, Record<string, any>>)[url];
+    const pageResponse = (requests as Record<string, NetworkRequest>)[url];
     if (pageResponse?.headers) {
       const cacheControl = pageResponse.headers['cache-control'] || '';
       const expires = pageResponse.headers['expires'];
       const etag = pageResponse.headers['etag'];
 
       cachingAnalysis.htmlCacheable =
-        (cacheControl.includes('max-age') || cacheControl.includes('public') || expires || etag) &&
+        !!(cacheControl.includes('max-age') || cacheControl.includes('public') || expires || etag) &&
         !cacheControl.includes('no-store') &&
         !cacheControl.includes('no-cache');
     }
@@ -82,12 +86,12 @@ class CachingAnalyzer {
       '.ico',
     ];
 
-    for (const [reqUrl, reqData] of Object.entries(requests) as [string, any][]) {
+    for (const [reqUrl, reqData] of Object.entries(requests)) {
       const urlPath = reqUrl.toLowerCase().split('?')[0]; // strip query params
       const isStatic = staticExtensions.some((ext: string) => urlPath.endsWith(ext));
 
       if (isStatic) {
-        const headers = reqData.headers || {};
+        const headers = (reqData as NetworkRequest).headers || {};
         const cacheControl = headers['cache-control'] || '';
         const expires = headers['expires'];
         const etag = headers['etag'];

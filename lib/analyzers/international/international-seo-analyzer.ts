@@ -7,7 +7,23 @@ class InternationalSEOAnalyzer {
     url: string,
     responseHeaders: Record<string, string> = {},
   ) {
-    const intlData: Record<string, any> = {
+    const intlData: {
+      language: string | null;
+      region: string | null;
+      hasLangAttribute: boolean;
+      langAttribute: string | null;
+      contentLanguageHeader: string | null;
+      hasHreflang: boolean;
+      hasXDefault: boolean;
+      hasSelfReferential: boolean;
+      urlStructure: string | null;
+      charset: string | null;
+      issues: string[];
+      warnings: string[];
+      currencyDetected?: string;
+      hasDateFormat?: boolean;
+      detectedScript?: string;
+    } = {
       language: null,
       region: null,
       hasLangAttribute: false,
@@ -47,7 +63,7 @@ class InternationalSEOAnalyzer {
     const headers = responseHeaders || {};
     const contentLanguage = headers['content-language'] || headers['Content-Language'];
     if (contentLanguage) {
-      intlData.contentLanguageHeader = contentLanguage;
+      intlData.contentLanguageHeader = contentLanguage ?? null;
 
       // Check consistency with HTML lang
       if (htmlLang && contentLanguage.toLowerCase() !== htmlLang.toLowerCase()) {
@@ -62,7 +78,7 @@ class InternationalSEOAnalyzer {
     const metaContentType = parsedPage.querySelector('meta[http-equiv="Content-Type"]');
 
     if (metaCharset) {
-      intlData.charset = metaCharset.getAttribute('charset');
+      intlData.charset = metaCharset.getAttribute('charset') ?? null;
     } else if (metaContentType) {
       const content = metaContentType.getAttribute('content') || '';
       const match = content.match(/charset=([^;]+)/i);

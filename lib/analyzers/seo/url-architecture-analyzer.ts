@@ -15,7 +15,8 @@ class UrlArchitectureAnalyzer {
    * @returns {Object} Analysis results with issues array
    */
   static analyze(url: string, pageData: PageInfo, origin: string) {
-    const issues: Record<string, any>[] = [];
+    const issues: { type: string; message: string; detail?: string; severity: string; value?: number | string[] }[] =
+      [];
 
     try {
       const parsedUrl = new URL(url);

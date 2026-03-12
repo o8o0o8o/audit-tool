@@ -38,10 +38,17 @@ class MixedContentAnalyzer {
   static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const info = {
+    const info: {
+      isHttps: boolean;
+      activeMixedContent: { url: string; type: string; blocked: boolean }[];
+      passiveMixedContent: { url: string; type: string; blocked: boolean }[];
+      totalMixedResources: number;
+      blockedResources: number;
+      htmlMixedContent?: { type: string; url: string }[];
+    } = {
       isHttps: false,
-      activeMixedContent: [] as Record<string, any>[],
-      passiveMixedContent: [] as Record<string, any>[],
+      activeMixedContent: [],
+      passiveMixedContent: [],
       totalMixedResources: 0,
       blockedResources: 0,
     };
@@ -70,7 +77,7 @@ class MixedContentAnalyzer {
     // Check for mixed content in HTML (links, forms, etc.)
     const htmlMixed = this.detectHtmlMixedContent(pageData);
     if (htmlMixed.length > 0) {
-      (info as Record<string, any>).htmlMixedContent = htmlMixed;
+      info.htmlMixedContent = htmlMixed;
     }
 
     // Report active mixed content (critical - blocked by browsers)
@@ -128,9 +135,9 @@ class MixedContentAnalyzer {
    * @param {Array} resources - Resource list
    * @returns {object} Active and passive mixed content
    */
-  static detectMixedContent(resources: Record<string, any>[]) {
-    const active = [];
-    const passive = [];
+  static detectMixedContent(resources: { url?: string; type?: string; resourceType?: string }[]) {
+    const active: { url: string; type: string; blocked: boolean }[] = [];
+    const passive: { url: string; type: string; blocked: boolean }[] = [];
 
     for (const resource of resources) {
       const resourceUrl = resource.url || '';
@@ -141,7 +148,9 @@ class MixedContentAnalyzer {
       }
 
       const type = (resource.type || resource.resourceType || 'other').toLowerCase();
-      const config = (RESOURCE_SEVERITY as Record<string, any>)[type] || RESOURCE_SEVERITY.other;
+      const config =
+        (RESOURCE_SEVERITY as Record<string, { severity: string; type: string; blocked: boolean }>)[type] ||
+        RESOURCE_SEVERITY.other;
 
       const mixedResource = {
         url: resourceUrl,
@@ -176,7 +185,9 @@ class MixedContentAnalyzer {
     }
 
     // Check links
-    const links = Array.isArray(pageData.links) ? pageData.links : ([] as any[]);
+    const links: { href?: string; url?: string }[] = Array.isArray(pageData.links)
+      ? (pageData.links as { href?: string; url?: string }[])
+      : [];
     for (const link of links) {
       const href = link.href || link;
       if (typeof href === 'string' && href.startsWith('http://')) {

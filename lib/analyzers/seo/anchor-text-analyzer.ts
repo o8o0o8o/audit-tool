@@ -6,6 +6,17 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface PageLink {
+  href?: string;
+  url?: string;
+  text?: string;
+  anchor?: string;
+  hasImage?: boolean;
+  containsImage?: boolean;
+  imgAlt?: string;
+  [key: string]: unknown;
+}
+
 // Stop words to ignore in anchor text analysis
 const STOP_WORDS = new Set([
   'a',
@@ -133,26 +144,26 @@ class AnchorTextAnalyzer {
   static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const info: Record<string, any> = {
+    const info = {
       totalLinks: 0,
       internalLinks: 0,
       externalLinks: 0,
-      genericAnchors: [] as Record<string, any>[],
+      genericAnchors: [] as { href: string; anchor: string }[],
       emptyAnchors: [] as string[],
-      imageOnlyLinks: [] as Record<string, any>[],
+      imageOnlyLinks: [] as { href: string; hasAlt: boolean }[],
       duplicateAnchors: {} as Record<string, string[]>,
       anchorDistribution: {} as Record<string, number>,
       avgAnchorLength: 0,
     };
 
-    const links = (Array.isArray(pageData.links) ? pageData.links : []) as any[];
+    const links: PageLink[] = Array.isArray(pageData.links) ? (pageData.links as PageLink[]) : [];
     const pageOrigin = this.getOrigin(url);
 
     let totalAnchorLength = 0;
     let anchorCount = 0;
 
     for (const link of links) {
-      const href = link.href || link.url || link;
+      const href = String(link.href || link.url || '');
       const anchor = (link.text || link.anchor || '').trim();
       const hasImage = link.hasImage || link.containsImage || false;
 
@@ -216,7 +227,7 @@ class AnchorTextAnalyzer {
     }
 
     // Image-only links without alt
-    const imageLinksNoAlt = info.imageOnlyLinks.filter((l: any) => !l.hasAlt);
+    const imageLinksNoAlt = info.imageOnlyLinks.filter((l) => !l.hasAlt);
     if (imageLinksNoAlt.length > 0) {
       issues.push({
         message: 'Image links without alt text',
@@ -253,13 +264,13 @@ class AnchorTextAnalyzer {
 
     // Same anchor pointing to different pages
     const confusingAnchors = Object.entries(info.duplicateAnchors).filter(
-      ([anchor, urls]: [string, any]) => urls.length > 1 && !GENERIC_ANCHORS.includes(anchor),
+      ([anchor, urls]) => urls.length > 1 && !GENERIC_ANCHORS.includes(anchor),
     );
 
     if (confusingAnchors.length > 0) {
       const examples = confusingAnchors
         .slice(0, 2)
-        .map(([a, urls]: [string, any]) => `"${a}" → ${urls.length} different URLs`)
+        .map(([a, urls]) => `"${a}" → ${urls.length} different URLs`)
         .join(', ');
       warnings.push({
         message: 'Same anchor text links to different pages',
@@ -349,13 +360,13 @@ class AnchorTextAnalyzer {
     const targetAnchorMap = new Map(); // target URL -> anchor texts used
 
     for (const [_url, pageData] of Object.entries(pages)) {
-      const links = (Array.isArray(pageData.links) ? pageData.links : []) as any[];
+      const links: PageLink[] = Array.isArray(pageData.links) ? (pageData.links as PageLink[]) : [];
 
       for (const link of links) {
-        const href = link.href || link.url || link;
+        const href = String(link.href || link.url || '');
         const anchor = (link.text || link.anchor || '').trim().toLowerCase();
 
-        if (!this.isInternalLink(href, origin)) continue;
+        if (!href || !this.isInternalLink(href, origin)) continue;
 
         stats.totalInternalLinks++;
 

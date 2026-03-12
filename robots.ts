@@ -10,7 +10,7 @@ import { generateHTML } from './generateHTML';
 import { parseArgs, calculateSafeConcurrency } from './lib/args-parser';
 import { loadConfig, generateSampleConfig, applyConfigToConstants, getConfigSummary } from './lib/config-loader';
 import * as constants from './lib/constants';
-import { printAuditSummary, getJsonSummary } from './lib/utils/cli-summary';
+import { printAuditSummary, getJsonSummary, type AuditResultsExtended } from './lib/utils/cli-summary';
 import { validateArguments, validateURL, validateRepoPath } from './validators';
 import { generateWorkflow } from './lib/utils/github-actions-generator';
 import { ComparisonAudit } from './lib/comparison/comparison-audit';
@@ -125,7 +125,7 @@ async function audit() {
       try {
         const config = loadConfig(args.config);
         console.log('Config is valid.');
-        console.log(`  Thresholds: ${Object.keys(config.thresholds).length} defined`);
+        console.log(`  Thresholds: ${Object.keys(config.thresholds ?? {}).length} defined`);
         console.log(`  Crawl concurrency: ${config.crawl?.concurrency || 5}`);
         console.log(`  Query param mode: ${config.queryParams?.mode || 'strip_tracking'}`);
         process.exit(0);
@@ -428,10 +428,10 @@ async function audit() {
 
     if (args.json) {
       // JSON mode: output machine-readable summary to stdout
-      const jsonSummary = getJsonSummary(seo.data as any, seo.domainName!, clickableReportPath);
+      const jsonSummary = getJsonSummary(seo.data as AuditResultsExtended, seo.domainName!, clickableReportPath);
       console.log(JSON.stringify(jsonSummary, null, 2));
     } else {
-      printAuditSummary(seo.data as any, seo.domainName!, clickableReportPath);
+      printAuditSummary(seo.data as AuditResultsExtended, seo.domainName!, clickableReportPath);
     }
 
     // CI mode: exit with code 1 if score is below threshold
@@ -470,7 +470,7 @@ async function audit() {
     // Send webhook notification if configured
     if (args.webhook) {
       try {
-        const jsonSummary = getJsonSummary(seo.data as any, seo.domainName!, clickableReportPath);
+        const jsonSummary = getJsonSummary(seo.data as AuditResultsExtended, seo.domainName!, clickableReportPath);
         const payload = JSON.stringify(jsonSummary);
         const webhookUrl = new URL(args.webhook);
         const transport = webhookUrl.protocol === 'https:' ? https : http;

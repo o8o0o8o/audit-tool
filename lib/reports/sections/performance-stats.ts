@@ -34,7 +34,6 @@ function getPerformanceStats(data: ReportSectionData) {
 
   const avg = (arr: number[]): string | number => arr.length > 0 ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(0) : 0;
   const p50 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.5)] : 0;
-  const median = p50;
   const p75 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0;
   const p95 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.95)] : 0;
   const p99 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.99)] : 0;

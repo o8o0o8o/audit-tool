@@ -204,8 +204,8 @@ interface CrawlPageResult {
 
 type PerformanceEntryList = unknown[];
 
-import { KNOWN_ERRORS, SEVERITY, THRESHOLDS, META_TAGS, META_TAGS_CONFIG, getMetaTagSeverity, VIEWPORT, normalizeTextForComparison, CRAWL_SETTINGS } from '../constants';
-import { normalizeUrl, stripHashFragment, createSafeFilename, analyzeUrlStructure } from '../utils';
+import { SEVERITY, THRESHOLDS, META_TAGS, META_TAGS_CONFIG, VIEWPORT, normalizeTextForComparison, CRAWL_SETTINGS } from '../constants';
+import { normalizeUrl, createSafeFilename, analyzeUrlStructure } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
 import { ProgressReporter } from '../utils/progress-reporter';
@@ -423,7 +423,7 @@ class CrawlerEngine {
    * @private
    * @param {string} errorType - Type of error
    */
-  #recordFailure(errorType: string) {
+  #recordFailure(_errorType: string) {
     this.#failureTracker.consecutiveFailures++;
     this.#failureTracker.lastFailureTime = Date.now();
 
@@ -520,7 +520,7 @@ class CrawlerEngine {
         const body = await response.body();
         size = body.length;
         totalResponseSize += size;
-      } catch (e: unknown) {
+      } catch {
         // Body read failed - ignore
       }
 
@@ -1052,7 +1052,6 @@ class CrawlerEngine {
     } = params;
 
     const chromePage = await context.newPage();
-    const pageData = null;
     let isMultiLang = false;
     let failed: boolean;
 
@@ -1162,7 +1161,7 @@ class CrawlerEngine {
    * Get a user-friendly error explanation
    * @private
    */
-  #getFriendlyErrorMessage(errorType: string, url: string): string {
+  #getFriendlyErrorMessage(errorType: string, _url: string): string {
     const messages = {
       timeout: 'Page took too long to load (>30s). The server may be slow or blocking automated requests.',
       dns_error: 'Could not resolve domain. Check the URL spelling and DNS configuration.',
@@ -1853,7 +1852,7 @@ class CrawlerEngine {
    */
   async #collectLinks(params: CollectLinksParams) {
     const {
-      parsedPage, url, results, incomingLinksTracking,
+      parsedPage, url, results: _results, incomingLinksTracking,
       collectedURLs, uniquePages, pagesToCrawl, addMissing, discoveredLinksSource, sitemapUrls
     } = params;
 
@@ -1880,7 +1879,7 @@ class CrawlerEngine {
           try {
             const baseUrl = new URL(url);
             fullHref = `${baseUrl.protocol}//${baseUrl.host}${href}`;
-          } catch (e: unknown) {
+          } catch {
             continue;
           }
         }
@@ -2204,8 +2203,8 @@ class CrawlerEngine {
     const syncResults = this.#extractSettledResults(syncResultsSettled, group2Fallbacks, url);
 
     const [
-      urlArchResult, freshnessResult, eeatResult, schemaResult, technicalResult,
-      thinContentResult, redirectResult, compressionResult, hintsResult,
+      _urlArchResult, freshnessResult, _eeatResult, _schemaResult, _technicalResult,
+      _thinContentResult, redirectResult, compressionResult, hintsResult,
       mixedResult, protocolResult, pwaResult, aboveFoldResult,
       anchorResult, externalLinksResult, responseHeaderResult,
     ] = syncResults as Array<AnalyzerResult & { freshnessData?: any; info?: any }>;

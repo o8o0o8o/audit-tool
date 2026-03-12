@@ -143,8 +143,6 @@ class AdvancedSchemaValidator {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name'];
-    const recommended = ['image', 'description', 'brand', 'offers', 'aggregateRating', 'review'];
-
     for (const field of required) {
       if (!schema[field]) {
         issues.push({
@@ -297,7 +295,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate HowTo schema
    */
-  static validateHowTo(schema: Record<string, any>, url: string) {
+  static validateHowTo(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -363,7 +361,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate BreadcrumbList schema
    */
-  static validateBreadcrumb(schema: Record<string, any>, url: string) {
+  static validateBreadcrumb(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -420,7 +418,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate LocalBusiness schema
    */
-  static validateLocalBusiness(schema: Record<string, any>, url: string) {
+  static validateLocalBusiness(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'address'];
@@ -475,7 +473,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Organization schema
    */
-  static validateOrganization(schema: Record<string, any>, url: string) {
+  static validateOrganization(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -517,7 +515,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Person schema
    */
-  static validatePerson(schema: Record<string, any>, url: string) {
+  static validatePerson(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -546,7 +544,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Review schema
    */
-  static validateReview(schema: Record<string, any>, url: string) {
+  static validateReview(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -580,7 +578,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Event schema
    */
-  static validateEvent(schema: Record<string, any>, url: string) {
+  static validateEvent(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'startDate', 'location'];
@@ -627,7 +625,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Recipe schema
    */
-  static validateRecipe(schema: Record<string, any>, url: string) {
+  static validateRecipe(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'image'];
@@ -659,7 +657,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate VideoObject schema
    */
-  static validateVideo(schema: Record<string, any>, url: string) {
+  static validateVideo(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'description', 'thumbnailUrl', 'uploadDate'];
@@ -696,7 +694,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate WebPage schema
    */
-  static validateWebPage(schema: Record<string, any>, url: string) {
+  static validateWebPage(schema: Record<string, any>, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

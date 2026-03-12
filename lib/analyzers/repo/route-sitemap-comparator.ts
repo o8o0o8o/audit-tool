@@ -14,7 +14,7 @@ class RouteSitemapComparator {
    * @param {string} origin - Site origin (e.g., https://example.com)
    * @returns {{ issues: Array, warnings: Array, stats: object, details: object }}
    */
-  static compare(routes: Record<string, any>[], sitemapUrls: Record<string, any>, origin: string) {
+  static compare(routes: Record<string, any>[], sitemapUrls: Record<string, any>, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

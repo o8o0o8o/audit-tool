@@ -234,7 +234,6 @@ class SourceMapper {
 
   static #mapMissingStructuredData(repoPath: string, framework: string, srcDirs: string[]) {
     const locations = [];
-    const componentPattern = framework === 'Nuxt' ? /\.(vue|ts|js)$/ : /\.(tsx|jsx|js|ts|astro)$/;
 
     // Search for existing structured data to show where it's implemented (or missing)
     const layoutPattern = framework === 'Next.js' ? /^layout\.(tsx|jsx|js|ts)$/ :

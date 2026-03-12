@@ -15,7 +15,6 @@ function calculateSafeConcurrency() {
   const MEMORY_PER_BROWSER_MB = 150; // Conservative estimate including overhead
   const MIN_FREE_MEMORY_MB = 512; // Keep at least 512MB free for system
 
-  const totalMemoryMB = Math.floor(os.totalmem() / (1024 * 1024));
   const freeMemoryMB = Math.floor(os.freemem() / (1024 * 1024));
   const availableForBrowsers = Math.max(0, freeMemoryMB - MIN_FREE_MEMORY_MB);
 

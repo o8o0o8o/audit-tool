@@ -148,18 +148,12 @@ class CTADetectorAnalyzer {
     const pages = Object.values(allPages);
 
     let pagesWithoutCTAs = 0;
-    let pagesWithForms = 0;
-    let pagesWithPhoneLinks = 0;
-    let totalCTAs = 0;
 
     for (const page of pages) {
       const ctaData = page.ctaData;
       if (!ctaData?.summary) continue;
 
-      totalCTAs += ctaData.summary.total;
       if (ctaData.summary.total === 0) pagesWithoutCTAs++;
-      if (ctaData.summary.forms > 0) pagesWithForms++;
-      if (ctaData.summary.phoneLinks > 0) pagesWithPhoneLinks++;
     }
 
     if (pagesWithoutCTAs > pages.length * 0.5 && pages.length > 5) {

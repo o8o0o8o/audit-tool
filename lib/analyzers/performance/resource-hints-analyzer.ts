@@ -35,7 +35,6 @@ class ResourceHintsAnalyzer {
     info.modulePreload = hints.modulePreload || [];
 
     // Analyze LCP element for preload opportunities
-    const lcpElement = pageData.lcpElement || pageData.vitals?.lcpElement;
     const lcpUrl = pageData.lcpUrl || pageData.vitals?.lcpUrl;
 
     if (lcpUrl && !this.isPreloaded(lcpUrl, info.preload)) {
@@ -261,7 +260,7 @@ class ResourceHintsAnalyzer {
 
     const commonMissingHints = new Map();
 
-    for (const [url, pageData] of Object.entries(pages)) {
+    for (const [_url, pageData] of Object.entries(pages)) {
       const hints = pageData.resourceHints || {};
       const hasHints = (hints.preload?.length || 0) +
                        (hints.prefetch?.length || 0) +

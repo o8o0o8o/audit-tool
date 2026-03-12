@@ -201,7 +201,7 @@ class Soft404Analyzer {
         }
         return document.body?.innerText?.substring(0, 5000) || '';
       });
-    } catch (e) {
+    } catch {
       return '';
     }
   }
@@ -218,13 +218,13 @@ class Soft404Analyzer {
             if (document.querySelector(selector)) {
               return true;
             }
-          } catch (e) {
+          } catch {
             // Invalid selector, skip
           }
         }
         return false;
       }, this.#errorSelectors);
-    } catch (e) {
+    } catch {
       return false;
     }
   }

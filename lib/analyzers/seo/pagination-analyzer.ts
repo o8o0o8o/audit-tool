@@ -265,7 +265,7 @@ class PaginationAnalyzer {
 
         return result;
       });
-    } catch (e) {
+    } catch {
       return { detected: false, type: null, links: [] as Record<string, any>[], currentPage: null, totalPages: null };
     }
   }
@@ -320,7 +320,7 @@ class PaginationAnalyzer {
       return {
         detected: result.detected || htmlHasPattern,
       };
-    } catch (e) {
+    } catch {
       return { detected: false };
     }
   }
@@ -362,7 +362,7 @@ class PaginationAnalyzer {
 
         return { detected: false };
       });
-    } catch (e) {
+    } catch {
       return { detected: false };
     }
   }
@@ -383,7 +383,7 @@ class PaginationAnalyzer {
       const currentPath = currentUrl.pathname.replace(/\/$/, '') + currentUrl.search;
 
       return canonicalUrl.origin === currentUrl.origin && canonicalPath === currentPath;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -397,15 +397,13 @@ class PaginationAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    let paginatedPages = 0;
     let infiniteScrollPages = 0;
     let pagesWithRelPrevNext = 0;
     let pagesWithBadCanonical = 0;
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
 
       if (page.paginationData?.hasPagination) {
-        paginatedPages++;
 
   
         if (page.paginationData.infiniteScrollDetected) {

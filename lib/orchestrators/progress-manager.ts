@@ -4,8 +4,6 @@
  * Uses multi-file format: manifest + metadata + analysis + page batches
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { ErrorAggregator } from '../utils/error-aggregator';
 import type { PageInfo } from '../types';
 import type { FileManager } from '../storage/file-manager';

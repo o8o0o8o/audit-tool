@@ -189,7 +189,7 @@ class CookieConsentAnalyzer {
           result.method = 'generic-banner';
           return result;
         }
-      } catch (e) {
+      } catch {
         // Invalid selector
       }
     }
@@ -217,7 +217,7 @@ class CookieConsentAnalyzer {
         result.detected = true;
         result.method = 'visual-detection';
       }
-    } catch (e) {
+    } catch {
       // Evaluation failed
     }
 
@@ -287,7 +287,7 @@ class CookieConsentAnalyzer {
         thirdParty,
         cookies: cookieList,
       };
-    } catch (e) {
+    } catch {
       return { total: 0, thirdParty: 0, cookies: [] };
     }
   }
@@ -315,7 +315,7 @@ class CookieConsentAnalyzer {
    * Analyze tracking before consent
    * @private
    */
-  static #analyzeTrackingBeforeConsent(requests: Record<string, any>, hasConsent: boolean) {
+  static #analyzeTrackingBeforeConsent(requests: Record<string, any>, _hasConsent: boolean) {
     const trackingScripts = [];
 
     const trackingDomains = [
@@ -350,21 +350,16 @@ class CookieConsentAnalyzer {
     const warnings: Issue[] = [];
 
     let pagesWithConsent = 0;
-    let pagesWithTracking = 0;
     let pagesWithoutPrivacyPolicy = 0;
     const platformsUsed = new Set();
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.consentData) {
         if (page.consentData.hasConsentBanner) {
           pagesWithConsent++;
           if (page.consentData.consentPlatform) {
             platformsUsed.add(page.consentData.consentPlatform);
           }
-        }
-
-        if (page.consentData.trackingBeforeConsent?.length > 0) {
-          pagesWithTracking++;
         }
 
         if (!page.consentData.hasPrivacyPolicy) {

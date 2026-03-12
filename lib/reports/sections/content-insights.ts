@@ -294,7 +294,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
   const withData = pages.filter(p => (p.outboundLinkHealth?.totalChecked ?? 0) > 0);
   if (withData.length === 0) return '';
 
-  let totalChecked = 0, totalBroken = 0, totalRedirected = 0, totalTimeouts = 0;
+  let totalChecked = 0, totalBroken = 0, totalRedirected = 0;
   const brokenUrls = new Map();
 
   for (const page of withData) {
@@ -302,7 +302,6 @@ function getOutboundLinksSection(pages: PageInfo[]) {
     totalChecked += h.totalChecked ?? 0;
     totalBroken += h.broken?.length || 0;
     totalRedirected += h.redirected?.length || 0;
-    totalTimeouts += h.timeouts?.length || 0;
     for (const b of (h.broken || [])) {
       if (!brokenUrls.has(b.url)) brokenUrls.set(b.url, { status: b.status, count: 0 });
       brokenUrls.get(b.url).count++;

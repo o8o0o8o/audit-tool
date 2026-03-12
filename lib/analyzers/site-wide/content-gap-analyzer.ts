@@ -264,7 +264,7 @@ class ContentGapAnalyzer {
    * @param {number} totalPages - Total number of pages
    * @returns {number} Score 0-100
    */
-  static calculateOpportunityScore(clusterData: Record<string, any>, totalPages: number) {
+  static calculateOpportunityScore(clusterData: Record<string, any>, _totalPages: number) {
     let score = 0;
 
     // Higher density = more important keyword

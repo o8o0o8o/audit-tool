@@ -440,7 +440,7 @@ class VitalsCollector {
             }
           });
           inpObserver.observe({ type: "event", buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
-        } catch (e) {
+        } catch {
           // INP not supported
         }
 
@@ -471,10 +471,10 @@ class VitalsCollector {
           // Try 'long-animation-frame' first, fall back to 'longtask'
           try {
             longTaskObserver.observe({ type: "long-animation-frame", buffered: true });
-          } catch (e) {
+          } catch {
             longTaskObserver.observe({ type: "longtask", buffered: true });
           }
-        } catch (e) {
+        } catch {
           // Long task observation not supported
         }
 

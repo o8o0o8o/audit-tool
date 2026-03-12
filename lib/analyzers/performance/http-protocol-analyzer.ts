@@ -13,7 +13,7 @@ class HTTPProtocolAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: PageInfo, url: string) {
+  static analyze(pageData: PageInfo, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -172,7 +172,7 @@ class HTTPProtocolAnalyzer {
 
     // Estimate parallel loading rounds needed
     const http1Rounds = Math.ceil(totalResources / maxHttp1Connections);
-    const http2Rounds = 1; // All resources can be multiplexed
+    // All resources can be multiplexed with HTTP/2 (effectively 1 round)
 
     // Estimate time savings (rough)
     const avgResourceTime = 100; // ms estimate
@@ -207,7 +207,7 @@ class HTTPProtocolAnalyzer {
 
     let totalResources = 0;
 
-    for (const [url, pageData] of Object.entries(pages)) {
+    for (const [_url, pageData] of Object.entries(pages)) {
       stats.pagesAnalyzed++;
 
       const protocol = pageData.protocol || pageData.httpVersion || this.detectProtocol(pageData);

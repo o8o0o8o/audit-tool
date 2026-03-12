@@ -1,7 +1,7 @@
 import type { ChromePage, ParsedPage } from '../../types';
 
 class AnalyticsTrackingAnalyzer {
-  static async analyzeAnalyticsTracking(chromePage: ChromePage, parsedPage: ParsedPage, url: string) {
+  static async analyzeAnalyticsTracking(chromePage: ChromePage, parsedPage: ParsedPage, _url: string) {
     const analyticsData = {
       hasGA4: false,
       hasUniversalAnalytics: false,

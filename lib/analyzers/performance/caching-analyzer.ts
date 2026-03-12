@@ -104,7 +104,7 @@ class CachingAnalyzer {
       cachingAnalysis.hasServiceWorker = await chromePage.evaluate(() => {
         return 'serviceWorker' in navigator && navigator.serviceWorker.controller !== null;
       });
-    } catch (error: unknown) {
+    } catch {
       // Service worker check failed, assume false
       cachingAnalysis.hasServiceWorker = false;
     }

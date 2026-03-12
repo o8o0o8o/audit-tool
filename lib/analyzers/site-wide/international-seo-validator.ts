@@ -314,7 +314,7 @@ class InternationalSEOValidator {
     // (e.g., two different URLs in the same group both pointing to the same hreflang)
     let duplicateLangCount = 0;
 
-    for (const { rootUrl, group } of languageGroups) {
+    for (const { group } of languageGroups) {
       // Within this group, check if any hreflang is assigned to multiple different URLs
       const langToUrls = new Map();
       for (const [lang, groupUrl] of group) {
@@ -340,10 +340,7 @@ class InternationalSEOValidator {
     // Check 2: Incomplete bidirectional hreflang links
     let incompleteLinkCount = 0;
 
-    for (const { rootUrl, group } of languageGroups) {
-      const expectedUrls = new Set(group.values());
-      const expectedLangs = new Set(group.keys());
-
+    for (const { group } of languageGroups) {
       // For each URL in the group, check if it has links to all other URLs
       for (const [lang, groupUrl] of group) {
         const page = allPages[groupUrl];

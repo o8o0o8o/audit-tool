@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { HistoryManager } from './historyManager';
 import { escapeHtml } from './lib/reports/html-utils';
-import type { AuditComparison, AuditSnapshot, InsightsSummary } from './lib/types';
+import type { InsightsSummary } from './lib/types';
 
 /**
  * Generate HTML comparison report between two audits

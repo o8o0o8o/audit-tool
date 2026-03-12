@@ -547,7 +547,7 @@ class TechnicalSEOAnalyzer {
     let pwaEnabled = 0;
     let lazyLoadingPages = 0;
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
 
       if (page.technical) {
   

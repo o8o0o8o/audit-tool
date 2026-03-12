@@ -111,7 +111,7 @@ class ThirdPartyAnalyzer {
         thirdPartyData.byCategory[category].size += size;
         thirdPartyData.byCategory[category].time += duration;
         thirdPartyData.byCategory[category].hosts.add(reqHost);
-      } catch (e) {
+      } catch {
         // Invalid URL, skip
       }
     }
@@ -236,14 +236,14 @@ class ThirdPartyAnalyzer {
                 host: scriptHost,
               });
             }
-          } catch (e) {
+          } catch {
             // Invalid URL
           }
         }
 
         return blocking;
       }, originHost);
-    } catch (e) {
+    } catch {
       return [];
     }
   }
@@ -257,14 +257,12 @@ class ThirdPartyAnalyzer {
     const issues: Record<string, any>[] = [];
     const warnings: Record<string, any>[] = [];
 
-    let totalThirdPartySize = 0;
     let pagesWithBlockingScripts = 0;
     const allHosts = new Set();
     const categoryTotals: Record<string, any> = {};
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.thirdPartyData) {
-        totalThirdPartySize += page.thirdPartyData.totalSize || 0;
 
         if ((page.thirdPartyData.blockingScripts?.length ?? 0) > 0) {
           pagesWithBlockingScripts++;

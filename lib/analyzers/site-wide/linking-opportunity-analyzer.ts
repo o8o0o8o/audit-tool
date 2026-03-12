@@ -272,7 +272,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} targetPage - Target page data
    * @returns {string} Suggested anchor text
    */
-  static suggestAnchorText(sharedKeywords: Record<string, any>[], targetPage: PageInfo) {
+  static suggestAnchorText(sharedKeywords: Record<string, any>[], _targetPage: PageInfo) {
     // Prefer keyword that's in target title
     const titleKeyword = sharedKeywords.find(k => k.inTargetTitle);
     if (titleKeyword) {

@@ -121,7 +121,7 @@ describe('ContentSimilarityAnalyzer', () => {
       },
     };
 
-    const result = ContentSimilarityAnalyzer.analyze(allPages as any);
+    ContentSimilarityAnalyzer.analyze(allPages as any);
     // Pages A and B should be detected as similar
     const pageA = allPages['https://example.com/a'] as any;
     assert.ok(pageA.contentSimilarity);

@@ -8,7 +8,7 @@ import * as path from 'path';
 import { FileManager } from '../storage/file-manager';
 import { HistoryManager } from '../../historyManager';
 import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyzer';
-import type { PageInfo, PageData, AnalysisDetail, FailedBatch, ManifestData } from '../types';
+import type { PageInfo, PageData, AnalysisDetail, FailedBatch } from '../types';
 
 class ReportDataProcessor {
   /**

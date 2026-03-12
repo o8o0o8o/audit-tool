@@ -19,7 +19,7 @@ class AboveFoldAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: PageInfo, url: string) {
+  static analyze(pageData: PageInfo, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -39,7 +39,6 @@ class AboveFoldAnalyzer {
     };
 
     // Analyze LCP element position
-    const lcpElement = pageData.lcpElement || pageData.vitals?.lcpElement;
     const lcpRect = pageData.lcpRect || pageData.vitals?.lcpRect;
 
     if (lcpRect) {
@@ -56,13 +55,11 @@ class AboveFoldAnalyzer {
 
     // Analyze above-fold images
     const images = (pageData.images as Record<string, any>[] | undefined) || [];
-    let aboveFoldImageCount = 0;
     let lazyLoadedAboveFold = 0;
 
     for (const image of images) {
       const rect = image.rect || image.boundingRect;
       if (rect && this.isInViewport(rect, info.viewport)) {
-        aboveFoldImageCount++;
         info.aboveFoldElements.images.push({
           src: image.src,
           size: image.size || image.fileSize,

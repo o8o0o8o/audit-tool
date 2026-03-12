@@ -211,7 +211,7 @@ class FontLoadingAnalyzer {
                 }
               }
             }
-          } catch (e) {
+          } catch {
             // Cross-origin stylesheet, skip
           }
         }
@@ -222,7 +222,7 @@ class FontLoadingAnalyzer {
           fontDisplayValues: Array.from(fontDisplayValues),
         };
       });
-    } catch (e) {
+    } catch {
       return { fontFaces: [], hasFontDisplay: false, fontDisplayValues: [] };
     }
   }
@@ -254,7 +254,7 @@ class FontLoadingAnalyzer {
 
         return systemFontIndicators.some(font => fontFamily.includes(font));
       });
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -307,21 +307,14 @@ class FontLoadingAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    let totalFontPayload = 0;
     let pagesWithoutFontDisplay = 0;
-    let pagesWithLargeFonts = 0;
     const fontFilesUsed = new Set();
 
-    for (const [url, page] of Object.entries(pages) as [string, any][]) {
+    for (const [_url, page] of Object.entries(pages) as [string, any][]) {
       if (page.fontData) {
-        totalFontPayload += page.fontData.totalFontSize || 0;
 
         if (page.fontData.webFontCount > 0 && !page.fontData.hasFontDisplay) {
           pagesWithoutFontDisplay++;
-        }
-
-        if (page.fontData.totalFontSize > 250000) {
-          pagesWithLargeFonts++;
         }
 
         for (const font of page.fontData.fonts || []) {

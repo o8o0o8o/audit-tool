@@ -17,7 +17,7 @@ const RECOMMENDED_MANIFEST_FIELDS = [
 
 // Required icon sizes for different platforms
 const REQUIRED_ICON_SIZES = [192, 512];
-const RECOMMENDED_ICON_SIZES = [48, 72, 96, 144, 168, 192, 256, 512];
+// Recommended icon sizes: [48, 72, 96, 144, 168, 192, 256, 512]
 
 class PWAAnalyzer {
   /**
@@ -301,7 +301,7 @@ class PWAAnalyzer {
       isInstallable: false,
     };
 
-    for (const [url, pageData] of Object.entries(pages)) {
+    for (const [_url, pageData] of Object.entries(pages)) {
       if (pageData.manifest || pageData.webManifest) {
         stats.pagesWithManifest++;
         const manifestUrl = typeof pageData.manifest === 'string'

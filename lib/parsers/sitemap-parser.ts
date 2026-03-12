@@ -5,7 +5,6 @@
 
 import { parse, HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
-import type { SitemapUrl } from '../types';
 
 interface SitemapEntry {
   total: number;
@@ -162,7 +161,7 @@ class SitemapParser {
       // Validate URL format
       try {
         new URL(loc);
-      } catch (e) {
+      } catch {
         result.errors.push({
           message: `Invalid URL format in sitemap`,
           detail: `URL "${loc}" in sitemap ${currentSitemap} is not a valid URL`,

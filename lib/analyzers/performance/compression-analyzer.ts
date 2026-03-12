@@ -36,7 +36,7 @@ class CompressionAnalyzer {
    * @param {string} url - Page URL
    * @returns {object} Analysis results
    */
-  static analyze(pageData: PageInfo, url: string) {
+  static analyze(pageData: PageInfo, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {

@@ -24,7 +24,7 @@ class LinkQualityAnalyzer {
     };
 
     // Get all links with detailed information
-    const linkElements = await chromePage.evaluate(({ currentUrl, origin }) => {
+    const linkElements = await chromePage.evaluate(({ currentUrl: _currentUrl, origin }) => {
       const links = Array.from(document.querySelectorAll('a[href]'));
       return links.map(link => {
         const href = (link as HTMLAnchorElement).href;
@@ -61,7 +61,7 @@ class LinkQualityAnalyzer {
         try {
           const domain = new URL(link.href).hostname;
           linkAnalysis.externalDomains[domain] = (linkAnalysis.externalDomains[domain] || 0) + 1;
-        } catch (e) {
+        } catch {
           // Invalid URL, skip
         }
       }

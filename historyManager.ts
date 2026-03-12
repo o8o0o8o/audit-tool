@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import type {
-  SeverityLevel, AuditHistory, AuditSnapshot, AuditComparison,
-  IssueSummary, PerformanceSummary, InsightsSummary, IssueTrend, TrendData,
-  PageInfo, AuditResults, AnalysisDetail,
+  AuditHistory, AuditSnapshot, AuditComparison,
+  IssueSummary, PerformanceSummary, InsightsSummary, IssueTrend,
+  PageInfo, AuditResults,
 } from './lib/types';
 import { FileManager } from './lib/storage/file-manager';
 import { sanitizeDomainName } from './validators';

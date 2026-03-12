@@ -151,7 +151,7 @@ class WebComponentAnalyzer {
 
         return customElements;
       });
-    } catch (e) {
+    } catch {
       return [];
     }
   }
@@ -231,7 +231,7 @@ class WebComponentAnalyzer {
 
         return result;
       });
-    } catch (e) {
+    } catch {
       return {
         shadowRoots: [],
         count: 0,
@@ -274,7 +274,7 @@ class WebComponentAnalyzer {
         if ((window as Record<string, any>).Polymer) return 'Polymer';
         return null;
       });
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -302,7 +302,7 @@ class WebComponentAnalyzer {
     let pagesWithContentInShadow = 0;
     const frameworksUsed = new Set();
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.webComponentData) {
         if ((page.webComponentData.totalShadowRoots ?? 0) > 0) {
           pagesWithShadowDom++;

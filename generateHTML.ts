@@ -8,18 +8,8 @@ import { sanitizeDomainName } from './validators';
 
 // Import report modules
 import { ReportDataProcessor } from './lib/reports/data-processor';
-import { THRESHOLDS } from './lib/reports/metrics-metadata';
 import {
   escapeHtml,
-  formatBytes,
-  getStatusColor,
-  getMetricColor,
-  getTextLengthColor,
-  hasMetaTag,
-  getMissingMetaTags,
-  hasHeadingStructureIssue,
-  getMetricTooltip,
-  getTextLengthTooltip,
 } from './lib/reports/html-utils';
 
 // Import section generators

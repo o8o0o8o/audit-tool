@@ -16,14 +16,14 @@ const SUSPICIOUS_PATTERNS = [
 ];
 
 // Domains that should typically have nofollow
-const NOFOLLOW_RECOMMENDED = [
+const _NOFOLLOW_RECOMMENDED = [
   /^(?:www\.)?(?:facebook|twitter|instagram|linkedin|youtube|tiktok)\./i,
   /^(?:www\.)?(?:amazon|ebay|aliexpress)\./i,
   /^(?:www\.)?(?:wikipedia|reddit)\./i,
 ];
 
 // Trusted domains that don't need nofollow
-const TRUSTED_DOMAINS = [
+const _TRUSTED_DOMAINS = [
   /^(?:www\.)?(?:google|microsoft|apple|github)\./i,
   /\.gov$/i,
   /\.edu$/i,
@@ -128,10 +128,6 @@ class ExternalLinksAnalyzer {
           });
         }
       }
-
-      // Check if link should have nofollow
-      const shouldNofollow = NOFOLLOW_RECOMMENDED.some(pattern => pattern.test(domain));
-      const isTrusted = TRUSTED_DOMAINS.some(pattern => pattern.test(domain));
 
       // Detect affiliate links
       if (this.isAffiliateLink(href)) {
@@ -420,7 +416,7 @@ class ExternalLinksAnalyzer {
    * @param {string} origin - Site origin
    * @returns {object} Site-wide analysis
    */
-  static analyzeSiteWide(pages: Record<string, PageInfo>, origin: string) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats: Record<string, any> = {

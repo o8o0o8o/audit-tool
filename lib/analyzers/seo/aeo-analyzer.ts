@@ -145,7 +145,7 @@ class AEOAnalyzer {
    * Analyze content structure for AI extraction
    * @private
    */
-  static #analyzeContentStructure(parsedPage: ParsedPage, info: Record<string, any>, warnings: Issue[], url: string) {
+  static #analyzeContentStructure(parsedPage: ParsedPage, info: Record<string, any>, _warnings: Issue[], _url: string) {
     // Check heading hierarchy
     const headings: { level: number; text: string }[] = [];
     for (let i = 1; i <= 6; i++) {
@@ -214,7 +214,7 @@ class AEOAnalyzer {
    * Analyze citation-friendly signals
    * @private
    */
-  static #analyzeCitationSignals(parsedPage: ParsedPage, info: Record<string, any>, warnings: Issue[], url: string) {
+  static #analyzeCitationSignals(parsedPage: ParsedPage, info: Record<string, any>, _warnings: Issue[], _url: string) {
     // Check for author info
     const authorMeta = parsedPage.querySelector('meta[name="author"]');
     const authorSchema = parsedPage.toString().includes('"author"');
@@ -289,7 +289,7 @@ class AEOAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} AI crawler analysis
    */
-  static analyzeRobotsTxt(robotsData: Record<string, any>, origin: string) {
+  static analyzeRobotsTxt(robotsData: Record<string, any>, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
@@ -469,7 +469,7 @@ class AEOAnalyzer {
     let pagesWithMain = 0;
     let pagesAnalyzed = 0;
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (!page.aeo) continue;
       pagesAnalyzed++;
 

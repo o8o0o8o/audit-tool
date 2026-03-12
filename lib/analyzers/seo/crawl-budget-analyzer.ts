@@ -14,7 +14,7 @@ class CrawlBudgetAnalyzer {
    * @param {object} robots - Robots.txt data
    * @returns {object} Analysis results
    */
-  static analyze(pages: Record<string, PageInfo>, sitemaps: Record<string, any> = {}, robots: Record<string, any> = {}) {
+  static analyze(pages: Record<string, PageInfo>, _sitemaps: Record<string, any> = {}, _robots: Record<string, any> = {}) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const stats = {
@@ -112,13 +112,13 @@ class CrawlBudgetAnalyzer {
     }
 
     // Count duplicates
-    for (const [title, urls] of duplicateTitles) {
+    for (const [_title, urls] of duplicateTitles) {
       if (urls.length > 1) {
         stats.duplicates.byTitle += urls.length - 1;
       }
     }
 
-    for (const [canonical, urls] of canonicalTargets) {
+    for (const [_canonical, urls] of canonicalTargets) {
       stats.duplicates.byCanonical += urls.length;
     }
 

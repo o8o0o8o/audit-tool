@@ -223,7 +223,7 @@ class JavaScriptRenderingAnalyzer {
    * @param {object} pageData - Page data
    * @returns {string|null}
    */
-  static detectFramework(html: string, pageData: PageInfo) {
+  static detectFramework(html: string, _pageData: PageInfo) {
     // Check for framework markers
     if (html.includes('__NEXT_DATA__') || html.includes('_next/static')) {
       return 'Next.js';

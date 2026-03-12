@@ -126,7 +126,7 @@ class EEATAnalyzer {
             }
           }
         }
-      } catch (e) {
+      } catch {
         // JSON parsing failed - script contains invalid JSON-LD, skip silently
         // This is expected for malformed structured data
       }
@@ -441,7 +441,7 @@ class EEATAnalyzer {
     let ymylPages = 0;
     let ymylWithoutAuthor = 0;
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.eeat) {
         contentPages++;
         totalScore += page.eeat.score;

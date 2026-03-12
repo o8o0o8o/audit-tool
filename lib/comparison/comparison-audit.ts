@@ -10,7 +10,6 @@ import * as zlib from 'zlib';
 import { SEOData } from '../seo-data';
 import { PageMatcher } from './page-matcher';
 import { generateTimestamp } from '../utils';
-import { SEVERITY, THRESHOLDS } from '../constants';
 import { formatElapsedTime } from '../utils';
 import { generateHTML } from '../../generateHTML';
 import type { PageInfo, Issue, AuditSummary } from '../types';

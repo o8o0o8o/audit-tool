@@ -37,7 +37,7 @@ class FreshnessAnalyzer {
           freshnessData.lastModified = lastModDate.toISOString();
           freshnessData.ageInDays = Math.floor((now.getTime() - lastModDate.getTime()) / (1000 * 60 * 60 * 24));
         }
-      } catch (e) {
+      } catch {
         // Invalid date format
       }
     }
@@ -54,7 +54,7 @@ class FreshnessAnalyzer {
             if (!isNaN(pubDate.getTime())) {
               freshnessData.datePublished = pubDate.toISOString();
             }
-          } catch (e) {
+          } catch {
             // Invalid date format in schema - skip silently
           }
         }
@@ -64,7 +64,7 @@ class FreshnessAnalyzer {
             if (!isNaN(modDate.getTime())) {
               freshnessData.dateModified = modDate.toISOString();
             }
-          } catch (e) {
+          } catch {
             // Invalid date format in schema - skip silently
           }
         }
@@ -82,7 +82,7 @@ class FreshnessAnalyzer {
           if (!isNaN(pubDate.getTime())) {
             freshnessData.datePublished = pubDate.toISOString();
           }
-        } catch (e) {
+        } catch {
           // Invalid date format in meta tag - skip silently
         }
       }
@@ -93,7 +93,7 @@ class FreshnessAnalyzer {
           if (!isNaN(modDate.getTime())) {
             freshnessData.dateModified = modDate.toISOString();
           }
-        } catch (e) {
+        } catch {
           // Invalid date format in meta tag - skip silently
         }
       }
@@ -264,9 +264,7 @@ class FreshnessAnalyzer {
     let pagesWithoutDates = 0;
     let stalePages = 0;
 
-    const now = new Date();
-
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.freshnessData) {
         freshnessScores.push(page.freshnessData.freshnessScore);
 

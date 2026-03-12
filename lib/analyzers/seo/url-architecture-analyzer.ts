@@ -231,7 +231,7 @@ class UrlArchitectureAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} Site-wide issues
    */
-  static analyzeSiteWide(pages: Record<string, PageInfo>, origin: string) {
+  static analyzeSiteWide(pages: Record<string, PageInfo>, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -264,7 +264,7 @@ class UrlArchitectureAnalyzer {
         } else {
           protocolCounts.http++;
         }
-      } catch (e) {
+      } catch {
         // Skip invalid URLs
       }
     }

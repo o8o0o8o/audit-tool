@@ -102,7 +102,7 @@ class ProgressReporter {
    * Record a skipped item (already processed)
    * @param {string} url - URL that was skipped
    */
-  skip(url: string) {
+  skip(_url: string) {
     this.#skipped++;
   }
 
@@ -178,7 +178,7 @@ class ProgressReporter {
       const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
       const rssMB = Math.round(mem.rss / 1024 / 1024);
       memInfo = `Memory:          ${heapUsedMB}MB / ${heapTotalMB}MB heap (${rssMB}MB RSS)`;
-    } catch (_) { /* ignore */ }
+    } catch { /* ignore */ }
 
     // Speed rating
     const rate = parseFloat(stats.rate);

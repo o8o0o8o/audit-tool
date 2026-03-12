@@ -170,7 +170,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
               }
             }
           }
-        } catch (_) { /* ignore - best effort */ }
+        } catch { /* ignore - best effort */ }
 
         if (restartCount >= MAX_RESTART_ATTEMPTS) {
           console.error(`\n❌ Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached. Giving up.`);

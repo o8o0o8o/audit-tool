@@ -139,7 +139,7 @@ class ConnectionTimingAnalyzer {
           protocol: nav.nextHopProtocol,
         };
       });
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -157,7 +157,7 @@ class ConnectionTimingAnalyzer {
           let origin;
           try {
             origin = new URL(r.name).origin;
-          } catch (e) {
+          } catch {
             origin = 'unknown';
           }
 
@@ -178,7 +178,7 @@ class ConnectionTimingAnalyzer {
           };
         });
       });
-    } catch (e) {
+    } catch {
       return [];
     }
   }
@@ -278,14 +278,14 @@ class ConnectionTimingAnalyzer {
         const preconnectOrigins = Array.from(preconnects).map(l => {
           try {
             return new URL((l as HTMLLinkElement).href).origin;
-          } catch (e) {
+          } catch {
             return null;
           }
         });
 
         return targetOrigins.some(o => preconnectOrigins.includes(o));
       }, origins);
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -299,15 +299,12 @@ class ConnectionTimingAnalyzer {
     const issues: Record<string, any>[] = [];
     const warnings: Record<string, any>[] = [];
 
-    let pagesWithSlowDns = 0;
     let pagesWithSlowTtfb = 0;
     const totalUniqueOrigins = new Set();
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.timingData) {
-        if ((page.timingData.document?.dns ?? 0) > 100) {
-          pagesWithSlowDns++;
-        }
+        // dns timing tracked but not currently used for site-wide reporting
         if ((page.timingData.document?.ttfb ?? 0) > 600) {
           pagesWithSlowTtfb++;
         }

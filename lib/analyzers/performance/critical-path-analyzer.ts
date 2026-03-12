@@ -227,7 +227,7 @@ class CriticalPathAnalyzer {
           firstPaint: firstPaint?.startTime || 0,
         };
       });
-    } catch (e) {
+    } catch {
       return { htmlParseTime: 0, domContentLoaded: 0, firstPaint: 0 };
     }
   }
@@ -330,9 +330,7 @@ class CriticalPathAnalyzer {
 
     let pagesWithBlockingCSS = 0;
     let pagesWithBlockingJS = 0;
-    let totalBlockingResources = 0;
-
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.criticalPathData) {
         if ((page.criticalPathData.blockingCSS?.length ?? 0) > 2) {
           pagesWithBlockingCSS++;
@@ -340,8 +338,6 @@ class CriticalPathAnalyzer {
         if ((page.criticalPathData.blockingJS?.filter((js: any) => js.inHead).length ?? 0) > 0) {
           pagesWithBlockingJS++;
         }
-        totalBlockingResources += (page.criticalPathData.blockingCSS?.length || 0) +
-                                  (page.criticalPathData.blockingJS?.length || 0);
       }
     }
 

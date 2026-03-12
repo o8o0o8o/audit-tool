@@ -241,7 +241,7 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Extract main topic from URL and content
    */
-  static extractTopic(url: string, page: PageInfo) {
+  static extractTopic(url: string, _page: PageInfo) {
     try {
       const parsed = new URL(url);
       const pathParts = parsed.pathname.split('/').filter(p => p.length > 0);

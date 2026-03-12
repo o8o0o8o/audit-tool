@@ -246,7 +246,7 @@ class AnchorTextAnalyzer {
 
     const targetAnchorMap = new Map(); // target URL -> anchor texts used
 
-    for (const [url, pageData] of Object.entries(pages)) {
+    for (const [_url, pageData] of Object.entries(pages)) {
       const links = (Array.isArray(pageData.links) ? pageData.links : []) as any[];
 
       for (const link of links) {

@@ -34,9 +34,6 @@ const WEAK_CIPHERS = [
   'RC4', 'DES', 'MD5', 'NULL', 'EXPORT', 'anon', '3DES',
 ];
 
-// Minimum TLS version
-const MIN_TLS_VERSION = 'TLSv1.2';
-
 class SSLCertificateAnalyzer {
   /**
    * Analyze SSL certificate for a URL

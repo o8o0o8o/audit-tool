@@ -156,8 +156,6 @@ class LinkDepthAnalyzer {
   static buildLinkGraph(pages: Record<string, PageInfo>, origin: string) {
     const graph = new Map();
     const originHost = new URL(origin).host;
-    const allPageUrls = new Set(Object.keys(pages));
-
     for (const [url, page] of Object.entries(pages)) {
       const links = new Set();
 

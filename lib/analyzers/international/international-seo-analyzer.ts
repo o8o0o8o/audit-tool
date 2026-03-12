@@ -133,7 +133,7 @@ class InternationalSEOAnalyzer {
       else if (pathname.match(/^\/[a-z]{2}(-[A-Z]{2})?(\/|$)/)) {
         intlData.urlStructure = 'subdirectory';
       }
-    } catch (e) {
+    } catch {
       // Invalid URL, skip structure detection
     }
 

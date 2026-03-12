@@ -217,7 +217,7 @@ class ConsoleErrorAnalyzer {
     let totalErrors = 0;
     const commonErrors = new Map();
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
 
       if (page.consoleAnalysis?.hasErrors) {
         pagesWithErrors++;

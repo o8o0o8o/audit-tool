@@ -297,7 +297,7 @@ class MediaSEOAnalyzer {
     let pagesWithVideoSchema = 0;
     let totalVideosWithoutCaptions = 0;
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
 
       if ((page.mediaData?.totalVideos ?? 0) > 0) {
         pagesWithVideo++;

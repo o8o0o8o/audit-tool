@@ -87,8 +87,6 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
     return `<span style="color:${color};font-weight:600;">${display}</span>`;
   }
 
-  // Count columns before perf columns: #, URL, Source, Segment, Incoming, URL Length, URL Depth, Redirects, HTTP Links, Status, Title, Description = 12
-  const preColumns = 12;
   // Count columns after perf columns by reading the rest of the header (Page Size onwards)
   // Page Size, Requests, Canonical, H1, H2, H Structure, Missing Meta, Alternates, Links w/o Text,
   // Security Score, Missing Headers, Insecure Cookies, Mixed Content, Forms w/o CSRF, Inline Scripts,

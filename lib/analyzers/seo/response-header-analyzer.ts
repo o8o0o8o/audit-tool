@@ -153,7 +153,6 @@ class ResponseHeaderAnalyzer {
 
     let pagesWithXRobotsNoindex = 0;
     let pagesWithDynamicServing = 0;
-    let pagesWithLinkCanonical = 0;
     const varyPatterns: Record<string, number> = {};
 
     for (const page of pages) {
@@ -162,7 +161,6 @@ class ResponseHeaderAnalyzer {
 
       if (headerData.noindexViaHeader) pagesWithXRobotsNoindex++;
       if (headerData.dynamicServing) pagesWithDynamicServing++;
-      if (headerData.httpCanonical) pagesWithLinkCanonical++;
 
       const varyKey = headerData.vary || 'none';
       varyPatterns[varyKey] = (varyPatterns[varyKey] || 0) + 1;

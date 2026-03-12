@@ -3,7 +3,6 @@
  * Handles site-wide validation and audit workflow coordination
  */
 
-import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { SEVERITY } from '../constants';
@@ -278,7 +277,7 @@ class AuditOrchestrator {
 
     // Extended patterns: en-us, en-gb, de-de, etc.
     const langRegionPattern = /^\/([a-z]{2})(-[a-z]{2})?\//i;
-    const subdomainPattern = /^([a-z]{2})(-[a-z]{2})?\.(?!www\.)/i;
+    const _subdomainPattern = /^([a-z]{2})(-[a-z]{2})?\.(?!www\.)/i;
 
     const detectedLanguages = new Set<string>();
     let urlsChecked = 0;

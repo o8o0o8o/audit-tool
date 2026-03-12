@@ -136,7 +136,7 @@ class FormAccessibilityAnalyzer {
    * Analyze a single form
    * @private
    */
-  static async #analyzeForm(form: any, index: number, chromePage: ChromePage) {
+  static async #analyzeForm(form: any, index: number, _chromePage: ChromePage) {
     const analysis = {
       index,
       hasAction: !!form.getAttribute('action'),
@@ -308,7 +308,7 @@ class FormAccessibilityAnalyzer {
     let totalInputsWithoutLabels = 0;
     let pagesWithFormIssues = 0;
 
-    for (const [url, page] of Object.entries(pages)) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.formData) {
         totalForms += page.formData.totalForms ?? 0;
         totalInputs += page.formData.totalInputs ?? 0;
@@ -330,7 +330,6 @@ class FormAccessibilityAnalyzer {
     }
 
     if (totalForms > 0 && pagesWithFormIssues > 0) {
-      const totalPages = Object.keys(pages).length;
       warnings.push({
         message: `${pagesWithFormIssues} pages have form accessibility issues`,
         detail: `Review forms on these pages to ensure all inputs have associated labels and proper ARIA attributes.`,

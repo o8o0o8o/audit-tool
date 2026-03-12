@@ -4,7 +4,6 @@
  * Similar to Wappalyzer/BuiltWith
  */
 
-import { SEVERITY } from '../../constants';
 import type { ChromePage, ParsedPage } from '../../types';
 
 class TechnologyDetector {

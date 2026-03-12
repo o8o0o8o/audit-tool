@@ -58,7 +58,7 @@ class PageMatcher {
       }
 
       return path;
-    } catch (error) {
+    } catch {
       // If URL parsing fails, try to extract path manually
       const match = url.match(/^https?:\/\/[^\/]+(\/[^?#]*)?/i);
       if (match && match[1]) {

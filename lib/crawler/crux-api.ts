@@ -125,7 +125,7 @@ class CrUXAPI {
         try {
           const origin = new URL(urlOrOrigin).origin;
           data = await this.#queryCrUX(origin, 'origin', key, formFactor);
-        } catch (e) {
+        } catch {
           // Invalid URL
         }
       }

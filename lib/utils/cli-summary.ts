@@ -3,9 +3,7 @@
  * Prints a formatted summary of audit results to the console
  */
 
-import { SEVERITY } from '../constants';
-import type { AuditResults, AnalysisDetail, PageInfo, AuditSummary, CategoryScores } from '../types';
-import type { AnalysisState } from './error-aggregator';
+import type { AnalysisDetail, PageInfo, AuditSummary } from '../types';
 
 interface AuditResultsExtended {
   analysis: {

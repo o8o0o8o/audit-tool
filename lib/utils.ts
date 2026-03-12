@@ -5,7 +5,7 @@
 
 import crypto from 'crypto';
 import { THRESHOLDS, SEVERITY } from './constants';
-import type { SeverityLevel, Issue, UrlAnalysis } from './types';
+import type { UrlAnalysis } from './types';
 // Import core URL validation from validators.js for consistency
 import { validateURL as coreValidateURL } from '../validators';
 

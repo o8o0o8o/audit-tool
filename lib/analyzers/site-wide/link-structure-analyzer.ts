@@ -90,7 +90,7 @@ class LinkStructureAnalyzer {
         ? linkData.anchorTextMap
         : Object.entries(linkData.anchorTextMap || {});
 
-      for (const [anchorText, count] of anchorTextEntries) {
+      for (const [anchorText, _count] of anchorTextEntries) {
         if (!linkStats.anchorTextDiversity.has(anchorText)) {
           linkStats.anchorTextDiversity.set(anchorText, new Set());
         }

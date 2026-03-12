@@ -7,7 +7,6 @@ import {
   METRIC_INFO,
   SIGNAL_CATEGORIES,
   getSignalInfo,
-  getSignalTooltip,
   formatSignalValue,
   isSignalGood,
 } from './metrics-metadata';

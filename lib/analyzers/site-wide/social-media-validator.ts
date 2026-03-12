@@ -87,7 +87,6 @@ class SocialMediaValidator {
       socialStats.totalWarnings += socialData.warnings?.length || 0;
     }
 
-    const totalPages = Object.keys(allPages).length;
     const ogCoverage = pagesAnalyzed > 0 ? Math.round((socialStats.pagesWithOpenGraph / pagesAnalyzed) * 100) : 0;
     const twitterCoverage = pagesAnalyzed > 0 ? Math.round((socialStats.pagesWithTwitterCard / pagesAnalyzed) * 100) : 0;
 

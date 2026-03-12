@@ -36,9 +36,6 @@ class RedirectChainAnalyzer {
     }
 
     // Analyze the redirect chain
-    let previousUrl = url;
-    let httpToHttpsCount = 0;
-    let wwwRedirectCount = 0;
 
     for (let i = 0; i < redirectChain.length; i++) {
       const redirect = redirectChain[i];
@@ -47,7 +44,6 @@ class RedirectChainAnalyzer {
 
       // Check for HTTP to HTTPS redirect
       if (fromUrl.startsWith('http://') && toUrl.startsWith('https://')) {
-        httpToHttpsCount++;
         info.hasHttpToHttps = true;
       }
 
@@ -57,10 +53,9 @@ class RedirectChainAnalyzer {
         const toHost = new URL(toUrl).hostname;
         if ((fromHost.startsWith('www.') && !toHost.startsWith('www.')) ||
             (!fromHost.startsWith('www.') && toHost.startsWith('www.'))) {
-          wwwRedirectCount++;
           info.hasWwwRedirect = true;
         }
-      } catch (e) {
+      } catch {
         // Invalid URL
       }
 
@@ -69,7 +64,7 @@ class RedirectChainAnalyzer {
         info.totalRedirectTime += redirect.timing;
       }
 
-      previousUrl = toUrl;
+      // previousUrl tracking removed - not currently used
     }
 
     // Check for redirect chain length
@@ -137,7 +132,7 @@ class RedirectChainAnalyzer {
           severity: SEVERITY.LOW,
         });
       }
-    } catch (e) {
+    } catch {
       // Invalid URL
     }
 

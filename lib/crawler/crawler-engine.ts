@@ -292,6 +292,19 @@ import { ResponseHeaderAnalyzer } from '../analyzers/seo/response-header-analyze
 import { CTADetectorAnalyzer } from '../analyzers/content/cta-detector-analyzer';
 import { LanguageDetectionAnalyzer } from '../analyzers/content/language-detection-analyzer';
 import { CodeCoverageAnalyzer } from '../analyzers/performance/code-coverage-analyzer';
+import { SRIAnalyzer } from '../analyzers/security/sri-analyzer';
+import { PermissionsPolicyAnalyzer } from '../analyzers/security/permissions-policy-analyzer';
+import { CrossOriginPolicyAnalyzer } from '../analyzers/security/cross-origin-policy-analyzer';
+import { InformationDisclosureAnalyzer } from '../analyzers/security/information-disclosure-analyzer';
+import { CSPQualityAnalyzer } from '../analyzers/security/csp-quality-analyzer';
+import { OpenRedirectAnalyzer } from '../analyzers/security/open-redirect-analyzer';
+import { ColorContrastAnalyzer } from '../analyzers/accessibility/color-contrast-analyzer';
+import { ReducedMotionAnalyzer } from '../analyzers/accessibility/reduced-motion-analyzer';
+import { AriaLiveAnalyzer } from '../analyzers/accessibility/aria-live-analyzer';
+import { DOMComplexityAnalyzer } from '../analyzers/performance/dom-complexity-analyzer';
+import { DeprecatedHTMLAnalyzer } from '../analyzers/seo/deprecated-html-analyzer';
+import { InterstitialAnalyzer } from '../analyzers/seo/interstitial-analyzer';
+import { AdDensityAnalyzer } from '../analyzers/seo/ad-density-analyzer';
 import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
 
 // Circuit breaker constants
@@ -2191,6 +2204,17 @@ class CrawlerEngine {
       { ctas: [], summary: {}, issues: [], warnings: [] }, // ctaResult
       // Language Detection
       { info: null, issues: [], warnings: [] }, // langDetectionResult
+      // New analyzers (browser-based)
+      { issues: [], warnings: [], info: {} }, // colorContrastResult
+      { issues: [], warnings: [], info: {} }, // reducedMotionResult
+      { issues: [], warnings: [], info: {} }, // ariaLiveResult
+      { issues: [], warnings: [], info: {} }, // domComplexityResult
+      { issues: [], warnings: [], info: {} }, // deprecatedHtmlResult
+      { issues: [], warnings: [], info: {} }, // interstitialResult
+      { issues: [], warnings: [], info: {} }, // adDensityResult
+      { issues: [], warnings: [], info: {} }, // sriResult
+      { issues: [], warnings: [], info: {} }, // infoDisclosureResult
+      { issues: [], warnings: [], info: {} }, // openRedirectResult
     ];
 
     const browserAnalyzersSettled = await this.#withTimeout(
@@ -2258,6 +2282,18 @@ class CrawlerEngine {
 
         // Language Detection
         LanguageDetectionAnalyzer.analyzeLanguage(chromePage, parsedPage, url, pageData),
+
+        // Security (browser-based)
+        ColorContrastAnalyzer.analyze(chromePage, url),
+        ReducedMotionAnalyzer.analyze(chromePage, parsedPage, url),
+        AriaLiveAnalyzer.analyze(chromePage, url),
+        DOMComplexityAnalyzer.analyze(chromePage, url),
+        DeprecatedHTMLAnalyzer.analyze(chromePage, parsedPage, url),
+        InterstitialAnalyzer.analyze(chromePage, url),
+        AdDensityAnalyzer.analyze(chromePage, url),
+        SRIAnalyzer.analyze(parsedPage, url),
+        InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url),
+        OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
       ]),
       analyzerTimeout,
       `Analyzer timeout for ${url}`,
@@ -2298,6 +2334,16 @@ class CrawlerEngine {
       technologies,
       ctaResult,
       langDetectionResult,
+      colorContrastResult,
+      reducedMotionResult,
+      ariaLiveResult,
+      domComplexityResult,
+      deprecatedHtmlResult,
+      interstitialResult,
+      adDensityResult,
+      sriResult,
+      infoDisclosureResult,
+      openRedirectResult,
     ] = browserAnalyzers as AnalyzerResult[];
 
     // Apply results to pageData
@@ -2337,6 +2383,16 @@ class CrawlerEngine {
       summary: (ctaResult as AnalyzerResult & { summary: unknown }).summary,
     };
     pd.languageDetection = (langDetectionResult as AnalyzerResult & { info: unknown }).info;
+    pd.colorContrastData = (colorContrastResult as AnalyzerResult & { info: unknown }).info;
+    pd.reducedMotionData = (reducedMotionResult as AnalyzerResult & { info: unknown }).info;
+    pd.ariaLiveData = (ariaLiveResult as AnalyzerResult & { info: unknown }).info;
+    pd.domComplexityData = (domComplexityResult as AnalyzerResult & { info: unknown }).info;
+    pd.deprecatedHtmlData = (deprecatedHtmlResult as AnalyzerResult & { info: unknown }).info;
+    pd.interstitialData = (interstitialResult as AnalyzerResult & { info: unknown }).info;
+    pd.adDensityData = (adDensityResult as AnalyzerResult & { info: unknown }).info;
+    pd.sriData = (sriResult as AnalyzerResult & { info: unknown }).info;
+    pd.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: unknown }).info;
+    pd.openRedirectData = (openRedirectResult as AnalyzerResult & { info: unknown }).info;
 
     // Report issues from Group 1
     [
@@ -2367,6 +2423,16 @@ class CrawlerEngine {
       aeoResult,
       ctaResult,
       langDetectionResult,
+      colorContrastResult,
+      reducedMotionResult,
+      ariaLiveResult,
+      domComplexityResult,
+      deprecatedHtmlResult,
+      interstitialResult,
+      adDensityResult,
+      sriResult,
+      infoDisclosureResult,
+      openRedirectResult,
     ].forEach((result) => this.#reportIssues(result as AnalyzerResult));
 
     // ============================================================
@@ -2402,6 +2468,9 @@ class CrawlerEngine {
       { info: null, issues: [], warnings: [] }, // anchorResult
       { info: null, issues: [], warnings: [] }, // externalLinksResult
       { info: null, issues: [], warnings: [] }, // responseHeaderResult
+      { info: null, issues: [], warnings: [] }, // cspQualityResult
+      { info: null, issues: [], warnings: [] }, // permissionsPolicyResult
+      { info: null, issues: [], warnings: [] }, // crossOriginResult
     ];
 
     const syncResultsSettled = await this.#withTimeout(
@@ -2422,6 +2491,9 @@ class CrawlerEngine {
         AnchorTextAnalyzer.analyze(pageData, url),
         ExternalLinksAnalyzer.analyze(pageData, url),
         ResponseHeaderAnalyzer.analyze(pageData, url),
+        CSPQualityAnalyzer.analyze(pageData, url),
+        PermissionsPolicyAnalyzer.analyze(pageData, url),
+        CrossOriginPolicyAnalyzer.analyze(pageData, url),
       ]),
       analyzerTimeout,
       `Sync analyzers timeout for ${url}`,
@@ -2447,6 +2519,9 @@ class CrawlerEngine {
       anchorResult,
       externalLinksResult,
       responseHeaderResult,
+      cspQualityResult,
+      permissionsPolicyResult,
+      crossOriginResult,
     ] = syncResults as Array<AnalyzerResult & { freshnessData?: unknown; info?: unknown }>;
 
     // Apply data results
@@ -2461,6 +2536,9 @@ class CrawlerEngine {
     pageData.anchorTextData = anchorResult.info as typeof pageData.anchorTextData;
     pageData.externalLinksData = externalLinksResult.info as typeof pageData.externalLinksData;
     pageData.responseHeaderAnalysis = responseHeaderResult.info as typeof pageData.responseHeaderAnalysis;
+    pageData.cspQualityData = cspQualityResult.info;
+    pageData.permissionsPolicyData = permissionsPolicyResult.info;
+    pageData.crossOriginPolicyData = crossOriginResult.info;
 
     // Report issues from Group 2
     syncResults.forEach((result) => this.#reportIssues(result as AnalyzerResult));

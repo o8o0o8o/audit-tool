@@ -230,6 +230,14 @@ class ScoreCalculator {
         'x-robots-tag',
         'response header',
         'vary',
+        'soft 404',
+        'deprecated',
+        'document.write',
+        'interstitial',
+        'popup',
+        'overlay',
+        'ad density',
+        'open redirect',
       ],
     };
 
@@ -663,6 +671,75 @@ class ScoreCalculator {
         effort: '10 minutes',
         fix: "Ensure all URLs in the sitemap use the correct domain/origin. All <loc> entries should match the site's canonical domain.",
         example: 'If site is https://www.example.com, sitemap URLs should start with https://www.example.com/',
+        resources: [],
+      },
+      'External scripts missing Subresource Integrity (SRI)': {
+        effort: '15 minutes',
+        fix: 'Add integrity attributes to external script and stylesheet tags to protect against compromised CDNs.',
+        example:
+          '<script src="https://cdn.example.com/lib.js" integrity="sha384-..." crossorigin="anonymous"></script>',
+        resources: [
+          { text: 'SRI Guide', url: 'https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity' },
+        ],
+      },
+      'Missing Permissions-Policy header': {
+        effort: '10 minutes',
+        fix: 'Add a Permissions-Policy header to restrict browser features like camera, microphone, and geolocation.',
+        example: 'Permissions-Policy: camera=(), microphone=(), geolocation=(self)',
+        resources: [
+          {
+            text: 'Permissions Policy',
+            url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy',
+          },
+        ],
+      },
+      'Weak Content-Security-Policy directives': {
+        effort: '30 minutes',
+        fix: "Review and tighten CSP directives. Remove 'unsafe-inline' and 'unsafe-eval' where possible. Use nonces or hashes instead.",
+        example:
+          "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-abc123'; style-src 'self' 'unsafe-inline'",
+        resources: [
+          { text: 'CSP Guide', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP' },
+        ],
+      },
+      'Color contrast fails WCAG AA': {
+        effort: '20 minutes',
+        fix: 'Increase contrast between text and background colors. Use a contrast checker tool to verify ratios meet WCAG AA (4.5:1 for normal text, 3:1 for large text).',
+        example: 'Change light gray text (#999) on white to darker gray (#595959) for 7:1 ratio.',
+        resources: [
+          { text: 'Contrast Checker', url: 'https://webaim.org/resources/contrastchecker/' },
+        ],
+      },
+      'Excessive DOM size': {
+        effort: '30 minutes',
+        fix: 'Reduce DOM complexity by simplifying markup, using virtualization for long lists, and removing unnecessary wrapper elements.',
+        example:
+          'Use virtual scrolling for lists >100 items. Flatten nested divs. Remove hidden elements from DOM instead of display:none.',
+        resources: [{ text: 'DOM Size', url: 'https://developer.chrome.com/docs/lighthouse/performance/dom-size' }],
+      },
+      'No prefers-reduced-motion CSS support': {
+        effort: '15 minutes',
+        fix: 'Add @media (prefers-reduced-motion: reduce) CSS rules to disable or simplify animations for users who prefer reduced motion.',
+        example:
+          '@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}',
+        resources: [
+          { text: 'prefers-reduced-motion', url: 'https://web.dev/articles/prefers-reduced-motion' },
+        ],
+      },
+      'Intrusive interstitial/popup detected': {
+        effort: '20 minutes',
+        fix: 'Ensure popups and overlays do not cover more than 30% of the viewport on mobile. Use less intrusive alternatives like banners or inline CTAs.',
+        resources: [
+          {
+            text: 'Interstitial Guidelines',
+            url: 'https://developers.google.com/search/docs/appearance/avoid-intrusive-interstitials',
+          },
+        ],
+      },
+      'Deprecated HTML elements found': {
+        effort: '15 minutes',
+        fix: 'Replace deprecated HTML elements with modern equivalents. Use CSS for presentational styling instead of HTML elements.',
+        example: 'Replace <center> with CSS text-align:center. Replace <font> with CSS font properties.',
         resources: [],
       },
     };

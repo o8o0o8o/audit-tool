@@ -1111,11 +1111,11 @@ function getScripts(data: ReportSectionData) {
                           tooltip: {
                               callbacks: {
                                   label: function(context) {
-                                      const label = context.label || '';
-                                      const value = context.parsed || 0;
+                                      const dsLabel = context.dataset.label || context.label || '';
+                                      const value = typeof context.parsed === 'object' ? context.parsed.y : context.parsed;
                                       const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                       const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                      return label + ': ' + value + ' (' + percentage + '%)';
+                                      return dsLabel + ': ' + value + ' (' + percentage + '%)';
                                   }
                               }
                           }

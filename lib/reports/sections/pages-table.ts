@@ -989,9 +989,136 @@ function getNewInsightCells(page: PageInfo) {
 
 // ── Comparison pages table ───────────────────────────────────────────────────
 
+/**
+ * Extract all numeric/display values from a PageInfo for comparison table.
+ * Returns simple string/number values suitable for dual() rendering.
+ */
+function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string, string[]>) {
+  if (!p) return null;
+
+  const h1Count = Array.isArray(p.headings)
+    ? p.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count || 0
+    : p.headings?.h1?.length || 0;
+  const h2Count = Array.isArray(p.headings)
+    ? p.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count || 0
+    : p.headings?.h2?.length || 0;
+
+  const headingsArray: HeadingCount[] | null = Array.isArray(p.headings)
+    ? p.headings
+    : p.headings
+      ? [
+          { tag: 'h1', count: p.headings.h1?.length || p.headings.h1Count || 0 },
+          { tag: 'h2', count: p.headings.h2?.length || p.headings.h2Count || 0 },
+          { tag: 'h3', count: p.headings.h3?.length || p.headings.h3Count || 0 },
+          { tag: 'h4', count: p.headings.h4?.length || p.headings.h4Count || 0 },
+          { tag: 'h5', count: p.headings.h5?.length || p.headings.h5Count || 0 },
+          { tag: 'h6', count: p.headings.h6?.length || p.headings.h6Count || 0 },
+        ]
+      : null;
+  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
+  const missingMeta = getMissingMetaTags(p);
+  const alternatesCount = p.alternates?.length || 0;
+  const linksWithoutText = (Array.isArray(p.links) ? p.links : []).filter(
+    (link: { text?: string }) => !link.text || link.text.trim() === '',
+  ).length || 0;
+
+  // Security
+  const securityScore = p.security?.securityScore ?? null;
+  const missingSecHeaders = p.security?.missingHeaders?.length || 0;
+  const mixedContent = p.security?.mixedContent || 0;
+  const insecureCookies = p.security?.insecureCookies || 0;
+  const formsWithoutCSRF = p.security?.formsWithoutCSRF || 0;
+  const inlineScripts = p.security?.inlineScripts || 0;
+
+  // Caching
+  const cacheScore = p.caching?.cacheScore ?? null;
+  const hasCDN = p.caching?.hasCDN || false;
+  const uncachedStatic = p.caching?.staticUncached || 0;
+  const cachedStatic = p.caching?.staticCached || 0;
+  const hasServiceWorker = p.caching?.hasServiceWorker || false;
+
+  // Image optimization
+  const imgOpt = p.imageOptimization || {};
+  const resOpt = p.resourceOptimization || {};
+  const totalImages = imgOpt.totalImages || 0;
+  const lazyImages = imgOpt.withLazyLoading || 0;
+  const totalImageSize = imgOpt.totalImageSize || 0;
+  const modernFormats = imgOpt.modernFormats || 0;
+  const renderBlocking = resOpt.renderBlocking?.totalBlocking || 0;
+  const uncompressed = resOpt.compression?.uncompressed || 0;
+  const unminified = (resOpt.minification?.unminifiedJS || 0) + (resOpt.minification?.unminifiedCSS || 0);
+
+  // Accessibility
+  const a11y = p.accessibility ?? ({} as AccessibilityAnalysis);
+  const a11yScore = a11y.a11yScore ?? null;
+  const ariaValid = a11y.aria?.valid || 0;
+  const ariaInvalid = a11y.aria?.invalid || 0;
+  const inputsWithLabels = a11y.forms?.inputsWithLabels || 0;
+  const inputsWithoutLabels = a11y.forms?.inputsWithoutLabels || 0;
+  const totalInputs = inputsWithLabels + inputsWithoutLabels;
+  const hasMain = a11y.semantic?.hasMain || false;
+  const hasNav = a11y.semantic?.hasNav || false;
+  const hasHeader = a11y.semantic?.hasHeader || false;
+  const focusIssues = (a11y.keyboard?.elementsWithoutFocus || 0) + (a11y.keyboard?.positiveTabindex || 0);
+
+  // Content quality
+  const content = p.contentQuality ?? ({} as ContentQualityAnalysis);
+  const contentScore = content.contentScore ?? null;
+  const wordCount = content.wordCount || 0;
+  const textToHtmlRatio = content.textToHtmlRatio || 0;
+  const readability = content.readabilityScore || 0;
+  const topKeywords = (content.topKeywords || [])
+    .slice(0, 3)
+    .map((k: { word: string; density: number }) => `${k.word}(${k.density}%)`)
+    .join(', ');
+
+  // New insights
+  const lang = p.languageDetection;
+  const langDisplay = lang?.detectedLanguage?.toUpperCase() || '—';
+  const pr = p.internalPageRank;
+  const prDisplay = pr != null ? (pr * 100).toFixed(1) : '—';
+  const ctaCount = p.ctaData?.summary?.total ?? null;
+  const jsUnused = p.codeCoverage?.js?.ratio;
+  const brokenCount = p.outboundLinkHealth?.broken?.length ?? null;
+  const mainWords = p.contentQuality?.wordCountBySection?.main ?? null;
+
+  const status = (p.status as number) || (p.statusCode as number) || 0;
+  const incomingCount = incomingLinks[p.url]?.length || p.incomingLinksCount || 0;
+
+  // Canonical symbol
+  const canonicalSymbol = p.canonical ? (p.canonical === p.url ? '=' : '~') : 'x';
+
+  return {
+    status, source: p.foundIn === 'discovered' ? 'Link' : 'Sitemap',
+    segment: p.segment || 'other', incomingCount,
+    urlLength: p.urlAnalysis?.length || 0, urlDepth: p.urlAnalysis?.depth || 0,
+    redirects: p.redirectCount || 0, httpLinks: p.httpLinksCount || 0,
+    titleLength: p.title?.length || 0, descLength: p.description?.length || 0,
+    TTFB: p.TTFB, FCP: p.FCP, LCP: p.LCP, CLS: p.CLS, INP: p.INP,
+    pageSize: p.totalResponseSize || 0, requests: p.totalNumberOfRequests || 0,
+    canonicalSymbol, h1Count, h2Count, hStructure: hasHStructureIssue ? 'x' : '=',
+    missingMeta: missingMeta.length, alternatesCount, linksWithoutText,
+    securityScore, missingSecHeaders, insecureCookies, mixedContent, formsWithoutCSRF, inlineScripts,
+    cacheScore, cdn: hasCDN ? '=' : 'x', cachedStatic, uncachedStatic,
+    serviceWorker: hasServiceWorker ? '=' : 'x',
+    totalImages, lazyImages, totalImageSizeKB: Math.round(totalImageSize / 1000),
+    modernFormats, renderBlocking, uncompressed, unminified,
+    a11yScore, aria: ariaInvalid > 0 ? 'x' : ariaValid > 0 ? '=' : '—',
+    formLabels: `${inputsWithLabels}/${totalInputs}`,
+    landmarks: `${hasMain ? 'M' : ''}${hasNav ? 'N' : ''}${hasHeader ? 'H' : ''}` || '—',
+    focusIssues,
+    contentScore, wordCount, textToHtmlRatio, readability, topKeywords: topKeywords || '—',
+    langDisplay, prDisplay, ctaCount: ctaCount != null ? String(ctaCount) : '—',
+    jsUnused: jsUnused != null ? `${jsUnused}%` : '—',
+    brokenLinks: brokenCount != null ? String(brokenCount) : '—',
+    mainWords: mainWords != null ? String(mainWords) : '—',
+  };
+}
+
 function getComparisonPagesTable(data: ReportSectionData, comparison: ComparisonData) {
   const originLabel = shortDomain(comparison.originDomainName);
   const compareLabel = shortDomain(comparison.compareDomainName);
+  const hasPerf = data.hasPerformanceMetrics;
 
   // Build lookup maps
   const originPagesMap = (data.pageData?.pages || {}) as Record<string, PageInfo>;
@@ -1006,34 +1133,181 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     compareByUrl[url] = page;
   }
 
-  // Build matched page rows
+  const originIncoming = (data.pageData?.incomingLinks || {}) as Record<string, string[]>;
+  const compareIncoming = (comparison.comparePageData?.incomingLinks || {}) as Record<string, string[]>;
+
+  // Helper: format o/c dual value, underline when different
+  const dual = (oVal: string | number, cVal: string | number) => {
+    const o = oVal === '' || oVal === undefined || oVal === null ? '—' : String(oVal);
+    const c = cVal === '' || cVal === undefined || cVal === null ? '—' : String(cVal);
+    const changed = o !== c && o !== '—' && c !== '—';
+    const style = changed ? 'border-bottom:2px solid #f97316;padding-bottom:1px;' : '';
+    return `<span style="${style}"><span style="color:#3b82f6;">${o}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${c}</span></span>`;
+  };
+
+  // Helper: single-side value (for unmatched rows)
+  const singleVal = (v: string | number, isOrigin: boolean) => {
+    const s = v === '' || v === undefined || v === null ? '—' : String(v);
+    return isOrigin
+      ? `<span style="color:#3b82f6;">${s}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#d1d5db;">—</span>`
+      : `<span style="color:#d1d5db;">—</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${s}</span>`;
+  };
+
+  const fmtMs = (v: number | undefined) => v ? String(Math.round(v)) : '';
+  const fmtCls = (v: number | undefined) => v !== undefined ? v.toFixed(3) : '';
+  const fmtSize = (v: number | undefined) => v && v > 0 ? formatBytes(v) : '';
+
+  const td = 'padding:4px 5px;font-size:11px;text-align:center;white-space:nowrap;';
+
+  // Build a comparison row from two extracted value sets
+  const buildRow = (
+    idx: number,
+    path: string,
+    url: string,
+    matchType: string,
+    ov: ReturnType<typeof extractPageValues>,
+    cv: ReturnType<typeof extractPageValues>,
+    isUnmatched: boolean,
+    isOrigin: boolean,
+  ) => {
+    const shortPath = path.length > 50 ? '...' + path.slice(-47) : path;
+    const bg = !isUnmatched ? '' : isOrigin ? 'background:rgba(59,130,246,0.03);' : 'background:rgba(168,85,247,0.03);';
+    const badge = isUnmatched
+      ? ` <span class="site-badge ${isOrigin ? 'site-badge-origin' : 'site-badge-compare'}" style="font-size:9px;padding:1px 4px;">${isOrigin ? 'O' : 'C'}</span>`
+      : '';
+
+    // d = dual or single-side render
+    const d = (oVal: string | number | null | undefined, cVal: string | number | null | undefined) => {
+      if (isUnmatched) return singleVal(isOrigin ? (oVal ?? '') : (cVal ?? ''), isOrigin);
+      return dual(oVal ?? '', cVal ?? '');
+    };
+
+    // Check symbol render
+    const sym = (v: string | undefined) => {
+      if (!v || v === '—') return '—';
+      if (v === '=') return '<span style="color:#10b981;">&#10003;</span>';
+      if (v === '~') return '<span style="color:#f59e0b;">&#9888;</span>';
+      if (v === 'x') return '<span style="color:#ef4444;">&#10007;</span>';
+      return v;
+    };
+    const dSym = (oSym: string | undefined, cSym: string | undefined) => {
+      if (isUnmatched) {
+        const s = isOrigin ? sym(oSym) : sym(cSym);
+        return isOrigin
+          ? `<span style="color:#3b82f6;">${s}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#d1d5db;">—</span>`
+          : `<span style="color:#d1d5db;">—</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${s}</span>`;
+      }
+      return `<span style="color:#3b82f6;">${sym(oSym)}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${sym(cSym)}</span>`;
+    };
+
+    return `<tr data-match-type="${matchType}" data-path="${escapeHtml(path)}" style="border-bottom:1px solid #f3f4f6;${bg}">
+      <td style="${td}color:#9ca3af;">${idx + 1}</td>
+      <td style="padding:4px 5px;font-size:11px;"><a href="${escapeHtml(url)}" target="_blank" style="color:#2563eb;text-decoration:none;" title="${escapeHtml(path)}">${escapeHtml(shortPath)}</a>${badge}</td>
+      <td style="${td}">${d(ov?.source, cv?.source)}</td>
+      <td style="${td}">${d(ov?.segment, cv?.segment)}</td>
+      <td style="${td}">${d(ov?.incomingCount, cv?.incomingCount)}</td>
+      <td style="${td}">${d(ov?.urlLength, cv?.urlLength)}</td>
+      <td style="${td}">${d(ov?.urlDepth, cv?.urlDepth)}</td>
+      <td style="${td}">${d(ov?.redirects, cv?.redirects)}</td>
+      <td style="${td}">${d(ov?.httpLinks, cv?.httpLinks)}</td>
+      <td style="${td}font-weight:600;">${d(ov?.status, cv?.status)}</td>
+      <td style="${td}">${d(ov?.titleLength, cv?.titleLength)}</td>
+      <td style="${td}">${d(ov?.descLength, cv?.descLength)}</td>
+      ${hasPerf ? `
+      <td style="${td}">${d(fmtMs(ov?.TTFB), fmtMs(cv?.TTFB))}</td>
+      <td style="${td}">${d(fmtMs(ov?.FCP), fmtMs(cv?.FCP))}</td>
+      <td style="${td}">${d(fmtMs(ov?.LCP), fmtMs(cv?.LCP))}</td>
+      <td style="${td}">${d(fmtCls(ov?.CLS), fmtCls(cv?.CLS))}</td>
+      <td style="${td}">${d(fmtMs(ov?.INP), fmtMs(cv?.INP))}</td>
+      ` : ''}
+      <td style="${td}">${d(fmtSize(ov?.pageSize), fmtSize(cv?.pageSize))}</td>
+      <td style="${td}">${d(ov?.requests, cv?.requests)}</td>
+      <td style="${td}">${dSym(ov?.canonicalSymbol, cv?.canonicalSymbol)}</td>
+      <td style="${td}">${d(ov?.h1Count, cv?.h1Count)}</td>
+      <td style="${td}">${d(ov?.h2Count, cv?.h2Count)}</td>
+      <td style="${td}">${dSym(ov?.hStructure, cv?.hStructure)}</td>
+      <td style="${td}">${d(ov?.missingMeta, cv?.missingMeta)}</td>
+      <td style="${td}">${d(ov?.alternatesCount, cv?.alternatesCount)}</td>
+      <td style="${td}">${d(ov?.linksWithoutText, cv?.linksWithoutText)}</td>
+      <td style="${td}">${d(ov?.securityScore, cv?.securityScore)}</td>
+      <td style="${td}">${d(ov?.missingSecHeaders, cv?.missingSecHeaders)}</td>
+      <td style="${td}">${d(ov?.insecureCookies, cv?.insecureCookies)}</td>
+      <td style="${td}">${d(ov?.mixedContent, cv?.mixedContent)}</td>
+      <td style="${td}">${d(ov?.formsWithoutCSRF, cv?.formsWithoutCSRF)}</td>
+      <td style="${td}">${d(ov?.inlineScripts, cv?.inlineScripts)}</td>
+      <td style="${td}">${d(ov?.cacheScore, cv?.cacheScore)}</td>
+      <td style="${td}">${dSym(ov?.cdn, cv?.cdn)}</td>
+      <td style="${td}">${d(ov?.cachedStatic, cv?.cachedStatic)}</td>
+      <td style="${td}">${d(ov?.uncachedStatic, cv?.uncachedStatic)}</td>
+      <td style="${td}">${dSym(ov?.serviceWorker, cv?.serviceWorker)}</td>
+      <td style="${td}">${d(ov?.totalImages, cv?.totalImages)}</td>
+      <td style="${td}">${d(ov?.lazyImages, cv?.lazyImages)}</td>
+      <td style="${td}">${d(ov?.totalImageSizeKB, cv?.totalImageSizeKB)}</td>
+      <td style="${td}">${d(ov?.modernFormats, cv?.modernFormats)}</td>
+      <td style="${td}">${d(ov?.renderBlocking, cv?.renderBlocking)}</td>
+      <td style="${td}">${d(ov?.uncompressed, cv?.uncompressed)}</td>
+      <td style="${td}">${d(ov?.unminified, cv?.unminified)}</td>
+      <td style="${td}">${d(ov?.a11yScore, cv?.a11yScore)}</td>
+      <td style="${td}">${dSym(ov?.aria, cv?.aria)}</td>
+      <td style="${td}">${d(ov?.formLabels, cv?.formLabels)}</td>
+      <td style="${td}">${d(ov?.landmarks, cv?.landmarks)}</td>
+      <td style="${td}">${d(ov?.focusIssues, cv?.focusIssues)}</td>
+      <td style="${td}">${d(ov?.contentScore, cv?.contentScore)}</td>
+      <td style="${td}">${d(ov?.wordCount, cv?.wordCount)}</td>
+      <td style="${td}">${d(ov?.textToHtmlRatio != null ? ov.textToHtmlRatio + '%' : '', cv?.textToHtmlRatio != null ? cv.textToHtmlRatio + '%' : '')}</td>
+      <td style="${td}">${d(ov?.readability, cv?.readability)}</td>
+      <td style="${td}text-align:left;font-size:10px;white-space:normal;max-width:120px;overflow:hidden;">${d(ov?.topKeywords, cv?.topKeywords)}</td>
+      <td style="${td}">${d(ov?.langDisplay, cv?.langDisplay)}</td>
+      <td style="${td}">${d(ov?.prDisplay, cv?.prDisplay)}</td>
+      <td style="${td}">${d(ov?.ctaCount, cv?.ctaCount)}</td>
+      <td style="${td}">${d(ov?.jsUnused, cv?.jsUnused)}</td>
+      <td style="${td}">${d(ov?.brokenLinks, cv?.brokenLinks)}</td>
+      <td style="${td}">${d(ov?.mainWords, cv?.mainWords)}</td>
+    </tr>`;
+  };
+
+  // Build matched rows
   const matchedRows = comparison.matchedPaths.map((match, idx) => {
-    const oPage = originByUrl[match.originUrl];
-    const cPage = compareByUrl[match.compareUrl];
-    if (!oPage && !cPage) return '';
-    return getComparisonPageRowPair(match.path, oPage, cPage, idx, originLabel, compareLabel);
+    const o = originByUrl[match.originUrl];
+    const c = compareByUrl[match.compareUrl];
+    if (!o && !c) return '';
+    const ov = extractPageValues(o, originIncoming);
+    const cv = extractPageValues(c, compareIncoming);
+    return buildRow(idx, match.path, o?.url || c?.url || '', 'matched', ov, cv, false, false);
   }).join('');
 
-  // Origin-only pages
-  const originOnlyRows = comparison.originOnlyPaths.map((path, idx) => {
-    const page = Object.values(originByUrl).find(p => {
-      try { return new URL(p.url).pathname.toLowerCase().replace(/\/$/, '') === path || new URL(p.url).pathname.toLowerCase() === path; } catch { return false; }
+  // Unmatched rows
+  const findPageByPath = (pages: Record<string, PageInfo>, path: string) => {
+    return Object.values(pages).find(p => {
+      try {
+        const pathname = new URL(p.url).pathname.toLowerCase();
+        return pathname.replace(/\/$/, '') === path || pathname === path;
+      } catch { return false; }
     });
+  };
+
+  const originOnlyRows = comparison.originOnlyPaths.map((path, idx) => {
+    const page = findPageByPath(originByUrl, path);
     if (!page) return '';
-    return getUnmatchedPageRow(page, comparison.matchedPaths.length + idx, originLabel, 'site-badge-origin', 'page-row-origin-only');
+    const ov = extractPageValues(page, originIncoming);
+    return buildRow(comparison.matchedPaths.length + idx, path, page.url, 'origin-only', ov, null, true, true);
   }).join('');
 
   const compareOnlyRows = comparison.compareOnlyPaths.map((path, idx) => {
-    const page = Object.values(compareByUrl).find(p => {
-      try { return new URL(p.url).pathname.toLowerCase().replace(/\/$/, '') === path || new URL(p.url).pathname.toLowerCase() === path; } catch { return false; }
-    });
+    const page = findPageByPath(compareByUrl, path);
     if (!page) return '';
-    return getUnmatchedPageRow(page, comparison.matchedPaths.length + comparison.originOnlyPaths.length + idx, compareLabel, 'site-badge-compare', 'page-row-compare-only');
+    const cv = extractPageValues(page, compareIncoming);
+    return buildRow(comparison.matchedPaths.length + comparison.originOnlyPaths.length + idx, path, page.url, 'compare-only', null, cv, true, false);
   }).join('');
 
   const totalRows = comparison.matchedPaths.length + comparison.originOnlyPaths.length + comparison.compareOnlyPaths.length;
 
+  const thStyle = 'padding:5px 6px;text-align:center;font-size:10px;color:#6b7280;font-weight:600;white-space:nowrap;border-bottom:2px solid #e5e7eb;';
+
   return `
+    <div style="margin-bottom: 10px; font-size: 11px; color: #6b7280;">
+      Values shown as <span style="color:#3b82f6;font-weight:600;">${escapeHtml(originLabel)}</span><span style="color:#9ca3af;"> / </span><span style="color:#a855f7;font-weight:600;">${escapeHtml(compareLabel)}</span>
+    </div>
     <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
       <button class="sev-pill active" onclick="filterCompareTable('all', this)">All (${totalRows})</button>
       <button class="sev-pill" onclick="filterCompareTable('matched', this)">Matched (${comparison.matchedPaths.length})</button>
@@ -1043,19 +1317,71 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     </div>
 
     <div class="table-container">
-      <table id="pagesTable" style="width: 100%; border-collapse: collapse;">
+      <table id="pagesTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
         <thead>
           <tr style="background: #f9fafb;">
-            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 30px;">#</th>
-            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 70px;">Site</th>
-            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">Path</th>
-            <th style="padding: 8px; text-align: center; font-size: 11px; color: #6b7280; width: 50px;">Status</th>
-            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">Title</th>
-            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 60px;">TTFB</th>
-            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 60px;">LCP</th>
-            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 50px;">CLS</th>
-            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 70px;">Size</th>
-            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 50px;">Words</th>
+            <th style="${thStyle}">#</th>
+            <th style="${thStyle}text-align:left;">Path</th>
+            <th style="${thStyle}">Source</th>
+            <th style="${thStyle}">Segment</th>
+            <th style="${thStyle}">Incoming</th>
+            <th style="${thStyle}">URL Len</th>
+            <th style="${thStyle}">Depth</th>
+            <th style="${thStyle}">Redirects</th>
+            <th style="${thStyle}">HTTP Links</th>
+            <th style="${thStyle}">Status</th>
+            <th style="${thStyle}">Title</th>
+            <th style="${thStyle}">Desc</th>
+            ${hasPerf ? `
+            <th style="${thStyle}">TTFB</th>
+            <th style="${thStyle}">FCP</th>
+            <th style="${thStyle}">LCP</th>
+            <th style="${thStyle}">CLS</th>
+            <th style="${thStyle}">INP</th>
+            ` : ''}
+            <th style="${thStyle}">Size</th>
+            <th style="${thStyle}">Requests</th>
+            <th style="${thStyle}">Canonical</th>
+            <th style="${thStyle}">H1</th>
+            <th style="${thStyle}">H2</th>
+            <th style="${thStyle}">H Struct</th>
+            <th style="${thStyle}">Miss Meta</th>
+            <th style="${thStyle}">Alternates</th>
+            <th style="${thStyle}">No Text</th>
+            <th style="${thStyle}">Sec Score</th>
+            <th style="${thStyle}">Miss Hdrs</th>
+            <th style="${thStyle}">Cookies</th>
+            <th style="${thStyle}">Mixed</th>
+            <th style="${thStyle}">No CSRF</th>
+            <th style="${thStyle}">Inline JS</th>
+            <th style="${thStyle}">Cache</th>
+            <th style="${thStyle}">CDN</th>
+            <th style="${thStyle}">Cached</th>
+            <th style="${thStyle}">Uncached</th>
+            <th style="${thStyle}">SW</th>
+            <th style="${thStyle}">Images</th>
+            <th style="${thStyle}">Lazy</th>
+            <th style="${thStyle}">Img KB</th>
+            <th style="${thStyle}">Modern</th>
+            <th style="${thStyle}">Blocking</th>
+            <th style="${thStyle}">Uncompr</th>
+            <th style="${thStyle}">Unmin</th>
+            <th style="${thStyle}">A11y</th>
+            <th style="${thStyle}">ARIA</th>
+            <th style="${thStyle}">Labels</th>
+            <th style="${thStyle}">Landmarks</th>
+            <th style="${thStyle}">Focus</th>
+            <th style="${thStyle}">Content</th>
+            <th style="${thStyle}">Words</th>
+            <th style="${thStyle}">Text/HTML</th>
+            <th style="${thStyle}">Read</th>
+            <th style="${thStyle}text-align:left;">Keywords</th>
+            <th style="${thStyle}">Lang</th>
+            <th style="${thStyle}">PR</th>
+            <th style="${thStyle}">CTAs</th>
+            <th style="${thStyle}">JS Unused</th>
+            <th style="${thStyle}">Broken</th>
+            <th style="${thStyle}">Main Wds</th>
           </tr>
         </thead>
         <tbody>
@@ -1085,73 +1411,6 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     }
     </script>
   `;
-}
-
-function getComparisonPageRowPair(path: string, oPage: PageInfo | undefined, cPage: PageInfo | undefined, idx: number, originLabel: string, compareLabel: string): string {
-  const shortPath = path.length > 60 ? '...' + path.slice(-57) : path;
-
-  const renderRow = (page: PageInfo | undefined, label: string, badgeClass: string, rowClass: string) => {
-    if (!page) return '';
-    const status = (page.status as number) || 0;
-    const statusColor = getStatusColor(status);
-    const title = (page.title as string) || '';
-    const shortTitle = title.length > 40 ? title.slice(0, 37) + '...' : title;
-    const ttfb = page.TTFB || 0;
-    const lcp = page.LCP || 0;
-    const cls = page.CLS;
-    const size = page.totalResponseSize as number || 0;
-    const words = (page.contentQuality as ContentQualityAnalysis)?.wordCount || 0;
-    const ttfbColor = ttfb > 1500 ? '#ef4444' : ttfb > 800 ? '#f59e0b' : '#10b981';
-    const lcpColor = lcp > 4000 ? '#ef4444' : lcp > 2500 ? '#f59e0b' : '#10b981';
-
-    return `<tr class="${rowClass}" data-match-type="matched" data-path="${escapeHtml(path)}" style="border-bottom: 1px solid #f3f4f6;">
-      <td style="padding: 6px 8px; font-size: 11px; color: #9ca3af;">${idx + 1}</td>
-      <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
-      <td style="padding: 6px 8px; font-size: 12px;"><a href="${escapeHtml(page.url)}" target="_blank" style="color: #2563eb; text-decoration: none;" title="${escapeHtml(path)}">${escapeHtml(shortPath)}</a></td>
-      <td style="padding: 6px 8px; text-align: center; font-size: 12px; color: ${statusColor}; font-weight: 600;">${status}</td>
-      <td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;" title="${escapeHtml(title)}">${escapeHtml(shortTitle)}</td>
-      <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${ttfbColor}; font-weight: 500;">${ttfb ? ttfb + 'ms' : '—'}</td>
-      <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${lcpColor}; font-weight: 500;">${lcp ? lcp + 'ms' : '—'}</td>
-      <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${cls !== undefined ? cls.toFixed(3) : '—'}</td>
-      <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${size > 0 ? formatBytes(size) : '—'}</td>
-      <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${words || '—'}</td>
-    </tr>`;
-  };
-
-  return renderRow(oPage, originLabel, 'site-badge-origin', 'page-row-origin')
-    + renderRow(cPage, compareLabel, 'site-badge-compare', 'page-row-compare');
-}
-
-function getUnmatchedPageRow(page: PageInfo, idx: number, label: string, badgeClass: string, rowClass: string): string {
-  let shortPath;
-  try { shortPath = new URL(page.url).pathname; } catch { shortPath = page.url; }
-  if (shortPath.length > 60) shortPath = '...' + shortPath.slice(-57);
-
-  const matchType = badgeClass.includes('origin') ? 'origin-only' : 'compare-only';
-  const status = (page.status as number) || 0;
-  const statusColor = getStatusColor(status);
-  const title = (page.title as string) || '';
-  const shortTitle = title.length > 40 ? title.slice(0, 37) + '...' : title;
-  const ttfb = page.TTFB || 0;
-  const lcp = page.LCP || 0;
-  const cls = page.CLS;
-  const size = page.totalResponseSize as number || 0;
-  const words = (page.contentQuality as ContentQualityAnalysis)?.wordCount || 0;
-  const ttfbColor = ttfb > 1500 ? '#ef4444' : ttfb > 800 ? '#f59e0b' : '#10b981';
-  const lcpColor = lcp > 4000 ? '#ef4444' : lcp > 2500 ? '#f59e0b' : '#10b981';
-
-  return `<tr class="${rowClass}" data-match-type="${matchType}" data-path="${escapeHtml(shortPath)}" style="border-bottom: 1px solid #f3f4f6;">
-    <td style="padding: 6px 8px; font-size: 11px; color: #9ca3af;">${idx + 1}</td>
-    <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
-    <td style="padding: 6px 8px; font-size: 12px;"><a href="${escapeHtml(page.url)}" target="_blank" style="color: #2563eb; text-decoration: none;">${escapeHtml(shortPath)}</a></td>
-    <td style="padding: 6px 8px; text-align: center; font-size: 12px; color: ${statusColor}; font-weight: 600;">${status}</td>
-    <td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;" title="${escapeHtml(title)}">${escapeHtml(shortTitle)}</td>
-    <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${ttfbColor}; font-weight: 500;">${ttfb ? ttfb + 'ms' : '—'}</td>
-    <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${lcpColor}; font-weight: 500;">${lcp ? lcp + 'ms' : '—'}</td>
-    <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${cls !== undefined ? cls.toFixed(3) : '—'}</td>
-    <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${size > 0 ? formatBytes(size) : '—'}</td>
-    <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${words || '—'}</td>
-  </tr>`;
 }
 
 export { getPagesTable };

@@ -312,6 +312,7 @@ async function audit() {
         concurrency: args.concurrency,
         sitemap: args.sitemap,
         compareSitemap: args.compareSitemap,
+        open: args.open,
       });
 
       await comparison.audit();

@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
+import { exec } from 'child_process';
 // Import SEOData from extracted module (avoids circular dependency with robots.js)
 import { SEOData } from '../seo-data';
 import { PageMatcher } from './page-matcher';
@@ -21,6 +22,7 @@ interface ComparisonOptions {
   concurrency: number;
   sitemap: string | null;
   compareSitemap: string | null;
+  open: boolean;
 }
 
 interface AuditSiteResult {
@@ -141,6 +143,7 @@ class ComparisonAudit {
       concurrency: options.concurrency || 5,
       sitemap: options.sitemap || null,
       compareSitemap: options.compareSitemap || null,
+      open: options.open || false,
     };
     this.#originResults = null;
     this.#compareResults = null;
@@ -581,6 +584,16 @@ class ComparisonAudit {
     this.#generateComparisonHtml(htmlFile);
 
     console.log(`📄 Generated comparison report: ${htmlFile}`);
+
+    // Auto-open comparison report in browser if --open flag is set
+    if (this.#options.open) {
+      const openCmd =
+        process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      const absolutePath = path.resolve(htmlFile);
+      exec(`${openCmd} "${absolutePath}"`, (err) => {
+        if (err) console.log('Could not auto-open comparison report:', err.message);
+      });
+    }
   }
 
   /**

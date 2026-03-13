@@ -991,6 +991,17 @@ export interface SeverityColorConfig {
 
 // ─── Report Section Data ────────────────────────────────────────────────────
 
+export interface ComparisonData {
+  compareJsonData: Record<string, unknown>;
+  comparePages: PageInfo[];
+  comparePageData: PageData & { incomingLinks?: Record<string, string[]> };
+  compareDomainName: string;
+  originDomainName: string;
+  matchedPaths: Array<{ path: string; originUrl: string; compareUrl: string }>;
+  originOnlyPaths: string[];
+  compareOnlyPaths: string[];
+}
+
 export interface ReportSectionData {
   jsonData: Record<string, unknown>;
   pages: PageInfo[];
@@ -1007,6 +1018,7 @@ export interface ReportSectionData {
   isMultiLang?: boolean;
   hasPerformanceMetrics?: boolean;
   domainName?: string;
+  comparison?: ComparisonData;
 }
 
 export interface TopIssue {

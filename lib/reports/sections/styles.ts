@@ -2601,6 +2601,183 @@ function getStyles() {
                   content: none !important;
               }
           }
+
+          /* ── Comparison / Dual-Origin Styles ─────────────────────────── */
+
+          .comparison-header {
+              background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+              color: white;
+              padding: 16px 24px;
+              border-radius: 12px;
+              margin-bottom: 24px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 12px;
+          }
+          .comparison-header-sites {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              font-size: 16px;
+              font-weight: 600;
+          }
+          .comparison-origin-badge {
+              background: rgba(59, 130, 246, 0.3);
+              border: 1px solid rgba(59, 130, 246, 0.5);
+              padding: 4px 12px;
+              border-radius: 6px;
+          }
+          .comparison-compare-badge {
+              background: rgba(168, 85, 247, 0.3);
+              border: 1px solid rgba(168, 85, 247, 0.5);
+              padding: 4px 12px;
+              border-radius: 6px;
+          }
+          .comparison-vs {
+              opacity: 0.7;
+              font-weight: 400;
+              font-size: 14px;
+          }
+          .comparison-header-stats {
+              display: flex;
+              gap: 16px;
+              font-size: 13px;
+              opacity: 0.9;
+          }
+          .comparison-stat-origin { color: #93c5fd; }
+          .comparison-stat-compare { color: #c4b5fd; }
+
+          .dual-value {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              flex-wrap: wrap;
+          }
+          .dual-value-item {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              min-width: 60px;
+          }
+          .dual-label {
+              font-size: 10px;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin-bottom: 2px;
+          }
+          .origin-label { color: #3b82f6; }
+          .compare-label { color: #a855f7; }
+          .dual-val { font-weight: 600; }
+          .dual-delta {
+              font-size: 12px;
+              font-weight: 600;
+          }
+
+          .delta-badge {
+              font-size: 11px;
+              font-weight: 600;
+              padding: 1px 6px;
+              border-radius: 4px;
+              white-space: nowrap;
+          }
+          .delta-badge.neutral { color: #6b7280; }
+
+          .dual-score {
+              display: flex;
+              align-items: center;
+              gap: 16px;
+              justify-content: center;
+          }
+          .dual-score-item {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+          }
+          .dual-score-val {
+              font-size: 48px;
+              font-weight: 800;
+              line-height: 1;
+          }
+          .dual-score-delta {
+              font-size: 18px;
+              font-weight: 700;
+          }
+
+          .dual-stat-card {
+              display: grid;
+              grid-template-columns: 1fr auto 1fr;
+              gap: 12px;
+              align-items: start;
+          }
+          .dual-stat-side {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 8px;
+              font-size: 12px;
+          }
+          .dual-stat-divider {
+              width: 1px;
+              background: rgba(255,255,255,0.3);
+              align-self: stretch;
+          }
+
+          .comparison-summary-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: 16px;
+              margin: 20px 0;
+          }
+
+          /* Origin/Compare row styling in pages table */
+          .page-row-origin { background: rgba(59, 130, 246, 0.03); }
+          .page-row-compare { background: rgba(168, 85, 247, 0.03); }
+          .page-row-origin-only { background: rgba(59, 130, 246, 0.06); }
+          .page-row-compare-only { background: rgba(168, 85, 247, 0.06); }
+
+          .site-badge {
+              display: inline-block;
+              padding: 1px 6px;
+              border-radius: 3px;
+              font-size: 10px;
+              font-weight: 600;
+              text-transform: uppercase;
+          }
+          .site-badge-origin {
+              background: #dbeafe;
+              color: #1d4ed8;
+          }
+          .site-badge-compare {
+              background: #ede9fe;
+              color: #6d28d9;
+          }
+
+          @media (max-width: 768px) {
+              .dual-value {
+                  flex-direction: column;
+                  gap: 4px;
+              }
+              .dual-score {
+                  flex-direction: column;
+                  gap: 8px;
+              }
+              .dual-score-val {
+                  font-size: 32px;
+              }
+              .comparison-header {
+                  flex-direction: column;
+                  text-align: center;
+              }
+              .dual-stat-card {
+                  grid-template-columns: 1fr;
+              }
+              .dual-stat-divider {
+                  width: 100%;
+                  height: 1px;
+              }
+          }
       </style>`;
 }
 

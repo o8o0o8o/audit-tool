@@ -579,11 +579,24 @@ class ComparisonAudit {
       console.warn(`⚠️  Could not generate compare HTML report: ${(error as Error).message}`);
     }
 
-    // Generate comparison HTML report
+    // Generate rich comparison HTML report using the regular report with dual-origin mode
     const htmlFile = path.join(this.comparisonDir, 'comparison.html');
-    this.#generateComparisonHtml(htmlFile);
-
-    console.log(`📄 Generated comparison report: ${htmlFile}`);
+    try {
+      generateHTML(
+        this.#originResults!.file,
+        this.#originResults!.domain!,
+        htmlFile,
+        {
+          compareFile: this.#compareResults!.file,
+          compareDomainName: this.#compareResults!.domain!,
+        },
+      );
+      console.log(`📄 Generated comparison report: ${htmlFile}`);
+    } catch (error) {
+      console.warn(`⚠️  Rich comparison report failed, falling back to simple report: ${(error as Error).message}`);
+      this.#generateComparisonHtml(htmlFile);
+      console.log(`📄 Generated fallback comparison report: ${htmlFile}`);
+    }
 
     // Auto-open comparison report in browser if --open flag is set
     if (this.#options.open) {

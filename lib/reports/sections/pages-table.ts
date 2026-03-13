@@ -15,12 +15,14 @@ import {
   getMetricTooltip,
   getTextLengthTooltip,
 } from '../html-utils';
+import { shortDomain } from '../comparison-helpers';
 import type {
   PageInfo,
   ReportSectionData,
   HeadingCount,
   AccessibilityAnalysis,
   ContentQualityAnalysis,
+  ComparisonData,
 } from '../../types';
 
 interface CrUXMetric {
@@ -129,6 +131,10 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
  * @returns {string} HTML string for the pages table
  */
 function getPagesTable(data: ReportSectionData) {
+  if (data.comparison) {
+    return getComparisonPagesTable(data, data.comparison);
+  }
+
   const { pages, hasPerformanceMetrics = false } = data;
   const cruxData = (data.jsonData?.cruxData || null) as CrUXData | null;
   const hasCrux = !!cruxData?.metrics;
@@ -979,6 +985,173 @@ function getNewInsightCells(page: PageInfo) {
     <td style="text-align: center; font-size: 12px; color: ${brokenCount != null ? brokenColor : '#6b7280'}; font-weight: ${(brokenCount ?? 0) > 0 ? '600' : 'normal'};">${brokenDisplay}</td>
     <td style="text-align: center; font-size: 12px; color: ${mainColor};">${mainDisplay}</td>
   `;
+}
+
+// ── Comparison pages table ───────────────────────────────────────────────────
+
+function getComparisonPagesTable(data: ReportSectionData, comparison: ComparisonData) {
+  const originLabel = shortDomain(comparison.originDomainName);
+  const compareLabel = shortDomain(comparison.compareDomainName);
+
+  // Build lookup maps
+  const originPagesMap = (data.pageData?.pages || {}) as Record<string, PageInfo>;
+  const comparePagesMap = (comparison.comparePageData?.pages || {}) as Record<string, PageInfo>;
+
+  const originByUrl: Record<string, PageInfo> = {};
+  for (const [url, page] of Object.entries(originPagesMap)) {
+    originByUrl[url] = page;
+  }
+  const compareByUrl: Record<string, PageInfo> = {};
+  for (const [url, page] of Object.entries(comparePagesMap)) {
+    compareByUrl[url] = page;
+  }
+
+  // Build matched page rows
+  const matchedRows = comparison.matchedPaths.map((match, idx) => {
+    const oPage = originByUrl[match.originUrl];
+    const cPage = compareByUrl[match.compareUrl];
+    if (!oPage && !cPage) return '';
+    return getComparisonPageRowPair(match.path, oPage, cPage, idx, originLabel, compareLabel);
+  }).join('');
+
+  // Origin-only pages
+  const originOnlyRows = comparison.originOnlyPaths.map((path, idx) => {
+    const page = Object.values(originByUrl).find(p => {
+      try { return new URL(p.url).pathname.toLowerCase().replace(/\/$/, '') === path || new URL(p.url).pathname.toLowerCase() === path; } catch { return false; }
+    });
+    if (!page) return '';
+    return getUnmatchedPageRow(page, comparison.matchedPaths.length + idx, originLabel, 'site-badge-origin', 'page-row-origin-only');
+  }).join('');
+
+  const compareOnlyRows = comparison.compareOnlyPaths.map((path, idx) => {
+    const page = Object.values(compareByUrl).find(p => {
+      try { return new URL(p.url).pathname.toLowerCase().replace(/\/$/, '') === path || new URL(p.url).pathname.toLowerCase() === path; } catch { return false; }
+    });
+    if (!page) return '';
+    return getUnmatchedPageRow(page, comparison.matchedPaths.length + comparison.originOnlyPaths.length + idx, compareLabel, 'site-badge-compare', 'page-row-compare-only');
+  }).join('');
+
+  const totalRows = comparison.matchedPaths.length + comparison.originOnlyPaths.length + comparison.compareOnlyPaths.length;
+
+  return `
+    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <button class="sev-pill active" onclick="filterCompareTable('all', this)">All (${totalRows})</button>
+      <button class="sev-pill" onclick="filterCompareTable('matched', this)">Matched (${comparison.matchedPaths.length})</button>
+      ${comparison.originOnlyPaths.length > 0 ? `<button class="sev-pill" onclick="filterCompareTable('origin-only', this)">Only ${escapeHtml(originLabel)} (${comparison.originOnlyPaths.length})</button>` : ''}
+      ${comparison.compareOnlyPaths.length > 0 ? `<button class="sev-pill" onclick="filterCompareTable('compare-only', this)">Only ${escapeHtml(compareLabel)} (${comparison.compareOnlyPaths.length})</button>` : ''}
+      <input type="text" id="compareSearch" placeholder="Filter by path..." style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; width: 250px;" onkeyup="filterCompareSearch(this.value)">
+    </div>
+
+    <div class="table-container">
+      <table id="pagesTable" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f9fafb;">
+            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 30px;">#</th>
+            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 70px;">Site</th>
+            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">Path</th>
+            <th style="padding: 8px; text-align: center; font-size: 11px; color: #6b7280; width: 50px;">Status</th>
+            <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">Title</th>
+            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 60px;">TTFB</th>
+            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 60px;">LCP</th>
+            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 50px;">CLS</th>
+            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 70px;">Size</th>
+            <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280; width: 50px;">Words</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matchedRows}
+          ${originOnlyRows}
+          ${compareOnlyRows}
+        </tbody>
+      </table>
+    </div>
+
+    <script>
+    function filterCompareTable(type, btn) {
+      document.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
+      if (btn) btn.classList.add('active');
+      document.querySelectorAll('#pagesTable tbody tr').forEach(function(r) {
+        if (type === 'all') { r.style.display = ''; return; }
+        var match = r.dataset.matchType;
+        r.style.display = match === type ? '' : 'none';
+      });
+    }
+    function filterCompareSearch(query) {
+      var q = query.toLowerCase();
+      document.querySelectorAll('#pagesTable tbody tr').forEach(function(r) {
+        var path = (r.dataset.path || '').toLowerCase();
+        r.style.display = !q || path.includes(q) ? '' : 'none';
+      });
+    }
+    </script>
+  `;
+}
+
+function getComparisonPageRowPair(path: string, oPage: PageInfo | undefined, cPage: PageInfo | undefined, idx: number, originLabel: string, compareLabel: string): string {
+  const shortPath = path.length > 60 ? '...' + path.slice(-57) : path;
+
+  const renderRow = (page: PageInfo | undefined, label: string, badgeClass: string, rowClass: string) => {
+    if (!page) return '';
+    const status = (page.status as number) || 0;
+    const statusColor = getStatusColor(status);
+    const title = (page.title as string) || '';
+    const shortTitle = title.length > 40 ? title.slice(0, 37) + '...' : title;
+    const ttfb = page.TTFB || 0;
+    const lcp = page.LCP || 0;
+    const cls = page.CLS;
+    const size = page.totalResponseSize as number || 0;
+    const words = (page.contentQuality as ContentQualityAnalysis)?.wordCount || 0;
+    const ttfbColor = ttfb > 1500 ? '#ef4444' : ttfb > 800 ? '#f59e0b' : '#10b981';
+    const lcpColor = lcp > 4000 ? '#ef4444' : lcp > 2500 ? '#f59e0b' : '#10b981';
+
+    return `<tr class="${rowClass}" data-match-type="matched" data-path="${escapeHtml(path)}" style="border-bottom: 1px solid #f3f4f6;">
+      <td style="padding: 6px 8px; font-size: 11px; color: #9ca3af;">${idx + 1}</td>
+      <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
+      <td style="padding: 6px 8px; font-size: 12px;"><a href="${escapeHtml(page.url)}" target="_blank" style="color: #2563eb; text-decoration: none;" title="${escapeHtml(path)}">${escapeHtml(shortPath)}</a></td>
+      <td style="padding: 6px 8px; text-align: center; font-size: 12px; color: ${statusColor}; font-weight: 600;">${status}</td>
+      <td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;" title="${escapeHtml(title)}">${escapeHtml(shortTitle)}</td>
+      <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${ttfbColor}; font-weight: 500;">${ttfb ? ttfb + 'ms' : '—'}</td>
+      <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${lcpColor}; font-weight: 500;">${lcp ? lcp + 'ms' : '—'}</td>
+      <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${cls !== undefined ? cls.toFixed(3) : '—'}</td>
+      <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${size > 0 ? formatBytes(size) : '—'}</td>
+      <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${words || '—'}</td>
+    </tr>`;
+  };
+
+  return renderRow(oPage, originLabel, 'site-badge-origin', 'page-row-origin')
+    + renderRow(cPage, compareLabel, 'site-badge-compare', 'page-row-compare');
+}
+
+function getUnmatchedPageRow(page: PageInfo, idx: number, label: string, badgeClass: string, rowClass: string): string {
+  let shortPath;
+  try { shortPath = new URL(page.url).pathname; } catch { shortPath = page.url; }
+  if (shortPath.length > 60) shortPath = '...' + shortPath.slice(-57);
+
+  const matchType = badgeClass.includes('origin') ? 'origin-only' : 'compare-only';
+  const status = (page.status as number) || 0;
+  const statusColor = getStatusColor(status);
+  const title = (page.title as string) || '';
+  const shortTitle = title.length > 40 ? title.slice(0, 37) + '...' : title;
+  const ttfb = page.TTFB || 0;
+  const lcp = page.LCP || 0;
+  const cls = page.CLS;
+  const size = page.totalResponseSize as number || 0;
+  const words = (page.contentQuality as ContentQualityAnalysis)?.wordCount || 0;
+  const ttfbColor = ttfb > 1500 ? '#ef4444' : ttfb > 800 ? '#f59e0b' : '#10b981';
+  const lcpColor = lcp > 4000 ? '#ef4444' : lcp > 2500 ? '#f59e0b' : '#10b981';
+
+  return `<tr class="${rowClass}" data-match-type="${matchType}" data-path="${escapeHtml(shortPath)}" style="border-bottom: 1px solid #f3f4f6;">
+    <td style="padding: 6px 8px; font-size: 11px; color: #9ca3af;">${idx + 1}</td>
+    <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
+    <td style="padding: 6px 8px; font-size: 12px;"><a href="${escapeHtml(page.url)}" target="_blank" style="color: #2563eb; text-decoration: none;">${escapeHtml(shortPath)}</a></td>
+    <td style="padding: 6px 8px; text-align: center; font-size: 12px; color: ${statusColor}; font-weight: 600;">${status}</td>
+    <td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;" title="${escapeHtml(title)}">${escapeHtml(shortTitle)}</td>
+    <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${ttfbColor}; font-weight: 500;">${ttfb ? ttfb + 'ms' : '—'}</td>
+    <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${lcpColor}; font-weight: 500;">${lcp ? lcp + 'ms' : '—'}</td>
+    <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${cls !== undefined ? cls.toFixed(3) : '—'}</td>
+    <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${size > 0 ? formatBytes(size) : '—'}</td>
+    <td style="padding: 6px 8px; text-align: right; font-size: 12px;">${words || '—'}</td>
+  </tr>`;
 }
 
 export { getPagesTable };

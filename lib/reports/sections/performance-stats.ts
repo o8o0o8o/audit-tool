@@ -5,7 +5,8 @@
 
 import { METRIC_INFO, THRESHOLDS } from '../metrics-metadata';
 import { escapeHtml } from '../html-utils';
-import type { PageInfo, ReportSectionData, MetricInfoEntry } from '../../types';
+import { shortDomain, formatPercentDelta } from '../comparison-helpers';
+import type { PageInfo, ReportSectionData, MetricInfoEntry, ComparisonData } from '../../types';
 
 /**
  * Generate the performance statistics section
@@ -14,6 +15,10 @@ import type { PageInfo, ReportSectionData, MetricInfoEntry } from '../../types';
  * @returns {string} HTML string for the performance stats section
  */
 function getPerformanceStats(data: ReportSectionData) {
+  if (data.comparison) {
+    return getComparisonPerformanceStats(data.jsonData, data.comparison);
+  }
+
   const { jsonData } = data;
   const pageData = jsonData.pageData as Record<string, unknown> | undefined;
   const pages = (pageData?.pages || {}) as Record<string, PageInfo>;
@@ -434,6 +439,161 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
         `
             : ''
         }
+      </div>
+    </div>
+  `;
+}
+
+// ── Comparison performance stats ─────────────────────────────────────────────
+
+function extractPerfValues(jsonData: Record<string, unknown>) {
+  const pageData = jsonData.pageData as Record<string, unknown> | undefined;
+  const pages = (pageData?.pages || {}) as Record<string, PageInfo>;
+  const pagesArray: PageInfo[] = Object.values(pages);
+  const pagesWithPerf = pagesArray.filter((p) => p.TTFB || p.LCP || p.CLS || p.INP);
+
+  const extract = (arr: PageInfo[], fn: (p: PageInfo) => number | undefined, filterZero = true) => {
+    const vals = arr.map(fn).filter((v): v is number => v !== undefined && v !== null);
+    return filterZero ? vals.filter(v => v > 0).sort((a, b) => a - b) : vals.sort((a, b) => a - b);
+  };
+
+  return {
+    pagesWithPerf,
+    ttfb: extract(pagesWithPerf, p => p.TTFB),
+    lcp: extract(pagesWithPerf, p => p.LCP),
+    cls: extract(pagesWithPerf, p => p.CLS, false).filter(v => v >= 0),
+    fcp: extract(pagesWithPerf, p => p.FCP),
+    inp: extract(pagesWithPerf, p => p.INP),
+    pageSize: extract(pagesArray, p => p.totalResponseSize as number | undefined),
+  };
+}
+
+function getComparisonPerformanceStats(jsonData: Record<string, unknown>, comparison: ComparisonData) {
+  const origin = extractPerfValues(jsonData);
+  const compare = extractPerfValues(comparison.compareJsonData);
+
+  if (origin.pagesWithPerf.length === 0 && compare.pagesWithPerf.length === 0) return '';
+
+  const avg = (arr: number[]): number => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+  const p75 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0;
+
+  const originLabel = shortDomain(comparison.originDomainName);
+  const compareLabel = shortDomain(comparison.compareDomainName);
+
+  const metrics = [
+    { key: 'ttfb', label: '⚡ TTFB', unit: 'ms', colors: ['#8b5cf6', '#7c3aed'], oVals: origin.ttfb, cVals: compare.ttfb },
+    { key: 'lcp', label: '🎨 LCP', unit: 'ms', colors: ['#ec4899', '#db2777'], oVals: origin.lcp, cVals: compare.lcp },
+    { key: 'cls', label: '📐 CLS', unit: '', colors: ['#14b8a6', '#0d9488'], oVals: origin.cls, cVals: compare.cls, isCls: true },
+    { key: 'inp', label: '👆 INP', unit: 'ms', colors: ['#f97316', '#ea580c'], oVals: origin.inp, cVals: compare.inp },
+    { key: 'pageSize', label: '📦 Page Size', unit: 'MB', colors: ['#f59e0b', '#d97706'], oVals: origin.pageSize, cVals: compare.pageSize, isSize: true },
+  ];
+
+  const cards = metrics
+    .filter(m => m.oVals.length > 0 || m.cVals.length > 0)
+    .map(m => {
+      const oAvg = avg(m.oVals);
+      const cAvg = avg(m.cVals);
+      const oP75 = p75(m.oVals);
+      const cP75 = p75(m.cVals);
+
+      const formatVal = (v: number) => {
+        if (m.isCls) return v.toFixed(3);
+        if (m.isSize) return (v / (1024 * 1024)).toFixed(2) + 'MB';
+        return v + m.unit;
+      };
+
+      const delta = formatPercentDelta(oAvg, cAvg, true);
+
+      const info = METRIC_INFO[m.key] || {} as MetricInfoEntry;
+      const fullName = info.fullName || m.label;
+
+      return `
+        <div style="background: linear-gradient(135deg, ${m.colors[0]} 0%, ${m.colors[1]} 100%); color: white; padding: 20px; border-radius: 8px;">
+          <div style="font-size: 14px; opacity: 0.9; margin-bottom: 12px;">${m.label} ${fullName !== m.label ? `(${fullName})` : ''}</div>
+          <div class="dual-stat-card">
+            <div class="dual-stat-side">
+              <div style="grid-column: 1 / -1; font-size: 10px; font-weight: 600; text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; color: #93c5fd;">${originLabel}</div>
+              <div><strong>Avg:</strong> ${formatVal(oAvg)}</div>
+              <div><strong>P75:</strong> ${formatVal(oP75)}</div>
+            </div>
+            <div class="dual-stat-divider"></div>
+            <div class="dual-stat-side">
+              <div style="grid-column: 1 / -1; font-size: 10px; font-weight: 600; text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; color: #c4b5fd;">${compareLabel}</div>
+              <div><strong>Avg:</strong> ${formatVal(cAvg)}</div>
+              <div><strong>P75:</strong> ${formatVal(cP75)}</div>
+            </div>
+          </div>
+          <div style="text-align: center; margin-top: 10px; font-size: 12px;">${delta}</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="charts-section">
+      <h2 style="text-align: center; color: #1f2937; margin-bottom: 10px;">📈 Performance Comparison</h2>
+      <p style="text-align: center; color: #6b7280; margin-bottom: 25px;">
+        ${originLabel}: ${origin.pagesWithPerf.length} pages | ${compareLabel}: ${compare.pagesWithPerf.length} pages with performance data
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px;">
+        ${cards}
+      </div>
+
+      ${getComparisonSlowestPages(origin.pagesWithPerf, compare.pagesWithPerf, originLabel, compareLabel)}
+    </div>
+  `;
+}
+
+function getComparisonSlowestPages(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+  const getTop5 = (pages: PageInfo[]) => pages
+    .filter(p => p.TTFB && p.TTFB > 0)
+    .sort((a, b) => (b.TTFB || 0) - (a.TTFB || 0))
+    .slice(0, 5);
+
+  const originSlowest = getTop5(originPages);
+  const compareSlowest = getTop5(comparePages);
+
+  if (originSlowest.length === 0 && compareSlowest.length === 0) return '';
+
+  const renderRows = (pages: PageInfo[], label: string, badgeClass: string) => pages.map((p, i) => {
+    const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
+    let shortUrl;
+    try { shortUrl = new URL(p.url).pathname; } catch { shortUrl = p.url; }
+    if (shortUrl.length > 40) shortUrl = '...' + shortUrl.slice(-37);
+
+    return `
+      <tr>
+        <td style="padding: 6px 8px; font-size: 12px; color: #9ca3af;">${i + 1}</td>
+        <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
+        <td style="padding: 6px 8px; font-size: 13px;">
+          <a href="${escapeHtml(p.url)}" target="_blank" style="color: #2563eb; text-decoration: none;">${escapeHtml(shortUrl)}</a>
+        </td>
+        <td style="padding: 6px 8px; font-weight: 600; color: ${ttfbColor}; text-align: right;">${p.TTFB}ms</td>
+        <td style="padding: 6px 8px; text-align: right;">${p.LCP ? p.LCP + 'ms' : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div style="margin-top: 20px;">
+      <h3 style="color: #1f2937; margin-bottom: 12px;">🐢 Slowest Pages</h3>
+      <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f9fafb;">
+              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 30px;">#</th>
+              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 80px;">Site</th>
+              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">URL</th>
+              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">TTFB</th>
+              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">LCP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderRows(originSlowest, originLabel, 'site-badge-origin')}
+            ${renderRows(compareSlowest, compareLabel, 'site-badge-compare')}
+          </tbody>
+        </table>
       </div>
     </div>
   `;

@@ -17,6 +17,9 @@ type IssueTrendItem = IssueTrend & { issue: string; priorityScore: number };
  * @returns {string} HTML string for the historical progress section
  */
 function getHistoricalProgress(data: ReportSectionData) {
+  // In comparison mode, skip historical trends (not meaningful for cross-site comparison)
+  if (data.comparison) return '';
+
   const { jsonData, trendData, previousAudit } = data;
 
   const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;

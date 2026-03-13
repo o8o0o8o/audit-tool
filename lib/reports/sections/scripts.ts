@@ -271,12 +271,21 @@ function createPagesExportData(jsonData: Record<string, unknown>) {
  */
 function getScripts(data: ReportSectionData) {
   const { pageData, jsonData, trendData, domainName } = data;
+  const isComparison = !!data.comparison;
 
   // Pre-calculate chart data to avoid embedding full jsonData
   const chartData = calculateChartData(jsonData);
 
+  // Calculate comparison chart data if in comparison mode
+  const compareChartData = isComparison ? calculateChartData(data.comparison!.compareJsonData as Record<string, unknown>) : null;
+
   // Create minimal data for CSV exports
   const pagesExportData = createPagesExportData(jsonData);
+  const comparePagesExportData = isComparison ? createPagesExportData(data.comparison!.compareJsonData as Record<string, unknown>) : null;
+
+  // Domain labels for comparison mode
+  const originLabel = isComparison ? data.comparison!.originDomainName : '';
+  const compareLabel = isComparison ? data.comparison!.compareDomainName : '';
 
   // Extract details with limited examples for modal popups (max 100 per issue)
   const detailsForModals: Record<string, { severity: string; examples: string[] }> = {};
@@ -839,6 +848,33 @@ function getScripts(data: ReportSectionData) {
           });
       })();
 
+      // Comparison mode data
+      const isComparison = ${isComparison};
+      const compareChartData = ${safeJsonStringify(compareChartData)};
+      const originLabel = ${safeJsonStringify(originLabel)};
+      const compareLabel = ${safeJsonStringify(compareLabel)};
+
+      // Comparison pages table filter
+      function filterCompareTable(type, btn) {
+          if (!btn) return;
+          var parent = btn.parentElement;
+          if (parent) {
+              parent.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
+          }
+          btn.classList.add('active');
+          var table = document.getElementById('comparisonPagesTable') || document.getElementById('pagesTable');
+          if (!table) return;
+          var rows = table.querySelectorAll('tbody tr');
+          rows.forEach(function(row) {
+              var rowType = row.getAttribute('data-compare-type') || 'matched';
+              if (type === 'all') {
+                  row.style.display = '';
+              } else {
+                  row.style.display = rowType === type ? '' : 'none';
+              }
+          });
+      }
+
       // Initialize Charts
       (function initCharts() {
           // Use pre-calculated chart data instead of full jsonData
@@ -1021,26 +1057,48 @@ function getScripts(data: ReportSectionData) {
           // Chart 1: Issue Distribution by Severity
           const issueCtx = document.getElementById('issueChart');
           if (issueCtx) {
+              const issueDatasets = [{
+                  label: isComparison ? originLabel : 'Issues',
+                  data: [
+                      summary.criticalCount || 0,
+                      summary.highCount || 0,
+                      summary.mediumCount || 0,
+                      summary.lowCount || 0
+                  ],
+                  backgroundColor: [
+                      '#ef4444',
+                      '#f59e0b',
+                      '#3b82f6',
+                      '#6b7280'
+                  ],
+                  borderWidth: 2,
+                  borderColor: '#fff'
+              }];
+              if (isComparison && compareChartData) {
+                  const cs = compareChartData.summary;
+                  issueDatasets.push({
+                      label: compareLabel,
+                      data: [
+                          cs.criticalCount || 0,
+                          cs.highCount || 0,
+                          cs.mediumCount || 0,
+                          cs.lowCount || 0
+                      ],
+                      backgroundColor: [
+                          'rgba(239,68,68,0.5)',
+                          'rgba(245,158,11,0.5)',
+                          'rgba(59,130,246,0.5)',
+                          'rgba(107,114,128,0.5)'
+                      ],
+                      borderWidth: 2,
+                      borderColor: '#fff'
+                  });
+              }
               new Chart(issueCtx, {
-                  type: 'doughnut',
+                  type: isComparison ? 'bar' : 'doughnut',
                   data: {
                       labels: ['Critical', 'High', 'Medium', 'Low'],
-                      datasets: [{
-                          data: [
-                              summary.criticalCount || 0,
-                              summary.highCount || 0,
-                              summary.mediumCount || 0,
-                              summary.lowCount || 0
-                          ],
-                          backgroundColor: [
-                              '#ef4444',
-                              '#f59e0b',
-                              '#3b82f6',
-                              '#6b7280'
-                          ],
-                          borderWidth: 2,
-                          borderColor: '#fff'
-                      }]
+                      datasets: issueDatasets
                   },
                   options: {
                       responsive: true,
@@ -1124,29 +1182,39 @@ function getScripts(data: ReportSectionData) {
           // Chart 3: Performance Metrics Distribution (pre-calculated)
           const performanceCtx = document.getElementById('performanceChart');
           if (performanceCtx && chartData.performance.hasData) {
+              const perfDatasets = [{
+                  label: isComparison ? originLabel : 'Average Value',
+                  data: [chartData.performance.avgTTFB, chartData.performance.avgLCP, (chartData.performance.avgCLS * 100).toFixed(1)],
+                  backgroundColor: isComparison ? 'rgba(59, 130, 246, 0.7)' : ['#8b5cf6', '#ec4899', '#14b8a6'],
+                  borderColor: isComparison ? '#2563eb' : ['#7c3aed', '#db2777', '#0d9488'],
+                  borderWidth: 2
+              }];
+              if (isComparison && compareChartData && compareChartData.performance.hasData) {
+                  perfDatasets.push({
+                      label: compareLabel,
+                      data: [compareChartData.performance.avgTTFB, compareChartData.performance.avgLCP, (compareChartData.performance.avgCLS * 100).toFixed(1)],
+                      backgroundColor: 'rgba(249, 115, 22, 0.7)',
+                      borderColor: '#ea580c',
+                      borderWidth: 2
+                  });
+              }
               new Chart(performanceCtx, {
                   type: 'bar',
                   data: {
                       labels: ['TTFB (ms)', 'LCP (ms)', 'CLS (×100)'],
-                      datasets: [{
-                          label: 'Average Value',
-                          data: [chartData.performance.avgTTFB, chartData.performance.avgLCP, (chartData.performance.avgCLS * 100).toFixed(1)],
-                          backgroundColor: ['#8b5cf6', '#ec4899', '#14b8a6'],
-                          borderColor: ['#7c3aed', '#db2777', '#0d9488'],
-                          borderWidth: 2
-                      }]
+                      datasets: perfDatasets
                   },
                   options: {
                       responsive: true,
                       maintainAspectRatio: false,
                       plugins: {
-                          legend: { display: false },
+                          legend: { display: isComparison, position: 'bottom' },
                           tooltip: {
                               callbacks: {
                                   label: function(context) {
-                                      let label = context.label || '';
+                                      let label = context.dataset.label || context.label || '';
                                       let value = context.parsed.y;
-                                      if (label.includes('CLS')) {
+                                      if (context.label && context.label.includes('CLS')) {
                                           value = (value / 100).toFixed(3);
                                       }
                                       return label + ': ' + value;
@@ -1214,42 +1282,39 @@ function getScripts(data: ReportSectionData) {
 
           const wordCountCtx = document.getElementById('wordCountChart');
           if (wordCountCtx) {
+              const wcDatasets = [{
+                  label: isComparison ? originLabel : 'Pages',
+                  data: Object.values(wordCountBuckets),
+                  backgroundColor: isComparison ? 'rgba(59, 130, 246, 0.7)' : ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'],
+                  borderColor: isComparison ? '#2563eb' : ['#dc2626', '#d97706', '#059669', '#2563eb', '#7c3aed'],
+                  borderWidth: 2
+              }];
+              if (isComparison && compareChartData) {
+                  wcDatasets.push({
+                      label: compareLabel,
+                      data: Object.values(compareChartData.wordCountBuckets),
+                      backgroundColor: 'rgba(249, 115, 22, 0.7)',
+                      borderColor: '#ea580c',
+                      borderWidth: 2
+                  });
+              }
               new Chart(wordCountCtx, {
                   type: 'bar',
                   data: {
                       labels: Object.keys(wordCountBuckets),
-                      datasets: [{
-                          label: 'Pages',
-                          data: Object.values(wordCountBuckets),
-                          backgroundColor: [
-                              '#ef4444',
-                              '#f59e0b',
-                              '#10b981',
-                              '#3b82f6',
-                              '#8b5cf6'
-                          ],
-                          borderColor: [
-                              '#dc2626',
-                              '#d97706',
-                              '#059669',
-                              '#2563eb',
-                              '#7c3aed'
-                          ],
-                          borderWidth: 2
-                      }]
+                      datasets: wcDatasets
                   },
                   options: {
                       responsive: true,
                       maintainAspectRatio: false,
                       plugins: {
-                          legend: { display: false },
+                          legend: { display: isComparison, position: 'bottom' },
                           tooltip: {
                               callbacks: {
                                   label: function(context) {
                                       const value = context.parsed.y || 0;
-                                      const total = Object.values(wordCountBuckets).reduce((a, b) => a + b, 0);
-                                      const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                      return value + ' pages (' + percentage + '%)';
+                                      const dsLabel = context.dataset.label || '';
+                                      return dsLabel + ': ' + value + ' pages';
                                   }
                               }
                           }
@@ -1509,31 +1574,32 @@ function getScripts(data: ReportSectionData) {
       function exportCSV(type) {
           // Use pre-calculated minimal data instead of full jsonData
           const pagesExportData = ${safeJsonStringify(pagesExportData)};
+          const comparePagesExportData = ${safeJsonStringify(comparePagesExportData)};
           const summaryData = ${safeJsonStringify(chartData.summary)};
+          const compareSummaryData = ${safeJsonStringify(compareChartData?.summary || null)};
           let content = '';
           let filename = '';
 
           if (type === 'pages') {
               filename = '${domainName}_pages_overview.csv';
-              const rows = [['URL', 'Status Code', 'Title', 'Description', 'H1 Count', 'Canonical', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Has Errors']];
-
-              pagesExportData.forEach(data => {
-                  rows.push([
-                      data.url,
-                      data.status,
-                      data.title,
-                      data.description,
-                      data.h1Count,
-                      data.canonical,
-                      data.TTFB,
-                      data.LCP,
-                      data.CLS,
-                      data.pageSize,
-                      data.requests,
-                      data.hasErrors
-                  ].map(escapeCSV));
-              });
-              content = rows.map(row => row.join(',')).join('\\n');
+              if (isComparison) {
+                  const rows = [['Site', 'URL', 'Status Code', 'Title', 'Description', 'H1 Count', 'Canonical', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Has Errors']];
+                  pagesExportData.forEach(data => {
+                      rows.push([originLabel, data.url, data.status, data.title, data.description, data.h1Count, data.canonical, data.TTFB, data.LCP, data.CLS, data.pageSize, data.requests, data.hasErrors].map(escapeCSV));
+                  });
+                  if (comparePagesExportData) {
+                      comparePagesExportData.forEach(data => {
+                          rows.push([compareLabel, data.url, data.status, data.title, data.description, data.h1Count, data.canonical, data.TTFB, data.LCP, data.CLS, data.pageSize, data.requests, data.hasErrors].map(escapeCSV));
+                      });
+                  }
+                  content = rows.map(row => row.join(',')).join('\\n');
+              } else {
+                  const rows = [['URL', 'Status Code', 'Title', 'Description', 'H1 Count', 'Canonical', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Has Errors']];
+                  pagesExportData.forEach(data => {
+                      rows.push([data.url, data.status, data.title, data.description, data.h1Count, data.canonical, data.TTFB, data.LCP, data.CLS, data.pageSize, data.requests, data.hasErrors].map(escapeCSV));
+                  });
+                  content = rows.map(row => row.join(',')).join('\\n');
+              }
           }
           else if (type === 'issues') {
               filename = '${domainName}_issues_breakdown.csv';
@@ -1552,22 +1618,30 @@ function getScripts(data: ReportSectionData) {
           }
           else if (type === 'performance') {
               filename = '${domainName}_performance_metrics.csv';
-              const rows = [['URL', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Load Time (ms)']];
-
-              pagesExportData.forEach(data => {
-                  if (data.TTFB || data.LCP || data.CLS) {
-                      rows.push([
-                          data.url,
-                          data.TTFB,
-                          data.LCP,
-                          data.CLS,
-                          data.pageSize,
-                          data.requests,
-                          data.loadTime
-                      ].map(escapeCSV));
+              if (isComparison) {
+                  const rows = [['Site', 'URL', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Load Time (ms)']];
+                  pagesExportData.forEach(data => {
+                      if (data.TTFB || data.LCP || data.CLS) {
+                          rows.push([originLabel, data.url, data.TTFB, data.LCP, data.CLS, data.pageSize, data.requests, data.loadTime].map(escapeCSV));
+                      }
+                  });
+                  if (comparePagesExportData) {
+                      comparePagesExportData.forEach(data => {
+                          if (data.TTFB || data.LCP || data.CLS) {
+                              rows.push([compareLabel, data.url, data.TTFB, data.LCP, data.CLS, data.pageSize, data.requests, data.loadTime].map(escapeCSV));
+                          }
+                      });
                   }
-              });
-              content = rows.map(row => row.join(',')).join('\\n');
+                  content = rows.map(row => row.join(',')).join('\\n');
+              } else {
+                  const rows = [['URL', 'TTFB (ms)', 'LCP (ms)', 'CLS', 'Page Size (MB)', 'Requests', 'Load Time (ms)']];
+                  pagesExportData.forEach(data => {
+                      if (data.TTFB || data.LCP || data.CLS) {
+                          rows.push([data.url, data.TTFB, data.LCP, data.CLS, data.pageSize, data.requests, data.loadTime].map(escapeCSV));
+                      }
+                  });
+                  content = rows.map(row => row.join(',')).join('\\n');
+              }
           }
           else if (type === 'quickwins') {
               filename = '${domainName}_quick_wins.csv';
@@ -1591,26 +1665,48 @@ function getScripts(data: ReportSectionData) {
           }
           else if (type === 'summary') {
               filename = '${domainName}_summary.csv';
-              const rows = [
-                  ['Metric', 'Value'],
-                  ['Overall SEO Score', summaryData.overallScore || 0],
-                  ['Total Issues', summaryData.totalIssues || 0],
-                  ['Critical Issues', summaryData.criticalCount || 0],
-                  ['High Issues', summaryData.highCount || 0],
-                  ['Medium Issues', summaryData.mediumCount || 0],
-                  ['Low Issues', summaryData.lowCount || 0],
-                  ['Pass Rate (%)', summaryData.passRate || 0],
-                  ['Total Pages', pagesExportData.length]
-              ];
-
-              if (summaryData.categoryScores) {
-                  rows.push(['SEO Score', summaryData.categoryScores.seo || 0]);
-                  rows.push(['Performance Score', summaryData.categoryScores.performance || 0]);
-                  rows.push(['Accessibility Score', summaryData.categoryScores.accessibility || 0]);
-                  rows.push(['Security Score', summaryData.categoryScores.security || 0]);
-                  rows.push(['Technical Score', summaryData.categoryScores.technical || 0]);
+              if (isComparison && compareSummaryData) {
+                  const rows = [
+                      ['Metric', originLabel, compareLabel, 'Delta'],
+                      ['Overall SEO Score', summaryData.overallScore || 0, compareSummaryData.overallScore || 0, (summaryData.overallScore || 0) - (compareSummaryData.overallScore || 0)],
+                      ['Total Issues', summaryData.totalIssues || 0, compareSummaryData.totalIssues || 0, (summaryData.totalIssues || 0) - (compareSummaryData.totalIssues || 0)],
+                      ['Critical Issues', summaryData.criticalCount || 0, compareSummaryData.criticalCount || 0, (summaryData.criticalCount || 0) - (compareSummaryData.criticalCount || 0)],
+                      ['High Issues', summaryData.highCount || 0, compareSummaryData.highCount || 0, (summaryData.highCount || 0) - (compareSummaryData.highCount || 0)],
+                      ['Medium Issues', summaryData.mediumCount || 0, compareSummaryData.mediumCount || 0, (summaryData.mediumCount || 0) - (compareSummaryData.mediumCount || 0)],
+                      ['Low Issues', summaryData.lowCount || 0, compareSummaryData.lowCount || 0, (summaryData.lowCount || 0) - (compareSummaryData.lowCount || 0)],
+                      ['Pass Rate (%)', summaryData.passRate || 0, compareSummaryData.passRate || 0, (summaryData.passRate || 0) - (compareSummaryData.passRate || 0)],
+                      ['Total Pages', pagesExportData.length, comparePagesExportData ? comparePagesExportData.length : 0, '']
+                  ];
+                  if (summaryData.categoryScores) {
+                      const cs = compareSummaryData.categoryScores || {};
+                      rows.push(['SEO Score', summaryData.categoryScores.seo || 0, cs.seo || 0, (summaryData.categoryScores.seo || 0) - (cs.seo || 0)]);
+                      rows.push(['Performance Score', summaryData.categoryScores.performance || 0, cs.performance || 0, (summaryData.categoryScores.performance || 0) - (cs.performance || 0)]);
+                      rows.push(['Accessibility Score', summaryData.categoryScores.accessibility || 0, cs.accessibility || 0, (summaryData.categoryScores.accessibility || 0) - (cs.accessibility || 0)]);
+                      rows.push(['Security Score', summaryData.categoryScores.security || 0, cs.security || 0, (summaryData.categoryScores.security || 0) - (cs.security || 0)]);
+                      rows.push(['Technical Score', summaryData.categoryScores.technical || 0, cs.technical || 0, (summaryData.categoryScores.technical || 0) - (cs.technical || 0)]);
+                  }
+                  content = rows.map(row => row.map(escapeCSV).join(',')).join('\\n');
+              } else {
+                  const rows = [
+                      ['Metric', 'Value'],
+                      ['Overall SEO Score', summaryData.overallScore || 0],
+                      ['Total Issues', summaryData.totalIssues || 0],
+                      ['Critical Issues', summaryData.criticalCount || 0],
+                      ['High Issues', summaryData.highCount || 0],
+                      ['Medium Issues', summaryData.mediumCount || 0],
+                      ['Low Issues', summaryData.lowCount || 0],
+                      ['Pass Rate (%)', summaryData.passRate || 0],
+                      ['Total Pages', pagesExportData.length]
+                  ];
+                  if (summaryData.categoryScores) {
+                      rows.push(['SEO Score', summaryData.categoryScores.seo || 0]);
+                      rows.push(['Performance Score', summaryData.categoryScores.performance || 0]);
+                      rows.push(['Accessibility Score', summaryData.categoryScores.accessibility || 0]);
+                      rows.push(['Security Score', summaryData.categoryScores.security || 0]);
+                      rows.push(['Technical Score', summaryData.categoryScores.technical || 0]);
+                  }
+                  content = rows.map(row => row.map(escapeCSV).join(',')).join('\\n');
               }
-              content = rows.map(row => row.map(escapeCSV).join(',')).join('\\n');
           }
 
           if (content) {

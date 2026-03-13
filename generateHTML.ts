@@ -9,6 +9,7 @@ import { sanitizeDomainName } from './validators';
 // Import report modules
 import { ReportDataProcessor } from './lib/reports/data-processor';
 import { escapeHtml } from './lib/reports/html-utils';
+import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
 
 // Import section generators
 import {
@@ -26,9 +27,15 @@ import {
   getContentInsights,
 } from './lib/reports/sections';
 
-function generateHTML(file: string, domainName: string, outputPath: string | null = null) {
+interface ComparisonOptions {
+  compareFile: string;
+  compareDomainName: string;
+}
+
+function generateHTML(file: string, domainName: string, outputPath: string | null = null, comparisonOpts?: ComparisonOptions) {
   // Sanitize domain name to prevent injection
   const safeDomainName = sanitizeDomainName(domainName);
+  const isComparison = !!comparisonOpts;
 
   // Determine output path
   const htmlOutputPath = outputPath || `${safeDomainName}.html`;
@@ -38,7 +45,11 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
   let loadError = null;
 
   try {
-    reportData = ReportDataProcessor.prepareReportData(file, domainName);
+    if (isComparison) {
+      reportData = ReportDataProcessor.prepareComparisonReportData(file, comparisonOpts!.compareFile, domainName, comparisonOpts!.compareDomainName);
+    } else {
+      reportData = ReportDataProcessor.prepareReportData(file, domainName);
+    }
   } catch (error: unknown) {
     loadError = error;
     console.error(`⚠️  Error loading report data: ${(error as Error).message}`);
@@ -78,7 +89,10 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
     trendData: trendData as ReportSectionData['trendData'],
     previousAudit: previousAudit as ReportSectionData['previousAudit'],
     hasPerformanceMetrics: pagesWithMetrics.length > 0,
+    comparison: (reportData as Record<string, unknown>).comparison as ReportSectionData['comparison'],
   };
+
+  const safeCompareDomain = isComparison ? sanitizeDomainName(comparisonOpts!.compareDomainName) : '';
 
   const htmlContent = `
   <!DOCTYPE html>
@@ -86,7 +100,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
   <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>SEO Audit Report - ${escapeHtml(safeDomainName)}</title>
+      <title>${isComparison ? `SEO Comparison: ${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : `SEO Audit Report - ${escapeHtml(safeDomainName)}`}</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
       ${getStyles()}
   </head>
@@ -146,8 +160,8 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
       <div class="container">
           <header>
               ${jsonData.branding?.logo ? `<img src="${escapeHtml(jsonData.branding.logo)}" alt="Logo" style="max-height:40px;margin-bottom:10px;">` : ''}
-              <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}SEO Audit Report</h1>
-              <p class="subtitle">${escapeHtml(safeDomainName)}</p>
+              <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}${isComparison ? 'SEO Comparison Report' : 'SEO Audit Report'}</h1>
+              <p class="subtitle">${isComparison ? `${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : escapeHtml(safeDomainName)}</p>
               <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
               ${(timing as Record<string, unknown>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, unknown>).elapsedTimeFormatted as string)}</p>` : ''}
               <div class="stats">
@@ -273,6 +287,16 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               : ''
           }
 
+          ${isComparison && sectionData.comparison ? getComparisonHeader(
+              shortDomain(sectionData.comparison.originDomainName),
+              shortDomain(sectionData.comparison.compareDomainName),
+              {
+                matched: sectionData.comparison.matchedPaths.length,
+                originOnly: sectionData.comparison.originOnlyPaths.length,
+                compareOnly: sectionData.comparison.compareOnlyPaths.length,
+              }
+          ) : ''}
+
           <!-- Section tabs for quick navigation -->
           <div class="section-tabs" id="sectionTabs">
               <button class="section-tab active" data-target="executive-summary">Summary</button>
@@ -373,39 +397,57 @@ const isDirectRun = process.argv[1]?.endsWith('generateHTML.ts') || process.argv
 if (isMainModule || isDirectRun) {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error('Usage: node generateHTML.js <json-file>');
+    console.error('Usage: node generateHTML.js <json-file> [--compare=<json-file>]');
     console.error('Example: node generateHTML.js audit-results/SEOAnalysis__example.com.json');
     console.error('Example: node generateHTML.js audit-results/domain.com/2026-01-01_12-00-00/manifest.json.gz');
+    console.error('Example: node generateHTML.js origin/manifest.json.gz --compare=compare/manifest.json.gz');
     process.exit(1);
   }
 
-  const jsonFile = args[0];
+  // Parse --compare argument
+  const compareArg = args.find(a => a.startsWith('--compare='));
+  const compareFile = compareArg ? compareArg.substring('--compare='.length) : null;
+  const positionalArgs = args.filter(a => !a.startsWith('--'));
+
+  const jsonFile = positionalArgs[0];
   if (!fs.existsSync(jsonFile)) {
     console.error(`Error: File not found: ${jsonFile}`);
     process.exit(1);
   }
 
-  const basename = path.basename(jsonFile);
-  let domainName;
-  let outputPath;
-
-  // Check if this is a multi-file format (manifest.json.gz)
-  if (basename === 'manifest.json.gz' || basename === 'manifest.json') {
-    // Extract domain from directory structure: audit-results/domain.com/timestamp/manifest.json.gz
-    const dir = path.dirname(jsonFile);
-    const parentDir = path.dirname(dir);
-    domainName = path.basename(parentDir);
-
-    // Output to same directory as manifest
-    outputPath = path.join(dir, `${domainName}.html`);
-    console.log(`Generating HTML report for ${domainName}...`);
-  } else {
-    // Legacy format: SEOAnalysis__domain.com.json.gz
-    // Use sanitizeDomainName for consistent domain handling
-    const rawDomain = basename.replace('SEOAnalysis__', '').replace(/\.json(\.gz)?$/, '');
-    domainName = sanitizeDomainName(rawDomain);
-    console.log(`Generating HTML report for ${domainName}...`);
+  if (compareFile && !fs.existsSync(compareFile)) {
+    console.error(`Error: Compare file not found: ${compareFile}`);
+    process.exit(1);
   }
 
-  generateHTML(jsonFile, domainName, outputPath);
+  const extractDomainFromFile = (file: string): { domainName: string; outputPath?: string } => {
+    const bn = path.basename(file);
+    if (bn === 'manifest.json.gz' || bn === 'manifest.json') {
+      const dir = path.dirname(file);
+      const parentDir = path.dirname(dir);
+      const domain = path.basename(parentDir);
+      return { domainName: domain, outputPath: path.join(dir, `${domain}.html`) };
+    }
+    const rawDomain = bn.replace('SEOAnalysis__', '').replace(/\.json(\.gz)?$/, '');
+    return { domainName: sanitizeDomainName(rawDomain) };
+  };
+
+  const originInfo = extractDomainFromFile(jsonFile);
+  const domainName = originInfo.domainName;
+  const outputPath = originInfo.outputPath;
+
+  if (compareFile) {
+    const compareInfo = extractDomainFromFile(compareFile);
+    const compOutputPath = outputPath
+      ? path.join(path.dirname(outputPath), `${domainName}__vs__${compareInfo.domainName}.html`)
+      : `${domainName}__vs__${compareInfo.domainName}.html`;
+    console.log(`Generating comparison report: ${domainName} vs ${compareInfo.domainName}...`);
+    generateHTML(jsonFile, domainName, compOutputPath, {
+      compareFile,
+      compareDomainName: compareInfo.domainName,
+    });
+  } else {
+    console.log(`Generating HTML report for ${domainName}...`);
+    generateHTML(jsonFile, domainName, outputPath);
+  }
 }

@@ -12,7 +12,8 @@
  */
 
 import { escapeHtml } from '../html-utils';
-import type { PageInfo, ReportSectionData } from '../../types';
+import { shortDomain, formatPercentDelta } from '../comparison-helpers';
+import type { PageInfo, ReportSectionData, ComparisonData } from '../../types';
 
 /**
  * Generate the content insights section
@@ -20,7 +21,12 @@ import type { PageInfo, ReportSectionData } from '../../types';
  * @returns {string} HTML string
  */
 function getContentInsights(data: ReportSectionData) {
-  const { jsonData } = data;
+  const { jsonData, comparison } = data;
+
+  if (comparison) {
+    return getComparisonContentInsights(jsonData, comparison);
+  }
+
   const pageData = (jsonData.pageData || {}) as Record<string, unknown>;
   const pages = (pageData.pages || {}) as Record<string, PageInfo>;
   const pagesArray: PageInfo[] = Object.values(pages);
@@ -47,6 +53,173 @@ function getContentInsights(data: ReportSectionData) {
       ${sections.join('')}
     </div>
   `;
+}
+
+function extractPages(jsonData: Record<string, unknown>): PageInfo[] {
+  const pageData = (jsonData.pageData || {}) as Record<string, unknown>;
+  const pages = (pageData.pages || {}) as Record<string, PageInfo>;
+  return Object.values(pages);
+}
+
+function getComparisonContentInsights(jsonData: Record<string, unknown>, comparison: ComparisonData) {
+  const originPages = extractPages(jsonData);
+  const comparePages = extractPages(comparison.compareJsonData);
+
+  if (originPages.length === 0 && comparePages.length === 0) return '';
+
+  const originLabel = shortDomain(comparison.originDomainName);
+  const compareLabel = shortDomain(comparison.compareDomainName);
+
+  const sections = [
+    getComparisonCTASection(originPages, comparePages, originLabel, compareLabel),
+    getComparisonCodeCoverageSection(originPages, comparePages, originLabel, compareLabel),
+    getComparisonOutboundLinksSection(originPages, comparePages, originLabel, compareLabel),
+  ].filter(Boolean);
+
+  if (sections.length === 0) return '';
+
+  return `
+    <div class="charts-section" id="content-insights">
+      <h2 style="text-align: center; color: #1f2937; margin-bottom: 10px;">🔍 Content & Technical Insights (Comparison)</h2>
+      <p style="text-align: center; color: #6b7280; margin-bottom: 25px;">${originLabel}: ${originPages.length} pages | ${compareLabel}: ${comparePages.length} pages</p>
+      ${sections.join('')}
+    </div>
+  `;
+}
+
+function getComparisonCTASection(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+  const getCTAStats = (pages: PageInfo[]) => {
+    const withCTA = pages.filter(p => p.ctaData?.summary);
+    let forms = 0, buttons = 0, phone = 0, email = 0, noCTAs = 0;
+    for (const page of withCTA) {
+      const s = page.ctaData.summary;
+      forms += s.forms || 0;
+      buttons += s.ctaButtons || 0;
+      phone += s.phoneLinks || 0;
+      email += s.emailLinks || 0;
+      if (s.total === 0) noCTAs++;
+    }
+    return { forms, buttons, phone, email, noCTAs, total: withCTA.length };
+  };
+
+  const o = getCTAStats(originPages);
+  const c = getCTAStats(comparePages);
+  if (o.total === 0 && c.total === 0) return '';
+
+  const dualStat = (label: string, icon: string, oVal: number, cVal: number, color: string) => `
+    <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #e5e7eb;">
+      <div style="font-size: 16px;">${icon}</div>
+      <div style="display: flex; justify-content: center; gap: 12px; margin: 4px 0;">
+        <div><span style="font-size: 10px; color: #3b82f6;">${originLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: ${color};">${oVal}</span></div>
+        <div><span style="font-size: 10px; color: #a855f7;">${compareLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: ${color};">${cVal}</span></div>
+      </div>
+      <div style="font-size: 11px; color: #6b7280;">${label}</div>
+      ${oVal !== cVal ? `<div style="font-size: 10px; margin-top: 2px;">${formatPercentDelta(oVal, cVal, true)}</div>` : ''}
+    </div>`;
+
+  return `
+    <div style="margin-bottom: 30px;">
+      <h3 style="color: #1f2937; margin-bottom: 12px;">🎯 Conversion Elements</h3>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        ${dualStat('Forms', '📝', o.forms, c.forms, '#3b82f6')}
+        ${dualStat('CTA Buttons', '🔘', o.buttons, c.buttons, '#8b5cf6')}
+        ${dualStat('Phone Links', '📞', o.phone, c.phone, '#10b981')}
+        ${dualStat('Email Links', '✉️', o.email, c.email, '#f59e0b')}
+      </div>
+    </div>`;
+}
+
+function getComparisonCodeCoverageSection(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+  const getCoverage = (pages: PageInfo[]) => {
+    const withCoverage = pages.filter(p => (p.codeCoverage?.totalBytes ?? 0) > 0);
+    let totalJS = 0, unusedJS = 0, totalCSS = 0, unusedCSS = 0;
+    for (const page of withCoverage) {
+      totalJS += page.codeCoverage?.js?.total || 0;
+      unusedJS += page.codeCoverage?.js?.unused || 0;
+      totalCSS += page.codeCoverage?.css?.total || 0;
+      unusedCSS += page.codeCoverage?.css?.unused || 0;
+    }
+    return {
+      jsRatio: totalJS > 0 ? Math.round((unusedJS / totalJS) * 100) : 0,
+      cssRatio: totalCSS > 0 ? Math.round((unusedCSS / totalCSS) * 100) : 0,
+      count: withCoverage.length,
+    };
+  };
+
+  const o = getCoverage(originPages);
+  const c = getCoverage(comparePages);
+  if (o.count === 0 && c.count === 0) return '';
+
+  const barColor = (ratio: number) => ratio > 60 ? '#ef4444' : ratio > 40 ? '#f59e0b' : '#10b981';
+
+  return `
+    <div style="margin-bottom: 30px;">
+      <h3 style="color: #1f2937; margin-bottom: 12px;">📦 Code Coverage</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">JavaScript Unused</div>
+          <div style="display: flex; gap: 16px; justify-content: center;">
+            <div style="text-align: center;"><span style="font-size: 10px; color: #3b82f6;">${originLabel}</span><br><span style="font-size: 24px; font-weight: 700; color: ${barColor(o.jsRatio)};">${o.jsRatio}%</span></div>
+            <div style="text-align: center;"><span style="font-size: 10px; color: #a855f7;">${compareLabel}</span><br><span style="font-size: 24px; font-weight: 700; color: ${barColor(c.jsRatio)};">${c.jsRatio}%</span></div>
+          </div>
+          <div style="text-align: center; margin-top: 6px;">${formatPercentDelta(o.jsRatio, c.jsRatio, true)}</div>
+        </div>
+        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px;">CSS Unused</div>
+          <div style="display: flex; gap: 16px; justify-content: center;">
+            <div style="text-align: center;"><span style="font-size: 10px; color: #3b82f6;">${originLabel}</span><br><span style="font-size: 24px; font-weight: 700; color: ${barColor(o.cssRatio)};">${o.cssRatio}%</span></div>
+            <div style="text-align: center;"><span style="font-size: 10px; color: #a855f7;">${compareLabel}</span><br><span style="font-size: 24px; font-weight: 700; color: ${barColor(c.cssRatio)};">${c.cssRatio}%</span></div>
+          </div>
+          <div style="text-align: center; margin-top: 6px;">${formatPercentDelta(o.cssRatio, c.cssRatio, true)}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function getComparisonOutboundLinksSection(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+  const getStats = (pages: PageInfo[]) => {
+    const withData = pages.filter(p => (p.outboundLinkHealth?.totalChecked ?? 0) > 0);
+    let checked = 0, broken = 0, redirected = 0;
+    for (const page of withData) {
+      const h = page.outboundLinkHealth!;
+      checked += h.totalChecked ?? 0;
+      broken += h.broken?.length || 0;
+      redirected += h.redirected?.length || 0;
+    }
+    return { checked, broken, redirected };
+  };
+
+  const o = getStats(originPages);
+  const c = getStats(comparePages);
+  if (o.checked === 0 && c.checked === 0) return '';
+
+  return `
+    <div style="margin-bottom: 30px;">
+      <h3 style="color: #1f2937; margin-bottom: 12px;">🔗 Outbound Link Health</h3>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: #047857; margin-bottom: 4px;">Checked</div>
+          <div style="display: flex; justify-content: center; gap: 12px;">
+            <div><span style="font-size: 10px; color: #3b82f6;">${originLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: #059669;">${o.checked}</span></div>
+            <div><span style="font-size: 10px; color: #a855f7;">${compareLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: #059669;">${c.checked}</span></div>
+          </div>
+        </div>
+        <div style="background: ${o.broken > 0 || c.broken > 0 ? '#fef2f2' : '#f0fdf4'}; padding: 12px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: ${o.broken > 0 || c.broken > 0 ? '#991b1b' : '#047857'}; margin-bottom: 4px;">Broken</div>
+          <div style="display: flex; justify-content: center; gap: 12px;">
+            <div><span style="font-size: 10px; color: #3b82f6;">${originLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: ${o.broken > 0 ? '#dc2626' : '#059669'};">${o.broken}</span></div>
+            <div><span style="font-size: 10px; color: #a855f7;">${compareLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: ${c.broken > 0 ? '#dc2626' : '#059669'};">${c.broken}</span></div>
+          </div>
+        </div>
+        <div style="background: #fef3c7; padding: 12px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: #a16207; margin-bottom: 4px;">Redirected</div>
+          <div style="display: flex; justify-content: center; gap: 12px;">
+            <div><span style="font-size: 10px; color: #3b82f6;">${originLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: #92400e;">${o.redirected}</span></div>
+            <div><span style="font-size: 10px; color: #a855f7;">${compareLabel}</span><br><span style="font-size: 18px; font-weight: 700; color: #92400e;">${c.redirected}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 function getPageRankSection(pages: PageInfo[]) {

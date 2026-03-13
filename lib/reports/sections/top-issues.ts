@@ -4,7 +4,8 @@
  */
 
 import { escapeHtml } from '../html-utils';
-import type { ReportSectionData } from '../../types';
+import { shortDomain } from '../comparison-helpers';
+import type { ReportSectionData, ComparisonData } from '../../types';
 
 /**
  * Educational context for common SEO issues
@@ -178,6 +179,10 @@ function isCrawlerError(issue: string) {
  * @returns {string} HTML string for the top issues section
  */
 function getTopIssues(data: ReportSectionData) {
+  if (data.comparison) {
+    return getComparisonTopIssues(data.jsonData, data.comparison);
+  }
+
   const { jsonData } = data;
   const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
   const bySeverity = (analysisObj.bySeverity || {}) as Record<string, string[]>;
@@ -287,6 +292,105 @@ function getIssueCard(
 
       ${educationHtml}
       ${examplesHtml}
+    </div>
+  `;
+}
+
+function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: ComparisonData) {
+  const extractIssues = (data: Record<string, unknown>) => {
+    const analysisObj = (data.analysis || {}) as Record<string, unknown>;
+    const bySeverity = (analysisObj.bySeverity || {}) as Record<string, string[]>;
+    return [
+      ...(bySeverity.critical || []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
+      ...(bySeverity.high || []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
+      ...(bySeverity.medium || []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
+      ...(bySeverity.low || []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
+    ].filter((item) => !isCrawlerError(item.issue));
+  };
+
+  const originIssues = extractIssues(jsonData);
+  const compareIssues = extractIssues(comparison.compareJsonData);
+
+  const originSet = new Set(originIssues.map(i => i.issue.replace(/ \[(critical|high|medium|low)\]$/i, '')));
+  const compareSet = new Set(compareIssues.map(i => i.issue.replace(/ \[(critical|high|medium|low)\]$/i, '')));
+
+  // Merge all unique issues
+  const allIssueKeys = new Set([...originIssues.map(i => i.issue), ...compareIssues.map(i => i.issue)]);
+  const mergedIssues: Array<{ issue: string; severity: string; severityLabel: string; status: string }> = [];
+
+  for (const issue of allIssueKeys) {
+    const originItem = originIssues.find(i => i.issue === issue);
+    const compareItem = compareIssues.find(i => i.issue === issue);
+    const item = originItem || compareItem!;
+    const key = issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
+
+    let status = 'both';
+    if (originSet.has(key) && !compareSet.has(key)) status = 'fixed';
+    else if (!originSet.has(key) && compareSet.has(key)) status = 'new';
+
+    mergedIssues.push({ ...item, status });
+  }
+
+  const topIssues = mergedIssues.slice(0, 10);
+  if (topIssues.length === 0) return '';
+
+  const originLabel = shortDomain(comparison.originDomainName);
+  const compareLabel = shortDomain(comparison.compareDomainName);
+
+  return `
+    <div class="top-issues-section">
+      <div class="wins-issues-title">
+        <span>⚠️</span>
+        <span>Top ${topIssues.length} Issues (Comparison)</span>
+      </div>
+
+      <p style="text-align: center; margin-bottom: 25px; font-size: 14px; opacity: 0.95;">
+        Prioritized by severity — showing issues across both <strong>${escapeHtml(originLabel)}</strong> and <strong>${escapeHtml(compareLabel)}</strong>
+      </p>
+
+      ${topIssues.map((item, index) => {
+        const statusBadge = item.status === 'fixed'
+          ? `<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">FIXED in ${escapeHtml(compareLabel)}</span>`
+          : item.status === 'new'
+          ? `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">NEW in ${escapeHtml(compareLabel)}</span>`
+          : '';
+        return getIssueCardWithBadge(item, index, jsonData, statusBadge);
+      }).join('')}
+    </div>
+  `;
+}
+
+function getIssueCardWithBadge(item: { issue: string; severity: string; severityLabel: string }, index: number, jsonData: Record<string, unknown>, extraBadge: string) {
+  const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
+  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
+  const detailsMap = (analysisObj.details || {}) as Record<string, Record<string, unknown>>;
+  const details = detailsMap[issueKey] || ({} as Record<string, unknown>);
+  const examples = (details.examples || []) as string[];
+  const totalCount = (details.count as number) || examples.length;
+
+  const education = findEducation(issueKey);
+  const educationHtml = education
+    ? `
+    <div class="issue-education">
+      <details>
+        <summary class="education-toggle">Why this matters</summary>
+        <p class="education-text">${education.why}</p>
+        ${education.learnMore ? `<a href="${education.learnMore}" target="_blank" rel="noopener noreferrer" class="education-link">Learn more &rarr;</a>` : ''}
+      </details>
+    </div>
+  `
+    : '';
+
+  return `
+    <div class="issue-card">
+      <div class="issue-header">
+        <div class="issue-title">${index + 1}. ${escapeHtml(issueKey)}${extraBadge}</div>
+        <div class="issue-badges">
+          <span class="issue-badge-item">${item.severityLabel}</span>
+          ${totalCount > 0 ? `<span class="issue-badge-item">${totalCount} affected</span>` : ''}
+        </div>
+      </div>
+      ${educationHtml}
     </div>
   `;
 }

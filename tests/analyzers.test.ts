@@ -70,6 +70,8 @@ describe('LanguageDetectionAnalyzer', () => {
           declaredLanguage: 'en',
           detectedConfidence: 0.8,
           htmlLang: 'en',
+          contentLanguageHeader: null,
+          topCandidates: [],
         },
       },
       'https://example.com/about': {
@@ -80,6 +82,8 @@ describe('LanguageDetectionAnalyzer', () => {
           declaredLanguage: 'en',
           detectedConfidence: 0.9,
           htmlLang: 'en',
+          contentLanguageHeader: null,
+          topCandidates: [],
         },
       },
     };

@@ -56,8 +56,8 @@ function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
   const byCategory: Record<string, Set<string>> = {};
 
   for (const page of pages) {
-    const tech = page.technologies || {};
-    const technologies = tech.technologies || [];
+    const tech = page.technologies;
+    const technologies = tech?.technologies || [];
 
     for (const t of technologies) {
       if (!allTechs.has(t.name)) {

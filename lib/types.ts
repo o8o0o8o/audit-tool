@@ -19,12 +19,15 @@ export interface Issue {
 
 export interface AnalyzerResult {
   issues: Issue[];
-  [key: string]: any;
+  warnings?: Issue[];
+  info?: Record<string, unknown>;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any -- generic return type from diverse analyzers
 }
 
 export interface SiteWideAnalyzerResult {
   issues: Issue[];
-  [key: string]: any;
+  warnings?: Issue[];
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any -- generic return type from diverse analyzers
 }
 
 // ─── Page Data ───────────────────────────────────────────────────────────────
@@ -73,7 +76,7 @@ export interface PageInfo {
   loadEvent?: number;
 
   // Vitals attribution
-  vitals?: Record<string, any>;
+  vitals?: Record<string, unknown>;
 
   // CrUX field data (per-URL, only in perf mode)
   cruxFieldData?: {
@@ -88,8 +91,8 @@ export interface PageInfo {
 
   // Network / resource data
   requests?: Record<string, unknown>;
-  metrics?: Record<string, any>;
-  blockers?: Record<string, any>;
+  metrics?: Record<string, unknown>;
+  blockers?: Record<string, unknown>;
   totalResponseSize?: number;
   totalNumberOfRequests?: number;
   responseHeaders?: Record<string, string>;
@@ -137,7 +140,7 @@ export interface PageInfo {
   thirdPartyData?: ThirdPartyData;
   timingData?: TimingData;
   criticalPathData?: CriticalPathData;
-  fontData?: Record<string, any>;
+  fontData?: Record<string, unknown>;
   compressionData?: CompressionData;
   imageOptimization?: ImageOptimizationData;
   consoleAnalysis?: ConsoleAnalysisData;
@@ -162,8 +165,33 @@ export interface PageInfo {
   eeat?: EeatData;
   segment?: string;
 
-  // TODO: Remove this index signature once all dynamic properties are typed above
-  [key: string]: any;
+  // Analyzer results not previously typed
+  crawlability?: CrawlabilityData;
+  internationalSEO?: InternationalSEOData;
+  mobileFriendly?: MobileFriendlyData;
+  analytics?: AnalyticsTrackingData;
+  consentData?: ConsentData;
+  paginationData?: PaginationData;
+  aeo?: AeoData;
+  technologies?: TechnologyDetectionData;
+  ctas?: CtaItem[];
+  ctaData?: CtaData;
+  languageDetection?: LanguageDetectionData;
+  colorContrastData?: ColorContrastData;
+  reducedMotionData?: ReducedMotionData;
+  ariaLiveData?: AriaLiveData;
+  domComplexityData?: DomComplexityData;
+  deprecatedHtmlData?: DeprecatedHtmlData;
+  interstitialData?: InterstitialData;
+  adDensityData?: AdDensityData;
+  sriData?: SriData;
+  infoDisclosureData?: InfoDisclosureData;
+  openRedirectData?: OpenRedirectData;
+  spellingData?: SpellingData;
+
+  // Dynamic properties set by crawler/analyzers not yet typed above
+  // TODO: Continue typing remaining dynamic properties and remove this signature
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface PageData {
@@ -246,8 +274,13 @@ export interface HeadingAnalysis {
   h4: string[];
   h5: string[];
   h6: string[];
+  h1Count?: number;
+  h2Count?: number;
+  h3Count?: number;
+  h4Count?: number;
+  h5Count?: number;
+  h6Count?: number;
   issues: Issue[];
-  [key: string]: any;
 }
 
 export interface ImageAnalysis {
@@ -256,27 +289,40 @@ export interface ImageAnalysis {
   withEmptyAlt: number;
   decorativeImages: number;
   issues: Issue[];
-  [key: string]: any;
 }
 
 export interface AccessibilityAnalysis {
   issues: Issue[];
   ariaLandmarks?: string[];
   formLabels?: { labeled: number; unlabeled: number };
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface SecurityAnalysis {
   isHttps: boolean;
   headers: Record<string, string | undefined>;
   issues: Issue[];
-  [key: string]: any;
+  securityScore?: number;
+  missingHeaders?: string[];
+  mixedContent?: number;
+  insecureCookies?: number;
+  insecureCookieDetails?: { name: string; domain: string; issues: string[]; sameSite?: string }[];
+  sameSiteIssues?: number;
+  formsWithoutCSRF?: number;
+  inlineScripts?: number;
+}
+
+export interface JsonLdSchema {
+  type?: string;
+  raw?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- JSON-LD schemas are inherently dynamic
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface StructuredDataAnalysis {
   schemas: SchemaItem[];
   issues: Issue[];
-  [key: string]: any;
+  jsonLdSchemas?: JsonLdSchema[];
+  hasStructuredData?: boolean;
 }
 
 export interface SchemaItem {
@@ -287,8 +333,11 @@ export interface SchemaItem {
 export interface SocialMediaAnalysis {
   og: Record<string, string>;
   twitter: Record<string, string>;
+  openGraph?: Record<string, string>;
   issues: Issue[];
-  [key: string]: any;
+  warnings?: Issue[];
+  hasOpenGraph?: boolean;
+  hasTwitterCard?: boolean;
 }
 
 export interface PerformanceAnalysis {
@@ -296,7 +345,6 @@ export interface PerformanceAnalysis {
   requestCount?: number;
   renderBlockingResources?: number;
   issues: Issue[];
-  [key: string]: any;
 }
 
 export interface ContentQualityAnalysis {
@@ -305,7 +353,11 @@ export interface ContentQualityAnalysis {
   textToHtmlRatio?: number;
   keywordDensity?: Record<string, number>;
   issues: Issue[];
-  [key: string]: any;
+  wordCountBySection?: Record<string, number> | { heading: string; wordCount: number }[];
+  paragraphCount?: number;
+  topKeywords?: { word: string; count: number; density: number }[];
+  textLength?: number;
+  contentScore?: number;
 }
 
 export interface IndexabilityAnalysis {
@@ -319,13 +371,12 @@ export interface IndexabilityAnalysis {
   hasNoindexTag: boolean;
   hasNofollowTag: boolean;
   blockedByRobotsTxt: boolean;
-  [key: string]: any;
+  issues?: Issue[];
 }
 
 export interface InternationalAnalysis {
   hreflangTags: AlternateLink[];
   issues: Issue[];
-  [key: string]: any;
 }
 
 export interface UrlAnalysis {
@@ -336,10 +387,12 @@ export interface UrlAnalysis {
   hasSpaces: boolean;
   hasSpecialChars: boolean;
   hasQueryParams: boolean;
+  hasTrackingParams?: boolean;
+  trackingParams?: string[];
   queryParamCount: number;
+  paramCount?: number;
   isHttps: boolean;
   issues: Issue[];
-  [key: string]: any;
 }
 
 // ─── Advanced Analyzer Data Types ───────────────────────────────────────────
@@ -365,14 +418,12 @@ export interface LinkAnalysisData {
   nofollowRatio?: number;
   internalNofollowLinks?: { href: string; anchorText: string }[];
   internalLinkUrls?: string[];
-  [key: string]: any;
 }
 
 export interface Soft404Data {
   isSoft404: boolean;
   confidence: number;
   signals: string[];
-  [key: string]: any;
 }
 
 export interface FreshnessData {
@@ -399,10 +450,12 @@ export interface ThirdPartyData {
   scripts?: ThirdPartyScript[];
   totalSize?: number;
   totalTime?: number;
+  totalScripts?: number;
   byCategory?: Record<string, { count: number; size: number; time: number; hosts: string[] }>;
   blockingScripts?: { src: string; host: string }[];
   count?: number;
-  [key: string]: any;
+  issues?: Issue[];
+  warnings?: Issue[];
 }
 
 export interface TimingPhaseData {
@@ -450,7 +503,9 @@ export interface TimingData {
     size: number;
     protocol: string;
   }[];
-  [key: string]: any;
+  slowResources?: { url: string; origin: string; time: number }[];
+  issues?: Issue[];
+  warnings?: Issue[];
 }
 
 export interface CriticalPathData {
@@ -469,7 +524,10 @@ export interface CriticalPathData {
   inlineCSSSize?: number;
   inlineJSSize?: number;
   hasCriticalCSS?: boolean;
-  [key: string]: any;
+  blockingCSSCount?: number;
+  blockingJSCount?: number;
+  issues?: Issue[];
+  warnings?: Issue[];
 }
 
 export interface CompressionData {
@@ -488,7 +546,8 @@ export interface CompressionData {
     isCompressed: boolean;
     potentialSavings: number;
   }[];
-  [key: string]: any;
+  issues?: Issue[];
+  warnings?: Issue[];
 }
 
 export interface ImageOptimizationData {
@@ -507,8 +566,9 @@ export interface ImageOptimizationData {
   withLazyLoading?: number;
   withoutLazyLoading?: number;
   withoutAlt?: number;
+  images?: { src: string; size: number; format: string; width: number; height: number; loading: string }[];
   issues?: Issue[];
-  [key: string]: any;
+  warnings?: Issue[];
 }
 
 export interface ConsoleAnalysisData {
@@ -518,7 +578,7 @@ export interface ConsoleAnalysisData {
   errors?: { text: string; type: string; url: string; isCritical: boolean }[];
   hasErrors?: boolean;
   hasCriticalErrors?: boolean;
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface FormInput {
@@ -559,7 +619,7 @@ export interface FormAccessibilityData {
   inputsWithoutAutocomplete?: number;
   formsWithoutAction?: number;
   accessibilityScore?: number;
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface ResourceOptimizationData {
@@ -586,7 +646,7 @@ export interface ResourceOptimizationData {
   };
   protocol?: { http1: number; http2: number; http3: number };
   issues?: Issue[];
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface CachingData {
@@ -598,11 +658,11 @@ export interface CachingData {
   hasServiceWorker?: boolean;
   cacheScore?: number | null;
   issues?: string[];
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface MediaData {
-  videos?: Record<string, any>[];
+  videos?: Record<string, unknown>[];
   audios?: { src: string | null; hasTitle: boolean; hasTranscript: boolean }[];
   hasVideoSchema?: boolean;
   videoSchemaValid?: boolean;
@@ -633,7 +693,7 @@ export interface MediaData {
   videosWithoutPoster: number;
   videosWithoutTitle: number;
   videoSchemaIssues?: string[];
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface WebComponentData {
@@ -646,7 +706,7 @@ export interface WebComponentData {
   lightDomTextLength?: number;
   framework?: string | null;
   hasDeclarativeShadowDom?: boolean;
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface AboveFoldData {
@@ -655,7 +715,7 @@ export interface AboveFoldData {
   aboveFoldElements?: {
     headings: { tag: string; text: string }[];
     images: { src: string; size: number; loading: string; fetchPriority: string }[];
-    text: Record<string, any>[];
+    text: Record<string, unknown>[];
     cta: { text: string; type: string }[];
   };
   criticalResources?: { url: string; type: string; size: number }[];
@@ -663,7 +723,7 @@ export interface AboveFoldData {
   renderBlockingResources?: number;
   aboveFoldImageSize?: number;
   estimatedFoldPosition?: null;
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface AnchorTextData {
@@ -676,7 +736,7 @@ export interface AnchorTextData {
   duplicateAnchors?: Record<string, string[]>;
   anchorDistribution?: Record<string, number>;
   avgAnchorLength?: number;
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface ExternalLinksData {
@@ -691,7 +751,7 @@ export interface ExternalLinksData {
   linksByDomain?: Record<string, { count: number; followed: number; nofollow: number }>;
   affiliateLinks?: { href: string; hasSponsored: boolean }[];
   socialLinks?: string[];
-  [key: string]: any;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export interface RedirectAnalysisData {
@@ -701,18 +761,16 @@ export interface RedirectAnalysisData {
   hasHttpToHttps: boolean;
   hasWwwRedirect: boolean;
   totalRedirectTime: number;
-  [key: string]: any;
 }
 
 export interface ResourceHintsData {
-  preload: Record<string, any>[];
-  prefetch: Record<string, any>[];
-  preconnect: Record<string, any>[];
-  dnsPrefetch: Record<string, any>[];
-  modulePreload: Record<string, any>[];
+  preload: Record<string, unknown>[];
+  prefetch: Record<string, unknown>[];
+  preconnect: Record<string, unknown>[];
+  dnsPrefetch: Record<string, unknown>[];
+  modulePreload: Record<string, unknown>[];
   missingHints: { url: string; type: string; reason: string }[];
   unnecessaryHints: { url: string; type: string; reason: string }[];
-  [key: string]: any;
 }
 
 export interface MixedContentData {
@@ -722,7 +780,6 @@ export interface MixedContentData {
   totalMixedResources: number;
   blockedResources: number;
   htmlMixedContent?: { type: string; url: string }[];
-  [key: string]: any;
 }
 
 export interface ProtocolData {
@@ -737,14 +794,13 @@ export interface ProtocolData {
     estimatedSavings: string;
   } | null;
   altSvc: string | null;
-  [key: string]: any;
 }
 
 export interface PwaData {
   hasManifest: boolean;
   manifestUrl: string | null;
   manifestValid: boolean;
-  manifestFields: Record<string, any> | string[];
+  manifestFields: Record<string, unknown> | string[];
   hasServiceWorker: boolean;
   serviceWorkerScope: string | null;
   isInstallable: boolean;
@@ -753,7 +809,6 @@ export interface PwaData {
   hasAppleTouchIcon: boolean;
   httpsRequired: boolean;
   offlineCapable: boolean;
-  [key: string]: any;
 }
 
 export interface ResponseHeaderAnalysisData {
@@ -774,7 +829,6 @@ export interface ResponseHeaderAnalysisData {
   maxSnippet?: number;
   maxImagePreview?: string;
   missingXContentTypeOptions?: boolean;
-  [key: string]: any;
 }
 
 export interface CodeCoverageFile {
@@ -790,7 +844,6 @@ export interface CodeCoverageData {
   totalUnusedBytes?: number;
   totalBytes?: number;
   unusedRatio?: number;
-  [key: string]: any;
 }
 
 export interface OutboundLinkHealthData {
@@ -799,7 +852,6 @@ export interface OutboundLinkHealthData {
   redirected: { url: string; redirectTo: string; status: number }[];
   timeouts: string[];
   healthy: number;
-  [key: string]: any;
 }
 
 export interface TechnicalData {
@@ -813,7 +865,6 @@ export interface TechnicalData {
   preload: { href: string; as: string | null }[];
   prefetch: string[];
   dns_prefetch: string[];
-  [key: string]: any;
 }
 
 export interface EeatData {
@@ -829,7 +880,287 @@ export interface EeatData {
   expertiseSignals: string[];
   score: number;
   isYMYL?: boolean;
-  [key: string]: any;
+  hasAuthor?: boolean;
+  hasCitations?: boolean;
+}
+
+// ─── Additional Analyzer Data Types ──────────────────────────────────────────
+
+export interface CrawlabilityData {
+  isCrawlable: boolean;
+  blockingFactors: string[];
+  warnings: string[];
+  hasRobotsTxtBlock: boolean;
+  hasAuthRequired: boolean;
+  redirectChain: string[];
+  loadTime: number;
+  resourcesBlocked: string[];
+}
+
+export interface InternationalSEOData {
+  language: string | null;
+  region: string | null;
+  hasLangAttribute: boolean;
+  langAttribute: string | null;
+  htmlLang?: string | null;
+  contentLanguageHeader: string | null;
+  hasHreflang: boolean;
+  hasXDefault: boolean;
+  hasSelfReferential: boolean;
+  urlStructure: string | null;
+  charset: string | null;
+  issues: string[];
+  warnings: string[];
+  currencyDetected?: string;
+  hasDateFormat?: boolean;
+  detectedScript?: string;
+}
+
+export interface MobileFriendlyData {
+  isMobileFriendly: boolean;
+  issues: string[];
+  warnings: string[];
+  issueCount: number;
+  warningCount: number;
+  metrics: Record<string, unknown>;
+}
+
+export interface AnalyticsTrackingData {
+  hasGA4: boolean;
+  hasUniversalAnalytics: boolean;
+  hasGTM: boolean;
+  hasFacebookPixel: boolean;
+  hasLinkedInTag: boolean;
+  hasTwitterPixel: boolean;
+  hasTikTokPixel: boolean;
+  hasPinterestTag: boolean;
+  hasHotjar: boolean;
+  hasMicrosoftClarity: boolean;
+  trackingIds: Record<string, string[]>;
+  hasCookieConsent: boolean;
+  consentTool: string | null;
+  hasPrivacyPolicy: boolean;
+  issues: string[];
+  warnings: string[];
+}
+
+export interface ConsentData {
+  hasConsentBanner: boolean;
+  consentPlatform: string | null;
+  hasCookiePolicy: boolean;
+  hasPrivacyPolicy: boolean;
+  cookiesBeforeConsent: string[];
+  trackingBeforeConsent: string[];
+  totalCookies: number;
+  thirdPartyCookies: number;
+  bannerDetectionMethod: string | null;
+  policyLinks?: { type: string; href: string }[];
+  cookies?: {
+    name: string;
+    domain: string;
+    isThirdParty: boolean;
+    secure: boolean;
+    httpOnly: boolean;
+    sameSite: string;
+    expires: number;
+  }[];
+}
+
+export interface PaginationData {
+  hasPagination: boolean;
+  type: string | null;
+  hasRelPrevNext: boolean;
+  relPrev: string | null;
+  relNext: string | null;
+  hasCanonical: boolean;
+  canonicalPointsToSelf: boolean;
+  paginationLinks: { page: number; href: string }[];
+  currentPage: number | null;
+  totalPages: number | null;
+  infiniteScrollDetected: boolean;
+  loadMoreDetected: boolean;
+  issues: Issue[];
+}
+
+export interface AeoData {
+  semanticHTMLRatio: number;
+  semanticElements: Record<string, number>;
+  genericElements: number;
+  totalElements: number;
+  hasFAQContent: boolean;
+  hasDefinitionLists: boolean;
+  hasStructuredQA: boolean;
+  hasClearHeadingHierarchy: boolean;
+  contentStructureScore: number;
+  hasCitableContent: boolean;
+  hasDatetimeMarkup: boolean;
+  hasAuthorInfo: boolean;
+  hasFAQSchema?: boolean;
+  hasHowToSchema?: boolean;
+  hasContentLists?: boolean;
+  hasStructuredTables?: boolean;
+  hasBlockquotes?: boolean;
+}
+
+export interface TechnologyDetectionData {
+  technologies: {
+    name: string;
+    category: string;
+    confidence: string;
+    detectedBy: { type: string; pattern?: string; matched?: string; tag?: string; value?: string; header?: string }[];
+  }[];
+  byCategory: Record<string, string[]>;
+  summary: {
+    total: number;
+    categories: { category: string; count: number; technologies: string[] }[];
+  };
+}
+
+export interface CtaItem {
+  type: string;
+  text: string;
+  href?: string | null;
+  action?: string;
+  method?: string;
+  inputCount?: number;
+  rect: { top: number; left: number; width: number; height: number };
+  aboveFold: boolean;
+}
+
+export interface CtaData {
+  ctas: CtaItem[];
+  summary: {
+    total: number;
+    forms: number;
+    ctaButtons: number;
+    buttons: number;
+    phoneLinks: number;
+    emailLinks: number;
+    aboveFoldCount: number;
+  };
+}
+
+export interface LanguageDetectionData {
+  detectedLanguage: string | null;
+  detectedConfidence: number;
+  declaredLanguage: string | null;
+  htmlLang: string | null;
+  contentLanguageHeader: string | null;
+  match: boolean | null;
+  topCandidates: { language: string; score: number; confidence: number }[];
+}
+
+export interface ColorContrastData {
+  totalChecked: number;
+  aaFailures: number;
+  aaaFailures: number;
+  worstContrast: {
+    selector: string;
+    text: string;
+    foreground: string;
+    background: string;
+    ratio: number;
+    fontSize: number;
+    fontWeight: number;
+    isLargeText: boolean;
+    passesAA: boolean;
+    passesAAA: boolean;
+  } | null;
+  failures: {
+    selector: string;
+    text: string;
+    foreground: string;
+    background: string;
+    ratio: number;
+    fontSize: number;
+    fontWeight: number;
+    isLargeText: boolean;
+    passesAA: boolean;
+    passesAAA: boolean;
+  }[];
+}
+
+export interface ReducedMotionData {
+  hasReducedMotionQuery: boolean;
+  autoplayVideos: number;
+  autoplayVideosWithoutPause: number;
+  animatedElements: number;
+  carousels: number;
+  marqueeElements: number;
+}
+
+export interface AriaLiveData {
+  totalLiveRegions: number;
+  assertiveRegions: number;
+  politeRegions: number;
+  alertRoles: number;
+  statusRoles: number;
+  emptyLiveRegions: number;
+  largeLiveRegions: number;
+}
+
+export interface DomComplexityData {
+  totalNodes: number;
+  maxDepth: number;
+  maxChildren: number;
+  deepestElement: string;
+  widestElement: string;
+  bodyChildren: number;
+  elementCounts: Record<string, number>;
+}
+
+export interface DeprecatedHtmlData {
+  deprecatedElements: { tag: string; count: number; replacement: string }[];
+  deprecatedAPIs: string[];
+  totalDeprecated: number;
+}
+
+export interface InterstitialData {
+  detected: boolean;
+  overlays: {
+    selector: string;
+    coveragePercent: number;
+    zIndex: number;
+    position: string;
+  }[];
+  cookieBanner: boolean;
+  popupLibraries: string[];
+}
+
+export interface AdDensityData {
+  totalAds: number;
+  adAreaPercent: number;
+  stickyAds: number;
+  adNetworks: string[];
+  adElements: { selector: string; width: number; height: number; isSticky: boolean }[];
+}
+
+export interface SriData {
+  externalScripts: number;
+  externalStyles: number;
+  scriptsWithSRI: number;
+  stylesWithSRI: number;
+  missingIntegrity: { tag: string; src: string }[];
+}
+
+export interface InfoDisclosureData {
+  serverHeader: string | null;
+  poweredBy: string | null;
+  disclosedHeaders: { name: string; value: string }[];
+  sensitiveComments: number;
+  hasSourceMaps: boolean;
+  sourceMapUrls: string[];
+}
+
+export interface OpenRedirectData {
+  suspiciousParams: { url: string; param: string; value: string }[];
+  suspiciousLinks: { href: string; param: string }[];
+}
+
+export interface SpellingData {
+  totalWords: number;
+  misspellings: { word: string; correction: string; count: number }[];
+  totalMisspellings: number;
 }
 
 // ─── Scoring ─────────────────────────────────────────────────────────────────
@@ -955,7 +1286,6 @@ export interface NetworkRequest {
   transferSize?: number;
   mimeType?: string;
   timing?: Record<string, number>;
-  [key: string]: any;
 }
 
 // ─── Metrics Metadata ────────────────────────────────────────────────────────

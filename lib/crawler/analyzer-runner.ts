@@ -1,0 +1,579 @@
+/**
+ * Analyzer Runner
+ * Orchestrates all page-level analyzers with parallel execution and error isolation
+ */
+
+import type {
+  ParsedPage,
+  ChromePage,
+  PageInfo,
+  CodeCoverageData,
+  OutboundLinkHealthData,
+  NetworkRequest,
+} from '../types';
+import type { RequestInfo, AnalyzerResult, ReportIssueFn, CrawlerInternalOptions } from './crawler-types';
+import { CRAWL_SETTINGS } from '../constants';
+import { withTimeout } from './resilience';
+
+// SEO analyzers
+import { HeadingAnalyzer } from '../analyzers/seo/heading-analyzer';
+import { ImageAnalyzer } from '../analyzers/seo/image-analyzer';
+import { StructuredDataAnalyzer } from '../analyzers/seo/structured-data-analyzer';
+import { IndexabilityAnalyzer } from '../analyzers/seo/indexability-analyzer';
+import { CrawlabilityAnalyzer } from '../analyzers/seo/crawlability-analyzer';
+import { UrlArchitectureAnalyzer } from '../analyzers/seo/url-architecture-analyzer';
+import { EEATAnalyzer } from '../analyzers/seo/eeat-analyzer';
+import { AdvancedSchemaValidator } from '../analyzers/seo/advanced-schema-validator';
+import { TechnicalSEOAnalyzer } from '../analyzers/seo/technical-seo-analyzer';
+import { TechnologyDetector } from '../analyzers/seo/technology-detector';
+import { ThinContentAnalyzer } from '../analyzers/content/thin-content-analyzer';
+import { Soft404Analyzer } from '../analyzers/seo/soft-404-analyzer';
+import { ConsoleErrorAnalyzer } from '../analyzers/seo/console-error-analyzer';
+import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
+import { MediaSEOAnalyzer } from '../analyzers/seo/media-seo-analyzer';
+import { WebComponentAnalyzer } from '../analyzers/seo/web-component-analyzer';
+
+// Performance analyzers
+import { ImageOptimizationAnalyzer } from '../analyzers/performance/image-optimization-analyzer';
+import { ResourceOptimizationAnalyzer } from '../analyzers/performance/resource-optimization-analyzer';
+import { CachingAnalyzer } from '../analyzers/performance/caching-analyzer';
+import { FontLoadingAnalyzer } from '../analyzers/performance/font-loading-analyzer';
+import { ThirdPartyAnalyzer } from '../analyzers/performance/third-party-analyzer';
+import { CriticalPathAnalyzer } from '../analyzers/performance/critical-path-analyzer';
+import { ConnectionTimingAnalyzer } from '../analyzers/performance/connection-timing-analyzer';
+
+// Content analyzers
+import { LinkQualityAnalyzer } from '../analyzers/content/link-quality-analyzer';
+import { ContentQualityAnalyzer } from '../analyzers/content/content-quality-analyzer';
+import { FreshnessAnalyzer } from '../analyzers/content/freshness-analyzer';
+
+// Accessibility analyzers
+import { AccessibilityAnalyzer } from '../analyzers/accessibility/accessibility-analyzer';
+import { MobileFriendlyAnalyzer } from '../analyzers/accessibility/mobile-friendly-analyzer';
+import { FormAccessibilityAnalyzer } from '../analyzers/accessibility/form-accessibility-analyzer';
+
+// International, Social, Analytics, Security
+import { InternationalSEOAnalyzer } from '../analyzers/international/international-seo-analyzer';
+import { SocialMediaAnalyzer } from '../analyzers/social/social-media-analyzer';
+import { AnalyticsTrackingAnalyzer } from '../analyzers/analytics/analytics-tracking-analyzer';
+import { SecurityAnalyzer } from '../analyzers/security/security-analyzer';
+import { CookieConsentAnalyzer } from '../analyzers/security/cookie-consent-analyzer';
+import { MixedContentAnalyzer } from '../analyzers/security/mixed-content-analyzer';
+
+// New analyzers
+import { RedirectChainAnalyzer } from '../analyzers/performance/redirect-chain-analyzer';
+import { CompressionAnalyzer } from '../analyzers/performance/compression-analyzer';
+import { ResourceHintsAnalyzer } from '../analyzers/performance/resource-hints-analyzer';
+import { HTTPProtocolAnalyzer } from '../analyzers/performance/http-protocol-analyzer';
+import { PWAAnalyzer } from '../analyzers/performance/pwa-analyzer';
+import { AboveFoldAnalyzer } from '../analyzers/performance/above-fold-analyzer';
+import { JavaScriptRenderingAnalyzer } from '../analyzers/seo/javascript-rendering-analyzer';
+import { AnchorTextAnalyzer } from '../analyzers/seo/anchor-text-analyzer';
+import { ExternalLinksAnalyzer } from '../analyzers/seo/external-links-analyzer';
+import { AEOAnalyzer } from '../analyzers/seo/aeo-analyzer';
+import { ResponseHeaderAnalyzer } from '../analyzers/seo/response-header-analyzer';
+import { CTADetectorAnalyzer } from '../analyzers/content/cta-detector-analyzer';
+import { LanguageDetectionAnalyzer } from '../analyzers/content/language-detection-analyzer';
+import { CodeCoverageAnalyzer } from '../analyzers/performance/code-coverage-analyzer';
+import { SRIAnalyzer } from '../analyzers/security/sri-analyzer';
+import { PermissionsPolicyAnalyzer } from '../analyzers/security/permissions-policy-analyzer';
+import { CrossOriginPolicyAnalyzer } from '../analyzers/security/cross-origin-policy-analyzer';
+import { InformationDisclosureAnalyzer } from '../analyzers/security/information-disclosure-analyzer';
+import { CSPQualityAnalyzer } from '../analyzers/security/csp-quality-analyzer';
+import { OpenRedirectAnalyzer } from '../analyzers/security/open-redirect-analyzer';
+import { ColorContrastAnalyzer } from '../analyzers/accessibility/color-contrast-analyzer';
+import { ReducedMotionAnalyzer } from '../analyzers/accessibility/reduced-motion-analyzer';
+import { AriaLiveAnalyzer } from '../analyzers/accessibility/aria-live-analyzer';
+import { DOMComplexityAnalyzer } from '../analyzers/performance/dom-complexity-analyzer';
+import { DeprecatedHTMLAnalyzer } from '../analyzers/seo/deprecated-html-analyzer';
+import { InterstitialAnalyzer } from '../analyzers/seo/interstitial-analyzer';
+import { AdDensityAnalyzer } from '../analyzers/seo/ad-density-analyzer';
+import { SpellingGrammarAnalyzer } from '../analyzers/content/spelling-grammar-analyzer';
+import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
+
+// Re-export ConsoleErrorAnalyzer for use by crawler-engine's #basicTest
+export { ConsoleErrorAnalyzer };
+// Re-export CodeCoverageAnalyzer for use by crawler-engine's #basicTest
+export { CodeCoverageAnalyzer };
+
+/**
+ * Extract values from Promise.allSettled results with fallback for rejected promises
+ */
+function extractSettledResults(results: PromiseSettledResult<unknown>[], fallbacks: unknown[], url: string): unknown[] {
+  return results.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    }
+    // Log the failure but continue with fallback
+    console.log(`⚠️  Analyzer ${index} failed for ${url}: ${result.reason?.message || result.reason}`);
+    return fallbacks[index];
+  });
+}
+
+/**
+ * Report issues and warnings from analyzer result
+ */
+function reportIssues(result: AnalyzerResult, reportIssue: ReportIssueFn): void {
+  for (const issue of result.issues || []) {
+    reportIssue(issue.message || '', issue.detail || '', issue.severity);
+  }
+  for (const warning of result.warnings || []) {
+    reportIssue(warning.message || '', warning.detail || '', warning.severity);
+  }
+}
+
+/**
+ * Run all analyzers on the page using parallel execution
+ * Each analyzer group has a timeout to prevent hung analyzers from freezing the crawl
+ */
+export async function runAnalyzers(
+  chromePage: ChromePage,
+  parsedPage: ParsedPage,
+  url: string,
+  pageData: PageInfo,
+  pageContent: string,
+  requests: Record<string, RequestInfo>,
+  consoleData: unknown,
+  options: CrawlerInternalOptions,
+  reportIssue: ReportIssueFn,
+): Promise<void> {
+  const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
+  // Cast requests for analyzer compatibility (analyzers use broader parameter types)
+  const analyzerRequests = requests as unknown as NetworkRequest[];
+
+  // ============================================================
+  // GROUP 1: Browser-based analyzers (can run in parallel)
+  // These read from the browser/parsed page independently
+  // Using Promise.allSettled to prevent single analyzer failure from crashing the crawl
+  // ============================================================
+
+  // Default fallback values for failed analyzers
+  const group1Fallbacks = [
+    // Core SEO
+    { issues: [], warnings: [] }, // headingResult
+    [], // images
+    { issues: [], warnings: [] }, // linkQualityResult
+    { issues: [], warnings: [] }, // structuredDataResult
+    { issues: [], warnings: [] }, // indexabilityResult
+    { issues: [], warnings: [] }, // crawlabilityResult
+    { issues: [], warnings: [] }, // internationalSEOResult
+    // Content & UX
+    { issues: [], warnings: [] }, // mobileFriendlyResult
+    { issues: [], warnings: [] }, // accessibilityResult
+    { issues: [], warnings: [] }, // contentQualityResult
+    { formData: null, issues: [], warnings: [] }, // formResult
+    // Social & Analytics
+    { issues: [], warnings: [] }, // socialMediaResult
+    { issues: [], warnings: [] }, // analyticsResult
+    // Security
+    { issues: [], warnings: [] }, // securityResult
+    { consentData: null, issues: [], warnings: [] }, // consentResult
+    // Performance
+    { issues: [], warnings: [] }, // cachingResult
+    { issues: [], warnings: [] }, // imageOptimizationResult
+    { issues: [], warnings: [] }, // resourceOptimizationResult
+    { fontData: null, issues: [], warnings: [] }, // fontResult
+    { thirdPartyData: null, issues: [], warnings: [] }, // thirdPartyResult
+    { criticalPathData: null, issues: [], warnings: [] }, // criticalPathResult
+    { timingData: null, issues: [], warnings: [] }, // connectionResult
+    // Advanced
+    { paginationData: null, issues: [], warnings: [] }, // paginationResult
+    { mediaData: null, issues: [], warnings: [] }, // mediaResult
+    { webComponentData: null, issues: [], warnings: [] }, // webComponentResult
+    // AEO / AI Search Readiness
+    { issues: [], warnings: [], info: {} }, // aeoResult
+    // Technology
+    { technologies: [], frameworks: [], cms: null }, // technologies
+    // CTA Detection
+    { ctas: [], summary: {}, issues: [], warnings: [] }, // ctaResult
+    // Language Detection
+    { info: null, issues: [], warnings: [] }, // langDetectionResult
+    // New analyzers (browser-based)
+    { issues: [], warnings: [], info: {} }, // colorContrastResult
+    { issues: [], warnings: [], info: {} }, // reducedMotionResult
+    { issues: [], warnings: [], info: {} }, // ariaLiveResult
+    { issues: [], warnings: [], info: {} }, // domComplexityResult
+    { issues: [], warnings: [], info: {} }, // deprecatedHtmlResult
+    { issues: [], warnings: [], info: {} }, // interstitialResult
+    { issues: [], warnings: [], info: {} }, // adDensityResult
+    { issues: [], warnings: [], info: {} }, // sriResult
+    { issues: [], warnings: [], info: {} }, // infoDisclosureResult
+    { issues: [], warnings: [], info: {} }, // openRedirectResult
+    { issues: [], warnings: [], info: {} }, // spellingResult
+  ];
+
+  const browserAnalyzersSettled = await withTimeout(
+    Promise.allSettled([
+      // Core SEO
+      HeadingAnalyzer.analyzeHeadings(parsedPage, url),
+      ImageAnalyzer.extractImageAlts(parsedPage),
+      LinkQualityAnalyzer.analyzeLinkQuality(chromePage, parsedPage, url, options.origin, {}),
+      StructuredDataAnalyzer.analyzeStructuredData(chromePage),
+      IndexabilityAnalyzer.analyzeIndexability(
+        chromePage,
+        parsedPage,
+        url,
+        pageData.status || 0,
+        pageData.responseHeaders || {},
+      ),
+      CrawlabilityAnalyzer.analyzeCrawlability(chromePage, parsedPage, url, pageData),
+      InternationalSEOAnalyzer.analyzeInternationalSEO(chromePage, parsedPage, url, pageData.responseHeaders),
+
+      // Content & UX
+      MobileFriendlyAnalyzer.analyzeMobileFriendly(chromePage),
+      AccessibilityAnalyzer.analyzeAccessibility(chromePage),
+      ContentQualityAnalyzer.analyzeContentQuality(chromePage, url, pageContent),
+      FormAccessibilityAnalyzer.analyze(chromePage, parsedPage, url),
+
+      // Social & Analytics
+      SocialMediaAnalyzer.analyzeSocialMediaTags(chromePage, parsedPage, url),
+      AnalyticsTrackingAnalyzer.analyzeAnalyticsTracking(chromePage, parsedPage, url),
+
+      // Security
+      SecurityAnalyzer.analyzeSecurity(chromePage, parsedPage, url, pageData.responseHeaders),
+      CookieConsentAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
+
+      // Performance
+      CachingAnalyzer.analyzeCaching(chromePage, analyzerRequests, url),
+      ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, requests, url),
+      ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
+      FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
+      ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, options.origin),
+      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics || {}, url),
+      ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
+
+      // Advanced
+      PaginationAnalyzer.analyze(chromePage, parsedPage, url),
+      MediaSEOAnalyzer.analyze(chromePage, parsedPage, pageData, url),
+      WebComponentAnalyzer.analyze(chromePage, parsedPage, url),
+
+      // AEO / AI Search Readiness
+      AEOAnalyzer.analyze(chromePage, parsedPage, url),
+
+      // Technology detection (with error handling)
+      TechnologyDetector.detect(
+        chromePage,
+        parsedPage,
+        pageContent,
+        pageData.responseHeaders || {},
+        analyzerRequests,
+      ).catch(() => {
+        const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
+        return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders || {}, scriptSrcs);
+      }),
+
+      // CTA Detection
+      CTADetectorAnalyzer.analyzeCTAs(chromePage, parsedPage, url),
+
+      // Language Detection
+      LanguageDetectionAnalyzer.analyzeLanguage(chromePage, parsedPage, url, pageData),
+
+      // Security (browser-based)
+      ColorContrastAnalyzer.analyze(chromePage, url),
+      ReducedMotionAnalyzer.analyze(chromePage, parsedPage, url),
+      AriaLiveAnalyzer.analyze(chromePage, url),
+      DOMComplexityAnalyzer.analyze(chromePage, url),
+      DeprecatedHTMLAnalyzer.analyze(chromePage, parsedPage, url),
+      InterstitialAnalyzer.analyze(chromePage, url),
+      AdDensityAnalyzer.analyze(chromePage, url),
+      SRIAnalyzer.analyze(parsedPage, url),
+      InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url),
+      OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
+      SpellingGrammarAnalyzer.analyze(chromePage, url),
+    ]),
+    analyzerTimeout,
+    `Analyzer timeout for ${url}`,
+  );
+
+  // Extract results with fallbacks for failed analyzers
+  const browserAnalyzers = extractSettledResults(browserAnalyzersSettled, group1Fallbacks, url);
+
+  // Assign results from Group 1
+  // Results come from Promise.allSettled extraction, cast to AnalyzerResult for typed access
+  const [
+    headingResult,
+    images,
+    linkQualityResult,
+    structuredDataResult,
+    indexabilityResult,
+    crawlabilityResult,
+    internationalSEOResult,
+    mobileFriendlyResult,
+    accessibilityResult,
+    contentQualityResult,
+    formResult,
+    socialMediaResult,
+    analyticsResult,
+    securityResult,
+    consentResult,
+    cachingResult,
+    imageOptimizationResult,
+    resourceOptimizationResult,
+    fontResult,
+    thirdPartyResult,
+    criticalPathResult,
+    connectionResult,
+    paginationResult,
+    mediaResult,
+    webComponentResult,
+    aeoResult,
+    technologies,
+    ctaResult,
+    langDetectionResult,
+    colorContrastResult,
+    reducedMotionResult,
+    ariaLiveResult,
+    domComplexityResult,
+    deprecatedHtmlResult,
+    interstitialResult,
+    adDensityResult,
+    sriResult,
+    infoDisclosureResult,
+    openRedirectResult,
+    spellingResult,
+  ] = browserAnalyzers as AnalyzerResult[];
+
+  // Apply analyzer results to pageData via index access
+  // Typed properties on PageInfo provide autocomplete at read sites;
+  // writes go through the index signature to avoid per-analyzer type assertions
+  const pd = pageData as Record<string, unknown>;
+  pd.headings = headingResult;
+  pd.images = images;
+  pd.linkAnalysis = linkQualityResult;
+  pd.structuredData = structuredDataResult;
+  pd.indexability = indexabilityResult;
+  pd.crawlability = crawlabilityResult;
+  pd.internationalSEO = internationalSEOResult;
+  pd.mobileFriendly = mobileFriendlyResult;
+  pd.accessibility = accessibilityResult;
+  pd.contentQuality = contentQualityResult;
+  pd.formData = (formResult as AnalyzerResult & { formData: unknown }).formData;
+  pd.socialMedia = socialMediaResult;
+  pd.analytics = analyticsResult;
+  pd.security = securityResult;
+  pd.consentData = (consentResult as AnalyzerResult & { consentData: unknown }).consentData;
+  pd.caching = cachingResult;
+  pd.imageOptimization = imageOptimizationResult;
+  pd.resourceOptimization = resourceOptimizationResult;
+  pd.fontData = (fontResult as AnalyzerResult & { fontData: unknown }).fontData;
+  pd.thirdPartyData = (thirdPartyResult as AnalyzerResult & { thirdPartyData: unknown }).thirdPartyData;
+  pd.criticalPathData = (criticalPathResult as AnalyzerResult & { criticalPathData: unknown }).criticalPathData;
+  pd.timingData = (connectionResult as AnalyzerResult & { timingData: unknown }).timingData;
+  pd.paginationData = (paginationResult as AnalyzerResult & { paginationData: unknown }).paginationData;
+  pd.mediaData = (mediaResult as AnalyzerResult & { mediaData: unknown }).mediaData;
+  pd.webComponentData = (webComponentResult as AnalyzerResult & { webComponentData: unknown }).webComponentData;
+  pd.aeo = (aeoResult as AnalyzerResult & { info: unknown }).info;
+  pd.technologies = technologies;
+  pd.ctas = (ctaResult as AnalyzerResult & { ctas: unknown }).ctas;
+  pd.ctaData = {
+    ctas: (ctaResult as AnalyzerResult & { ctas: unknown }).ctas,
+    summary: (ctaResult as AnalyzerResult & { summary: unknown }).summary,
+  };
+  pd.languageDetection = (langDetectionResult as AnalyzerResult & { info: unknown }).info;
+  pd.colorContrastData = (colorContrastResult as AnalyzerResult & { info: unknown }).info;
+  pd.reducedMotionData = (reducedMotionResult as AnalyzerResult & { info: unknown }).info;
+  pd.ariaLiveData = (ariaLiveResult as AnalyzerResult & { info: unknown }).info;
+  pd.domComplexityData = (domComplexityResult as AnalyzerResult & { info: unknown }).info;
+  pd.deprecatedHtmlData = (deprecatedHtmlResult as AnalyzerResult & { info: unknown }).info;
+  pd.interstitialData = (interstitialResult as AnalyzerResult & { info: unknown }).info;
+  pd.adDensityData = (adDensityResult as AnalyzerResult & { info: unknown }).info;
+  pd.sriData = (sriResult as AnalyzerResult & { info: unknown }).info;
+  pd.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: unknown }).info;
+  pd.openRedirectData = (openRedirectResult as AnalyzerResult & { info: unknown }).info;
+  pd.spellingData = (spellingResult as AnalyzerResult & { info: unknown }).info;
+
+  // Report issues from Group 1
+  [
+    headingResult,
+    linkQualityResult,
+    structuredDataResult,
+    indexabilityResult,
+    crawlabilityResult,
+    internationalSEOResult,
+    mobileFriendlyResult,
+    accessibilityResult,
+    contentQualityResult,
+    formResult,
+    socialMediaResult,
+    analyticsResult,
+    securityResult,
+    consentResult,
+    cachingResult,
+    imageOptimizationResult,
+    resourceOptimizationResult,
+    fontResult,
+    thirdPartyResult,
+    criticalPathResult,
+    connectionResult,
+    paginationResult,
+    mediaResult,
+    webComponentResult,
+    aeoResult,
+    ctaResult,
+    langDetectionResult,
+    colorContrastResult,
+    reducedMotionResult,
+    ariaLiveResult,
+    domComplexityResult,
+    deprecatedHtmlResult,
+    interstitialResult,
+    adDensityResult,
+    sriResult,
+    infoDisclosureResult,
+    openRedirectResult,
+    spellingResult,
+  ].forEach((result) => reportIssues(result as AnalyzerResult, reportIssue));
+
+  // ============================================================
+  // GROUP 2: Data-based analyzers (depend on Group 1 results)
+  // These analyze pageData populated by Group 1
+  // ============================================================
+
+  // Soft 404 detection (needs contentQuality.wordCount from Group 1)
+  const soft404Result = await withTimeout(
+    Soft404Analyzer.analyze(chromePage, parsedPage, url, pageData),
+    analyzerTimeout,
+    `Soft404 analyzer timeout for ${url}`,
+  ).catch((e) => {
+    if (options.verbose) console.warn(`[soft404] Analyzer failed for ${url}: ${e instanceof Error ? e.message : e}`);
+    return { soft404Data: null, issues: [], warnings: [] };
+  });
+  pageData.soft404 = soft404Result.soft404Data;
+  reportIssues(soft404Result, reportIssue);
+
+  // Synchronous analyzers - run in parallel since they only read pageData
+  // Using Promise.allSettled to prevent single analyzer failure from crashing the crawl
+  const group2Fallbacks = [
+    { issues: [], warnings: [] }, // urlArchResult
+    { freshnessData: null, issues: [], warnings: [] }, // freshnessResult
+    { issues: [], warnings: [] }, // eeatResult
+    { issues: [], warnings: [] }, // schemaResult
+    { issues: [], warnings: [] }, // technicalResult
+    { issues: [], warnings: [] }, // thinContentResult
+    { info: null, issues: [], warnings: [] }, // redirectResult
+    { info: null, issues: [], warnings: [] }, // compressionResult
+    { info: null, issues: [], warnings: [] }, // hintsResult
+    { info: null, issues: [], warnings: [] }, // mixedResult
+    { info: null, issues: [], warnings: [] }, // protocolResult
+    { info: null, issues: [], warnings: [] }, // pwaResult
+    { info: null, issues: [], warnings: [] }, // aboveFoldResult
+    { info: null, issues: [], warnings: [] }, // anchorResult
+    { info: null, issues: [], warnings: [] }, // externalLinksResult
+    { info: null, issues: [], warnings: [] }, // responseHeaderResult
+    { info: null, issues: [], warnings: [] }, // cspQualityResult
+    { info: null, issues: [], warnings: [] }, // permissionsPolicyResult
+    { info: null, issues: [], warnings: [] }, // crossOriginResult
+  ];
+
+  const syncResultsSettled = await withTimeout(
+    Promise.allSettled([
+      UrlArchitectureAnalyzer.analyze(url, pageData, options.origin),
+      FreshnessAnalyzer.analyze(pageData, pageData.response || {}, parsedPage),
+      EEATAnalyzer.analyze(parsedPage, url, pageData),
+      AdvancedSchemaValidator.validate(pageData, url),
+      TechnicalSEOAnalyzer.analyze(parsedPage, url, pageData),
+      ThinContentAnalyzer.analyze(pageData, url),
+      RedirectChainAnalyzer.analyze(pageData, url),
+      CompressionAnalyzer.analyze(pageData, url),
+      ResourceHintsAnalyzer.analyze(pageData, url),
+      MixedContentAnalyzer.analyze(pageData, url),
+      HTTPProtocolAnalyzer.analyze(pageData, url),
+      PWAAnalyzer.analyze(pageData, url),
+      AboveFoldAnalyzer.analyze(pageData, url),
+      AnchorTextAnalyzer.analyze(pageData, url),
+      ExternalLinksAnalyzer.analyze(pageData, url),
+      ResponseHeaderAnalyzer.analyze(pageData, url),
+      CSPQualityAnalyzer.analyze(pageData, url),
+      PermissionsPolicyAnalyzer.analyze(pageData, url),
+      CrossOriginPolicyAnalyzer.analyze(pageData, url),
+    ]),
+    analyzerTimeout,
+    `Sync analyzers timeout for ${url}`,
+  );
+
+  // Extract results with fallbacks for failed analyzers
+  const syncResults = extractSettledResults(syncResultsSettled, group2Fallbacks, url);
+
+  const [
+    _urlArchResult,
+    freshnessResult,
+    _eeatResult,
+    _schemaResult,
+    _technicalResult,
+    _thinContentResult,
+    redirectResult,
+    compressionResult,
+    hintsResult,
+    mixedResult,
+    protocolResult,
+    pwaResult,
+    aboveFoldResult,
+    anchorResult,
+    externalLinksResult,
+    responseHeaderResult,
+    cspQualityResult,
+    permissionsPolicyResult,
+    crossOriginResult,
+  ] = syncResults as Array<AnalyzerResult & { freshnessData?: unknown; info?: unknown }>;
+
+  // Apply data results
+  pageData.freshnessData = freshnessResult.freshnessData as typeof pageData.freshnessData;
+  pageData.redirectAnalysis = redirectResult.info as typeof pageData.redirectAnalysis;
+  pageData.compressionData = compressionResult.info as typeof pageData.compressionData;
+  pageData.resourceHintsData = hintsResult.info as typeof pageData.resourceHintsData;
+  pageData.mixedContentData = mixedResult.info as typeof pageData.mixedContentData;
+  pageData.protocolData = protocolResult.info as typeof pageData.protocolData;
+  pageData.pwaData = pwaResult.info as typeof pageData.pwaData;
+  pageData.aboveFoldData = aboveFoldResult.info as typeof pageData.aboveFoldData;
+  pageData.anchorTextData = anchorResult.info as typeof pageData.anchorTextData;
+  pageData.externalLinksData = externalLinksResult.info as typeof pageData.externalLinksData;
+  pageData.responseHeaderAnalysis = responseHeaderResult.info as typeof pageData.responseHeaderAnalysis;
+  pageData.cspQualityData = cspQualityResult.info;
+  pageData.permissionsPolicyData = permissionsPolicyResult.info;
+  pageData.crossOriginPolicyData = crossOriginResult.info;
+
+  // Report issues from Group 2
+  syncResults.forEach((result) => reportIssues(result as AnalyzerResult, reportIssue));
+
+  // Console error analysis (independent)
+  if (consoleData) {
+    const consoleResult = ConsoleErrorAnalyzer.analyze(consoleData, url);
+    pageData.consoleAnalysis = consoleResult.consoleAnalysis;
+    reportIssues(consoleResult, reportIssue);
+  }
+
+  // JavaScript rendering analysis (only if raw HTML available)
+  if (pageData.rawHtml) {
+    const jsRenderResult = JavaScriptRenderingAnalyzer.analyze(pageData, url);
+    pageData.jsRenderingData = jsRenderResult.info;
+    reportIssues(jsRenderResult, reportIssue);
+  }
+
+  // Code coverage analysis (requires perf flag, uses Coverage API started before navigation)
+  if (options.perf) {
+    try {
+      const coverageResult = await withTimeout(
+        CodeCoverageAnalyzer.analyze(chromePage, analyzerRequests, url),
+        analyzerTimeout,
+        `Coverage analyzer timeout for ${url}`,
+      );
+      pageData.codeCoverage = coverageResult.info as CodeCoverageData;
+      reportIssues(coverageResult, reportIssue);
+    } catch {
+      pageData.codeCoverage = null;
+    }
+  }
+
+  // Outbound link health check (async, rate-limited)
+  try {
+    const outboundResult = await withTimeout(
+      OutboundLinkChecker.analyze(pageData, url, options.origin, options.analysis),
+      analyzerTimeout * 3, // Allow more time for external requests
+      `Outbound link checker timeout for ${url}`,
+    );
+    pageData.outboundLinkHealth = outboundResult.info as OutboundLinkHealthData;
+    reportIssues(outboundResult, reportIssue);
+  } catch {
+    pageData.outboundLinkHealth = null;
+  }
+}

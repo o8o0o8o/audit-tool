@@ -228,20 +228,20 @@ class HistoryManager {
     };
 
     // Support both old (vitals.ttfb) and new (TTFB) formats
-    const ttfbValues = pagesWithPerf.map((p) => p.TTFB || p.vitals?.ttfb || 0).filter((v) => v > 0);
-    const lcpValues = pagesWithPerf.map((p) => p.LCP || p.vitals?.lcp || 0).filter((v) => v > 0);
+    const ttfbValues = pagesWithPerf.map((p) => p.TTFB || (p.vitals?.ttfb as number) || 0).filter((v) => v > 0);
+    const lcpValues = pagesWithPerf.map((p) => p.LCP || (p.vitals?.lcp as number) || 0).filter((v) => v > 0);
     // CLS=0 is a perfect score (no layout shift) — don't filter it out
     const clsValues = pagesWithPerf
-      .map((p) => p.CLS ?? p.vitals?.cls ?? null)
-      .filter((v) => v !== null && v !== undefined);
+      .map((p) => p.CLS ?? (p.vitals?.cls as number | undefined) ?? null)
+      .filter((v): v is number => v !== null && v !== undefined);
 
     return {
-      avgTTFB: avg(ttfbValues).toFixed(0),
-      avgLCP: avg(lcpValues).toFixed(0),
-      avgCLS: avg(clsValues).toFixed(3),
-      p75TTFB: p75(ttfbValues).toFixed(0),
-      p75LCP: p75(lcpValues).toFixed(0),
-      p75CLS: p75(clsValues).toFixed(3),
+      avgTTFB: avg(ttfbValues as number[]).toFixed(0),
+      avgLCP: avg(lcpValues as number[]).toFixed(0),
+      avgCLS: avg(clsValues as number[]).toFixed(3),
+      p75TTFB: p75(ttfbValues as number[]).toFixed(0),
+      p75LCP: p75(lcpValues as number[]).toFixed(0),
+      p75CLS: p75(clsValues as number[]).toFixed(3),
       pagesWithMetrics: pagesWithPerf.length,
     };
   }
@@ -285,8 +285,8 @@ class HistoryManager {
     const allTechs = new Set<string>();
 
     for (const page of Object.values(pages) as PageInfo[]) {
-      const tech = page.technologies || {};
-      const technologies = tech.technologies || [];
+      const tech = page.technologies;
+      const technologies = tech?.technologies || [];
       for (const t of technologies) {
         allTechs.add(t.name);
       }

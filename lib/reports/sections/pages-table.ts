@@ -910,7 +910,8 @@ function getSegmentLabel(segment: string) {
 function getContentQualityCells(page: PageInfo) {
   const content = page.contentQuality ?? ({} as ContentQualityAnalysis);
 
-  const contentScore = content.contentScore ?? 'N/A';
+  const contentScore: number | string = content.contentScore ?? 'N/A';
+  const contentScoreNum = typeof contentScore === 'number' ? contentScore : 0;
   const wordCount = content.wordCount || 0;
   const textToHtmlRatio = content.textToHtmlRatio || 0;
   const readability = content.readabilityScore || 0;
@@ -921,7 +922,7 @@ function getContentQualityCells(page: PageInfo) {
     .join(', ');
 
   return `
-    <td style="color: ${contentScore >= 70 ? '#10b981' : contentScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Content Quality Score: ${contentScore}/100">
+    <td style="color: ${contentScoreNum >= 70 ? '#10b981' : contentScoreNum >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Content Quality Score: ${contentScore}/100">
         ${contentScore}
     </td>
     <td style="color: ${wordCount >= 600 ? '#10b981' : wordCount >= 300 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${wordCount} words (min: 300, recommended: 600)">
@@ -972,7 +973,8 @@ function getNewInsightCells(page: PageInfo) {
   const brokenColor = (brokenCount ?? 0) > 0 ? '#ef4444' : '#10b981';
 
   // Main content words
-  const mainWords = page.contentQuality?.wordCountBySection?.main ?? null;
+  const wcs = page.contentQuality?.wordCountBySection;
+  const mainWords = (wcs && !Array.isArray(wcs)) ? (wcs as Record<string, number>).main ?? null : null;
   const mainDisplay = mainWords != null ? mainWords : '—';
   const mainColor =
     mainWords != null ? (mainWords >= 300 ? '#10b981' : mainWords >= 100 ? '#f59e0b' : '#ef4444') : '#6b7280';
@@ -1080,7 +1082,8 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const ctaCount = p.ctaData?.summary?.total ?? null;
   const jsUnused = p.codeCoverage?.js?.ratio;
   const brokenCount = p.outboundLinkHealth?.broken?.length ?? null;
-  const mainWords = p.contentQuality?.wordCountBySection?.main ?? null;
+  const pWcs = p.contentQuality?.wordCountBySection;
+  const mainWords = (pWcs && !Array.isArray(pWcs)) ? (pWcs as Record<string, number>).main ?? null : null;
 
   const status = (p.status as number) || (p.statusCode as number) || 0;
   const incomingCount = incomingLinks[p.url]?.length || p.incomingLinksCount || 0;

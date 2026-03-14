@@ -110,7 +110,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
       indexability['Client Errors (4xx)']++;
     } else if (status >= 300) {
       indexability['Redirects (3xx)']++;
-    } else if (page.indexability?.noindex || page.metaMap?.robots?.includes('noindex')) {
+    } else if (page.indexability?.hasNoindexTag || page.metaMap?.robots?.includes('noindex')) {
       indexability['Noindex']++;
     } else {
       indexability['Indexable']++;

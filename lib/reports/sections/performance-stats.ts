@@ -379,13 +379,13 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
  * Generate vitals attribution section (LCP bottleneck + CLS sources)
  */
 function getVitalsAttributionSection(pagesArray: PageInfo[]) {
-  const pagesWithAttribution = pagesArray.filter((p) => p.vitals?.lcpAnalysis?.bottleneck);
+  const pagesWithAttribution = pagesArray.filter((p) => (p.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.bottleneck);
   if (pagesWithAttribution.length === 0) return '';
 
   // Count bottleneck types
   const bottleneckCounts: Record<string, number> = {};
   for (const p of pagesWithAttribution) {
-    const bn = p.vitals!.lcpAnalysis.bottleneck;
+    const bn = (p.vitals!.lcpAnalysis as Record<string, unknown>).bottleneck as string;
     bottleneckCounts[bn] = (bottleneckCounts[bn] || 0) + 1;
   }
 
@@ -418,8 +418,8 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
   // Sample recommendations
   const topBottleneck = sorted[0][0];
-  const samplePage = pagesWithAttribution.find((p) => p.vitals!.lcpAnalysis.bottleneck === topBottleneck);
-  const recommendation = samplePage?.vitals?.lcpAnalysis?.recommendation || '';
+  const samplePage = pagesWithAttribution.find((p) => (p.vitals!.lcpAnalysis as Record<string, unknown>).bottleneck === topBottleneck);
+  const recommendation = (samplePage?.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation || '';
 
   return `
     <div style="margin-bottom: 30px;">

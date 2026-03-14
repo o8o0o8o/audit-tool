@@ -1,316 +1,75 @@
 /**
  * Crawler Engine
- * Handles page crawling, analysis orchestration, and data collection
+ * Handles page crawling, browser lifecycle, and orchestration
  */
 
 import { parse } from 'node-html-parser';
-import * as fs from 'fs';
-import * as path from 'path';
 import { chromium } from 'playwright';
-import type { Request as PlaywrightRequest, Response as PlaywrightResponse, BrowserContext } from 'playwright';
+import type { Request as PlaywrightRequest, Response as PlaywrightResponse } from 'playwright';
 import type {
-  ParsedPage,
   ChromePage,
   PageInfo,
   NetworkCondition,
   CpuCondition,
   CrawlerEngineOptions,
   CrawlerCallbacks,
-  SitemapUrl,
-  Issue,
-  CodeCoverageData,
-  OutboundLinkHealthData,
 } from '../types';
 import type { CollectedVitals } from './vitals-collector';
-import type { CrUXFieldData } from './crux-api';
 
-// ─── Crawler Engine internal interfaces ─────────────────────────────────────
-
-interface CrawlerInternalOptions {
-  concurrency: number;
-  saveHtml: boolean;
-  screenshots: boolean;
-  analysis: Record<string, unknown>;
-  perf: boolean;
-  origin: string;
-  networkConditions: Record<string, NetworkCondition>;
-  cpuConditions: Record<string, CpuCondition>;
-  verbose: boolean;
-  userAgent: string | null;
-  queryParams: QueryParamConfig;
-  cruxApiKey?: string | null;
-  config?: Record<string, unknown>;
-}
-
-interface QueryParamConfig {
-  mode?: 'strip_all' | 'strip_tracking' | 'keep_all' | 'whitelist';
-  whitelist?: string[];
-  blacklist?: string[];
-}
-
-interface FailureTracker {
-  consecutiveFailures: number;
-  lastFailureTime: number;
-  circuitOpen: boolean;
-  circuitOpenTime: number;
-}
-
-interface BackoffState {
-  attempts: number;
-  lastAttempt: number;
-}
-
-interface RequestInfo {
-  resourceType?: string;
-  method?: string;
-  startTime?: number;
-  status?: number;
-  endTime?: number;
-  duration?: number;
-  size?: number | null;
-}
-
-interface RedirectEntry {
-  url: string;
-  status: number | string;
-}
-
-interface BasicTestResult {
-  TTFB?: number;
-  FCP?: number;
-  LCP?: number;
-  CLS?: number;
-  INP?: number;
-  TBT?: number;
-  TTI?: number;
-  speedIndex?: number;
-  lcpElement?: string | null;
-  lcpUrl?: string | null;
-  lcpSize?: { width: number; height: number } | null;
-  lcpSubParts?: { ttfb: number; resourceLoad: number; resourceDelay: number; renderDelay: number };
-  clsEntries?: unknown[];
-  clsLargestShift?: number | null;
-  clsShiftCount?: number;
-  inpEvent?: string | null;
-  longTasks?: unknown[];
-  domContentLoaded?: number;
-  domComplete?: number;
-  loadEvent?: number;
-  status: number | undefined;
-  requests: Record<string, RequestInfo>;
-  totalResponseSize: number;
-  metrics: PerformanceMetrics;
-  redirectChain: RedirectEntry[];
-  responseHeaders: Record<string, string | undefined>;
-  consoleData: unknown;
-  url?: string;
-  blockers?: unknown;
-}
-
-interface PerformanceMetrics {
-  nav: PerformanceEntryList;
-  resources: PerformanceEntryList;
-  paint: PerformanceEntryList;
-}
-
-interface CrawlPagesParams {
-  pagesToCrawl: string[];
-  collectedURLs: Set<string>;
-  uniquePages: Set<string>;
-  addMissing: boolean;
-  results: CrawlResults;
-  incomingLinksTracking: Map<string, Set<string>>;
-  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
-}
-
-interface CrawlResults {
-  pageData: {
-    pages: Record<string, PageInfo>;
-    processedPages: Set<string>;
-    totalWithoutError: number;
-    totalWithError: number;
-    byError: Record<string, string[] | number>;
-    attempts: Record<string, number>;
-    incomingLinks?: Record<string, string[]>;
-  };
-  cruxData?: CrUXFieldData | null;
-}
-
-interface CrawlSinglePageParams {
-  url: string;
-  context: BrowserContext;
-  results: CrawlResults;
-  incomingLinksTracking: Map<string, Set<string>>;
-  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
-  collectedURLs: Set<string>;
-  uniquePages: Set<string>;
-  pagesToCrawl: string[];
-  addMissing: boolean;
-  discoveredLinksSource: Map<string, string>;
-  uniqueTitles: Set<string>;
-  uniqueDescriptions: Set<string>;
-}
-
-interface ProcessPageDataParams {
-  page: BasicTestResult;
-  chromePage: ChromePage;
-  url: string;
-  results: CrawlResults;
-  incomingLinksTracking: Map<string, Set<string>>;
-  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
-  collectedURLs: Set<string>;
-  uniquePages: Set<string>;
-  pagesToCrawl: string[];
-  addMissing: boolean;
-  discoveredLinksSource: Map<string, string>;
-  uniqueTitles: Set<string>;
-  uniqueDescriptions: Set<string>;
-}
-
-interface CollectLinksParams {
-  parsedPage: ParsedPage;
-  url: string;
-  results: CrawlResults;
-  incomingLinksTracking: Map<string, Set<string>>;
-  collectedURLs: Set<string>;
-  uniquePages: Set<string>;
-  pagesToCrawl: string[];
-  addMissing: boolean;
-  discoveredLinksSource: Map<string, string>;
-  sitemapUrls: Record<string, SitemapUrl>;
-}
-
-interface LinkEntry {
-  text: string | undefined;
-  href: string;
-  isInternal: boolean;
-}
-
-interface MetaTag {
-  name: string | null;
-  content: string;
-}
-
-interface LinkTag {
-  rel: string;
-  hrefLang: string;
-  href: string;
-}
-
-interface AlternateEntry {
-  hreflang: string;
-  href: string;
-}
-
-interface AnalyzerResult {
-  issues?: Issue[];
-  warnings?: Issue[];
-  [key: string]: unknown;
-}
-
-interface CrawlPageResult {
-  isMultiLang?: boolean;
-  failed: boolean;
-  errorType?: string;
-}
-
-type PerformanceEntryList = unknown[];
+import type {
+  CrawlerInternalOptions,
+  QueryParamConfig,
+  FailureTracker,
+  BackoffState,
+  RequestInfo,
+  RedirectEntry,
+  BasicTestResult,
+  PerformanceMetrics,
+  CrawlPagesParams,
+  CrawlResults,
+  CrawlSinglePageParams,
+  ProcessPageDataParams,
+  CrawlPageResult,
+} from './crawler-types';
 
 import {
   SEVERITY,
   THRESHOLDS,
-  META_TAGS,
-  META_TAGS_CONFIG,
   VIEWPORT,
-  normalizeTextForComparison,
   CRAWL_SETTINGS,
 } from '../constants';
-import { normalizeUrl, createSafeFilename, analyzeUrlStructure } from '../utils';
+import { analyzeUrlStructure } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
 import { ProgressReporter } from '../utils/progress-reporter';
 import { VitalsCollector } from './vitals-collector';
 import { CrUXAPI } from './crux-api';
 
-// SEO analyzers
-import { HeadingAnalyzer } from '../analyzers/seo/heading-analyzer';
-import { ImageAnalyzer } from '../analyzers/seo/image-analyzer';
-import { StructuredDataAnalyzer } from '../analyzers/seo/structured-data-analyzer';
-import { IndexabilityAnalyzer } from '../analyzers/seo/indexability-analyzer';
-import { CrawlabilityAnalyzer } from '../analyzers/seo/crawlability-analyzer';
-import { UrlArchitectureAnalyzer } from '../analyzers/seo/url-architecture-analyzer';
-import { EEATAnalyzer } from '../analyzers/seo/eeat-analyzer';
-import { AdvancedSchemaValidator } from '../analyzers/seo/advanced-schema-validator';
-import { TechnicalSEOAnalyzer } from '../analyzers/seo/technical-seo-analyzer';
-import { TechnologyDetector } from '../analyzers/seo/technology-detector';
-import { ThinContentAnalyzer } from '../analyzers/content/thin-content-analyzer';
-import { Soft404Analyzer } from '../analyzers/seo/soft-404-analyzer';
-import { ConsoleErrorAnalyzer } from '../analyzers/seo/console-error-analyzer';
-import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
-import { MediaSEOAnalyzer } from '../analyzers/seo/media-seo-analyzer';
-import { WebComponentAnalyzer } from '../analyzers/seo/web-component-analyzer';
+// Extracted modules
+import {
+  getBackoffDelay,
+  isCircuitOpen,
+  recordFailure,
+  recordSuccess,
+  withTimeout,
+  categorizeError,
+  handlePageError,
+} from './resilience';
+import {
+  processTitle,
+  processMetaTags,
+  processLinkTags,
+  processRedirects,
+  collectLinks,
+  checkVitalsThresholds,
+  optimizePageDataMemory,
+  saveHtmlSnapshot,
+  saveScreenshot,
+  populateIncomingLinksCount,
+} from './page-data-builder';
+import { runAnalyzers, ConsoleErrorAnalyzer, CodeCoverageAnalyzer } from './analyzer-runner';
 
-// Performance analyzers
-import { ImageOptimizationAnalyzer } from '../analyzers/performance/image-optimization-analyzer';
-import { ResourceOptimizationAnalyzer } from '../analyzers/performance/resource-optimization-analyzer';
-import { CachingAnalyzer } from '../analyzers/performance/caching-analyzer';
-import { FontLoadingAnalyzer } from '../analyzers/performance/font-loading-analyzer';
-import { ThirdPartyAnalyzer } from '../analyzers/performance/third-party-analyzer';
-import { CriticalPathAnalyzer } from '../analyzers/performance/critical-path-analyzer';
-import { ConnectionTimingAnalyzer } from '../analyzers/performance/connection-timing-analyzer';
-
-// Content analyzers
-import { LinkQualityAnalyzer } from '../analyzers/content/link-quality-analyzer';
-import { ContentQualityAnalyzer } from '../analyzers/content/content-quality-analyzer';
-import { FreshnessAnalyzer } from '../analyzers/content/freshness-analyzer';
-
-// Accessibility analyzers
-import { AccessibilityAnalyzer } from '../analyzers/accessibility/accessibility-analyzer';
-import { MobileFriendlyAnalyzer } from '../analyzers/accessibility/mobile-friendly-analyzer';
-import { FormAccessibilityAnalyzer } from '../analyzers/accessibility/form-accessibility-analyzer';
-
-// International, Social, Analytics, Security
-import { InternationalSEOAnalyzer } from '../analyzers/international/international-seo-analyzer';
-import { SocialMediaAnalyzer } from '../analyzers/social/social-media-analyzer';
-import { AnalyticsTrackingAnalyzer } from '../analyzers/analytics/analytics-tracking-analyzer';
-import { SecurityAnalyzer } from '../analyzers/security/security-analyzer';
-import { CookieConsentAnalyzer } from '../analyzers/security/cookie-consent-analyzer';
-import { MixedContentAnalyzer } from '../analyzers/security/mixed-content-analyzer';
-
-// New analyzers
-import { RedirectChainAnalyzer } from '../analyzers/performance/redirect-chain-analyzer';
-import { CompressionAnalyzer } from '../analyzers/performance/compression-analyzer';
-import { ResourceHintsAnalyzer } from '../analyzers/performance/resource-hints-analyzer';
-import { HTTPProtocolAnalyzer } from '../analyzers/performance/http-protocol-analyzer';
-import { PWAAnalyzer } from '../analyzers/performance/pwa-analyzer';
-import { AboveFoldAnalyzer } from '../analyzers/performance/above-fold-analyzer';
-import { JavaScriptRenderingAnalyzer } from '../analyzers/seo/javascript-rendering-analyzer';
-import { AnchorTextAnalyzer } from '../analyzers/seo/anchor-text-analyzer';
-import { ExternalLinksAnalyzer } from '../analyzers/seo/external-links-analyzer';
-import { AEOAnalyzer } from '../analyzers/seo/aeo-analyzer';
-import { ResponseHeaderAnalyzer } from '../analyzers/seo/response-header-analyzer';
-import { CTADetectorAnalyzer } from '../analyzers/content/cta-detector-analyzer';
-import { LanguageDetectionAnalyzer } from '../analyzers/content/language-detection-analyzer';
-import { CodeCoverageAnalyzer } from '../analyzers/performance/code-coverage-analyzer';
-import { SRIAnalyzer } from '../analyzers/security/sri-analyzer';
-import { PermissionsPolicyAnalyzer } from '../analyzers/security/permissions-policy-analyzer';
-import { CrossOriginPolicyAnalyzer } from '../analyzers/security/cross-origin-policy-analyzer';
-import { InformationDisclosureAnalyzer } from '../analyzers/security/information-disclosure-analyzer';
-import { CSPQualityAnalyzer } from '../analyzers/security/csp-quality-analyzer';
-import { OpenRedirectAnalyzer } from '../analyzers/security/open-redirect-analyzer';
-import { ColorContrastAnalyzer } from '../analyzers/accessibility/color-contrast-analyzer';
-import { ReducedMotionAnalyzer } from '../analyzers/accessibility/reduced-motion-analyzer';
-import { AriaLiveAnalyzer } from '../analyzers/accessibility/aria-live-analyzer';
-import { DOMComplexityAnalyzer } from '../analyzers/performance/dom-complexity-analyzer';
-import { DeprecatedHTMLAnalyzer } from '../analyzers/seo/deprecated-html-analyzer';
-import { InterstitialAnalyzer } from '../analyzers/seo/interstitial-analyzer';
-import { AdDensityAnalyzer } from '../analyzers/seo/ad-density-analyzer';
-import { SpellingGrammarAnalyzer } from '../analyzers/content/spelling-grammar-analyzer';
-import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
-
-// Circuit breaker constants
-const CIRCUIT_THRESHOLD = 10; // Open after 10 consecutive failures
-const CIRCUIT_COOLDOWN = 60000; // 60 second cooldown
+import type { Issue } from '../types';
 
 class CrawlerEngine {
   #options: CrawlerInternalOptions;
@@ -431,149 +190,11 @@ class CrawlerEngine {
   }
 
   /**
-   * Extract values from Promise.allSettled results with fallback for rejected promises
-   * @private
-   * @param results - Promise.allSettled results
-   * @param fallbacks - Fallback values for rejected promises (same length as results)
-   * @param {string} url - URL being processed (for logging)
-   * @returns Extracted values
+   * Helper to create a reportIssue function bound to saveError callback
    */
-  #extractSettledResults(results: PromiseSettledResult<unknown>[], fallbacks: unknown[], url: string): unknown[] {
-    return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      }
-      // Log the failure but continue with fallback
-      console.log(`⚠️  Analyzer ${index} failed for ${url}: ${result.reason?.message || result.reason}`);
-      return fallbacks[index];
-    });
-  }
-
-  /**
-   * Get backoff delay for an error type using exponential backoff
-   * @private
-   * @param {string} errorType - Type of error
-   * @returns {number} Delay in milliseconds
-   */
-  #getBackoffDelay(errorType: string) {
-    const state = this.#backoffState.get(errorType) || { attempts: 0, lastAttempt: 0 };
-    const now = Date.now();
-
-    // Reset if last attempt was more than 5 minutes ago
-    if (now - state.lastAttempt > 300000) {
-      state.attempts = 0;
-    }
-
-    // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
-    const baseDelay = 1000;
-    const maxDelay = 30000;
-    const delay = Math.min(baseDelay * Math.pow(2, state.attempts), maxDelay);
-
-    // Update state
-    state.attempts++;
-    state.lastAttempt = now;
-    this.#backoffState.set(errorType, state);
-
-    return delay;
-  }
-
-  /**
-   * Check if circuit breaker should prevent crawling
-   * Opens circuit after 10 consecutive failures, closes after 60s cooldown
-   * @private
-   * @returns {boolean} True if circuit is open (should skip)
-   */
-  #isCircuitOpen() {
-    const now = Date.now();
-
-    if (this.#failureTracker.circuitOpen) {
-      // Check if cooldown has passed
-      if (now - this.#failureTracker.circuitOpenTime > CIRCUIT_COOLDOWN) {
-        console.log('🔌 Circuit breaker: Cooldown passed, closing circuit (half-open state)');
-        this.#failureTracker.circuitOpen = false;
-        this.#failureTracker.consecutiveFailures = Math.floor(CIRCUIT_THRESHOLD / 2); // Half-open: reduce threshold
-        return false;
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Record a failure for circuit breaker
-   * @private
-   * @param {string} errorType - Type of error
-   */
-  #recordFailure(_errorType: string) {
-    this.#failureTracker.consecutiveFailures++;
-    this.#failureTracker.lastFailureTime = Date.now();
-
-    if (this.#failureTracker.consecutiveFailures >= CIRCUIT_THRESHOLD && !this.#failureTracker.circuitOpen) {
-      console.warn(`⚡ Circuit breaker: Opening after ${CIRCUIT_THRESHOLD} consecutive failures`);
-      this.#failureTracker.circuitOpen = true;
-      this.#failureTracker.circuitOpenTime = Date.now();
-    }
-  }
-
-  /**
-   * Record a success - resets failure counter
-   * @private
-   */
-  #recordSuccess() {
-    this.#failureTracker.consecutiveFailures = 0;
-    // Clear backoff state on success
-    this.#backoffState.clear();
-  }
-
-  /**
-   * Wrap a promise with a timeout
-   * Uses AbortController pattern for cleaner cancellation handling
-   * @private
-   * @param {Promise} promise - Promise to wrap
-   * @param {number} timeoutMs - Timeout in milliseconds
-   * @param {string} message - Error message on timeout
-   * @returns {Promise} Result of promise or timeout error
-   */
-  async #withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string = 'Observer timeout'): Promise<T> {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    let settled = false;
-    let timedOut = false;
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        if (!settled) {
-          timedOut = true;
-          reject(new Error(message));
-        }
-      }, timeoutMs);
-    });
-
-    try {
-      const result = await Promise.race([promise, timeoutPromise]);
-      settled = true;
-      return result;
-    } catch (error: unknown) {
-      settled = true;
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-      // Attach catch to original promise to prevent unhandled rejection warning
-      // Only ignore errors if we timed out - otherwise log unexpected errors
-      // that occur after the race is settled
-      promise.catch((err) => {
-        if (timedOut) {
-          // Expected: timeout won the race, original promise rejected later
-          // Log at debug level for troubleshooting
-          console.debug?.(`[withTimeout] Post-timeout rejection for "${message}": ${err.message}`);
-        } else if (!settled) {
-          // Unexpected: promise rejected but race somehow didn't catch it
-          console.error(`[withTimeout] Unexpected unhandled rejection: ${err.message}`);
-        }
-        // If settled is true and not timedOut, the error was already thrown/handled
-      });
-    }
-  }
+  #reportIssue = (message: string, detail: string, severity: string) => {
+    this.#callbacks.saveError(message, detail, severity);
+  };
 
   /**
    * Perform basic page test - navigate and collect metrics
@@ -626,7 +247,7 @@ class CrawlerEngine {
     page.on('request', requestHandler);
     page.on('response', responseHandler);
 
-    let response: PlaywrightResponse | null | undefined,
+    let response: import('playwright').Response | null | undefined,
       status: number | undefined,
       redirectChain: RedirectEntry[],
       vitals: Partial<CollectedVitals>,
@@ -660,7 +281,9 @@ class CrawlerEngine {
 
         // Start code coverage collection before navigation
         // Reuse the same CDP session to avoid conflicts from multiple sessions on one page
-        await CodeCoverageAnalyzer.startCoverage(page, session).catch(() => {});
+        await CodeCoverageAnalyzer.startCoverage(page, session).catch((e) => {
+          if (this.#options.verbose) console.warn(`[coverage] Failed to start coverage for ${url}: ${e instanceof Error ? e.message : e}`);
+        });
       }
 
       // Navigate to the page with explicit timeout
@@ -888,7 +511,7 @@ class CrawlerEngine {
         }
 
         // Check circuit breaker before processing batch
-        if (this.#isCircuitOpen()) {
+        if (isCircuitOpen(this.#failureTracker)) {
           const cooldownRemaining = 60000 - (Date.now() - this.#failureTracker.circuitOpenTime);
           console.warn(`⚡ Circuit breaker open. Waiting ${Math.ceil(cooldownRemaining / 1000)}s before retrying...`);
           await new Promise((resolve) => setTimeout(resolve, Math.min(cooldownRemaining, 10000)));
@@ -938,20 +561,20 @@ class CrawlerEngine {
               if (pageResult.failed) {
                 failedPages.push(url);
                 progress.fail(url, 'crawl error');
-                this.#recordFailure(pageResult.errorType || 'unknown');
+                recordFailure(this.#failureTracker, pageResult.errorType || 'unknown');
 
                 // Apply exponential backoff after failure
-                const backoffDelay = this.#getBackoffDelay(pageResult.errorType || 'unknown');
+                const backoffDelay = getBackoffDelay(pageResult.errorType || 'unknown', this.#backoffState);
                 if (backoffDelay > 1000) {
                   await new Promise((resolve) => setTimeout(resolve, backoffDelay));
                 }
               } else {
                 progress.success(url, duration);
-                this.#recordSuccess();
+                recordSuccess(this.#failureTracker, this.#backoffState);
               }
             } else {
               progress.success(url, duration);
-              this.#recordSuccess();
+              recordSuccess(this.#failureTracker, this.#backoffState);
             }
 
             return { url, pageResult, duration };
@@ -961,7 +584,7 @@ class CrawlerEngine {
         // Wrap batch with timeout to prevent indefinite hangs
         let batchResults;
         try {
-          batchResults = await this.#withTimeout(
+          batchResults = await withTimeout(
             batchPromise,
             BATCH_TIMEOUT,
             `Batch timeout after ${BATCH_TIMEOUT / 1000}s for ${batch.length} URLs`,
@@ -973,7 +596,7 @@ class CrawlerEngine {
             if (!results.pageData.processedPages.has(url)) {
               failedPages.push(url);
               progress.fail(url, 'batch timeout');
-              this.#recordFailure('batch_timeout');
+              recordFailure(this.#failureTracker, 'batch_timeout');
             }
           }
           continue; // Move to next batch
@@ -1144,7 +767,7 @@ class CrawlerEngine {
       incomingLinksTracking.clear();
 
       // After all pages are crawled, populate incoming links count for each page
-      this.#populateIncomingLinksCount(results);
+      populateIncomingLinksCount(results);
 
       return { alternatesErrors, isMultiLang, failedPages };
     } catch (error: unknown) {
@@ -1188,11 +811,19 @@ class CrawlerEngine {
     let failed: boolean;
 
     try {
-      const page = await this.#withTimeout<BasicTestResult | null>(
+      const page = await withTimeout<BasicTestResult | null>(
         this.#basicTest(chromePage, this.#options.networkConditions.slow4g, this.#options.cpuConditions.normal, url)
           .then(async (data): Promise<BasicTestResult> => ({ ...data, url }))
           .catch((error: Error): null => {
-            this.#handlePageError(error, url, results);
+            handlePageError(
+              error,
+              url,
+              results,
+              this.#options.verbose,
+              this.#reportIssue,
+              this.#callbacks.saveAttempt,
+              this.#callbacks.checkAttempts,
+            );
             return null;
           }),
         THRESHOLDS.PAGE_TIMEOUT,
@@ -1224,7 +855,7 @@ class CrawlerEngine {
       isMultiLang = processResult.isMultiLang;
       failed = processResult.failed;
     } catch (error: unknown) {
-      const errorType = this.#categorizeError(error as Error);
+      const errorType = categorizeError(error as Error);
       console.error(`Error processing page ${url} [${errorType}]:`, (error as Error).message);
       this.#callbacks.saveAttempt(url);
       this.#callbacks.checkAttempts(url);
@@ -1235,116 +866,6 @@ class CrawlerEngine {
 
     await chromePage.close();
     return { isMultiLang, failed };
-  }
-
-  /**
-   * Categorize error type for better debugging and reporting
-   * @private
-   */
-  #categorizeError(error: Error): string {
-    const message = (error.message || '').toLowerCase();
-    const name = (error.name || '').toLowerCase();
-
-    // Timeout errors
-    if (
-      message.includes('timeout') ||
-      message.includes('timed out') ||
-      name.includes('timeout') ||
-      message.includes('observer timeout')
-    ) {
-      return 'timeout';
-    }
-
-    // DNS/Network resolution errors
-    if (message.includes('err_name_not_resolved') || message.includes('getaddrinfo') || message.includes('dns')) {
-      return 'dns_error';
-    }
-
-    // Connection errors
-    if (
-      message.includes('err_connection') ||
-      message.includes('econnrefused') ||
-      message.includes('econnreset') ||
-      message.includes('connection refused')
-    ) {
-      return 'connection_error';
-    }
-
-    // SSL/TLS errors
-    if (message.includes('ssl') || message.includes('certificate') || message.includes('err_cert')) {
-      return 'ssl_error';
-    }
-
-    // Too many redirects
-    if (message.includes('err_too_many_redirects') || message.includes('redirect')) {
-      return 'redirect_error';
-    }
-
-    // Navigation errors
-    if (message.includes('navigation') || message.includes('net::')) {
-      return 'navigation_error';
-    }
-
-    // Default to crashed
-    return 'crashed';
-  }
-
-  /**
-   * Get a user-friendly error explanation
-   * @private
-   */
-  #getFriendlyErrorMessage(errorType: string, _url: string): string {
-    const messages = {
-      timeout: 'Page took too long to load (>30s). The server may be slow or blocking automated requests.',
-      dns_error: 'Could not resolve domain. Check the URL spelling and DNS configuration.',
-      connection_error: 'Connection refused. The server may be down or blocking the request.',
-      ssl_error: 'SSL/TLS certificate error. The site may have an expired or invalid certificate.',
-      redirect_error: 'Too many redirects. Check for redirect loops in server configuration.',
-      navigation_error: 'Navigation failed. The page may have returned an unexpected response.',
-      crashed: 'Page caused the browser to crash. It may have excessive JavaScript or memory usage.',
-    };
-    return (messages as Record<string, string>)[errorType] || 'Unknown error occurred.';
-  }
-
-  /**
-   * Handle page load error with categorization
-   * @private
-   */
-  #handlePageError(error: Error, url: string, results: CrawlResults) {
-    const errorType = this.#categorizeError(error);
-    const messageOverall = `${error.name} ${error.message} ${(error as Error & { cause?: string }).cause || ''}`.trim();
-    const friendlyMessage = this.#getFriendlyErrorMessage(errorType, url);
-
-    // Log user-friendly message, with raw error in verbose or non-TTY mode
-    if (this.#options.verbose) {
-      console.log(`\x1b[31m✗\x1b[0m ${url}\n  [${errorType}] ${friendlyMessage}\n  Raw: ${messageOverall}`);
-    } else {
-      console.log(`\x1b[31m✗\x1b[0m ${url} - ${friendlyMessage}`);
-    }
-
-    results.pageData.totalWithError += 1;
-
-    // Track by specific error type for better reporting
-    if (!results.pageData.byError[errorType]) {
-      results.pageData.byError[errorType] = [];
-      results.pageData.byError[`total_${errorType}`] = 0;
-    }
-
-    (results.pageData.byError[errorType] as string[]).push(url);
-    results.pageData.byError[`total_${errorType}`] = (results.pageData.byError[`total_${errorType}`] as number) + 1;
-
-    // Also track in legacy "crashed" category for backwards compatibility
-    if (errorType !== 'crashed') {
-      if (!results.pageData.byError.crashed) {
-        results.pageData.byError.crashed = [];
-        results.pageData.byError.totalCrashed = 0;
-      }
-      (results.pageData.byError.crashed as string[]).push(url);
-      results.pageData.byError.totalCrashed = (results.pageData.byError.totalCrashed as number) + 1;
-    }
-
-    this.#callbacks.saveAttempt(url);
-    this.#callbacks.checkAttempts(url);
   }
 
   /**
@@ -1408,7 +929,7 @@ class CrawlerEngine {
     const pageData = results.pageData.pages[url];
 
     // Store redirect chain info
-    this.#processRedirects(pageData, redirectChain, url);
+    processRedirects(pageData, redirectChain, url, this.#reportIssue);
 
     pageData.status = status;
     pageData.url = url;
@@ -1479,7 +1000,7 @@ class CrawlerEngine {
 
     // Other metrics
     pageData.requests = requests;
-    pageData.metrics = metrics;
+    pageData.metrics = metrics as unknown as Record<string, unknown>;
     pageData.blockers = blockers as Record<string, unknown>;
     pageData.totalResponseSize = totalResponseSize;
     pageData.responseHeaders = (responseHeaders || {}) as Record<string, string>;
@@ -1532,31 +1053,36 @@ class CrawlerEngine {
     const parsedPage = parse(pageContent);
 
     // Save HTML snapshot if enabled
-    this.#saveHtmlSnapshot(pageContent, url);
+    saveHtmlSnapshot(pageContent, url, this.#options);
 
     // Save viewport screenshot if enabled
-    await this.#saveScreenshot(chromePage, url);
+    await saveScreenshot(chromePage, url, this.#options);
 
     // Collect links and track incoming links
-    const linksResult = await this.#collectLinks({
-      parsedPage,
-      url,
-      results,
-      incomingLinksTracking,
-      collectedURLs,
-      uniquePages,
-      pagesToCrawl,
-      addMissing,
-      discoveredLinksSource,
-      sitemapUrls,
-    });
+    const linksResult = collectLinks(
+      {
+        parsedPage,
+        url,
+        results,
+        incomingLinksTracking,
+        collectedURLs,
+        uniquePages,
+        pagesToCrawl,
+        addMissing,
+        discoveredLinksSource,
+        sitemapUrls,
+      },
+      this.#options.origin,
+      this.#options.queryParams,
+      this.#reportIssue,
+    );
     pageData.links = linksResult.links;
     pageData.httpLinksCount = linksResult.httpLinksCount;
 
     // Run all analyzers with error isolation
     // Wrap in try-catch to prevent analyzer failures from losing all page data
     try {
-      await this.#runAnalyzers(chromePage, parsedPage, url, pageData, pageContent, requests, consoleData);
+      await runAnalyzers(chromePage, parsedPage, url, pageData, pageContent, requests, consoleData, this.#options, this.#reportIssue);
     } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page
       const err = analyzerError as Error;
@@ -1573,11 +1099,11 @@ class CrawlerEngine {
     }
 
     // Check Core Web Vitals thresholds
-    this.#checkVitalsThresholds(pageData, url, TTFB ?? 0, FCP ?? 0, LCP ?? 0, CLS ?? 0);
+    checkVitalsThresholds(pageData, url, TTFB ?? 0, FCP ?? 0, LCP ?? 0, CLS ?? 0, this.#reportIssue);
 
     // Process title
     const title = await chromePage.evaluate(() => document.querySelector('title')?.innerText);
-    const titleResult = this.#processTitle(title, url, uniqueTitles);
+    const titleResult = processTitle(title, url, uniqueTitles, this.#reportIssue);
     if (titleResult.title) {
       pageData.title = titleResult.title;
       pageData.titleLength = titleResult.titleLength;
@@ -1590,7 +1116,7 @@ class CrawlerEngine {
         content: meta.content,
       })),
     );
-    this.#processMetaTags(metaTags, pageData, url, uniqueDescriptions);
+    processMetaTags(metaTags, pageData, url, uniqueDescriptions, this.#reportIssue);
 
     // Process link tags (canonical, alternates)
     const linkTags = await chromePage.evaluate(() =>
@@ -1600,1485 +1126,15 @@ class CrawlerEngine {
         href: link.href,
       })),
     );
-    const linkResult = this.#processLinkTags(linkTags, pageData, url, sitemapUrls);
+    const linkResult = processLinkTags(linkTags, pageData, url, sitemapUrls, this.#options.origin, this.#reportIssue);
     const isMultiLang = linkResult.isMultiLang;
 
     results.pageData.processedPages.add(url);
 
     // Memory optimization: strip data after all processing is complete
-    this.#optimizePageDataMemory(pageData);
+    optimizePageDataMemory(pageData);
 
     return { isMultiLang, failed: false };
-  }
-
-  /**
-   * Optimize page data memory footprint after all processing is complete
-   * Converts detailed arrays to summaries while preserving all issues/warnings for the report
-   * @private
-   */
-  #optimizePageDataMemory(pageData: PageInfo) {
-    // PageInfo has [key: string]: any index signature, allowing dynamic property access
-    // Analyzer results often have more fields than the strict type definitions
-
-    // 1. Strip raw schema data (can be huge for e-commerce Product schemas)
-    const sd = pageData.structuredData as Record<string, unknown> | undefined;
-    if (sd?.jsonLdSchemas) {
-      for (const schema of sd.jsonLdSchemas as Array<Record<string, unknown>>) {
-        delete schema.raw;
-      }
-    }
-
-    // 2. Reduce requests object to summary (keeps type breakdown for report)
-    if (pageData.requests && typeof pageData.requests === 'object' && !pageData.requests.totalRequests) {
-      const entries = Object.entries(pageData.requests) as Array<[string, RequestInfo]>;
-      const byType: Record<string, number> = {};
-      let totalSize = 0;
-      for (const [, req] of entries) {
-        byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] || 0) + 1;
-        if (req.size) totalSize += req.size;
-      }
-      pageData.requests = { totalRequests: entries.length, byType, totalSize };
-    }
-
-    // 3. Keep only problematic links (links without text)
-    if (Array.isArray(pageData.links)) {
-      pageData.linksCount = pageData.links.length;
-      pageData.internalLinksCount = pageData.links.filter((l: LinkEntry) => l.isInternal).length;
-      pageData.externalLinksCount = pageData.links.filter((l: LinkEntry) => !l.isInternal).length;
-      pageData.links = pageData.links.filter((l: LinkEntry) => !l.text || l.text.trim() === '').slice(0, 20);
-    }
-
-    // 4. Reduce images array (keep problematic ones)
-    const imagesArr = pageData.images as unknown;
-    if (Array.isArray(imagesArr)) {
-      pageData.imagesCount = imagesArr.length;
-      pageData.imagesWithoutAltCount = imagesArr.filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '').length;
-      (pageData as Record<string, unknown>).images = imagesArr
-        .filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '')
-        .slice(0, 10);
-    }
-
-    // 5. Strip vitals detail arrays (keep analysis summaries)
-    if (pageData.vitals) {
-      delete pageData.vitals.lcpSubParts;
-      delete pageData.vitals.clsEntries;
-      delete pageData.vitals.longTasks;
-      if (pageData.vitals.lcpAnalysis) {
-        pageData.vitals.lcpAnalysis = {
-          bottleneck: pageData.vitals.lcpAnalysis.bottleneck,
-          recommendation: pageData.vitals.lcpAnalysis.recommendation,
-        };
-      }
-    }
-
-    // 6. Delete heavy objects not needed for report
-    delete pageData.metrics;
-    delete pageData.blockers;
-
-    // 7. Strip linkAnalysis (keep counts, issues, and fields needed by site-wide LinkStructureAnalyzer)
-    if (pageData.linkAnalysis) {
-      pageData.linkAnalysis = {
-        internalLinks: pageData.linkAnalysis.internalLinks || 0,
-        externalLinks: pageData.linkAnalysis.externalLinks || 0,
-        brokenLinks: pageData.linkAnalysis.brokenLinks || 0,
-        anchorTextMap: pageData.linkAnalysis.anchorTextMap,
-        externalDomains: pageData.linkAnalysis.externalDomains,
-        genericAnchorLinks: pageData.linkAnalysis.genericAnchorLinks,
-        internalNofollowLinks: pageData.linkAnalysis.internalNofollowLinks,
-        issues: pageData.linkAnalysis.issues,
-        warnings: pageData.linkAnalysis.warnings,
-      };
-    }
-
-    // 8. Strip contentQuality (keep scores and top keywords)
-    if (pageData.contentQuality) {
-      const cq = pageData.contentQuality as unknown as Record<string, unknown>;
-      delete cq.keywords;
-      if (Array.isArray(cq.topKeywords)) {
-        cq.topKeywords = (cq.topKeywords as unknown[]).slice(0, 5);
-      }
-    }
-
-    // 9. Strip third-party data (keep summary)
-    if (pageData.thirdPartyData?.scripts) {
-      pageData.thirdPartyData = {
-        totalScripts: pageData.thirdPartyData.scripts.length,
-        totalSize: pageData.thirdPartyData.totalSize || 0,
-        issues: pageData.thirdPartyData.issues,
-        warnings: pageData.thirdPartyData.warnings,
-      };
-    }
-
-    // 10. Strip timing data (keep slow resources sample)
-    if (pageData.timingData?.resourceTimings) {
-      pageData.timingData = {
-        slowResources: (pageData.timingData.slowResources || []).slice(0, 5),
-        issues: pageData.timingData.issues,
-        warnings: pageData.timingData.warnings,
-      };
-    }
-
-    // 11. Strip critical path data (keep counts)
-    if (pageData.criticalPathData?.blockingCSS) {
-      pageData.criticalPathData = {
-        blockingCSSCount: pageData.criticalPathData.blockingCSS?.length || 0,
-        blockingJSCount: pageData.criticalPathData.blockingJS?.length || 0,
-        issues: pageData.criticalPathData.issues,
-        warnings: pageData.criticalPathData.warnings,
-      };
-    }
-
-    // 12. Strip font data (keep count)
-    if (pageData.fontData?.fonts) {
-      pageData.fontData = {
-        totalFonts: pageData.fontData.fonts.length,
-        issues: pageData.fontData.issues,
-        warnings: pageData.fontData.warnings,
-      };
-    }
-
-    // 13. Strip compression data
-    if (pageData.compressionData?.resources) {
-      pageData.compressionData = {
-        issues: pageData.compressionData.issues,
-        warnings: pageData.compressionData.warnings,
-      };
-    }
-
-    // 14. Strip image optimization data (keep counts needed by report)
-    if (pageData.imageOptimization?.images) {
-      const imgOpt = pageData.imageOptimization;
-      pageData.imageOptimization = {
-        totalImages: imgOpt.images.length,
-        withLazyLoading: imgOpt.withLazyLoading || 0,
-        modernFormats: imgOpt.modernFormats || 0,
-        legacyFormats: imgOpt.legacyFormats || 0,
-        totalImageSize: imgOpt.totalImageSize || 0,
-        issues: imgOpt.issues,
-        warnings: imgOpt.warnings,
-      };
-    }
-
-    // 15. Strip console analysis (keep count)
-    if (pageData.consoleAnalysis?.errors) {
-      pageData.consoleAnalysis = {
-        errorCount: pageData.consoleAnalysis.errors?.length || 0,
-        warningCount: pageData.consoleAnalysis.warnings?.length || 0,
-        issues: pageData.consoleAnalysis.issues,
-      };
-    }
-
-    // 16. Strip form data (keep count and accessibility score)
-    if (pageData.formData?.forms) {
-      pageData.formData = {
-        formCount: pageData.formData.forms.length,
-        accessibilityScore: pageData.formData.accessibilityScore,
-        totalInputs: pageData.formData.totalInputs || 0,
-        inputsWithoutLabels: pageData.formData.inputsWithoutLabels || 0,
-        inputsWithoutAutocomplete: pageData.formData.inputsWithoutAutocomplete || 0,
-        issues: pageData.formData.issues,
-        warnings: pageData.formData.warnings,
-      };
-    }
-
-    // 17. Strip resource optimization (keep counts needed by report)
-    if (pageData.resourceOptimization?.renderBlockingResources) {
-      const resOpt = pageData.resourceOptimization;
-      pageData.resourceOptimization = {
-        renderBlockingCount: resOpt.renderBlockingResources?.length || 0,
-        renderBlocking: {
-          totalBlocking: resOpt.renderBlocking?.totalBlocking || resOpt.renderBlockingResources?.length || 0,
-        },
-        compression: { uncompressed: resOpt.compression?.uncompressed || 0 },
-        minification: {
-          unminifiedJS: resOpt.minification?.unminifiedJS || 0,
-          unminifiedCSS: resOpt.minification?.unminifiedCSS || 0,
-        },
-        issues: resOpt.issues,
-        warnings: resOpt.warnings,
-      };
-    }
-
-    // 18. Strip headings (keep counts for all levels and first h1)
-    const hdg = pageData.headings as Record<string, unknown> | undefined;
-    if (hdg?.h1 && Array.isArray(hdg.h1)) {
-      const h1Arr = hdg.h1 as string[];
-      const h2Arr = hdg.h2 as string[] | undefined;
-      const h3Arr = hdg.h3 as string[] | undefined;
-      const h4Arr = hdg.h4 as string[] | undefined;
-      const h5Arr = hdg.h5 as string[] | undefined;
-      const h6Arr = hdg.h6 as string[] | undefined;
-      pageData.headings = {
-        h1Count: h1Arr.length,
-        h2Count: h2Arr?.length || 0,
-        h3Count: h3Arr?.length || 0,
-        h4Count: h4Arr?.length || 0,
-        h5Count: h5Arr?.length || 0,
-        h6Count: h6Arr?.length || 0,
-        h1: h1Arr.map((h: string) => (typeof h === 'string' ? h.substring(0, 100) : h)),
-        issues: hdg.issues,
-        warnings: hdg.warnings,
-      } as unknown as import('../types').HeadingAnalysis;
-    }
-
-    // 19. Strip accessibility data (keep scores and summary counts for report)
-    if (pageData.accessibility?.aria || pageData.accessibility?.violations) {
-      const a11y = pageData.accessibility;
-      pageData.accessibility = {
-        violationCount: a11y.violations?.length || 0,
-        a11yScore: a11y.a11yScore ?? null,
-        aria: a11y.aria
-          ? {
-              valid: a11y.aria.valid || 0,
-              invalid: a11y.aria.invalid || 0,
-            }
-          : null,
-        forms: a11y.forms
-          ? {
-              inputsWithLabels: a11y.forms.inputsWithLabels || 0,
-              inputsWithoutLabels: a11y.forms.inputsWithoutLabels || 0,
-            }
-          : null,
-        semantic: a11y.semantic
-          ? {
-              hasMain: a11y.semantic.hasMain || false,
-              hasNav: a11y.semantic.hasNav || false,
-              hasHeader: a11y.semantic.hasHeader || false,
-              hasFooter: a11y.semantic.hasFooter || false,
-            }
-          : null,
-        keyboard: a11y.keyboard
-          ? {
-              elementsWithoutFocus: a11y.keyboard.elementsWithoutFocus || 0,
-              positiveTabindex: a11y.keyboard.positiveTabindex || 0,
-            }
-          : null,
-        issues: a11y.issues,
-        warnings: a11y.warnings,
-      };
-    }
-
-    // 20. Strip caching data (keep scores and counts for report)
-    if (pageData.caching?.resources || pageData.caching?.cacheScore != null) {
-      const cache = pageData.caching;
-      pageData.caching = {
-        cacheScore: cache.cacheScore ?? null,
-        hasCDN: cache.hasCDN || false,
-        cdnProvider: cache.cdnProvider || null,
-        staticCached: cache.staticCached || 0,
-        staticUncached: cache.staticUncached || 0,
-        dynamicCached: cache.dynamicCached || 0,
-        dynamicUncached: cache.dynamicUncached || 0,
-        hasServiceWorker: cache.hasServiceWorker || false,
-        cachedCount: cache.cachedCount || 0,
-        uncachedCount: cache.uncachedCount || 0,
-        issues: cache.issues,
-        warnings: cache.warnings,
-      };
-    }
-
-    // 21. Strip media data (keep counts)
-    if (pageData.mediaData?.videos || pageData.mediaData?.audios) {
-      pageData.mediaData = {
-        videoCount: pageData.mediaData.videos?.length || 0,
-        audioCount: pageData.mediaData.audios?.length || 0,
-        issues: pageData.mediaData.issues,
-        warnings: pageData.mediaData.warnings,
-      } as unknown as typeof pageData.mediaData;
-    }
-
-    // 22. Strip web component data
-    if (pageData.webComponentData?.components) {
-      pageData.webComponentData = {
-        componentCount: pageData.webComponentData.components?.length || 0,
-        issues: pageData.webComponentData.issues,
-        warnings: pageData.webComponentData.warnings,
-      };
-    }
-
-    // 23. Strip above-fold data (keep key metrics)
-    if (pageData.aboveFoldData?.aboveFoldElements) {
-      pageData.aboveFoldData = {
-        lcpInViewport: pageData.aboveFoldData.lcpInViewport,
-        renderBlockingResources: pageData.aboveFoldData.renderBlockingResources,
-        aboveFoldImageSize: pageData.aboveFoldData.aboveFoldImageSize,
-        issues: pageData.aboveFoldData.issues,
-        warnings: pageData.aboveFoldData.warnings,
-      };
-    }
-
-    // 24. Strip anchor text data
-    if (pageData.anchorTextData?.anchors) {
-      pageData.anchorTextData = {
-        anchorCount: pageData.anchorTextData.anchors?.length || 0,
-        issues: pageData.anchorTextData.issues,
-        warnings: pageData.anchorTextData.warnings,
-      };
-    }
-
-    // 25. Strip external links data
-    if (pageData.externalLinksData?.links) {
-      pageData.externalLinksData = {
-        externalLinkCount: pageData.externalLinksData.links?.length || 0,
-        issues: pageData.externalLinksData.issues,
-        warnings: pageData.externalLinksData.warnings,
-      };
-    }
-
-    // 26. Strip meta array (metaMap is more useful and smaller)
-    if (Array.isArray(pageData.meta) && pageData.metaMap) {
-      delete pageData.meta;
-    }
-
-    // 27. Strip URL analysis (keep issues only)
-    const urlA = pageData.urlAnalysis as Record<string, unknown> | undefined;
-    if (urlA?.components) {
-      pageData.urlAnalysis = {
-        depth: urlA.depth as number,
-        length: urlA.length as number,
-        hasParameters: urlA.hasParameters as boolean,
-        issues: urlA.issues as Issue[],
-      } as unknown as import('../types').UrlAnalysis;
-    }
-
-    // 28. Strip response object (headers are large and rarely needed after analysis)
-    if (pageData.response?.headers) {
-      delete pageData.response;
-    }
-    delete pageData.responseHeaders;
-
-    // 29. Strip redirect chain (keep URLs for tooltip, limit to 10)
-    const rc = pageData.redirectChain;
-    if (rc && Array.isArray(rc) && rc.length > 0) {
-      pageData.redirectCount = rc.length;
-      pageData.redirectChain = rc.slice(0, 10).map((r: RedirectEntry) => ({ url: r.url, status: r.status }));
-    }
-
-    // 30. Limit issues/warnings arrays on all analyzers to 20 each
-    const limitArrays = (obj: Record<string, unknown>) => {
-      if (obj?.issues && Array.isArray(obj.issues)) {
-        obj.issues = obj.issues.slice(0, 20);
-      }
-      if (obj?.warnings && Array.isArray(obj.warnings)) {
-        obj.warnings = obj.warnings.slice(0, 20);
-      }
-    };
-
-    // Apply limits to all analyzer outputs
-    [
-      'linkAnalysis',
-      'accessibility',
-      'caching',
-      'contentQuality',
-      'imageOptimization',
-      'resourceOptimization',
-      'structuredData',
-      'headings',
-      'internationalSEO',
-      'thirdPartyData',
-      'timingData',
-      'criticalPathData',
-      'fontData',
-      'compressionData',
-      'consoleAnalysis',
-      'formData',
-      'mediaData',
-      'webComponentData',
-      'aboveFoldData',
-      'anchorTextData',
-      'externalLinksData',
-      'security',
-    ].forEach((key) => {
-      if (pageData[key]) {
-        limitArrays(pageData[key]);
-      }
-    });
-  }
-
-  /**
-   * Process redirect chain
-   * @private
-   */
-  #processRedirects(pageData: PageInfo, redirectChain: RedirectEntry[], url: string) {
-    pageData.redirectChain = redirectChain;
-    pageData.hasRedirects = redirectChain.length > 0;
-    // Chain includes final URL, so actual redirect count is length - 1
-    pageData.redirectCount = Math.max(0, redirectChain.length - 1);
-
-    if (redirectChain.length > 0) {
-      const redirectCount = redirectChain.length - 1;
-      const escapedUrl = escapeHtml(url);
-      const escapedChain = redirectChain.map((r) => escapeHtml(r.url)).join(' → ');
-      if (redirectCount > 2) {
-        this.#callbacks.saveError(
-          `Some pages have too many redirects`,
-          `<a href="${escapedUrl}">${escapedUrl}</a> has ${redirectCount} redirect(s): ${escapedChain}`,
-          SEVERITY.HIGH,
-        );
-      } else if (redirectCount > 0) {
-        this.#callbacks.saveError(
-          `Some pages have redirects`,
-          `<a href="${escapedUrl}">${escapedUrl}</a> has ${redirectCount} redirect(s): ${escapedChain}`,
-          SEVERITY.MEDIUM,
-        );
-      }
-    }
-  }
-
-  /**
-   * Collect links from page
-   * @private
-   */
-  async #collectLinks(params: CollectLinksParams) {
-    const {
-      parsedPage,
-      url,
-      results: _results,
-      incomingLinksTracking,
-      collectedURLs,
-      uniquePages,
-      pagesToCrawl,
-      addMissing,
-      discoveredLinksSource,
-      sitemapUrls,
-    } = params;
-
-    const links: LinkEntry[] = [];
-    let httpLinksCount = 0;
-
-    for (const link of parsedPage.querySelectorAll('a')) {
-      const href = link.attributes.href;
-      const text = link.innerText || link.attributes['aria-label'];
-
-      // Skip links without a valid href string (e.g. <a href> with no value)
-      if (typeof href !== 'string' || !href) continue;
-
-      // Skip pure anchor links
-      if (href.startsWith('#')) {
-        continue;
-      }
-
-      const isInternal = href?.startsWith(this.#options.origin) || href?.startsWith('/');
-
-      if (isInternal) {
-        let fullHref = href;
-        if (href?.startsWith('/')) {
-          try {
-            const baseUrl = new URL(url);
-            fullHref = `${baseUrl.protocol}//${baseUrl.host}${href}`;
-          } catch {
-            continue;
-          }
-        }
-
-        // Check HTTPS consistency
-        if (this.#options.origin.startsWith('https://') && fullHref?.startsWith('http://')) {
-          httpLinksCount++;
-        }
-
-        // Normalize URL: strip hash, handle query params based on config
-        const normalizedHref = normalizeUrl(fullHref, this.#options.queryParams);
-
-        // Track incoming links (store in Map, defer Array conversion to save time)
-        if (!incomingLinksTracking.has(normalizedHref)) {
-          incomingLinksTracking.set(normalizedHref, new Set());
-        }
-        incomingLinksTracking.get(normalizedHref)!.add(url);
-
-        // Handle URL discovery with limit to prevent unbounded growth
-        const maxDiscoveredUrls = CRAWL_SETTINGS.MAX_DISCOVERED_URLS || 100000;
-
-        if (addMissing) {
-          if (!collectedURLs.has(normalizedHref)) {
-            // Check limit before adding new URLs
-            if (pagesToCrawl.length < maxDiscoveredUrls) {
-              pagesToCrawl.push(normalizedHref);
-              collectedURLs.add(normalizedHref);
-              uniquePages.add(normalizedHref);
-
-              if (!sitemapUrls[normalizedHref]) {
-                discoveredLinksSource.set(normalizedHref, url);
-              }
-            }
-            // Silently skip URLs beyond the limit to prevent OOM
-          }
-        } else if (!uniquePages.has(normalizedHref)) {
-          // Only track in collectedURLs if under limit
-          if (collectedURLs.size < maxDiscoveredUrls) {
-            collectedURLs.add(normalizedHref);
-
-            if (!sitemapUrls[normalizedHref]) {
-              discoveredLinksSource.set(normalizedHref, url);
-            }
-          }
-        }
-      }
-
-      links.push({ text, href, isInternal });
-
-      if (!text) {
-        const escapedUrl = escapeHtml(url);
-        const escapedHref = escapeHtml(href);
-        this.#callbacks.saveError(
-          `Some pages have links without any text`,
-          `The page <a href="${escapedUrl}">${escapedUrl}</a> has a link without text "${escapedHref}"`,
-          SEVERITY.MEDIUM,
-        );
-      }
-    }
-
-    // Report HTTPS consistency issues
-    if (httpLinksCount > 0) {
-      const escapedUrl = escapeHtml(url);
-      this.#callbacks.saveError(
-        `Some pages have HTTP links on HTTPS site`,
-        `<a href="${escapedUrl}">${escapedUrl}</a> has ${httpLinksCount} internal HTTP link(s) (should use HTTPS)`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    return { links, httpLinksCount };
-  }
-
-  /**
-   * Run all analyzers on the page using parallel execution
-   * Each analyzer group has a timeout to prevent hung analyzers from freezing the crawl
-   * @private
-   */
-  async #runAnalyzers(
-    chromePage: ChromePage,
-    parsedPage: ParsedPage,
-    url: string,
-    pageData: PageInfo,
-    pageContent: string,
-    requests: Record<string, RequestInfo>,
-    consoleData: unknown,
-  ) {
-    const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
-    // Cast requests for analyzer compatibility (analyzers use broader parameter types)
-    const analyzerRequests = requests as unknown as import('../types').NetworkRequest[];
-
-    // ============================================================
-    // GROUP 1: Browser-based analyzers (can run in parallel)
-    // These read from the browser/parsed page independently
-    // Using Promise.allSettled to prevent single analyzer failure from crashing the crawl
-    // ============================================================
-
-    // Default fallback values for failed analyzers
-    const group1Fallbacks = [
-      // Core SEO
-      { issues: [], warnings: [] }, // headingResult
-      [], // images
-      { issues: [], warnings: [] }, // linkQualityResult
-      { issues: [], warnings: [] }, // structuredDataResult
-      { issues: [], warnings: [] }, // indexabilityResult
-      { issues: [], warnings: [] }, // crawlabilityResult
-      { issues: [], warnings: [] }, // internationalSEOResult
-      // Content & UX
-      { issues: [], warnings: [] }, // mobileFriendlyResult
-      { issues: [], warnings: [] }, // accessibilityResult
-      { issues: [], warnings: [] }, // contentQualityResult
-      { formData: null, issues: [], warnings: [] }, // formResult
-      // Social & Analytics
-      { issues: [], warnings: [] }, // socialMediaResult
-      { issues: [], warnings: [] }, // analyticsResult
-      // Security
-      { issues: [], warnings: [] }, // securityResult
-      { consentData: null, issues: [], warnings: [] }, // consentResult
-      // Performance
-      { issues: [], warnings: [] }, // cachingResult
-      { issues: [], warnings: [] }, // imageOptimizationResult
-      { issues: [], warnings: [] }, // resourceOptimizationResult
-      { fontData: null, issues: [], warnings: [] }, // fontResult
-      { thirdPartyData: null, issues: [], warnings: [] }, // thirdPartyResult
-      { criticalPathData: null, issues: [], warnings: [] }, // criticalPathResult
-      { timingData: null, issues: [], warnings: [] }, // connectionResult
-      // Advanced
-      { paginationData: null, issues: [], warnings: [] }, // paginationResult
-      { mediaData: null, issues: [], warnings: [] }, // mediaResult
-      { webComponentData: null, issues: [], warnings: [] }, // webComponentResult
-      // AEO / AI Search Readiness
-      { issues: [], warnings: [], info: {} }, // aeoResult
-      // Technology
-      { technologies: [], frameworks: [], cms: null }, // technologies
-      // CTA Detection
-      { ctas: [], summary: {}, issues: [], warnings: [] }, // ctaResult
-      // Language Detection
-      { info: null, issues: [], warnings: [] }, // langDetectionResult
-      // New analyzers (browser-based)
-      { issues: [], warnings: [], info: {} }, // colorContrastResult
-      { issues: [], warnings: [], info: {} }, // reducedMotionResult
-      { issues: [], warnings: [], info: {} }, // ariaLiveResult
-      { issues: [], warnings: [], info: {} }, // domComplexityResult
-      { issues: [], warnings: [], info: {} }, // deprecatedHtmlResult
-      { issues: [], warnings: [], info: {} }, // interstitialResult
-      { issues: [], warnings: [], info: {} }, // adDensityResult
-      { issues: [], warnings: [], info: {} }, // sriResult
-      { issues: [], warnings: [], info: {} }, // infoDisclosureResult
-      { issues: [], warnings: [], info: {} }, // openRedirectResult
-      { issues: [], warnings: [], info: {} }, // spellingResult
-    ];
-
-    const browserAnalyzersSettled = await this.#withTimeout(
-      Promise.allSettled([
-        // Core SEO
-        HeadingAnalyzer.analyzeHeadings(parsedPage, url),
-        ImageAnalyzer.extractImageAlts(parsedPage),
-        LinkQualityAnalyzer.analyzeLinkQuality(chromePage, parsedPage, url, this.#options.origin, {}),
-        StructuredDataAnalyzer.analyzeStructuredData(chromePage),
-        IndexabilityAnalyzer.analyzeIndexability(
-          chromePage,
-          parsedPage,
-          url,
-          pageData.status || 0,
-          pageData.responseHeaders || {},
-        ),
-        CrawlabilityAnalyzer.analyzeCrawlability(chromePage, parsedPage, url, pageData),
-        InternationalSEOAnalyzer.analyzeInternationalSEO(chromePage, parsedPage, url, pageData.responseHeaders),
-
-        // Content & UX
-        MobileFriendlyAnalyzer.analyzeMobileFriendly(chromePage),
-        AccessibilityAnalyzer.analyzeAccessibility(chromePage),
-        ContentQualityAnalyzer.analyzeContentQuality(chromePage, url, pageContent),
-        FormAccessibilityAnalyzer.analyze(chromePage, parsedPage, url),
-
-        // Social & Analytics
-        SocialMediaAnalyzer.analyzeSocialMediaTags(chromePage, parsedPage, url),
-        AnalyticsTrackingAnalyzer.analyzeAnalyticsTracking(chromePage, parsedPage, url),
-
-        // Security
-        SecurityAnalyzer.analyzeSecurity(chromePage, parsedPage, url, pageData.responseHeaders),
-        CookieConsentAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
-
-        // Performance
-        CachingAnalyzer.analyzeCaching(chromePage, analyzerRequests, url),
-        ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, requests, url),
-        ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
-        FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
-        ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, this.#options.origin),
-        CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics || {}, url),
-        ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
-
-        // Advanced
-        PaginationAnalyzer.analyze(chromePage, parsedPage, url),
-        MediaSEOAnalyzer.analyze(chromePage, parsedPage, pageData, url),
-        WebComponentAnalyzer.analyze(chromePage, parsedPage, url),
-
-        // AEO / AI Search Readiness
-        AEOAnalyzer.analyze(chromePage, parsedPage, url),
-
-        // Technology detection (with error handling)
-        TechnologyDetector.detect(
-          chromePage,
-          parsedPage,
-          pageContent,
-          pageData.responseHeaders || {},
-          analyzerRequests,
-        ).catch(() => {
-          const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
-          return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders || {}, scriptSrcs);
-        }),
-
-        // CTA Detection
-        CTADetectorAnalyzer.analyzeCTAs(chromePage, parsedPage, url),
-
-        // Language Detection
-        LanguageDetectionAnalyzer.analyzeLanguage(chromePage, parsedPage, url, pageData),
-
-        // Security (browser-based)
-        ColorContrastAnalyzer.analyze(chromePage, url),
-        ReducedMotionAnalyzer.analyze(chromePage, parsedPage, url),
-        AriaLiveAnalyzer.analyze(chromePage, url),
-        DOMComplexityAnalyzer.analyze(chromePage, url),
-        DeprecatedHTMLAnalyzer.analyze(chromePage, parsedPage, url),
-        InterstitialAnalyzer.analyze(chromePage, url),
-        AdDensityAnalyzer.analyze(chromePage, url),
-        SRIAnalyzer.analyze(parsedPage, url),
-        InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url),
-        OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
-        SpellingGrammarAnalyzer.analyze(chromePage, url),
-      ]),
-      analyzerTimeout,
-      `Analyzer timeout for ${url}`,
-    );
-
-    // Extract results with fallbacks for failed analyzers
-    const browserAnalyzers = this.#extractSettledResults(browserAnalyzersSettled, group1Fallbacks, url);
-
-    // Assign results from Group 1
-    // Results come from Promise.allSettled extraction, cast to AnalyzerResult for typed access
-    const [
-      headingResult,
-      images,
-      linkQualityResult,
-      structuredDataResult,
-      indexabilityResult,
-      crawlabilityResult,
-      internationalSEOResult,
-      mobileFriendlyResult,
-      accessibilityResult,
-      contentQualityResult,
-      formResult,
-      socialMediaResult,
-      analyticsResult,
-      securityResult,
-      consentResult,
-      cachingResult,
-      imageOptimizationResult,
-      resourceOptimizationResult,
-      fontResult,
-      thirdPartyResult,
-      criticalPathResult,
-      connectionResult,
-      paginationResult,
-      mediaResult,
-      webComponentResult,
-      aeoResult,
-      technologies,
-      ctaResult,
-      langDetectionResult,
-      colorContrastResult,
-      reducedMotionResult,
-      ariaLiveResult,
-      domComplexityResult,
-      deprecatedHtmlResult,
-      interstitialResult,
-      adDensityResult,
-      sriResult,
-      infoDisclosureResult,
-      openRedirectResult,
-      spellingResult,
-    ] = browserAnalyzers as AnalyzerResult[];
-
-    // Apply results to pageData
-    // Using PageInfo's [key: string]: any index signature for analyzer-specific properties
-    // that may not match the strict typed fields exactly
-    const pd = pageData as Record<string, unknown>;
-    pd.headings = headingResult;
-    pd.images = images;
-    pd.linkAnalysis = linkQualityResult;
-    pd.structuredData = structuredDataResult;
-    pd.indexability = indexabilityResult;
-    pd.crawlability = crawlabilityResult;
-    pd.internationalSEO = internationalSEOResult;
-    pd.mobileFriendly = mobileFriendlyResult;
-    pd.accessibility = accessibilityResult;
-    pd.contentQuality = contentQualityResult;
-    pd.formData = (formResult as AnalyzerResult & { formData: unknown }).formData;
-    pd.socialMedia = socialMediaResult;
-    pd.analytics = analyticsResult;
-    pd.security = securityResult;
-    pd.consentData = (consentResult as AnalyzerResult & { consentData: unknown }).consentData;
-    pd.caching = cachingResult;
-    pd.imageOptimization = imageOptimizationResult;
-    pd.resourceOptimization = resourceOptimizationResult;
-    pd.fontData = (fontResult as AnalyzerResult & { fontData: unknown }).fontData;
-    pd.thirdPartyData = (thirdPartyResult as AnalyzerResult & { thirdPartyData: unknown }).thirdPartyData;
-    pd.criticalPathData = (criticalPathResult as AnalyzerResult & { criticalPathData: unknown }).criticalPathData;
-    pd.timingData = (connectionResult as AnalyzerResult & { timingData: unknown }).timingData;
-    pd.paginationData = (paginationResult as AnalyzerResult & { paginationData: unknown }).paginationData;
-    pd.mediaData = (mediaResult as AnalyzerResult & { mediaData: unknown }).mediaData;
-    pd.webComponentData = (webComponentResult as AnalyzerResult & { webComponentData: unknown }).webComponentData;
-    pd.aeo = (aeoResult as AnalyzerResult & { info: unknown }).info;
-    pd.technologies = technologies;
-    pd.ctas = (ctaResult as AnalyzerResult & { ctas: unknown }).ctas;
-    pd.ctaData = {
-      ctas: (ctaResult as AnalyzerResult & { ctas: unknown }).ctas,
-      summary: (ctaResult as AnalyzerResult & { summary: unknown }).summary,
-    };
-    pd.languageDetection = (langDetectionResult as AnalyzerResult & { info: unknown }).info;
-    pd.colorContrastData = (colorContrastResult as AnalyzerResult & { info: unknown }).info;
-    pd.reducedMotionData = (reducedMotionResult as AnalyzerResult & { info: unknown }).info;
-    pd.ariaLiveData = (ariaLiveResult as AnalyzerResult & { info: unknown }).info;
-    pd.domComplexityData = (domComplexityResult as AnalyzerResult & { info: unknown }).info;
-    pd.deprecatedHtmlData = (deprecatedHtmlResult as AnalyzerResult & { info: unknown }).info;
-    pd.interstitialData = (interstitialResult as AnalyzerResult & { info: unknown }).info;
-    pd.adDensityData = (adDensityResult as AnalyzerResult & { info: unknown }).info;
-    pd.sriData = (sriResult as AnalyzerResult & { info: unknown }).info;
-    pd.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: unknown }).info;
-    pd.openRedirectData = (openRedirectResult as AnalyzerResult & { info: unknown }).info;
-    pd.spellingData = (spellingResult as AnalyzerResult & { info: unknown }).info;
-
-    // Report issues from Group 1
-    [
-      headingResult,
-      linkQualityResult,
-      structuredDataResult,
-      indexabilityResult,
-      crawlabilityResult,
-      internationalSEOResult,
-      mobileFriendlyResult,
-      accessibilityResult,
-      contentQualityResult,
-      formResult,
-      socialMediaResult,
-      analyticsResult,
-      securityResult,
-      consentResult,
-      cachingResult,
-      imageOptimizationResult,
-      resourceOptimizationResult,
-      fontResult,
-      thirdPartyResult,
-      criticalPathResult,
-      connectionResult,
-      paginationResult,
-      mediaResult,
-      webComponentResult,
-      aeoResult,
-      ctaResult,
-      langDetectionResult,
-      colorContrastResult,
-      reducedMotionResult,
-      ariaLiveResult,
-      domComplexityResult,
-      deprecatedHtmlResult,
-      interstitialResult,
-      adDensityResult,
-      sriResult,
-      infoDisclosureResult,
-      openRedirectResult,
-      spellingResult,
-    ].forEach((result) => this.#reportIssues(result as AnalyzerResult));
-
-    // ============================================================
-    // GROUP 2: Data-based analyzers (depend on Group 1 results)
-    // These analyze pageData populated by Group 1
-    // ============================================================
-
-    // Soft 404 detection (needs contentQuality.wordCount from Group 1)
-    const soft404Result = await this.#withTimeout(
-      Soft404Analyzer.analyze(chromePage, parsedPage, url, pageData),
-      analyzerTimeout,
-      `Soft404 analyzer timeout for ${url}`,
-    ).catch(() => ({ soft404Data: null, issues: [], warnings: [] }));
-    pageData.soft404 = soft404Result.soft404Data;
-    this.#reportIssues(soft404Result);
-
-    // Synchronous analyzers - run in parallel since they only read pageData
-    // Using Promise.allSettled to prevent single analyzer failure from crashing the crawl
-    const group2Fallbacks = [
-      { issues: [], warnings: [] }, // urlArchResult
-      { freshnessData: null, issues: [], warnings: [] }, // freshnessResult
-      { issues: [], warnings: [] }, // eeatResult
-      { issues: [], warnings: [] }, // schemaResult
-      { issues: [], warnings: [] }, // technicalResult
-      { issues: [], warnings: [] }, // thinContentResult
-      { info: null, issues: [], warnings: [] }, // redirectResult
-      { info: null, issues: [], warnings: [] }, // compressionResult
-      { info: null, issues: [], warnings: [] }, // hintsResult
-      { info: null, issues: [], warnings: [] }, // mixedResult
-      { info: null, issues: [], warnings: [] }, // protocolResult
-      { info: null, issues: [], warnings: [] }, // pwaResult
-      { info: null, issues: [], warnings: [] }, // aboveFoldResult
-      { info: null, issues: [], warnings: [] }, // anchorResult
-      { info: null, issues: [], warnings: [] }, // externalLinksResult
-      { info: null, issues: [], warnings: [] }, // responseHeaderResult
-      { info: null, issues: [], warnings: [] }, // cspQualityResult
-      { info: null, issues: [], warnings: [] }, // permissionsPolicyResult
-      { info: null, issues: [], warnings: [] }, // crossOriginResult
-    ];
-
-    const syncResultsSettled = await this.#withTimeout(
-      Promise.allSettled([
-        UrlArchitectureAnalyzer.analyze(url, pageData, this.#options.origin),
-        FreshnessAnalyzer.analyze(pageData, pageData.response || {}, parsedPage),
-        EEATAnalyzer.analyze(parsedPage, url, pageData),
-        AdvancedSchemaValidator.validate(pageData, url),
-        TechnicalSEOAnalyzer.analyze(parsedPage, url, pageData),
-        ThinContentAnalyzer.analyze(pageData, url),
-        RedirectChainAnalyzer.analyze(pageData, url),
-        CompressionAnalyzer.analyze(pageData, url),
-        ResourceHintsAnalyzer.analyze(pageData, url),
-        MixedContentAnalyzer.analyze(pageData, url),
-        HTTPProtocolAnalyzer.analyze(pageData, url),
-        PWAAnalyzer.analyze(pageData, url),
-        AboveFoldAnalyzer.analyze(pageData, url),
-        AnchorTextAnalyzer.analyze(pageData, url),
-        ExternalLinksAnalyzer.analyze(pageData, url),
-        ResponseHeaderAnalyzer.analyze(pageData, url),
-        CSPQualityAnalyzer.analyze(pageData, url),
-        PermissionsPolicyAnalyzer.analyze(pageData, url),
-        CrossOriginPolicyAnalyzer.analyze(pageData, url),
-      ]),
-      analyzerTimeout,
-      `Sync analyzers timeout for ${url}`,
-    );
-
-    // Extract results with fallbacks for failed analyzers
-    const syncResults = this.#extractSettledResults(syncResultsSettled, group2Fallbacks, url);
-
-    const [
-      _urlArchResult,
-      freshnessResult,
-      _eeatResult,
-      _schemaResult,
-      _technicalResult,
-      _thinContentResult,
-      redirectResult,
-      compressionResult,
-      hintsResult,
-      mixedResult,
-      protocolResult,
-      pwaResult,
-      aboveFoldResult,
-      anchorResult,
-      externalLinksResult,
-      responseHeaderResult,
-      cspQualityResult,
-      permissionsPolicyResult,
-      crossOriginResult,
-    ] = syncResults as Array<AnalyzerResult & { freshnessData?: unknown; info?: unknown }>;
-
-    // Apply data results
-    pageData.freshnessData = freshnessResult.freshnessData as typeof pageData.freshnessData;
-    pageData.redirectAnalysis = redirectResult.info as typeof pageData.redirectAnalysis;
-    pageData.compressionData = compressionResult.info as typeof pageData.compressionData;
-    pageData.resourceHintsData = hintsResult.info as typeof pageData.resourceHintsData;
-    pageData.mixedContentData = mixedResult.info as typeof pageData.mixedContentData;
-    pageData.protocolData = protocolResult.info as typeof pageData.protocolData;
-    pageData.pwaData = pwaResult.info as typeof pageData.pwaData;
-    pageData.aboveFoldData = aboveFoldResult.info as typeof pageData.aboveFoldData;
-    pageData.anchorTextData = anchorResult.info as typeof pageData.anchorTextData;
-    pageData.externalLinksData = externalLinksResult.info as typeof pageData.externalLinksData;
-    pageData.responseHeaderAnalysis = responseHeaderResult.info as typeof pageData.responseHeaderAnalysis;
-    pageData.cspQualityData = cspQualityResult.info;
-    pageData.permissionsPolicyData = permissionsPolicyResult.info;
-    pageData.crossOriginPolicyData = crossOriginResult.info;
-
-    // Report issues from Group 2
-    syncResults.forEach((result) => this.#reportIssues(result as AnalyzerResult));
-
-    // Console error analysis (independent)
-    if (consoleData) {
-      const consoleResult = ConsoleErrorAnalyzer.analyze(consoleData, url);
-      pageData.consoleAnalysis = consoleResult.consoleAnalysis;
-      this.#reportIssues(consoleResult);
-    }
-
-    // JavaScript rendering analysis (only if raw HTML available)
-    if (pageData.rawHtml) {
-      const jsRenderResult = JavaScriptRenderingAnalyzer.analyze(pageData, url);
-      pageData.jsRenderingData = jsRenderResult.info;
-      this.#reportIssues(jsRenderResult);
-    }
-
-    // Code coverage analysis (requires perf flag, uses Coverage API started before navigation)
-    if (this.#options.perf) {
-      try {
-        const coverageResult = await this.#withTimeout(
-          CodeCoverageAnalyzer.analyze(chromePage, analyzerRequests, url),
-          analyzerTimeout,
-          `Coverage analyzer timeout for ${url}`,
-        );
-        pageData.codeCoverage = coverageResult.info as CodeCoverageData;
-        this.#reportIssues(coverageResult);
-      } catch {
-        pageData.codeCoverage = null;
-      }
-    }
-
-    // Outbound link health check (async, rate-limited)
-    try {
-      const outboundResult = await this.#withTimeout(
-        OutboundLinkChecker.analyze(pageData, url, this.#options.origin, this.#options.analysis),
-        analyzerTimeout * 3, // Allow more time for external requests
-        `Outbound link checker timeout for ${url}`,
-      );
-      pageData.outboundLinkHealth = outboundResult.info as OutboundLinkHealthData;
-      this.#reportIssues(outboundResult);
-    } catch {
-      pageData.outboundLinkHealth = null;
-    }
-  }
-
-  /**
-   * Report issues and warnings from analyzer result
-   * @private
-   */
-  #reportIssues(result: AnalyzerResult) {
-    for (const issue of result.issues || []) {
-      this.#callbacks.saveError(issue.message || '', issue.detail || '', issue.severity);
-    }
-    for (const warning of result.warnings || []) {
-      this.#callbacks.saveError(warning.message || '', warning.detail || '', warning.severity);
-    }
-  }
-
-  /**
-   * Check Core Web Vitals thresholds
-   * @private
-   */
-  #checkVitalsThresholds(pageData: PageInfo, url: string, TTFB: number, FCP: number, LCP: number, CLS: number) {
-    const vitals = pageData.vitals || {};
-
-    const escapedUrlForVitals = escapeHtml(url);
-
-    if (TTFB > THRESHOLDS.TTFB) {
-      this.#callbacks.saveError(
-        `Some pages have TTFB more than ${THRESHOLDS.TTFB}ms`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has TTFB ${Math.round(TTFB)}ms (threshold: ${THRESHOLDS.TTFB}ms)`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    if (FCP > THRESHOLDS.FCP) {
-      this.#callbacks.saveError(
-        `Some pages have FCP more than ${THRESHOLDS.FCP}ms`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has FCP ${Math.round(FCP)}ms (threshold: ${THRESHOLDS.FCP}ms)`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    if (LCP > THRESHOLDS.LCP) {
-      // Include LCP element attribution for debugging
-      const lcpInfo = vitals.lcpElement
-        ? ` (LCP element: ${escapeHtml(vitals.lcpElement)}${vitals.lcpUrl ? ', ' + escapeHtml(vitals.lcpUrl) : ''})`
-        : '';
-      this.#callbacks.saveError(
-        `Some pages have LCP more than ${THRESHOLDS.LCP}ms`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has LCP ${Math.round(LCP)}ms (threshold: ${THRESHOLDS.LCP}ms)${lcpInfo}`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    if (CLS > THRESHOLDS.CLS) {
-      // Include CLS shift count for debugging
-      const clsInfo = vitals.clsShiftCount ? ` (${vitals.clsShiftCount} layout shifts)` : '';
-      this.#callbacks.saveError(
-        `Some pages have CLS more than ${THRESHOLDS.CLS}`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has CLS ${CLS.toFixed(3)} (threshold: ${THRESHOLDS.CLS})${clsInfo}`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    // INP check (only if measured - requires user interaction)
-    const INP = pageData.INP;
-    if (INP && INP > THRESHOLDS.INP) {
-      const inpInfo = vitals.inpEvent ? ` (slowest interaction: ${escapeHtml(vitals.inpEvent)})` : '';
-      this.#callbacks.saveError(
-        `Some pages have INP more than ${THRESHOLDS.INP}ms`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has INP ${Math.round(INP)}ms (threshold: ${THRESHOLDS.INP}ms)${inpInfo}`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    // TBT check (Total Blocking Time)
-    const TBT = pageData.TBT;
-    if (TBT && TBT > THRESHOLDS.TBT) {
-      const longTaskCount = vitals.longTasks?.length || 0;
-      const tbtInfo = longTaskCount > 0 ? ` (${longTaskCount} long tasks detected)` : '';
-      this.#callbacks.saveError(
-        `Some pages have TBT more than ${THRESHOLDS.TBT}ms`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has Total Blocking Time ${Math.round(TBT)}ms (threshold: ${THRESHOLDS.TBT}ms)${tbtInfo}`,
-        TBT > 600 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
-      );
-    }
-
-    // TTI check (Time to Interactive)
-    const TTI = pageData.TTI;
-    if (TTI && TTI > THRESHOLDS.TTI) {
-      this.#callbacks.saveError(
-        `Some pages have TTI more than ${THRESHOLDS.TTI}ms`,
-        `The page <a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> has Time to Interactive ${Math.round(TTI)}ms (threshold: ${THRESHOLDS.TTI}ms)`,
-        TTI > 7300 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
-      );
-    }
-
-    // LCP sub-parts analysis for failed LCP
-    if (LCP > THRESHOLDS.LCP && vitals.lcpAnalysis) {
-      const { bottleneck, percentages, recommendations, recommendation } = vitals.lcpAnalysis;
-      if (bottleneck && bottleneck !== 'none') {
-        const bottleneckNames = {
-          ttfb: 'Server Response (TTFB)',
-          resourceDelay: 'Resource Discovery Delay',
-          resourceLoad: 'Resource Load Time',
-          renderDelay: 'Render Delay',
-        };
-        const rec = recommendation || recommendations?.[0] || '';
-        // percentages may be undefined if memory optimization already ran
-        const breakdown = percentages
-          ? `LCP breakdown: TTFB ${percentages.ttfb}%, Resource Delay ${percentages.resourceDelay}%, Load ${percentages.resourceLoad}%, Render ${percentages.renderDelay}%. `
-          : '';
-        this.#callbacks.saveError(
-          `LCP bottleneck: ${(bottleneckNames as Record<string, string>)[bottleneck] || bottleneck}`,
-          `<a href="${escapedUrlForVitals}">${escapedUrlForVitals}</a> ${breakdown}${escapeHtml(rec)}`,
-          SEVERITY.MEDIUM,
-        );
-      }
-    }
-  }
-
-  /**
-   * Process title
-   * @private
-   */
-  #processTitle(title: string | null | undefined, url: string, uniqueTitles: Set<string>) {
-    const escapedUrl = escapeHtml(url);
-    const maxTitleLength = CRAWL_SETTINGS.MAX_TITLE_LENGTH || 500;
-
-    if (!title) {
-      this.#callbacks.saveError(
-        `Title is missing`,
-        `Title is missing for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-        SEVERITY.CRITICAL,
-      );
-      return { title: null, titleLength: 0 };
-    }
-
-    // Truncate excessively long titles to prevent memory issues
-    const originalLength = title.length;
-    let processedTitle = title;
-    if (originalLength > maxTitleLength) {
-      processedTitle = title.substring(0, maxTitleLength) + '...';
-    }
-
-    const titleLength = originalLength;
-
-    if (titleLength < THRESHOLDS.TITLE_MIN) {
-      this.#callbacks.saveError(
-        `Some pages have titles that are too short`,
-        `The page <a href="${escapedUrl}">${escapedUrl}</a> has title length ${titleLength} chars (recommended: ${THRESHOLDS.TITLE_MIN}-${THRESHOLDS.TITLE_MAX})`,
-        SEVERITY.MEDIUM,
-      );
-    } else if (titleLength > THRESHOLDS.TITLE_MAX) {
-      this.#callbacks.saveError(
-        `Some pages have titles that are too long`,
-        `The page <a href="${escapedUrl}">${escapedUrl}</a> has title length ${titleLength} chars (recommended: ${THRESHOLDS.TITLE_MIN}-${THRESHOLDS.TITLE_MAX})`,
-        SEVERITY.MEDIUM,
-      );
-    }
-
-    // Normalize title for duplicate comparison (handles whitespace variations)
-    const normalizedTitle = normalizeTextForComparison(title);
-    if (uniqueTitles.has(normalizedTitle)) {
-      this.#callbacks.saveError(
-        `Some pages have identical titles`,
-        `Title "${escapeHtml(title)}" is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    uniqueTitles.add(normalizedTitle);
-    return { title: processedTitle, titleLength };
-  }
-
-  /**
-   * Process meta tags
-   * @private
-   */
-  #processMetaTags(metaTags: MetaTag[], pageData: PageInfo, url: string, uniqueDescriptions: Set<string>) {
-    const escapedUrl = escapeHtml(url);
-
-    // Store meta tags as both array (backwards compatible) and object (easier access)
-    pageData.meta = [];
-    pageData.metaMap = {};
-
-    for (const metaTag of metaTags) {
-      const name = metaTag.name;
-      const content = metaTag.content;
-
-      if (!name) continue;
-
-      // Store in metaMap for easy access
-      pageData.metaMap[name] = content;
-
-      // Store in meta array for backwards compatibility
-      if (META_TAGS.includes(name) || (META_TAGS_CONFIG.optional as readonly string[]).includes(name)) {
-        pageData.meta.push({ [name]: content });
-      }
-
-      // Special handling for description
-      if (name === 'description') {
-        const maxDescLength = CRAWL_SETTINGS.MAX_DESCRIPTION_LENGTH || 1000;
-        const descLength = content ? content.length : 0;
-        // Truncate excessively long descriptions to prevent memory issues
-        const processedContent =
-          content && content.length > maxDescLength ? content.substring(0, maxDescLength) + '...' : content;
-        pageData.description = processedContent;
-        pageData.descriptionLength = descLength;
-
-        if (descLength < THRESHOLDS.DESCRIPTION_MIN) {
-          this.#callbacks.saveError(
-            `Some pages have descriptions that are too short`,
-            `The page <a href="${escapedUrl}">${escapedUrl}</a> has description length ${descLength} chars (recommended: ${THRESHOLDS.DESCRIPTION_MIN}-${THRESHOLDS.DESCRIPTION_MAX})`,
-            SEVERITY.MEDIUM,
-          );
-        } else if (descLength > THRESHOLDS.DESCRIPTION_MAX) {
-          this.#callbacks.saveError(
-            `Some pages have descriptions that are too long`,
-            `The page <a href="${escapedUrl}">${escapedUrl}</a> has description length ${descLength} chars (recommended: ${THRESHOLDS.DESCRIPTION_MIN}-${THRESHOLDS.DESCRIPTION_MAX})`,
-            SEVERITY.MEDIUM,
-          );
-        }
-
-        // Normalize description for duplicate comparison (handles whitespace variations)
-        const normalizedDesc = normalizeTextForComparison(content);
-        if (content && uniqueDescriptions.has(normalizedDesc)) {
-          this.#callbacks.saveError(
-            `Some pages have identical descriptions`,
-            `Description "${escapeHtml(content.substring(0, 50))}..." is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-            SEVERITY.HIGH,
-          );
-        }
-
-        if (content) {
-          uniqueDescriptions.add(normalizedDesc);
-        }
-      }
-
-      // Check for deprecated keywords meta tag
-      if (name === 'keywords' && content) {
-        // Just note it in pageData, don't report as error (deprecated but not harmful)
-        pageData.hasKeywords = true;
-      }
-    }
-
-    // Check for missing critical and required meta tags
-    this.#checkMissingMetaTags(pageData, url);
-  }
-
-  /**
-   * Check for missing meta tags with appropriate severity levels
-   * @private
-   */
-  #checkMissingMetaTags(pageData: PageInfo, url: string) {
-    const escapedUrl = escapeHtml(url);
-    const presentTags = new Set(Object.keys(pageData.metaMap || {}));
-
-    // Check critical tags only - description
-    // (Social tags are handled by SocialMediaAnalyzer to avoid duplicate errors)
-    // (Viewport is handled by MobileFriendlyAnalyzer with detailed validation)
-    for (const tag of META_TAGS_CONFIG.critical) {
-      if (!presentTags.has(tag)) {
-        if (tag === 'description' && !pageData.description) {
-          this.#callbacks.saveError(
-            `Description meta tag is missing`,
-            `Meta description is missing for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-            SEVERITY.CRITICAL,
-          );
-        }
-      }
-    }
-
-    // Track viewport presence for reference (detailed check in MobileFriendlyAnalyzer)
-    pageData.hasViewport = presentTags.has('viewport');
-  }
-
-  /**
-   * Process link tags (canonical, alternates)
-   * @private
-   */
-  #processLinkTags(
-    linkTags: LinkTag[],
-    pageData: PageInfo,
-    url: string,
-    sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>,
-  ) {
-    const escapedUrl = escapeHtml(url);
-    let isMultiLang = false;
-
-    for (const link of linkTags) {
-      const rel = link.rel;
-
-      if (rel === 'canonical') {
-        pageData.canonical = link.href;
-      }
-
-      if (rel === 'alternate') {
-        if (link.hrefLang && link.hrefLang !== 'x-default') {
-          isMultiLang = true;
-        }
-
-        if (!pageData.alternates) {
-          pageData.alternates = [];
-        }
-
-        pageData.alternates.push({
-          hreflang: link.hrefLang,
-          href: link.href,
-        });
-      }
-    }
-
-    // Validate canonical
-    if (!pageData.canonical) {
-      this.#callbacks.saveError(
-        `Canonicals are not set for some pages`,
-        `Canonical link is missing for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-        SEVERITY.HIGH,
-      );
-    }
-
-    // Validate alternates
-    if (isMultiLang && !pageData.alternates) {
-      this.#callbacks.saveError(
-        `Alternates are not set for some pages`,
-        `Alternates links are missing for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-        SEVERITY.MEDIUM,
-      );
-    } else if (pageData.alternates) {
-      this.#checkAlternateDuplicates(pageData.alternates, url);
-    }
-
-    // Validate canonical matches sitemap
-    this.#validateCanonicalMatchesSitemap(pageData, url, sitemapUrls);
-
-    return { isMultiLang };
-  }
-
-  /**
-   * Check for duplicate alternates
-   * @private
-   */
-  #checkAlternateDuplicates(alternates: AlternateEntry[], url: string) {
-    const escapedUrl = escapeHtml(url);
-    for (const alternate of alternates) {
-      const count = alternates.reduce((acc, cur) => {
-        if (cur.href === alternate.href) {
-          return acc + 1;
-        }
-        return acc;
-      }, 0);
-
-      if (count > 1) {
-        this.#callbacks.saveError(
-          `Some alternates are duplicated in head links`,
-          `Alternate ${escapeHtml(alternate.href)} is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-          SEVERITY.MEDIUM,
-        );
-      }
-    }
-  }
-
-  /**
-   * Validate canonical matches sitemap
-   * @private
-   */
-  #validateCanonicalMatchesSitemap(
-    pageData: PageInfo,
-    url: string,
-    sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>,
-  ) {
-    const escapedUrl = escapeHtml(url);
-    const canonical = pageData.canonical || '';
-    const normalizedCanonical = canonical.startsWith('http')
-      ? canonical
-      : new URL(canonical, this.#options.origin).href;
-    const escapedCanonical = escapeHtml(normalizedCanonical);
-    const matchingCanonical = sitemapUrls[canonical] || sitemapUrls[normalizedCanonical];
-
-    if (matchingCanonical) {
-      if (matchingCanonical.alternates) {
-        if (pageData.alternates) {
-          for (const pageAlternate of pageData.alternates) {
-            if (!matchingCanonical.alternates[pageAlternate.href]) {
-              this.#callbacks.saveError(
-                `Some alternates from sitemap don't match alternates from pages`,
-                `Alternate ${escapeHtml(pageAlternate.href)} has no match in sitemap for loc ${escapedCanonical} for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-                SEVERITY.MEDIUM,
-              );
-            }
-          }
-        }
-
-        if (Array.isArray(pageData.alternates)) {
-          for (const pageAlternate of pageData.alternates) {
-            const sitemapAlternate = matchingCanonical.alternates[pageAlternate.href];
-
-            if (sitemapAlternate) {
-              if (sitemapAlternate.hreflang !== pageAlternate.hreflang) {
-                this.#callbacks.saveError(
-                  `Some alternate hreflangs from sitemap don't match alternate hreflangs from pages`,
-                  `Alternate hreflangs ${escapeHtml(pageAlternate.hreflang)} doesn't match sitemap hreflang ${escapeHtml(sitemapAlternate.hreflang)} for loc ${escapedCanonical} for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-                  SEVERITY.MEDIUM,
-                );
-              }
-            }
-          }
-        }
-      }
-    } else {
-      this.#callbacks.saveError(
-        `Some loc and canonical don't match`,
-        `No matching loc corresponding canonical ${escapedCanonical} is found for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-        SEVERITY.HIGH,
-      );
-    }
-  }
-
-  /**
-   * Save HTML snapshot
-   * @private
-   */
-  #saveHtmlSnapshot(pageContent: string, url: string) {
-    if (!this.#options.saveHtml) {
-      return;
-    }
-
-    const folderName = `audit_${createSafeFilename(this.#options.origin)}`;
-    const folder = path.join(process.cwd(), folderName);
-
-    try {
-      fs.mkdirSync(folder, { recursive: true });
-    } catch (error: unknown) {
-      console.error(`Failed to create directory ${folder}:`, (error as Error).message);
-      return;
-    }
-
-    const safeFilename = createSafeFilename(url);
-    const filePath = path.join(folder, `${safeFilename}.html`);
-
-    try {
-      fs.writeFileSync(filePath, pageContent);
-    } catch (error: unknown) {
-      console.error(`Failed to write file ${filePath}:`, (error as Error).message);
-    }
-  }
-
-  /**
-   * Save viewport screenshot
-   * @private
-   */
-  async #saveScreenshot(chromePage: ChromePage, url: string) {
-    if (!this.#options.screenshots) {
-      return;
-    }
-
-    const folderName = `audit_${createSafeFilename(this.#options.origin)}`;
-    const folder = path.join(process.cwd(), folderName, 'screenshots');
-
-    try {
-      fs.mkdirSync(folder, { recursive: true });
-    } catch (error: unknown) {
-      console.error(`Failed to create screenshots directory ${folder}:`, (error as Error).message);
-      return;
-    }
-
-    const safeFilename = createSafeFilename(url);
-    const filePath = path.join(folder, `${safeFilename}.png`);
-
-    try {
-      await chromePage.screenshot({ path: filePath, fullPage: false });
-    } catch (error: unknown) {
-      // Screenshot failures are non-critical
-      if (this.#options.verbose) {
-        console.error(`Failed to capture screenshot for ${url}:`, (error as Error).message);
-      }
-    }
-  }
-
-  /**
-   * Populate incoming links count for each page
-   * @private
-   */
-  #populateIncomingLinksCount(results: CrawlResults) {
-    for (const url in results.pageData.pages) {
-      const incomingLinksArray = results.pageData.incomingLinks?.[url] || [];
-      const incomingLinksCount = Array.isArray(incomingLinksArray) ? incomingLinksArray.length : 0;
-      results.pageData.pages[url].incomingLinksCount = incomingLinksCount;
-      results.pageData.pages[url].hasIncomingLinks = incomingLinksCount > 0;
-    }
   }
 }
 

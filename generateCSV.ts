@@ -216,9 +216,9 @@ function generatePerformanceCSV(jsonData: AuditJsonData) {
           data.totalResponseSize ? (data.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
           data.totalNumberOfRequests || '',
           data.redirectCount || 0,
-          data.vitals?.lcpAnalysis?.bottleneck || '',
-          data.vitals?.lcpAnalysis?.recommendation || '',
-        ].map(escapeCSV),
+          (data.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.bottleneck || '',
+          (data.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation || '',
+        ].map((v) => escapeCSV(v as string | number | boolean | null | undefined)),
       );
     }
   });

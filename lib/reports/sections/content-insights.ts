@@ -92,7 +92,7 @@ function getComparisonCTASection(originPages: PageInfo[], comparePages: PageInfo
     const withCTA = pages.filter(p => p.ctaData?.summary);
     let forms = 0, buttons = 0, phone = 0, email = 0, noCTAs = 0;
     for (const page of withCTA) {
-      const s = page.ctaData.summary;
+      const s = page.ctaData!.summary;
       forms += s.forms || 0;
       buttons += s.ctaButtons || 0;
       phone += s.phoneLinks || 0;
@@ -400,10 +400,10 @@ function getLanguageSection(pages: PageInfo[]) {
   let missingLang = 0;
 
   for (const page of withLang) {
-    const lang = page.languageDetection.detectedLanguage;
+    const lang = page.languageDetection!.detectedLanguage!;
     langCounts[lang] = (langCounts[lang] || 0) + 1;
-    if (page.languageDetection.match === false) mismatches++;
-    if (!page.languageDetection.htmlLang) missingLang++;
+    if (page.languageDetection!.match === false) mismatches++;
+    if (!page.languageDetection!.htmlLang) missingLang++;
   }
 
   const langBars = Object.entries(langCounts)
@@ -461,7 +461,7 @@ function getCTASection(pages: PageInfo[]) {
     pagesWithAboveFoldCTA = 0;
 
   for (const page of withCTA) {
-    const s = page.ctaData.summary;
+    const s = page.ctaData!.summary;
     totalForms += s.forms || 0;
     totalCTAButtons += s.ctaButtons || 0;
     totalPhone += s.phoneLinks || 0;
@@ -655,7 +655,8 @@ function getWordCountBreakdown(pages: PageInfo[]) {
 
   const totals = { main: 0, nav: 0, header: 0, footer: 0, sidebar: 0 };
   for (const page of withData) {
-    const s = page.contentQuality!.wordCountBySection;
+    const s = page.contentQuality!.wordCountBySection as Record<string, number> | undefined;
+    if (!s || Array.isArray(s)) continue;
     totals.main += s.main || 0;
     totals.nav += s.nav || 0;
     totals.header += s.header || 0;

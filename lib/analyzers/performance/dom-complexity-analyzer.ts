@@ -105,7 +105,6 @@ class DOMComplexityAnalyzer {
           topTags,
         };
 
-        // @ts-ignore - helper needs to be accessible
         function getSelector(el: Element): string {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';

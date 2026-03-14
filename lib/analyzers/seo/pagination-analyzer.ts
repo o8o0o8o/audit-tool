@@ -417,7 +417,7 @@ class PaginationAnalyzer {
           pagesWithRelPrevNext++;
         }
 
-        if (page.paginationData.currentPage > 1 && !page.paginationData.canonicalPointsToSelf) {
+        if (page.paginationData.currentPage != null && page.paginationData.currentPage > 1 && !page.paginationData.canonicalPointsToSelf) {
           pagesWithBadCanonical++;
         }
       }

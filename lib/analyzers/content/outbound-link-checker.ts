@@ -70,12 +70,12 @@ class OutboundLinkChecker {
     const uniqueLinks = [...new Set(externalLinks)];
 
     // Limit checks per page to avoid excessive requests
-    const maxChecks = config.maxOutboundChecks || 20;
+    const maxChecks = config.maxOutboundChecks ?? 20;
     const linksToCheck = uniqueLinks.slice(0, maxChecks);
 
     // Check each link sequentially per domain to respect rate limiting
     // (Promise.allSettled fires all in parallel, bypassing the per-domain delay)
-    const checkTimeout = config.outboundTimeout || 5000;
+    const checkTimeout = config.outboundTimeout ?? 5000;
     const results = [];
     for (const linkUrl of linksToCheck) {
       try {
@@ -191,7 +191,7 @@ class OutboundLinkChecker {
       return null;
     }
 
-    const lastRequest = domainRequestTimes.get(hostname) || 0;
+    const lastRequest = domainRequestTimes.get(hostname) ?? 0;
     const now = Date.now();
     if (now - lastRequest < RATE_LIMIT_MS) {
       await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS - (now - lastRequest)));
@@ -219,7 +219,7 @@ class OutboundLinkChecker {
           const result = {
             status: res.statusCode,
             redirected: res.statusCode! >= 300 && res.statusCode! < 400,
-            redirectTo: res.headers.location || null,
+            redirectTo: res.headers.location ?? null,
           };
           urlCache.set(urlToCheck, result);
           resolve(result);

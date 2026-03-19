@@ -11,7 +11,7 @@ interface WorkflowOptions {
 
 function generateWorkflow(origin: string, options: WorkflowOptions = {}) {
   const schedule = options.schedule || '0 6 * * 1'; // Default: Monday 6am
-  const threshold = options.threshold || 70;
+  const threshold = options.threshold ?? 70;
   const nodeVersion = options.nodeVersion || '18';
 
   return `name: SEO Audit

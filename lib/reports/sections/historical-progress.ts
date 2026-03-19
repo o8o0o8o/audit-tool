@@ -22,11 +22,11 @@ function getHistoricalProgress(data: ReportSectionData) {
 
   const { jsonData, trendData, previousAudit } = data;
 
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const summaryObj = (analysisObj.summary || {}) as Record<string, unknown>;
-  const currentScore = (summaryObj.overallScore || 0) as number;
-  const currentIssues = (summaryObj.totalIssues || 0) as number;
-  const auditCount = trendData?.labels?.length || 1;
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const summaryObj = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const currentScore = (summaryObj.overallScore ?? 0) as number;
+  const currentIssues = (summaryObj.totalIssues ?? 0) as number;
+  const auditCount = trendData?.labels?.length ?? 1;
 
   // Show first audit message if no previous audit
   if (!previousAudit || !trendData || auditCount < 2) {
@@ -242,7 +242,7 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
  */
 function getSeverityWeight(severity: string) {
   const weights: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-  return weights[severity?.toLowerCase()] || 1;
+  return weights[severity?.toLowerCase()] ?? 1;
 }
 
 function getSeverityColor(severity: string) {
@@ -252,7 +252,7 @@ function getSeverityColor(severity: string) {
     medium: '#f59e0b',
     low: '#6b7280',
   };
-  return colors[severity?.toLowerCase()] || '#6b7280';
+  return colors[severity?.toLowerCase()] ?? '#6b7280';
 }
 
 function getTrendIcon(trend: string) {
@@ -263,7 +263,7 @@ function getTrendIcon(trend: string) {
     new: '<span style="color: #f59e0b; font-size: 14px;">🆕</span>',
     fixed: '<span style="color: #10b981; font-size: 14px;">✓</span>',
   };
-  return icons[trend] || icons.stable;
+  return icons[trend] ?? icons.stable;
 }
 
 function getTrendColor(trend: string) {
@@ -274,7 +274,7 @@ function getTrendColor(trend: string) {
     new: '#f59e0b',
     fixed: '#10b981',
   };
-  return colors[trend] || '#6b7280';
+  return colors[trend] ?? '#6b7280';
 }
 
 function getChangeText(item: IssueTrendItem) {
@@ -339,10 +339,10 @@ function getInfoCard(
  * Generate category score deltas between current and previous audit
  */
 function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit: AuditSnapshot | null) {
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const summaryObj = (analysisObj.summary || {}) as Record<string, unknown>;
-  const currentCats = (summaryObj.categoryScores || {}) as Record<string, number>;
-  const prevCats = (previousAudit?.summary?.categoryScores || {}) as Record<string, number>;
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const summaryObj = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const currentCats = (summaryObj.categoryScores ?? {}) as Record<string, number>;
+  const prevCats = (previousAudit?.summary?.categoryScores ?? {}) as Record<string, number>;
 
   const categories = [
     { key: 'seo', name: 'SEO', icon: '🔍' },

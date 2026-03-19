@@ -10,6 +10,14 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface ParsedLink {
+  url: string;
+  rel?: string;
+  hreflang?: string;
+  as?: string;
+  type?: string;
+}
+
 class ResponseHeaderAnalyzer {
   /**
    * Analyze response headers for SEO signals
@@ -20,9 +28,27 @@ class ResponseHeaderAnalyzer {
   static analyze(pageData: PageInfo, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const headers = pageData.response?.headers || pageData.responseHeaders || {};
+    const headers = pageData.response?.headers ?? pageData.responseHeaders ?? {};
 
-    const info: Record<string, any> = {
+    const info: {
+      vary: string | null;
+      linkHeader: string | null;
+      xRobotsTag: string | null;
+      contentLanguage: string | null;
+      parsedLinks: ParsedLink[];
+      varyDirectives: string[];
+      dynamicServing?: boolean;
+      preloadHints?: { url: string; as: string }[];
+      httpCanonical?: string;
+      httpAlternates?: { url: string; hreflang: string }[];
+      noindexViaHeader?: boolean;
+      nofollowViaHeader?: boolean;
+      nosnippetViaHeader?: boolean;
+      noarchiveViaHeader?: boolean;
+      maxSnippet?: number;
+      maxImagePreview?: string;
+      missingXContentTypeOptions?: boolean;
+    } = {
       vary: null,
       linkHeader: null,
       xRobotsTag: null,
@@ -35,7 +61,7 @@ class ResponseHeaderAnalyzer {
     const vary = headers['vary'];
     if (vary) {
       info.vary = vary;
-      info.varyDirectives = vary.split(',').map((d: any) => d.trim().toLowerCase());
+      info.varyDirectives = vary.split(',').map((d: string) => d.trim().toLowerCase());
 
       // Warn if Vary includes too many directives (cache fragmentation)
       if (info.varyDirectives.length > 3) {
@@ -59,21 +85,21 @@ class ResponseHeaderAnalyzer {
       info.parsedLinks = ResponseHeaderAnalyzer.#parseLinkHeader(linkHeader);
 
       // Check for preload hints
-      const preloads = info.parsedLinks.filter((l: Record<string, any>) => l.rel === 'preload');
+      const preloads = info.parsedLinks.filter((l: ParsedLink) => l.rel === 'preload');
       if (preloads.length > 0) {
-        info.preloadHints = preloads.map((p: any) => ({ url: p.url, as: p.as }));
+        info.preloadHints = preloads.map((p: ParsedLink) => ({ url: p.url, as: p.as ?? '' }));
       }
 
       // Check for canonical via Link header
-      const canonical = info.parsedLinks.find((l: Record<string, any>) => l.rel === 'canonical');
+      const canonical = info.parsedLinks.find((l: ParsedLink) => l.rel === 'canonical');
       if (canonical) {
         info.httpCanonical = canonical.url;
       }
 
       // Check for alternate language links via Link header
-      const alternates = info.parsedLinks.filter((l: Record<string, any>) => l.rel === 'alternate' && l.hreflang);
+      const alternates = info.parsedLinks.filter((l: ParsedLink) => l.rel === 'alternate' && l.hreflang);
       if (alternates.length > 0) {
-        info.httpAlternates = alternates.map((a: any) => ({ url: a.url, hreflang: a.hreflang }));
+        info.httpAlternates = alternates.map((a: ParsedLink) => ({ url: a.url, hreflang: a.hreflang ?? '' }));
       }
     }
 
@@ -85,23 +111,23 @@ class ResponseHeaderAnalyzer {
       const directives = xRobotsTag
         .toLowerCase()
         .split(',')
-        .map((d: any) => {
+        .map((d: string) => {
           const trimmed = d.trim();
           // Strip user-agent prefix if present (e.g., "googlebot: noindex" → "noindex")
           const colonIdx = trimmed.indexOf(':');
           return colonIdx >= 0 ? trimmed.slice(colonIdx + 1).trim() : trimmed;
         });
 
-      if (directives.some((d: any) => d === 'noindex')) {
+      if (directives.some((d: string) => d === 'noindex')) {
         info.noindexViaHeader = true;
       }
-      if (directives.some((d: any) => d === 'nofollow')) {
+      if (directives.some((d: string) => d === 'nofollow')) {
         info.nofollowViaHeader = true;
       }
-      if (directives.some((d: any) => d === 'nosnippet')) {
+      if (directives.some((d: string) => d === 'nosnippet')) {
         info.nosnippetViaHeader = true;
       }
-      if (directives.some((d: any) => d === 'noarchive')) {
+      if (directives.some((d: string) => d === 'noarchive')) {
         info.noarchiveViaHeader = true;
       }
 
@@ -122,7 +148,7 @@ class ResponseHeaderAnalyzer {
       info.contentLanguage = contentLanguage;
 
       // Check for mismatch with html lang attribute
-      const htmlLang = pageData.internationalSEO?.htmlLang || pageData.lang;
+      const htmlLang = pageData.internationalSEO?.htmlLang ?? pageData.lang;
       if (htmlLang && contentLanguage) {
         const headerLang = contentLanguage.split(',')[0].trim().toLowerCase().split('-')[0];
         const htmlLangPrimary = htmlLang.toLowerCase().split('-')[0];
@@ -204,8 +230,8 @@ class ResponseHeaderAnalyzer {
    * @returns {Array} Parsed links
    * @private
    */
-  static #parseLinkHeader(header: string) {
-    const links: Record<string, any>[] = [];
+  static #parseLinkHeader(header: string): ParsedLink[] {
+    const links: ParsedLink[] = [];
     // Split on comma but not within angle brackets
     const parts = header.split(/,(?=\s*<)/);
 
@@ -213,7 +239,7 @@ class ResponseHeaderAnalyzer {
       const urlMatch = part.match(/<([^>]+)>/);
       if (!urlMatch) continue;
 
-      const link: Record<string, any> = { url: urlMatch[1] };
+      const link: ParsedLink = { url: urlMatch[1] };
 
       // Extract parameters
       const params = part.substring(urlMatch[0].length);

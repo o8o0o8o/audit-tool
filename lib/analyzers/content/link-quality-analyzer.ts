@@ -14,19 +14,20 @@ class LinkQualityAnalyzer {
       externalLinks: 0,
       nofollowLinks: 0,
       followLinks: 0,
-      brokenLinks: [] as Record<string, any>[],
-      redirectLinks: [] as Record<string, any>[],
-      emptyAnchorLinks: [] as Record<string, any>[],
-      genericAnchorLinks: [] as Record<string, any>[],
+      brokenLinks: [] as { href: string; statusCode: number; anchorText: string }[],
+      redirectLinks: [] as { href: string; redirectsTo: string }[],
+      emptyAnchorLinks: [] as { href: string; rel: string }[],
+      genericAnchorLinks: [] as { href: string; anchorText: string }[],
       anchorTextMap: {} as Record<string, number>, // anchor text -> count
       externalDomains: {} as Record<string, number>, // domain -> count
-      linksToNonIndexable: [] as Record<string, any>[],
+      linksToNonIndexable: [] as { href: string; reason: string }[],
       linkDepth: null as number | null,
-      issues: [] as Record<string, any>[],
-      warnings: [] as Record<string, any>[],
+      issues: [] as { message: string; count?: number; severity: string; details?: string[] }[],
+      warnings: [] as { message: string; details?: { anchorText: string; count: number }[] }[],
       internalLinkRatio: 0,
       externalLinkRatio: 0,
       nofollowRatio: 0,
+      internalNofollowLinks: [] as { href: string; anchorText: string }[],
     };
 
     // Get all links with detailed information
@@ -215,7 +216,7 @@ class LinkQualityAnalyzer {
 
     // Check for nofollow on internal links
     const internalNofollowLinks = linkElements.filter((l) => l.isInternal && l.isNofollow);
-    (linkAnalysis as Record<string, any>).internalNofollowLinks = internalNofollowLinks.map((l) => ({
+    linkAnalysis.internalNofollowLinks = internalNofollowLinks.map((l) => ({
       href: l.href,
       anchorText: l.anchorText,
     }));

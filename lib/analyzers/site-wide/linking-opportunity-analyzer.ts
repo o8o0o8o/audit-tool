@@ -1,6 +1,33 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface KeywordPageData {
+  density: number;
+  count: number;
+  inTitle: boolean;
+}
+
+interface SharedKeywordInfo {
+  keyword: string;
+  inTargetTitle: boolean;
+  targetDensity: number;
+}
+
+interface SuggestedLink {
+  targetUrl: string;
+  sharedKeywords: string[];
+  relevanceScore: number;
+  anchorTextSuggestion: string;
+}
+
+interface LinkingOpportunity {
+  sourcePage: string;
+  sourceTitle: string;
+  suggestedLinks: SuggestedLink[];
+  relevanceScore: number;
+  totalMissedLinks: number;
+}
+
 /**
  * Internal Linking Opportunity Analyzer
  * Identifies pages that should link to each other based on content similarity.
@@ -59,39 +86,39 @@ class LinkingOpportunityAnalyzer {
 
     for (const url in allPages) {
       const page = allPages[url];
-      const topKeywords = page.contentQuality?.topKeywords || [];
-      const title = (page.title || '').toLowerCase();
+      const topKeywords = page.contentQuality?.topKeywords ?? [];
+      const title = (page.title ?? '').toLowerCase();
 
       // Index top keywords
-      topKeywords.forEach((kw: any) => {
+      topKeywords.forEach((kw: { word: string; count: number; density: number }) => {
         const word = kw.word.toLowerCase();
         if (word.length < 4) return; // Skip very short words
 
         if (!keywordIndex.has(word)) {
-          keywordIndex.set(word, new Map());
+          keywordIndex.set(word, new Map<string, KeywordPageData>());
         }
 
-        keywordIndex.get(word).set(url, {
-          density: parseFloat(kw.density) || 0,
+        keywordIndex.get(word)!.set(url, {
+          density: kw.density || 0,
           count: kw.count || 1,
           inTitle: title.includes(word),
         });
       });
 
       // Also index significant words from title
-      const titleWords = title.split(/\s+/).filter((w: any) => w.length >= 4);
-      titleWords.forEach((word: any) => {
+      const titleWords = title.split(/\s+/).filter((w: string) => w.length >= 4);
+      titleWords.forEach((word: string) => {
         if (!keywordIndex.has(word)) {
-          keywordIndex.set(word, new Map());
+          keywordIndex.set(word, new Map<string, KeywordPageData>());
         }
-        if (!keywordIndex.get(word).has(url)) {
-          keywordIndex.get(word).set(url, {
+        if (!keywordIndex.get(word)!.has(url)) {
+          keywordIndex.get(word)!.set(url, {
             density: 0,
             count: 0,
             inTitle: true,
           });
         } else {
-          keywordIndex.get(word).get(url).inTitle = true;
+          keywordIndex.get(word)!.get(url)!.inTitle = true;
         }
       });
     }
@@ -105,15 +132,15 @@ class LinkingOpportunityAnalyzer {
    * @returns {Map} Existing links index
    */
   static buildExistingLinksIndex(allPages: Record<string, PageInfo>) {
-    const existingLinks = new Map();
+    const existingLinks = new Map<string, Set<string>>();
 
     for (const url in allPages) {
       const page = allPages[url];
-      const links = new Set();
+      const links = new Set<string>();
 
       // Get outbound links from the page
       if (page.links && Array.isArray(page.links)) {
-        page.links.forEach((link: any) => {
+        page.links.forEach((link: { href?: string }) => {
           if (link.href) {
             links.add(this.normalizeUrl(link.href));
           }
@@ -122,7 +149,7 @@ class LinkingOpportunityAnalyzer {
 
       // Also check linkAnalysis if available
       if (page.linkAnalysis?.internalLinkUrls) {
-        page.linkAnalysis.internalLinkUrls.forEach((href: any) => {
+        page.linkAnalysis.internalLinkUrls.forEach((href: string) => {
           links.add(this.normalizeUrl(href));
         });
       }
@@ -158,35 +185,35 @@ class LinkingOpportunityAnalyzer {
    */
   static findOpportunities(
     allPages: Record<string, PageInfo>,
-    keywordIndex: Map<string, any>,
+    keywordIndex: Map<string, Map<string, KeywordPageData>>,
     existingLinks: Map<string, Set<string>>,
     origin: string,
   ) {
-    const opportunities = [];
+    const opportunities: LinkingOpportunity[] = [];
     const urlList = Object.keys(allPages);
 
     // For each page, find related pages that aren't linked
     for (const sourceUrl of urlList) {
       const sourcePage = allPages[sourceUrl];
       const sourceNormalized = this.normalizeUrl(sourceUrl);
-      const sourceLinks = existingLinks.get(sourceNormalized) || new Set();
+      const sourceLinks = existingLinks.get(sourceNormalized) ?? new Set();
 
       // Get source page keywords
-      const sourceKeywords = new Set();
-      (sourcePage.contentQuality?.topKeywords || []).forEach((kw: any) => {
+      const sourceKeywords = new Set<string>();
+      (sourcePage.contentQuality?.topKeywords ?? []).forEach((kw: { word: string; count: number; density: number }) => {
         if (kw.word.length >= 4) sourceKeywords.add(kw.word.toLowerCase());
       });
 
       if (sourceKeywords.size === 0) continue;
 
       // Find related pages
-      const relatedPages = new Map(); // targetUrl -> { sharedKeywords, relevanceScore }
+      const relatedPages = new Map<string, { sharedKeywords: SharedKeywordInfo[]; relevanceScore: number }>(); // targetUrl -> { sharedKeywords, relevanceScore }
 
       sourceKeywords.forEach((keyword) => {
-        const pagesWithKeyword = keywordIndex.get(keyword as string);
+        const pagesWithKeyword = keywordIndex.get(keyword);
         if (!pagesWithKeyword) return;
 
-        pagesWithKeyword.forEach((keywordData: Record<string, any>, targetUrl: string) => {
+        pagesWithKeyword.forEach((keywordData: KeywordPageData, targetUrl: string) => {
           // Skip same page and pages we already link to
           if (targetUrl === sourceUrl) return;
           const targetNormalized = this.normalizeUrl(targetUrl);
@@ -207,7 +234,7 @@ class LinkingOpportunityAnalyzer {
             });
           }
 
-          const entry = relatedPages.get(targetUrl);
+          const entry = relatedPages.get(targetUrl)!;
           entry.sharedKeywords.push({
             keyword,
             inTargetTitle: keywordData.inTitle,
@@ -217,7 +244,7 @@ class LinkingOpportunityAnalyzer {
       });
 
       // Calculate relevance scores and filter
-      const suggestedLinks: Record<string, any>[] = [];
+      const suggestedLinks: SuggestedLink[] = [];
 
       relatedPages.forEach((data, targetUrl) => {
         if (data.sharedKeywords.length < 2) return; // Require at least 2 shared keywords
@@ -229,19 +256,19 @@ class LinkingOpportunityAnalyzer {
         score += Math.min(data.sharedKeywords.length * 10, 40);
 
         // Points for keywords in target title
-        const titleMatches = data.sharedKeywords.filter((k: any) => k.inTargetTitle).length;
+        const titleMatches = data.sharedKeywords.filter((k: SharedKeywordInfo) => k.inTargetTitle).length;
         score += titleMatches * 15;
 
         // Points for high density keywords
         const avgDensity =
-          data.sharedKeywords.reduce((sum: any, k: any) => sum + k.targetDensity, 0) / data.sharedKeywords.length;
+          data.sharedKeywords.reduce((sum: number, k: SharedKeywordInfo) => sum + k.targetDensity, 0) / data.sharedKeywords.length;
         score += Math.min(avgDensity * 5, 20);
 
         // Store if score is significant
         if (score >= 30) {
           suggestedLinks.push({
             targetUrl,
-            sharedKeywords: data.sharedKeywords.slice(0, 5).map((k: any) => k.keyword),
+            sharedKeywords: data.sharedKeywords.slice(0, 5).map((k: SharedKeywordInfo) => k.keyword),
             relevanceScore: Math.min(Math.round(score), 100),
             anchorTextSuggestion: this.suggestAnchorText(data.sharedKeywords, allPages[targetUrl]),
           });
@@ -279,7 +306,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} targetPage - Target page data
    * @returns {string} Suggested anchor text
    */
-  static suggestAnchorText(sharedKeywords: Record<string, any>[], _targetPage: PageInfo) {
+  static suggestAnchorText(sharedKeywords: SharedKeywordInfo[], _targetPage: PageInfo) {
     // Prefer keyword that's in target title
     const titleKeyword = sharedKeywords.find((k) => k.inTargetTitle);
     if (titleKeyword) {
@@ -302,7 +329,7 @@ class LinkingOpportunityAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Array} Issues array
    */
-  static generateIssues(opportunities: Record<string, any>[], allPages: Record<string, PageInfo>) {
+  static generateIssues(opportunities: LinkingOpportunity[], allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const totalPages = Object.keys(allPages).length;
 
@@ -333,13 +360,13 @@ class LinkingOpportunityAnalyzer {
     // Issue 3: Potential orphan pages (pages with opportunities to link TO but not FROM)
     const targetedPages = new Set();
     opportunities.forEach((o) => {
-      o.suggestedLinks.forEach((l: any) => targetedPages.add(l.targetUrl));
+      o.suggestedLinks.forEach((l: SuggestedLink) => targetedPages.add(l.targetUrl));
     });
 
     const orphanCandidates = [];
     for (const url in allPages) {
       const page = allPages[url];
-      const incomingCount = page.incomingLinksCount || 0;
+      const incomingCount = page.incomingLinksCount ?? 0;
       if (incomingCount <= 1 && targetedPages.has(url)) {
         orphanCandidates.push(url);
       }

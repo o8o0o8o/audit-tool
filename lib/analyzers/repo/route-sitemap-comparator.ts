@@ -6,6 +6,13 @@
 import { SEVERITY } from '../../constants';
 import type { Issue } from '../../types';
 
+interface RouteEntry {
+  pattern: string;
+  file: string;
+  isDynamic: boolean;
+  [key: string]: unknown;
+}
+
 class RouteSitemapComparator {
   /**
    * Compare routes extracted from code with sitemap URLs
@@ -14,7 +21,7 @@ class RouteSitemapComparator {
    * @param {string} origin - Site origin (e.g., https://example.com)
    * @returns {{ issues: Array, warnings: Array, stats: object, details: object }}
    */
-  static compare(routes: Record<string, any>[], sitemapUrls: Record<string, any>, _origin: string) {
+  static compare(routes: RouteEntry[], sitemapUrls: Record<string, unknown>, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -59,7 +66,7 @@ class RouteSitemapComparator {
     }
 
     // Check dynamic routes - see how many sitemap URLs match each pattern
-    const dynamicRouteStats: Array<Record<string, any> & { matchCount: number }> = [];
+    const dynamicRouteStats: Array<RouteEntry & { matchCount: number }> = [];
     const matchedByDynamic = new Set();
 
     for (const route of dynamicRoutes) {

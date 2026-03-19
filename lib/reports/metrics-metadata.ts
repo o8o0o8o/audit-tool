@@ -971,7 +971,7 @@ export const SIGNAL_CATEGORIES: Record<string, SignalCategory> = {
  * @returns {Object|null} Signal metadata or null if not found
  */
 export function getSignalInfo(key: string) {
-  return METRIC_INFO[key] || null;
+  return METRIC_INFO[key] ?? null;
 }
 
 /**
@@ -1000,7 +1000,7 @@ export function getSignalTooltip(key: string) {
   const info = METRIC_INFO[key];
   if (!info) return '';
 
-  let tooltip = info.description || '';
+  let tooltip = info.description ?? '';
   if (info.note) {
     tooltip += ` (${info.note})`;
   }

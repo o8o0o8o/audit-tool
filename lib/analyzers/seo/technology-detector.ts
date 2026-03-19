@@ -4,11 +4,48 @@
  * Similar to Wappalyzer/BuiltWith
  */
 
-import type { ChromePage, ParsedPage } from '../../types';
+import type { ChromePage, NetworkRequest, ParsedPage } from '../../types';
+
+interface TechSignaturePatterns {
+  html?: RegExp[];
+  meta?: Record<string, RegExp>;
+  scripts?: RegExp[];
+  headers?: Record<string, RegExp>;
+  cookies?: RegExp[];
+  globals?: string[];
+}
+
+interface TechSignature {
+  name: string;
+  patterns: TechSignaturePatterns;
+}
+
+interface DetectionMethod {
+  type: string;
+  pattern?: string;
+  matched?: string;
+  tag?: string;
+  value?: string;
+  header?: string;
+  variable?: string;
+}
+
+interface DetectedTechnology {
+  name: string;
+  category: string;
+  confidence: string;
+  detectedBy: DetectionMethod[];
+}
+
+interface CategorySummary {
+  category: string;
+  count: number;
+  technologies: string[];
+}
 
 class TechnologyDetector {
   // Technology signatures organized by category
-  static SIGNATURES = {
+  static SIGNATURES: Record<string, TechSignature[]> = {
     // Content Management Systems
     cms: [
       {
@@ -291,15 +328,15 @@ class TechnologyDetector {
     chromePage: ChromePage,
     parsedPage: ParsedPage,
     htmlContent: string,
-    responseHeaders: Record<string, any> = {},
-    requests: Record<string, any> = {},
+    responseHeaders: Record<string, string> = {},
+    requests: NetworkRequest[] | Record<string, { type?: string }> = {},
   ) {
     const detected = {
-      technologies: [] as Record<string, any>[],
+      technologies: [] as DetectedTechnology[],
       byCategory: {} as Record<string, string[]>,
       summary: {
         total: 0,
-        categories: [] as Record<string, any>[],
+        categories: [] as CategorySummary[],
       },
     };
 
@@ -342,7 +379,7 @@ class TechnologyDetector {
         ];
         return knownGlobals.filter((g) => {
           try {
-            return typeof (window as any)[g] !== 'undefined';
+            return typeof (window as unknown as Record<string, unknown>)[g] !== 'undefined';
           } catch {
             return false;
           }
@@ -375,8 +412,8 @@ class TechnologyDetector {
     // Calculate summary
     detected.summary.total = detected.technologies.length;
     detected.summary.categories = Object.entries(detected.byCategory)
-      .filter(([_, techs]: [string, any]) => techs.length > 0)
-      .map(([cat, techs]: [string, any]) => ({
+      .filter(([_, techs]) => techs.length > 0)
+      .map(([cat, techs]) => ({
         category: this.#formatCategory(cat),
         count: techs.length,
         technologies: techs,
@@ -388,11 +425,11 @@ class TechnologyDetector {
   /**
    * Quick detection without browser context (for faster analysis)
    */
-  static detectFromHtml(htmlContent: string, responseHeaders: Record<string, any> = {}, scriptSrcs: string[] = []) {
+  static detectFromHtml(htmlContent: string, responseHeaders: Record<string, string> = {}, scriptSrcs: string[] = []) {
     const detected = {
-      technologies: [] as Record<string, any>[],
+      technologies: [] as DetectedTechnology[],
       byCategory: {} as Record<string, string[]>,
-      summary: { total: 0, categories: [] as Record<string, any>[] },
+      summary: { total: 0, categories: [] as CategorySummary[] },
     };
 
     const htmlLower = (htmlContent || '').toLowerCase();
@@ -418,8 +455,8 @@ class TechnologyDetector {
 
     detected.summary.total = detected.technologies.length;
     detected.summary.categories = Object.entries(detected.byCategory)
-      .filter(([_, techs]: [string, any]) => techs.length > 0)
-      .map(([cat, techs]: [string, any]) => ({
+      .filter(([_, techs]) => techs.length > 0)
+      .map(([cat, techs]) => ({
         category: this.#formatCategory(cat),
         count: techs.length,
         technologies: techs,
@@ -434,15 +471,15 @@ class TechnologyDetector {
    * @returns {Object|null} Detection methods or null if not matched
    */
   static #matchSignature(
-    sig: Record<string, any>,
+    sig: TechSignature,
     htmlLower: string,
-    headersLower: Record<string, any>,
+    headersLower: Record<string, string>,
     scriptSrcs: string[],
     metaTags: Record<string, string>,
     globals: string[],
   ) {
     const patterns = sig.patterns || {};
-    const methods: Record<string, any>[] = [];
+    const methods: DetectionMethod[] = [];
 
     // Check HTML patterns
     if (patterns.html) {
@@ -518,9 +555,9 @@ class TechnologyDetector {
    * @private
    */
   static #calculateConfidence(
-    sig: Record<string, any>,
+    sig: TechSignature,
     htmlLower: string,
-    headersLower: Record<string, any>,
+    headersLower: Record<string, string>,
     scriptSrcs: string[],
     metaTags: Record<string, string>,
     globals: string[],
@@ -559,7 +596,10 @@ class TechnologyDetector {
    * Extract script sources from page
    * @private
    */
-  static #extractScriptSources(parsedPage: ParsedPage | null, requests: Record<string, any>): string[] {
+  static #extractScriptSources(
+    parsedPage: ParsedPage | null,
+    requests: NetworkRequest[] | Record<string, { type?: string }>,
+  ): string[] {
     const sources = new Set<string>();
 
     // From HTML
@@ -573,9 +613,17 @@ class TechnologyDetector {
 
     // From network requests
     if (requests) {
-      for (const [url, data] of Object.entries(requests)) {
-        if (url.endsWith('.js') || (data.type && data.type.includes('script'))) {
-          sources.add(url.toLowerCase());
+      if (Array.isArray(requests)) {
+        for (const req of requests) {
+          if (req.url.endsWith('.js') || (req.resourceType?.includes('script'))) {
+            sources.add(req.url.toLowerCase());
+          }
+        }
+      } else {
+        for (const [url, data] of Object.entries(requests)) {
+          if (url.endsWith('.js') || (data.type?.includes('script'))) {
+            sources.add(url.toLowerCase());
+          }
         }
       }
     }
@@ -621,10 +669,10 @@ class TechnologyDetector {
    * Lowercase all header keys
    * @private
    */
-  static #lowercaseHeaders(headers: Record<string, any>) {
-    const lower: Record<string, any> = {};
+  static #lowercaseHeaders(headers: Record<string, string>) {
+    const lower: Record<string, string> = {};
     for (const [key, value] of Object.entries(headers || {})) {
-      lower[key.toLowerCase()] = typeof value === 'string' ? value.toLowerCase() : value;
+      lower[key.toLowerCase()] = typeof value === 'string' ? value.toLowerCase() : String(value);
     }
     return lower;
   }

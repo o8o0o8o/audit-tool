@@ -165,7 +165,7 @@ class AnchorTextAnalyzer {
     for (const link of links) {
       const href = String(link.href || link.url || '');
       const anchor = (link.text || link.anchor || '').trim();
-      const hasImage = link.hasImage || link.containsImage || false;
+      const hasImage = link.hasImage ?? link.containsImage ?? false;
 
       info.totalLinks++;
 
@@ -383,7 +383,7 @@ class AnchorTextAnalyzer {
           targetAnchorMap.set(targetUrl, new Map());
         }
         const anchors = targetAnchorMap.get(targetUrl);
-        anchors.set(anchor, (anchors.get(anchor) || 0) + 1);
+        anchors.set(anchor, (anchors.get(anchor) ?? 0) + 1);
 
         // Track site-wide distribution
         if (anchor && !GENERIC_ANCHORS.includes(anchor)) {

@@ -34,7 +34,7 @@ class LinkDepthAnalyzer {
 
     for (const url of pageUrls) {
       const page = pages[url];
-      const incoming = incomingLinks[url] || [];
+      const incoming = incomingLinks[url] ?? [];
       const incomingCount = Array.isArray(incoming) ? incoming.length : 0;
 
       // Orphan page detection
@@ -222,7 +222,7 @@ class LinkDepthAnalyzer {
 
     while (queue.length > 0) {
       const { url, depth } = queue.shift()!;
-      const links: Set<string> = graph.get(url) || new Set();
+      const links: Set<string> = graph.get(url) ?? new Set();
 
       for (const linkedUrl of links) {
         if (!visited.has(linkedUrl)) {

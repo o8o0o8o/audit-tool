@@ -185,7 +185,7 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
 };
 
 class SpellingGrammarAnalyzer {
-  static async analyze(chromePage: ChromePage, url: string) {
+  static async analyze(chromePage: ChromePage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {

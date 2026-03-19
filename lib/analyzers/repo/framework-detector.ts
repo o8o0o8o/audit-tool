@@ -96,7 +96,7 @@ class RepoFrameworkDetector {
       const matchedPkg = fw.packages.find((pkg) => pkg in allDeps);
       if (!matchedPkg) continue;
 
-      const version = allDeps[matchedPkg] || null;
+      const version = allDeps[matchedPkg] ?? null;
 
       // Find which config file exists
       let configFile = null;

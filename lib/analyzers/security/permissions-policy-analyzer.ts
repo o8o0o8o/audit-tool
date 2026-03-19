@@ -24,7 +24,7 @@ const SENSITIVE_FEATURES = [
 ];
 
 class PermissionsPolicyAnalyzer {
-  static analyze(pageData: PageInfo, url: string) {
+  static analyze(pageData: PageInfo, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -41,7 +41,7 @@ class PermissionsPolicyAnalyzer {
       restricted: [],
     };
 
-    const headers = pageData.responseHeaders || {};
+    const headers = pageData.responseHeaders ?? {};
 
     // Check both Permissions-Policy and legacy Feature-Policy
     const ppHeader =

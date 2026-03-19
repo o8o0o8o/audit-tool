@@ -1,6 +1,37 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface HubPage {
+  url: string;
+  internalLinks: number;
+  externalLinks: number;
+  totalLinks: number;
+}
+
+interface ExcessiveLinkPage {
+  url: string;
+  totalLinks: number;
+  internalLinks: number;
+  externalLinks: number;
+}
+
+interface LinkStats {
+  totalBrokenLinks: number;
+  brokenLinksByPage: Map<string, number>;
+  mostLinkedPages: Map<string, number>;
+  hubPages: HubPage[];
+  anchorTextDiversity: Map<string, Set<string>>;
+  externalDomains: Map<string, number>;
+  orphanedPages: string[];
+  avgInternalLinks: number;
+  avgExternalLinks: number;
+  totalGenericAnchors: number;
+  pagesWithBrokenLinks: number;
+  excessiveLinkPages?: ExcessiveLinkPage[];
+  totalInternalNofollow?: number;
+  pagesWithInternalNofollow?: number;
+}
+
 /**
  * Site-wide Link Structure Analyzer
  * Analyzes internal and external link patterns across all pages.
@@ -13,10 +44,10 @@ class LinkStructureAnalyzer {
    * @param {Object} incomingLinks - Object with incoming link counts { url: count }
    * @returns {Object} { issues: [], hubPages: [], orphanedPages: [], mostLinkedPages: [] }
    */
-  static analyzeLinkStructure(allPages: Record<string, PageInfo>, incomingLinks: Record<string, any>) {
+  static analyzeLinkStructure(allPages: Record<string, PageInfo>, incomingLinks: Record<string, string[] | number>) {
     console.log('\nAnalyzing site-wide link structure...');
 
-    const linkStats: Record<string, any> = {
+    const linkStats: LinkStats = {
       totalBrokenLinks: 0,
       brokenLinksByPage: new Map(), // URL -> count
       mostLinkedPages: new Map(), // URL -> incoming link count (already tracked)
@@ -60,21 +91,21 @@ class LinkStructureAnalyzer {
       if ((linkData.internalLinks ?? 0) > 20) {
         linkStats.hubPages.push({
           url,
-          internalLinks: linkData.internalLinks,
-          externalLinks: linkData.externalLinks,
-          totalLinks: (linkData.internalLinks || 0) + (linkData.externalLinks || 0),
+          internalLinks: linkData.internalLinks ?? 0,
+          externalLinks: linkData.externalLinks ?? 0,
+          totalLinks: (linkData.internalLinks ?? 0) + (linkData.externalLinks ?? 0),
         });
       }
 
       // Track pages with excessive total links
-      const totalPageLinks = (linkData.internalLinks || 0) + (linkData.externalLinks || 0);
+      const totalPageLinks = (linkData.internalLinks ?? 0) + (linkData.externalLinks ?? 0);
       if (totalPageLinks > 150) {
         if (!linkStats.excessiveLinkPages) linkStats.excessiveLinkPages = [];
         linkStats.excessiveLinkPages.push({
           url,
           totalLinks: totalPageLinks,
-          internalLinks: linkData.internalLinks,
-          externalLinks: linkData.externalLinks,
+          internalLinks: linkData.internalLinks ?? 0,
+          externalLinks: linkData.externalLinks ?? 0,
         });
       }
 
@@ -89,13 +120,13 @@ class LinkStructureAnalyzer {
       // Track anchor text diversity
       // Handle both Map (fresh data) and plain object (restored from JSON)
       const anchorTextEntries =
-        linkData.anchorTextMap instanceof Map ? linkData.anchorTextMap : Object.entries(linkData.anchorTextMap || {});
+        linkData.anchorTextMap instanceof Map ? linkData.anchorTextMap : Object.entries(linkData.anchorTextMap ?? {});
 
       for (const [anchorText, _count] of anchorTextEntries) {
         if (!linkStats.anchorTextDiversity.has(anchorText)) {
           linkStats.anchorTextDiversity.set(anchorText, new Set());
         }
-        linkStats.anchorTextDiversity.get(anchorText).add(url);
+        linkStats.anchorTextDiversity.get(anchorText)!.add(url);
       }
 
       // Track external domains
@@ -103,16 +134,16 @@ class LinkStructureAnalyzer {
       const externalDomainEntries =
         linkData.externalDomains instanceof Map
           ? linkData.externalDomains
-          : Object.entries(linkData.externalDomains || {});
+          : Object.entries(linkData.externalDomains ?? {});
 
       for (const [domain, count] of externalDomainEntries) {
-        linkStats.externalDomains.set(domain, (linkStats.externalDomains.get(domain) || 0) + count);
+        linkStats.externalDomains.set(domain, (linkStats.externalDomains.get(domain) ?? 0) + count);
       }
 
       // Sum up for averages
-      totalInternalLinks += linkData.internalLinks || 0;
-      totalExternalLinks += linkData.externalLinks || 0;
-      linkStats.totalGenericAnchors += linkData.genericAnchorLinks?.length || 0;
+      totalInternalLinks += linkData.internalLinks ?? 0;
+      totalExternalLinks += linkData.externalLinks ?? 0;
+      linkStats.totalGenericAnchors += linkData.genericAnchorLinks?.length ?? 0;
     }
 
     // Calculate averages
@@ -122,12 +153,13 @@ class LinkStructureAnalyzer {
     }
 
     // Sort hub pages by outbound link count
-    linkStats.hubPages.sort((a: any, b: any) => b.internalLinks - a.internalLinks);
+    linkStats.hubPages.sort((a: HubPage, b: HubPage) => b.internalLinks - a.internalLinks);
 
     // Get most linked pages from existing incoming links data
     const mostLinked = [];
     for (const url in allPages) {
-      const incomingCount = incomingLinks[url] || 0;
+      const raw = incomingLinks[url];
+      const incomingCount = Array.isArray(raw) ? raw.length : (raw ?? 0);
       if (incomingCount > 0) {
         mostLinked.push({ url, incomingLinks: incomingCount });
       }
@@ -157,7 +189,7 @@ class LinkStructureAnalyzer {
     if (linkStats.hubPages.length > 10) {
       const topHubs = linkStats.hubPages
         .slice(0, 5)
-        .map((hub: any) => `<li><a href="${hub.url}">${hub.url}</a> (${hub.internalLinks} internal links)</li>`)
+        .map((hub: HubPage) => `<li><a href="${hub.url}">${hub.url}</a> (${hub.internalLinks} internal links)</li>`)
         .join('');
 
       issues.push({
@@ -194,22 +226,22 @@ class LinkStructureAnalyzer {
     }
 
     // Report 5: Pages with excessive total links (>150)
-    if (linkStats.excessiveLinkPages?.length > 0) {
-      const topExcessive = linkStats.excessiveLinkPages
-        .sort((a: any, b: any) => b.totalLinks - a.totalLinks)
+    if ((linkStats.excessiveLinkPages?.length ?? 0) > 0) {
+      const topExcessive = linkStats.excessiveLinkPages!
+        .sort((a: ExcessiveLinkPage, b: ExcessiveLinkPage) => b.totalLinks - a.totalLinks)
         .slice(0, 5)
-        .map((p: any) => `<li><a href="${p.url}">${p.url}</a> (${p.totalLinks} total links)</li>`)
+        .map((p: ExcessiveLinkPage) => `<li><a href="${p.url}">${p.url}</a> (${p.totalLinks} total links)</li>`)
         .join('');
 
       issues.push({
-        title: `${linkStats.excessiveLinkPages.length} page(s) have more than 150 links`,
+        title: `${linkStats.excessiveLinkPages!.length} page(s) have more than 150 links`,
         description: `Pages with too many links dilute link equity and may signal low quality to search engines:<ul>${topExcessive}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     // Report 6: Internal nofollow links
-    if (linkStats.totalInternalNofollow > 0) {
+    if ((linkStats.totalInternalNofollow ?? 0) > 0) {
       issues.push({
         title: `Internal links using nofollow attribute`,
         description: `${linkStats.totalInternalNofollow} internal link(s) across ${linkStats.pagesWithInternalNofollow} page(s) use rel="nofollow". Internal nofollow wastes crawl budget and prevents PageRank flow to your own pages. Remove nofollow from internal links unless intentionally blocking low-value pages.`,

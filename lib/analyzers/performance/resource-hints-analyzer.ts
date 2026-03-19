@@ -6,6 +6,19 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface ResourceHint {
+  href?: string;
+  as?: string;
+  crossorigin?: string;
+  [key: string]: unknown;
+}
+
+interface MissingHint {
+  url: string;
+  type: string;
+  reason: string;
+}
+
 class ResourceHintsAnalyzer {
   /**
    * Analyze resource hints for a page
@@ -17,25 +30,25 @@ class ResourceHintsAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      preload: [] as Record<string, any>[],
-      prefetch: [] as Record<string, any>[],
-      preconnect: [] as Record<string, any>[],
-      dnsPrefetch: [] as Record<string, any>[],
-      modulePreload: [] as Record<string, any>[],
-      missingHints: [] as Record<string, any>[],
-      unnecessaryHints: [] as Record<string, any>[],
+      preload: [] as ResourceHint[],
+      prefetch: [] as ResourceHint[],
+      preconnect: [] as ResourceHint[],
+      dnsPrefetch: [] as ResourceHint[],
+      modulePreload: [] as ResourceHint[],
+      missingHints: [] as MissingHint[],
+      unnecessaryHints: [] as MissingHint[],
     };
 
     // Extract resource hints from page data
-    const hints = pageData.resourceHints || {};
-    info.preload = hints.preload || [];
-    info.prefetch = hints.prefetch || [];
-    info.preconnect = hints.preconnect || [];
-    info.dnsPrefetch = hints.dnsPrefetch || [];
-    info.modulePreload = hints.modulePreload || [];
+    const hints = pageData.resourceHints ?? {};
+    info.preload = hints.preload ?? [];
+    info.prefetch = hints.prefetch ?? [];
+    info.preconnect = hints.preconnect ?? [];
+    info.dnsPrefetch = hints.dnsPrefetch ?? [];
+    info.modulePreload = hints.modulePreload ?? [];
 
     // Analyze LCP element for preload opportunities
-    const lcpUrl = pageData.lcpUrl || pageData.vitals?.lcpUrl;
+    const lcpUrl = pageData.lcpUrl ?? pageData.vitals?.lcpUrl;
 
     if (lcpUrl && !this.isPreloaded(lcpUrl, info.preload)) {
       const isImage = /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(lcpUrl);
@@ -54,8 +67,8 @@ class ResourceHintsAnalyzer {
     }
 
     // Check for critical fonts
-    const fonts = pageData.fonts || [];
-    const criticalFonts = fonts.filter((f: any) => f.critical || f.usedAboveFold);
+    const fonts = (pageData.fonts ?? []) as { url: string; critical?: boolean; usedAboveFold?: boolean }[];
+    const criticalFonts = fonts.filter((f) => f.critical || f.usedAboveFold);
     for (const font of criticalFonts) {
       if (!this.isPreloaded(font.url, info.preload)) {
         info.missingHints.push({
@@ -75,8 +88,8 @@ class ResourceHintsAnalyzer {
     const thirdPartyOrigins = this.extractThirdPartyOrigins(pageData, url);
     const criticalOrigins = thirdPartyOrigins.filter((o) => o.critical);
     const connectedOrigins = new Set([
-      ...info.preconnect.map((p) => this.getOrigin(p.href || p)),
-      ...info.dnsPrefetch.map((p) => this.getOrigin(p.href || p)),
+      ...info.preconnect.map((p) => this.getOrigin(p.href ?? '')),
+      ...info.dnsPrefetch.map((p) => this.getOrigin(p.href ?? '')),
     ]);
 
     for (const origin of criticalOrigins) {
@@ -96,13 +109,13 @@ class ResourceHintsAnalyzer {
 
     // Check for unnecessary preloads (not used within 3s)
     const unusedPreloads = info.preload.filter((p) => {
-      const href = p.href || p;
+      const href = p.href ?? '';
       return pageData.unusedPreloads?.includes(href);
     });
 
     if (unusedPreloads.length > 0) {
       info.unnecessaryHints = unusedPreloads.map((p) => ({
-        url: p.href || p,
+        url: p.href ?? '',
         type: 'preload',
         reason: 'Not used within 3 seconds',
       }));
@@ -110,7 +123,7 @@ class ResourceHintsAnalyzer {
         message: 'Unused preload hints detected',
         detail: `${unusedPreloads.length} preloaded resources not used within 3 seconds: ${unusedPreloads
           .slice(0, 3)
-          .map((p) => this.getFileName(p.href || p))
+          .map((p) => this.getFileName(p.href ?? ''))
           .join(', ')}. Remove or defer these preloads.`,
         severity: SEVERITY.LOW,
       });
@@ -121,7 +134,7 @@ class ResourceHintsAnalyzer {
       if (!preload.as && typeof preload === 'object') {
         warnings.push({
           message: 'Preload missing "as" attribute',
-          detail: `Preload for "${this.getFileName(preload.href)}" lacks 'as' attribute. Browser may not prioritize correctly.`,
+          detail: `Preload for "${this.getFileName(preload.href ?? '')}" lacks 'as' attribute. Browser may not prioritize correctly.`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -132,7 +145,7 @@ class ResourceHintsAnalyzer {
       if (preload.as === 'font' && !preload.crossorigin) {
         warnings.push({
           message: 'Font preload missing crossorigin',
-          detail: `Font preload "${this.getFileName(preload.href)}" needs crossorigin attribute to work correctly.`,
+          detail: `Font preload "${this.getFileName(preload.href ?? '')}" needs crossorigin attribute to work correctly.`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -156,9 +169,9 @@ class ResourceHintsAnalyzer {
   /**
    * Check if URL is preloaded
    */
-  static isPreloaded(url: string, preloads: Record<string, any>[]) {
-    return preloads.some((p: any) => {
-      const href = p.href || p;
+  static isPreloaded(url: string, preloads: ResourceHint[]) {
+    return preloads.some((p) => {
+      const href = p.href ?? '';
       return href === url || url.includes(href) || href.includes(url);
     });
   }
@@ -170,7 +183,7 @@ class ResourceHintsAnalyzer {
     const origins = new Map();
     const pageOrigin = this.getOrigin(pageUrl);
 
-    const resources = pageData.resources || [];
+    const resources = pageData.resources ?? [];
     for (const resource of resources) {
       const resourceOrigin = this.getOrigin(resource.url);
       if (resourceOrigin && resourceOrigin !== pageOrigin) {
@@ -268,35 +281,38 @@ class ResourceHintsAnalyzer {
     const commonMissingHints = new Map();
 
     for (const [_url, pageData] of Object.entries(pages)) {
-      const hints = pageData.resourceHints || {};
+      const hints = pageData.resourceHints ?? {};
       const hasHints =
-        (hints.preload?.length || 0) +
-          (hints.prefetch?.length || 0) +
-          (hints.preconnect?.length || 0) +
-          (hints.dnsPrefetch?.length || 0) >
+        (hints.preload?.length ?? 0) +
+          (hints.prefetch?.length ?? 0) +
+          (hints.preconnect?.length ?? 0) +
+          (hints.dnsPrefetch?.length ?? 0) >
         0;
 
       if (hasHints) {
         stats.pagesWithHints++;
-        stats.totalPreloads += hints.preload?.length || 0;
-        stats.totalPrefetch += hints.prefetch?.length || 0;
-        stats.totalPreconnect += hints.preconnect?.length || 0;
-        stats.totalDnsPrefetch += hints.dnsPrefetch?.length || 0;
+        stats.totalPreloads += hints.preload?.length ?? 0;
+        stats.totalPrefetch += hints.prefetch?.length ?? 0;
+        stats.totalPreconnect += hints.preconnect?.length ?? 0;
+        stats.totalDnsPrefetch += hints.dnsPrefetch?.length ?? 0;
       } else {
         stats.pagesWithoutHints++;
       }
 
       // Check LCP preload
-      const lcpUrl = pageData.lcpUrl || pageData.vitals?.lcpUrl;
+      const lcpUrl = pageData.lcpUrl ?? pageData.vitals?.lcpUrl;
       if (lcpUrl) {
-        const isPreloaded = hints.preload?.some((p: any) => (p.href || p) === lcpUrl || lcpUrl.includes(p.href || p));
+        const isPreloaded = hints.preload?.some((p: Record<string, unknown>) => {
+          const href = (p.href as string) ?? '';
+          return href === lcpUrl || lcpUrl.includes(href);
+        });
         if (isPreloaded) {
           stats.pagesWithLcpPreload++;
         } else if (/\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(lcpUrl)) {
           stats.pagesWithMissingLcpPreload++;
           // Track common missing hints
           const key = this.getFileName(lcpUrl);
-          commonMissingHints.set(key, (commonMissingHints.get(key) || 0) + 1);
+          commonMissingHints.set(key, (commonMissingHints.get(key) ?? 0) + 1);
         }
       }
     }
@@ -322,7 +338,7 @@ class ResourceHintsAnalyzer {
 
     // Report commonly missing hints
     const topMissing = Array.from(commonMissingHints.entries())
-      .sort((a: any, b: any) => b[1] - a[1])
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
       .slice(0, 5);
 
     if (topMissing.length > 0) {

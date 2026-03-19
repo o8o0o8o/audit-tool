@@ -82,7 +82,7 @@ class RepoOrchestrator {
       return result;
     }
 
-    console.log(`Detected framework: ${frameworkInfo.framework} ${frameworkInfo.version || ''}`);
+    console.log(`Detected framework: ${frameworkInfo.framework} ${frameworkInfo.version ?? ''}`);
 
     // 2. Validate framework config
     try {
@@ -96,9 +96,9 @@ class RepoOrchestrator {
     }
 
     // 3. Extract routes
-    let routes: Array<{ path: string; [key: string]: unknown }> = [];
+    let routes: ReturnType<typeof RouteExtractor.extract> = [];
     try {
-      routes = RouteExtractor.extract(repoPath, frameworkInfo) as Array<{ path: string; [key: string]: unknown }>;
+      routes = RouteExtractor.extract(repoPath, frameworkInfo);
       if (routes.length > 0) {
         console.log(`Extracted ${routes.length} route(s) from source code`);
       }
@@ -109,9 +109,9 @@ class RepoOrchestrator {
     // 4. Compare routes to sitemap
     if (routes.length > 0 && auditData) {
       try {
-        const sitemapUrls = auditData.sitemaps?.urls || {};
-        const origin = auditData.origin || '';
-        const comparison = RouteSitemapComparator.compare(routes, sitemapUrls, origin);
+        const sitemapUrls = auditData.sitemaps?.urls ?? {};
+        const origin = auditData.origin ?? '';
+        const comparison = RouteSitemapComparator.compare(routes, sitemapUrls as Record<string, unknown>, origin);
         result.routeCoverage = comparison.stats;
         result.issues.push(...comparison.issues);
         result.warnings.push(...comparison.warnings);
@@ -124,7 +124,7 @@ class RepoOrchestrator {
     // 5. Map audit issues to source files
     if (auditData?.analysis?.details) {
       try {
-        result.sourceMapping = SourceMapper.map(auditData.analysis.details, repoPath, frameworkInfo);
+        result.sourceMapping = SourceMapper.map(auditData.analysis.details as Record<string, unknown>, repoPath, frameworkInfo);
         const mappedCount = Object.keys(result.sourceMapping).length;
         if (mappedCount > 0) {
           console.log(`Mapped ${mappedCount} issue type(s) to source locations`);

@@ -25,7 +25,7 @@ class DuplicateChecker {
       const page = allPages[url];
 
       // Track titles (skip empty ones as they're already reported)
-      if (page.title && page.title.trim()) {
+      if (page.title?.trim()) {
         const title = page.title.trim();
         if (!titleMap[title]) {
           titleMap[title] = [];
@@ -34,7 +34,7 @@ class DuplicateChecker {
       }
 
       // Track descriptions (skip empty ones as they're already reported)
-      if (page.description && page.description.trim()) {
+      if (page.description?.trim()) {
         const description = page.description.trim();
         if (!descriptionMap[description]) {
           descriptionMap[description] = [];

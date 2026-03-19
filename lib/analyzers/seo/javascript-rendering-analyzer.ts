@@ -33,7 +33,7 @@ class JavaScriptRenderingAnalyzer {
     };
 
     // Get raw and rendered content
-    const rawHtml = pageData.rawHtml || '';
+    const rawHtml = pageData.rawHtml ?? '';
     const renderedHtml = pageData.renderedHtml || pageData.html || '';
 
     info.rawContentLength = rawHtml.length;
@@ -193,7 +193,7 @@ class JavaScriptRenderingAnalyzer {
 
     // Extract meta description
     const descMatch =
-      html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ||
+      html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ??
       html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i);
     if (descMatch) {
       content.description = descMatch[1].trim();

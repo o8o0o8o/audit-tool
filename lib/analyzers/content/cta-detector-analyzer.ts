@@ -36,7 +36,7 @@ class CTADetectorAnalyzer {
       const forms = document.querySelectorAll('form');
       forms.forEach((form) => {
         const rect = form.getBoundingClientRect();
-        const action = form.getAttribute('action') || '';
+        const action = form.getAttribute('action') ?? '';
         const method = (form.getAttribute('method') || 'get').toLowerCase();
         const inputs = form.querySelectorAll('input, textarea, select');
         const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
@@ -68,7 +68,7 @@ class CTADetectorAnalyzer {
 
         const rect = btn.getBoundingClientRect();
         const isCTA = ctaPatterns.test(text);
-        const href = btn.getAttribute('href') || '';
+        const href = btn.getAttribute('href') ?? '';
 
         results.push({
           type: isCTA ? 'cta-button' : 'button',

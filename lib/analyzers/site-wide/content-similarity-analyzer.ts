@@ -29,7 +29,7 @@ class ContentSimilarityAnalyzer {
       const contentQuality = pageData.contentQuality;
       if (!contentQuality) continue;
 
-      const keywords = contentQuality.topKeywords || [];
+      const keywords = contentQuality.topKeywords ?? [];
       const wordCount = contentQuality.wordCount || 0;
 
       // Skip pages with very little content

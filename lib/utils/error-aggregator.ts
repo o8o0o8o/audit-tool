@@ -41,26 +41,26 @@ class ErrorAggregator {
       const restoredDetails: Record<string, AnalysisDetail> = {};
       const MAX_EXAMPLES = CRAWL_SETTINGS.MAX_EXAMPLES_PER_ISSUE;
 
-      for (const [key, detail] of Object.entries(existingAnalysis.details || {}) as [string, AnalysisDetail][]) {
+      for (const [key, detail] of Object.entries(existingAnalysis.details ?? {}) as [string, AnalysisDetail][]) {
         restoredDetails[key] = {
           severity: detail.severity,
           count: detail.count || 0,
           examples: Array.isArray(detail.examples) ? detail.examples.slice(0, MAX_EXAMPLES) : [],
           // Restore truncated flag, or set it if examples are at limit
-          truncated: detail.truncated || (Array.isArray(detail.examples) && detail.examples.length >= MAX_EXAMPLES),
+          truncated: detail.truncated ?? (Array.isArray(detail.examples) && detail.examples.length >= MAX_EXAMPLES),
         };
       }
 
       this.#analysis = {
-        overall: new Set(existingAnalysis.overall || []),
+        overall: new Set(existingAnalysis.overall ?? []),
         details: restoredDetails,
-        bySeverity: existingAnalysis.bySeverity || {
+        bySeverity: existingAnalysis.bySeverity ?? {
           critical: [],
           high: [],
           medium: [],
           low: [],
         },
-        summary: existingAnalysis.summary || {
+        summary: existingAnalysis.summary ?? {
           totalIssues: 0,
           criticalCount: 0,
           highCount: 0,
@@ -98,7 +98,7 @@ class ErrorAggregator {
    */
   addError(generalError: string, detailedError: string | null, severity: SeverityLevel | string = SEVERITY.MEDIUM) {
     // Skip empty general errors
-    if (!generalError || !generalError.trim()) {
+    if (!generalError?.trim()) {
       return;
     }
 

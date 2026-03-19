@@ -31,7 +31,7 @@ class CachingAnalyzer {
 
     // Check response headers for CDN indicators
     for (const [reqUrl, reqData] of Object.entries(requests)) {
-      const headers = (reqData as NetworkRequest).headers || {};
+      const headers = (reqData as NetworkRequest).headers ?? {};
 
       // Check CDN headers
       for (const header of cdnIndicators.headers) {
@@ -91,7 +91,7 @@ class CachingAnalyzer {
       const isStatic = staticExtensions.some((ext: string) => urlPath.endsWith(ext));
 
       if (isStatic) {
-        const headers = (reqData as NetworkRequest).headers || {};
+        const headers = (reqData as NetworkRequest).headers ?? {};
         const cacheControl = headers['cache-control'] || '';
         const expires = headers['expires'];
         const etag = headers['etag'];

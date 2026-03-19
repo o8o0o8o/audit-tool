@@ -35,11 +35,11 @@ function getConfigInfo(data: ReportSectionData) {
  * Generate the robots.txt info card
  */
 function getRobotsCard(jsonData: Record<string, unknown>) {
-  const robots = (jsonData.robots || {}) as Record<string, unknown>;
-  const robotsSitemaps = (robots.sitemaps || []) as unknown[];
-  const userAgents = (robots['user-agent'] || {}) as Record<string, unknown>;
-  const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
-  const overallIssues = (analysis.overall || []) as unknown[];
+  const robots = (jsonData.robots ?? {}) as Record<string, unknown>;
+  const robotsSitemaps = (robots.sitemaps ?? []) as unknown[];
+  const userAgents = (robots['user-agent'] ?? {}) as Record<string, unknown>;
+  const analysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const overallIssues = (analysis.overall ?? []) as unknown[];
   const hasRobotsErrors =
     overallIssues.some((err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('robots')) ||
     false;
@@ -88,16 +88,16 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
  * Generate the sitemaps info card
  */
 function getSitemapsCard(jsonData: Record<string, unknown>) {
-  const sitemaps = (jsonData.sitemaps || {}) as Record<string, unknown>;
-  const totalUrls = (sitemaps.total || 0) as number;
+  const sitemaps = (jsonData.sitemaps ?? {}) as Record<string, unknown>;
+  const totalUrls = (sitemaps.total ?? 0) as number;
 
   // Get list of individual sitemaps (not the aggregated data)
   const individualSitemaps = Object.keys(sitemaps).filter(
     (key) => key !== 'urls' && key !== 'total' && typeof sitemaps[key] === 'object',
   );
 
-  const analysisData = (jsonData.analysis || {}) as Record<string, unknown>;
-  const overallIssues = (analysisData.overall || []) as unknown[];
+  const analysisData = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const overallIssues = (analysisData.overall ?? []) as unknown[];
   const hasSitemapErrors =
     overallIssues.some((err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('sitemap')) ||
     false;
@@ -111,8 +111,8 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
       ${individualSitemaps
         .slice(0, 3)
         .map((sm) => {
-          const smData = (sitemaps[sm] || {}) as Record<string, unknown>;
-          return `<li>${escapeHtml(sm)} <span style="color: #9ca3af;">(${smData.total || 0} URLs)</span></li>`;
+          const smData = (sitemaps[sm] ?? {}) as Record<string, unknown>;
+          return `<li>${escapeHtml(sm)} <span style="color: #9ca3af;">(${smData.total ?? 0} URLs)</span></li>`;
         })
         .join('')}
       ${individualSitemaps.length > 3 ? `<li>... and ${individualSitemaps.length - 3} more</li>` : ''}
@@ -139,8 +139,8 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
  * Generate the related issues card
  */
 function getIssuesCard(jsonData: Record<string, unknown>) {
-  const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
-  const bySeverity = (analysis.bySeverity || {}) as Record<string, unknown[]>;
+  const analysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const bySeverity = (analysis.bySeverity ?? {}) as Record<string, unknown[]>;
 
   // Filter for robots.txt and sitemap related issues
   const filterRobotsSitemap = (issues: unknown[]) =>
@@ -223,8 +223,8 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
  * Generate the crawl coverage card
  */
 function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
-  const sitemapData = (jsonData.sitemaps || {}) as Record<string, unknown>;
-  const sitemapTotal = (sitemapData.total || 0) as number;
+  const sitemapData = (jsonData.sitemaps ?? {}) as Record<string, unknown>;
+  const sitemapTotal = (sitemapData.total ?? 0) as number;
   const pagesCrawled = pages.length;
   const notCrawled = sitemapTotal - pagesCrawled;
 
@@ -243,7 +243,7 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
   const cardClass = notCrawled > sitemapTotal * 0.1 ? 'error' : 'warning';
 
   // Find URLs in sitemap but not in crawled pages
-  const sitemapUrls = new Set(Object.keys((sitemapData.urls || {}) as Record<string, unknown>));
+  const sitemapUrls = new Set(Object.keys((sitemapData.urls ?? {}) as Record<string, unknown>));
   const crawledUrls = new Set(pages.map((p) => p.url));
   const missingUrls = Array.from(sitemapUrls).filter((url) => !crawledUrls.has(url));
   const showUrls = missingUrls.slice(0, 10);
@@ -283,15 +283,15 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
  * Generate the audit configuration card
  */
 function getAuditConfigCard(jsonData: Record<string, unknown>) {
-  const timing = (jsonData.timing || {}) as Record<string, unknown>;
-  const phases = (timing.phases || []) as Array<Record<string, unknown>>;
+  const timing = (jsonData.timing ?? {}) as Record<string, unknown>;
+  const phases = (timing.phases ?? []) as Array<Record<string, unknown>>;
 
   if (phases.length === 0 && !timing.elapsedTimeFormatted) return '';
 
   const phaseRows = phases
     .map(
       (p: Record<string, unknown>) =>
-        `<div class="perf-budget-row" data-phase-ms="${p.durationMs || 0}">
+        `<div class="perf-budget-row" data-phase-ms="${p.durationMs ?? 0}">
       <span class="perf-budget-label">${escapeHtml(p.name)}</span>
       <span class="perf-budget-value">${escapeHtml(p.duration)}</span>
     </div>`,
@@ -313,8 +313,8 @@ function getAuditConfigCard(jsonData: Record<string, unknown>) {
  * Generate analysis configuration card
  */
 function getAnalysisConfigCard(jsonData: Record<string, unknown>) {
-  const config = (jsonData.config || {}) as Record<string, unknown>;
-  const analysis = (config.analysis || {}) as Record<string, unknown>;
+  const config = (jsonData.config ?? {}) as Record<string, unknown>;
+  const analysis = (config.analysis ?? {}) as Record<string, unknown>;
   const flags = [];
 
   if (config.perf) flags.push('Performance metrics');

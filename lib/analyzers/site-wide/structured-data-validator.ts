@@ -38,7 +38,7 @@ class StructuredDataValidator {
     for (const url in allPages) {
       const page = allPages[url];
 
-      if (!page.structuredData || !page.structuredData.hasStructuredData) {
+      if (!page.structuredData?.hasStructuredData) {
         schemaStats.pagesWithoutSchema++;
         continue;
       }
@@ -46,11 +46,11 @@ class StructuredDataValidator {
       schemaStats.pagesWithSchema++;
 
       // Analyze each schema type
-      for (const schema of page.structuredData.jsonLdSchemas || []) {
+      for (const schema of page.structuredData.jsonLdSchemas ?? []) {
         const type = schema.type;
 
         // Count schema types
-        schemaStats.schemaTypes.set(type, (schemaStats.schemaTypes.get(type) || 0) + 1);
+        schemaStats.schemaTypes.set(type, (schemaStats.schemaTypes.get(type) ?? 0) + 1);
 
         // Collect Organization schemas for consistency check
         if (type === 'Organization' || type === 'LocalBusiness') {

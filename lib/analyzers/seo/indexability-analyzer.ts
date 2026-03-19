@@ -29,7 +29,7 @@ class IndexabilityAnalyzer {
 
     // 2. Check meta robots tag
     const robotsMeta = parsedPage.querySelector('meta[name="robots"]');
-    const contentValue = robotsMeta?.getAttribute('content')?.toLowerCase() || '';
+    const contentValue = robotsMeta?.getAttribute('content')?.toLowerCase() ?? '';
     indexabilityData.metaRobots = contentValue || null;
 
     if (contentValue) {

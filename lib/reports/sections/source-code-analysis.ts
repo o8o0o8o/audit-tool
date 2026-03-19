@@ -17,7 +17,7 @@ function getSeverityBadge(severity: string) {
     medium: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
     low: { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534' },
   };
-  const c = (colors as Record<string, SeverityColorConfig>)[severity] || colors.medium;
+  const c = (colors as Record<string, SeverityColorConfig>)[severity] ?? colors.medium;
   return `<span style="display: inline-block; padding: 2px 8px; background: ${c.bg}; border: 1px solid ${c.border}; border-radius: 4px; color: ${c.text}; font-size: 11px; font-weight: 600; text-transform: uppercase;">${escapeHtml(severity)}</span>`;
 }
 
@@ -87,8 +87,8 @@ function getFrameworkInfo(repo: Record<string, unknown>) {
  * Config validation results
  */
 function getConfigValidation(repo: Record<string, unknown>) {
-  const issues = (repo.configIssues || []) as Array<Record<string, unknown>>;
-  const warnings = (repo.configWarnings || []) as Array<Record<string, unknown>>;
+  const issues = (repo.configIssues ?? []) as Array<Record<string, unknown>>;
+  const warnings = (repo.configWarnings ?? []) as Array<Record<string, unknown>>;
 
   if (issues.length === 0 && warnings.length === 0) {
     return `
@@ -109,7 +109,7 @@ function getConfigValidation(repo: Record<string, unknown>) {
     <tr>
       <td style="padding: 10px 12px;">${getSeverityBadge(f.severity as string)}</td>
       <td style="padding: 10px 12px; font-weight: 500;">${escapeHtml(f.message)}</td>
-      <td style="padding: 10px 12px; font-size: 13px; color: #4b5563;">${escapeHtml((f.detail as string) || '')}</td>
+      <td style="padding: 10px 12px; font-size: 13px; color: #4b5563;">${escapeHtml((f.detail as string) ?? '')}</td>
     </tr>
   `,
     )
@@ -143,14 +143,14 @@ function getRouteCoverage(repo: Record<string, unknown>) {
   const stats = repo.routeCoverage as Record<string, number> | undefined;
   if (!stats) return '';
 
-  const details = (repo.routeDetails || {}) as Record<string, unknown>;
+  const details = (repo.routeDetails ?? {}) as Record<string, unknown>;
   const coveragePercent = stats.totalRoutes > 0 ? Math.round((stats.coveredRoutes / stats.totalRoutes) * 100) : 0;
 
   const coverageColor = coveragePercent >= 80 ? '#10b981' : coveragePercent >= 50 ? '#f59e0b' : '#ef4444';
 
   // Uncovered routes table
   let uncoveredHtml = '';
-  const uncovered = (details.uncoveredRoutes || []) as Array<Record<string, unknown>>;
+  const uncovered = (details.uncoveredRoutes ?? []) as Array<Record<string, unknown>>;
   if (uncovered.length > 0) {
     const uncoveredRows = uncovered
       .slice(0, 20)

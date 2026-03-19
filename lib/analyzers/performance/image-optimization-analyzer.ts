@@ -62,7 +62,7 @@ class ImageOptimizationAnalyzer {
       // Analyze image from requests
       if (img.src && requests[img.src]) {
         const imgRequest = requests[img.src];
-        const size = imgRequest.size || 0;
+        const size = imgRequest.size ?? 0;
 
         imageAnalysis.totalImageSize += size;
 

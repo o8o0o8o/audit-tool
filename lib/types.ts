@@ -1267,13 +1267,13 @@ export interface AggregatedError {
 // ─── Common Analyzer Parameter Types ─────────────────────────────────────────
 
 /** node-html-parser HTMLElement - used as parsedPage parameter */
-export type ParsedPage = import('node-html-parser').HTMLElement;
+export type { HTMLElement as ParsedPage } from 'node-html-parser';
 
 /** Playwright Page - used as chromePage parameter */
-export type ChromePage = import('playwright').Page;
+export type { Page as ChromePage } from 'playwright';
 
 /** Playwright Response - used as response parameter */
-export type ChromeResponse = import('playwright').Response;
+export type { Response as ChromeResponse } from 'playwright';
 
 /** Network request info collected during crawl */
 export interface NetworkRequest {

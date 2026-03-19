@@ -21,9 +21,9 @@ function getPerformanceStats(data: ReportSectionData) {
 
   const { jsonData } = data;
   const pageData = jsonData.pageData as Record<string, unknown> | undefined;
-  const pages = (pageData?.pages || {}) as Record<string, PageInfo>;
+  const pages = (pageData?.pages ?? {}) as Record<string, PageInfo>;
   const pagesArray: PageInfo[] = Object.values(pages);
-  const cruxData = (jsonData.cruxData || null) as Record<string, unknown> | null;
+  const cruxData = (jsonData.cruxData ?? null) as Record<string, unknown> | null;
   // Check for pages with Core Web Vitals (stored at top level as TTFB, LCP, CLS, INP)
   const pagesWithPerf = pagesArray.filter((p) => p.TTFB || p.LCP || p.CLS || p.INP);
 
@@ -31,27 +31,27 @@ function getPerformanceStats(data: ReportSectionData) {
 
   // Calculate statistics - metrics are stored at top level (TTFB, LCP, CLS)
   const ttfbValues = pagesWithPerf
-    .map((p) => p.TTFB || 0)
+    .map((p) => p.TTFB ?? 0)
     .filter((v) => v > 0)
     .sort((a, b) => a - b);
   const lcpValues = pagesWithPerf
-    .map((p) => p.LCP || 0)
+    .map((p) => p.LCP ?? 0)
     .filter((v) => v > 0)
     .sort((a, b) => a - b);
   const clsValues = pagesWithPerf
-    .map((p) => p.CLS || 0)
+    .map((p) => p.CLS ?? 0)
     .filter((v) => v >= 0)
     .sort((a, b) => a - b);
   const fcpValues = pagesWithPerf
-    .map((p) => p.FCP || 0)
+    .map((p) => p.FCP ?? 0)
     .filter((v) => v > 0)
     .sort((a, b) => a - b);
   const inpValues = pagesWithPerf
-    .map((p) => p.INP || 0)
+    .map((p) => p.INP ?? 0)
     .filter((v) => v > 0)
     .sort((a, b) => a - b);
   const pageSizes = pagesArray
-    .map((p) => p.totalResponseSize || 0)
+    .map((p) => p.totalResponseSize ?? 0)
     .filter((v) => v > 0)
     .sort((a, b) => a - b);
 
@@ -102,7 +102,7 @@ function getCrUXSection(
   },
   p75Fn: (arr: number[]) => number,
 ) {
-  if (!cruxData || !cruxData.metrics) return '';
+  if (!cruxData?.metrics) return '';
 
   const labP75 = {
     LCP: labMetrics.lcpValues.length > 0 ? p75Fn(labMetrics.lcpValues) : null,
@@ -122,7 +122,7 @@ function getCrUXSection(
       const fieldP75 = Number(percentiles?.p75);
       if (isNaN(fieldP75)) return '';
 
-      const dist = (fieldData.distribution || {}) as Record<string, number>;
+      const dist = (fieldData.distribution ?? {}) as Record<string, number>;
       const labValue = (labP75 as Record<string, number | null>)[metric];
 
       // Format values
@@ -189,7 +189,7 @@ function getCrUXSection(
   // Collection period info
   const period = cruxData.collectionPeriod as Record<string, Record<string, unknown>> | undefined;
   const periodText = period
-    ? `Data from ${period.firstDate?.year || ''}/${period.firstDate?.month || ''}/${period.firstDate?.day || ''} to ${period.lastDate?.year || ''}/${period.lastDate?.month || ''}/${period.lastDate?.day || ''}`
+    ? `Data from ${period.firstDate?.year ?? ''}/${period.firstDate?.month ?? ''}/${period.firstDate?.day ?? ''} to ${period.lastDate?.year ?? ''}/${period.lastDate?.month ?? ''}/${period.lastDate?.day ?? ''}`
     : 'Last 28 days';
 
   return `
@@ -238,8 +238,8 @@ function getStatCard(
   const info = METRIC_INFO[metricKey] || {};
   const fullName = info.fullName || metricKey.toUpperCase();
   const description = info.description || '';
-  const threshold = info.threshold || '';
-  const learnMore = info.learnMore || '';
+  const threshold = info.threshold ?? '';
+  const learnMore = info.learnMore ?? '';
 
   return `
     <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: 8px;" title="${description}">
@@ -270,7 +270,7 @@ function getClsCard(
   const info = METRIC_INFO.cls || ({} as MetricInfoEntry);
   const description = info.description || 'Measures visual stability by tracking unexpected layout shifts';
   const threshold = THRESHOLDS.CLS || 0.1;
-  const learnMore = info.learnMore || '';
+  const learnMore = info.learnMore ?? '';
 
   return `
     <div style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); color: white; padding: 20px; border-radius: 8px;" title="${description}">
@@ -323,7 +323,7 @@ function getPageSizeCard(
 function getSlowestPagesSection(pagesArray: PageInfo[]) {
   const slowest = pagesArray
     .filter((p) => p.TTFB && p.TTFB > 0)
-    .sort((a, b) => (b.TTFB || 0) - (a.TTFB || 0))
+    .sort((a, b) => (b.TTFB ?? 0) - (a.TTFB ?? 0))
     .slice(0, 5);
 
   if (slowest.length === 0) return '';
@@ -419,7 +419,7 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
   // Sample recommendations
   const topBottleneck = sorted[0][0];
   const samplePage = pagesWithAttribution.find((p) => (p.vitals!.lcpAnalysis as Record<string, unknown>).bottleneck === topBottleneck);
-  const recommendation = (samplePage?.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation || '';
+  const recommendation = (samplePage?.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation ?? '';
 
   return `
     <div style="margin-bottom: 30px;">
@@ -448,7 +448,7 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
 function extractPerfValues(jsonData: Record<string, unknown>) {
   const pageData = jsonData.pageData as Record<string, unknown> | undefined;
-  const pages = (pageData?.pages || {}) as Record<string, PageInfo>;
+  const pages = (pageData?.pages ?? {}) as Record<string, PageInfo>;
   const pagesArray: PageInfo[] = Object.values(pages);
   const pagesWithPerf = pagesArray.filter((p) => p.TTFB || p.LCP || p.CLS || p.INP);
 
@@ -548,7 +548,7 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
 function getComparisonSlowestPages(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
   const getTop5 = (pages: PageInfo[]) => pages
     .filter(p => p.TTFB && p.TTFB > 0)
-    .sort((a, b) => (b.TTFB || 0) - (a.TTFB || 0))
+    .sort((a, b) => (b.TTFB ?? 0) - (a.TTFB ?? 0))
     .slice(0, 5);
 
   const originSlowest = getTop5(originPages);

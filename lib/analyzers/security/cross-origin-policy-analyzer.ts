@@ -12,7 +12,7 @@ const VALID_COEP = ['require-corp', 'credentialless', 'unsafe-none'];
 const VALID_CORP = ['same-origin', 'same-site', 'cross-origin'];
 
 class CrossOriginPolicyAnalyzer {
-  static analyze(pageData: PageInfo, url: string) {
+  static analyze(pageData: PageInfo, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -33,7 +33,7 @@ class CrossOriginPolicyAnalyzer {
       validCorp: true,
     };
 
-    const headers = pageData.responseHeaders || {};
+    const headers = pageData.responseHeaders ?? {};
 
     // Extract headers (case-insensitive)
     info.coop =

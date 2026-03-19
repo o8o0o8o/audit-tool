@@ -27,8 +27,8 @@ function getContentInsights(data: ReportSectionData) {
     return getComparisonContentInsights(jsonData, comparison);
   }
 
-  const pageData = (jsonData.pageData || {}) as Record<string, unknown>;
-  const pages = (pageData.pages || {}) as Record<string, PageInfo>;
+  const pageData = (jsonData.pageData ?? {}) as Record<string, unknown>;
+  const pages = (pageData.pages ?? {}) as Record<string, PageInfo>;
   const pagesArray: PageInfo[] = Object.values(pages);
 
   if (pagesArray.length === 0) return '';
@@ -56,8 +56,8 @@ function getContentInsights(data: ReportSectionData) {
 }
 
 function extractPages(jsonData: Record<string, unknown>): PageInfo[] {
-  const pageData = (jsonData.pageData || {}) as Record<string, unknown>;
-  const pages = (pageData.pages || {}) as Record<string, PageInfo>;
+  const pageData = (jsonData.pageData ?? {}) as Record<string, unknown>;
+  const pages = (pageData.pages ?? {}) as Record<string, PageInfo>;
   return Object.values(pages);
 }
 
@@ -93,10 +93,10 @@ function getComparisonCTASection(originPages: PageInfo[], comparePages: PageInfo
     let forms = 0, buttons = 0, phone = 0, email = 0, noCTAs = 0;
     for (const page of withCTA) {
       const s = page.ctaData!.summary;
-      forms += s.forms || 0;
-      buttons += s.ctaButtons || 0;
-      phone += s.phoneLinks || 0;
-      email += s.emailLinks || 0;
+      forms += s.forms ?? 0;
+      buttons += s.ctaButtons ?? 0;
+      phone += s.phoneLinks ?? 0;
+      email += s.emailLinks ?? 0;
       if (s.total === 0) noCTAs++;
     }
     return { forms, buttons, phone, email, noCTAs, total: withCTA.length };
@@ -134,10 +134,10 @@ function getComparisonCodeCoverageSection(originPages: PageInfo[], comparePages:
     const withCoverage = pages.filter(p => (p.codeCoverage?.totalBytes ?? 0) > 0);
     let totalJS = 0, unusedJS = 0, totalCSS = 0, unusedCSS = 0;
     for (const page of withCoverage) {
-      totalJS += page.codeCoverage?.js?.total || 0;
-      unusedJS += page.codeCoverage?.js?.unused || 0;
-      totalCSS += page.codeCoverage?.css?.total || 0;
-      unusedCSS += page.codeCoverage?.css?.unused || 0;
+      totalJS += page.codeCoverage?.js?.total ?? 0;
+      unusedJS += page.codeCoverage?.js?.unused ?? 0;
+      totalCSS += page.codeCoverage?.css?.total ?? 0;
+      unusedCSS += page.codeCoverage?.css?.unused ?? 0;
     }
     return {
       jsRatio: totalJS > 0 ? Math.round((unusedJS / totalJS) * 100) : 0,
@@ -184,9 +184,9 @@ function getComparisonOutboundLinksSection(originPages: PageInfo[], comparePages
     for (const page of withData) {
       const h = page.outboundLinkHealth!;
       checked += h.totalChecked ?? 0;
-      broken += h.broken?.length || 0;
-      redirected += h.redirected?.length || 0;
-      for (const b of h.broken || []) {
+      broken += h.broken?.length ?? 0;
+      redirected += h.redirected?.length ?? 0;
+      for (const b of h.broken ?? []) {
         const key = b.url;
         if (!brokenUrls.has(key)) brokenUrls.set(key, { status: b.status, count: 0, site: '' });
         brokenUrls.get(key)!.count++;
@@ -273,7 +273,7 @@ function getComparisonOutboundLinksSection(originPages: PageInfo[], comparePages
 function getPageRankSection(pages: PageInfo[]) {
   const ranked = pages
     .filter((p) => p.internalPageRank != null)
-    .sort((a, b) => (b.internalPageRank || 0) - (a.internalPageRank || 0));
+    .sort((a, b) => (b.internalPageRank ?? 0) - (a.internalPageRank ?? 0));
 
   if (ranked.length < 2) return '';
 
@@ -343,10 +343,10 @@ function getContentSimilaritySection(pages: PageInfo[]) {
   // Group by similarity groups
   const groups: Record<string, { urls: string[]; size: number }> = {};
   for (const page of withSimilarity) {
-    const key = [page.url, ...(page.contentSimilarity.similarPages || [])].sort().join('|');
+    const key = [page.url, ...(page.contentSimilarity.similarPages ?? [])].sort().join('|');
     if (!groups[key]) {
       groups[key] = {
-        urls: [page.url, ...(page.contentSimilarity.similarPages || [])],
+        urls: [page.url, ...(page.contentSimilarity.similarPages ?? [])],
         size: page.contentSimilarity.groupSize,
       };
     }
@@ -401,7 +401,7 @@ function getLanguageSection(pages: PageInfo[]) {
 
   for (const page of withLang) {
     const lang = page.languageDetection!.detectedLanguage!;
-    langCounts[lang] = (langCounts[lang] || 0) + 1;
+    langCounts[lang] = (langCounts[lang] ?? 0) + 1;
     if (page.languageDetection!.match === false) mismatches++;
     if (!page.languageDetection!.htmlLang) missingLang++;
   }
@@ -462,10 +462,10 @@ function getCTASection(pages: PageInfo[]) {
 
   for (const page of withCTA) {
     const s = page.ctaData!.summary;
-    totalForms += s.forms || 0;
-    totalCTAButtons += s.ctaButtons || 0;
-    totalPhone += s.phoneLinks || 0;
-    totalEmail += s.emailLinks || 0;
+    totalForms += s.forms ?? 0;
+    totalCTAButtons += s.ctaButtons ?? 0;
+    totalPhone += s.phoneLinks ?? 0;
+    totalEmail += s.emailLinks ?? 0;
     if (s.total === 0) pagesWithNoCTAs++;
     if (s.aboveFoldCount > 0) pagesWithAboveFoldCTA++;
   }
@@ -510,10 +510,10 @@ function getCodeCoverageSection(pages: PageInfo[]) {
     totalCSS = 0,
     unusedCSS = 0;
   for (const page of withCoverage) {
-    totalJS += page.codeCoverage?.js?.total || 0;
-    unusedJS += page.codeCoverage?.js?.unused || 0;
-    totalCSS += page.codeCoverage?.css?.total || 0;
-    unusedCSS += page.codeCoverage?.css?.unused || 0;
+    totalJS += page.codeCoverage?.js?.total ?? 0;
+    unusedJS += page.codeCoverage?.js?.unused ?? 0;
+    totalCSS += page.codeCoverage?.css?.total ?? 0;
+    unusedCSS += page.codeCoverage?.css?.unused ?? 0;
   }
 
   const jsRatio = totalJS > 0 ? Math.round((unusedJS / totalJS) * 100) : 0;
@@ -564,9 +564,9 @@ function getOutboundLinksSection(pages: PageInfo[]) {
   for (const page of withData) {
     const h = page.outboundLinkHealth!;
     totalChecked += h.totalChecked ?? 0;
-    totalBroken += h.broken?.length || 0;
-    totalRedirected += h.redirected?.length || 0;
-    for (const b of h.broken || []) {
+    totalBroken += h.broken?.length ?? 0;
+    totalRedirected += h.redirected?.length ?? 0;
+    for (const b of h.broken ?? []) {
       if (!brokenUrls.has(b.url)) brokenUrls.set(b.url, { status: b.status, count: 0 });
       brokenUrls.get(b.url).count++;
     }
@@ -657,11 +657,11 @@ function getWordCountBreakdown(pages: PageInfo[]) {
   for (const page of withData) {
     const s = page.contentQuality!.wordCountBySection as Record<string, number> | undefined;
     if (!s || Array.isArray(s)) continue;
-    totals.main += s.main || 0;
-    totals.nav += s.nav || 0;
-    totals.header += s.header || 0;
-    totals.footer += s.footer || 0;
-    totals.sidebar += s.sidebar || 0;
+    totals.main += s.main ?? 0;
+    totals.nav += s.nav ?? 0;
+    totals.header += s.header ?? 0;
+    totals.footer += s.footer ?? 0;
+    totals.sidebar += s.sidebar ?? 0;
   }
 
   const total = Object.values(totals).reduce((a, b) => a + b, 0);

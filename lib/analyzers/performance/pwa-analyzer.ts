@@ -79,13 +79,13 @@ class PWAAnalyzer {
     }
 
     // Check for manifest
-    const manifestLink = pageData.manifest || pageData.webManifest;
+    const manifestLink = pageData.manifest ?? pageData.webManifest;
     if (manifestLink) {
       info.hasManifest = true;
       info.manifestUrl = typeof manifestLink === 'string' ? manifestLink : manifestLink.href;
 
       // Analyze manifest content if available
-      const manifestContent = pageData.manifestContent || manifestLink.content;
+      const manifestContent = pageData.manifestContent ?? manifestLink.content;
       if (manifestContent) {
         this.analyzeManifest(manifestContent, info, issues, warnings);
       } else {
@@ -226,7 +226,7 @@ class PWAAnalyzer {
     if (manifestData.icons && Array.isArray(manifestData.icons)) {
       const iconSizes = manifestData.icons
         .map((icon) => {
-          const sizes = icon.sizes?.split('x') || [];
+          const sizes = icon.sizes?.split('x') ?? [];
           return parseInt(sizes[0], 10);
         })
         .filter((size) => !isNaN(size));
@@ -337,7 +337,7 @@ class PWAAnalyzer {
       if (pageData.manifest || pageData.webManifest) {
         stats.pagesWithManifest++;
         const manifestUrl =
-          typeof pageData.manifest === 'string' ? pageData.manifest : pageData.manifest?.href || pageData.webManifest;
+          typeof pageData.manifest === 'string' ? pageData.manifest : pageData.manifest?.href ?? pageData.webManifest;
         if (manifestUrl) stats.manifestUrls.add(manifestUrl);
       }
 

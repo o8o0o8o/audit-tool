@@ -99,7 +99,7 @@ class Soft404Analyzer {
     let confidence = 0;
 
     // 1. Check page title for 404 patterns
-    const title = pageData.title || '';
+    const title = pageData.title ?? '';
     for (const pattern of this.#notFoundTitlePatterns) {
       if (pattern.test(title)) {
         signals.push(`Title contains 404 indicator: "${title}"`);
@@ -135,7 +135,7 @@ class Soft404Analyzer {
     }
 
     // 4. Check for very thin content (common in soft 404s)
-    const wordCount = pageData.contentQuality?.wordCount || 0;
+    const wordCount = pageData.contentQuality?.wordCount ?? 0;
     if (wordCount < 50 && signals.length > 0) {
       signals.push(`Very thin content (${wordCount} words) combined with error signals`);
       confidence += 15;
@@ -152,7 +152,7 @@ class Soft404Analyzer {
     }
 
     // 6. Check meta robots for noindex (often set on soft 404s)
-    const metaRobots = pageData.metaMap?.robots || '';
+    const metaRobots = pageData.metaMap?.robots ?? '';
     if (metaRobots.toLowerCase().includes('noindex') && signals.length > 0) {
       signals.push('Page has noindex combined with error signals');
       confidence += 10;

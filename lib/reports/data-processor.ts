@@ -58,7 +58,7 @@ class ReportDataProcessor {
       throw new Error('Invalid manifest: missing or invalid "files.analysis" path');
     }
 
-    console.log(`  - Loaded manifest (${manifest.files.pageBatches?.length || 0} batches)`);
+    console.log(`  - Loaded manifest (${manifest.files.pageBatches?.length ?? 0} batches)`);
 
     // Load metadata
     const metadataPath = path.join(runDir, manifest.files.metadata);
@@ -82,7 +82,7 @@ class ReportDataProcessor {
 
     // Load all page batches
     const pages = {};
-    const batches = manifest.files.pageBatches || [];
+    const batches = manifest.files.pageBatches ?? [];
     const failedBatches: FailedBatch[] = [];
     let loadedBatchCount = 0;
 
@@ -109,7 +109,7 @@ class ReportDataProcessor {
         failedBatches.push({
           file: batchInfo.file,
           error: errMsg,
-          expectedCount: batchInfo.count || 0,
+          expectedCount: batchInfo.count ?? 0,
         });
       }
     }
@@ -143,7 +143,7 @@ class ReportDataProcessor {
       sitemaps: metadata.sitemaps,
       isMultiLang: metadata.isMultiLang,
       timing: metadata.timing,
-      cruxData: metadata.cruxData || null,
+      cruxData: metadata.cruxData ?? null,
       repoAnalysis,
       pageData: {
         pages,
@@ -171,7 +171,7 @@ class ReportDataProcessor {
     const jsonData = FileManager.readJsonFile(file);
 
     // Load and merge archived pages if they exist
-    if (jsonData.archiveInfo && jsonData.archiveInfo.lastArchivePart) {
+    if (jsonData.archiveInfo?.lastArchivePart) {
       console.log(`Loading ${jsonData.archiveInfo.lastArchivePart} archive file(s)...`);
 
       for (let i = 1; i <= jsonData.archiveInfo.lastArchivePart; i++) {
@@ -350,13 +350,13 @@ class ReportDataProcessor {
       .map(([issue, data]: [string, AnalysisDetail]) => ({
         issue,
         severity: data.severity,
-        count: data.count || data.examples?.length || 0,
-        examples: data.examples || [],
+        count: data.count ?? data.examples?.length ?? 0,
+        examples: data.examples ?? [],
       }))
       .sort((a, b) => {
         // Sort by severity first, then by count
         const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-        const severityDiff = (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4);
+        const severityDiff = (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4);
         if (severityDiff !== 0) return severityDiff;
         return b.count - a.count;
       })
@@ -373,15 +373,15 @@ class ReportDataProcessor {
     const jsonData = this.loadAuditData(file, domainName);
     const historyData = this.loadHistory(domainName);
 
-    const pageData = (jsonData.pageData || { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
+    const pageData = (jsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
       incomingLinks?: Record<string, string[]>;
     };
-    const pages: PageInfo[] = Object.values(pageData.pages || {});
-    const timing = (jsonData.timing || {}) as Record<string, unknown>;
-    const analysis = (jsonData.analysis || {}) as Record<string, unknown>;
+    const pages: PageInfo[] = Object.values(pageData.pages ?? {});
+    const timing = (jsonData.timing ?? {}) as Record<string, unknown>;
+    const analysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
 
     // Assign segments to pages if not already set (handles multi-file format)
-    this.#assignSegments(pageData.pages || {});
+    this.#assignSegments(pageData.pages ?? {});
 
     return {
       jsonData,
@@ -392,11 +392,11 @@ class ReportDataProcessor {
       metrics: this.aggregateMetrics(pages),
       pageCounts: this.countPages(pages),
       topIssues: this.getTopIssues(analysis.details as Record<string, AnalysisDetail> | undefined),
-      trendData: historyData?.trendData || null,
-      previousAudit: historyData?.previousAudit || null,
-      sitemaps: jsonData.sitemaps || {},
-      robots: jsonData.robots || {},
-      isMultiLang: jsonData.isMultiLang || false,
+      trendData: historyData?.trendData ?? null,
+      previousAudit: historyData?.previousAudit ?? null,
+      sitemaps: jsonData.sitemaps ?? {},
+      robots: jsonData.robots ?? {},
+      isMultiLang: jsonData.isMultiLang ?? false,
     };
   }
 
@@ -414,17 +414,17 @@ class ReportDataProcessor {
 
     // Load compare data
     const compareJsonData = this.loadAuditData(compareFile, compareDomain);
-    const comparePageData = (compareJsonData.pageData || { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
+    const comparePageData = (compareJsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
       incomingLinks?: Record<string, string[]>;
     };
-    const comparePages: PageInfo[] = Object.values(comparePageData.pages || {});
+    const comparePages: PageInfo[] = Object.values(comparePageData.pages ?? {});
 
     // Assign segments to compare pages
-    this.#assignSegments(comparePageData.pages || {});
+    this.#assignSegments(comparePageData.pages ?? {});
 
     // Match pages by URL path
-    const originPagesMap = (baseData.pageData.pages || {}) as Record<string, PageInfo>;
-    const comparePagesMap = (comparePageData.pages || {}) as Record<string, PageInfo>;
+    const originPagesMap = (baseData.pageData.pages ?? {}) as Record<string, PageInfo>;
+    const comparePagesMap = (comparePageData.pages ?? {}) as Record<string, PageInfo>;
     const matchResult = PageMatcher.matchPages(originPagesMap, comparePagesMap);
 
     const comparison: ComparisonData = {

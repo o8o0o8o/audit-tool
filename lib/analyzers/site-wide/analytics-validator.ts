@@ -67,7 +67,7 @@ class AnalyticsValidator {
         if (analytics.consentTool) {
           analyticsStats.consentTools.set(
             analytics.consentTool,
-            (analyticsStats.consentTools.get(analytics.consentTool) || 0) + 1,
+            (analyticsStats.consentTools.get(analytics.consentTool) ?? 0) + 1,
           );
         }
       }
@@ -91,15 +91,15 @@ class AnalyticsValidator {
       // Track unique tracking IDs (handle missing/undefined trackingIds)
       const trackingIds = analytics.trackingIds || {};
       (trackingIds.ga4 || []).forEach((id: string) => {
-        analyticsStats.ga4Ids.set(id, (analyticsStats.ga4Ids.get(id) || 0) + 1);
+        analyticsStats.ga4Ids.set(id, (analyticsStats.ga4Ids.get(id) ?? 0) + 1);
       });
 
       (trackingIds.ua || []).forEach((id: string) => {
-        analyticsStats.uaIds.set(id, (analyticsStats.uaIds.get(id) || 0) + 1);
+        analyticsStats.uaIds.set(id, (analyticsStats.uaIds.get(id) ?? 0) + 1);
       });
 
       (trackingIds.gtm || []).forEach((id: string) => {
-        analyticsStats.gtmIds.set(id, (analyticsStats.gtmIds.get(id) || 0) + 1);
+        analyticsStats.gtmIds.set(id, (analyticsStats.gtmIds.get(id) ?? 0) + 1);
       });
 
       // Count issues and warnings

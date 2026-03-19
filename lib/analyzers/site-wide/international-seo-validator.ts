@@ -55,14 +55,14 @@ class InternationalSEOValidator {
         langStats!.pages.push(url);
 
         // Track content length per language
-        const contentLength = page.contentQuality?.textLength || 0;
-        const currentLength = stats.contentLengthByLang.get(intl.language) || 0;
+        const contentLength = page.contentQuality?.textLength ?? 0;
+        const currentLength = stats.contentLengthByLang.get(intl.language) ?? 0;
         stats.contentLengthByLang.set(intl.language, currentLength + contentLength);
       }
 
       // Track URL structures
       if (intl.urlStructure) {
-        const currentCount = stats.urlStructures.get(intl.urlStructure) || 0;
+        const currentCount = stats.urlStructures.get(intl.urlStructure) ?? 0;
         stats.urlStructures.set(intl.urlStructure, currentCount + 1);
       }
 
@@ -172,7 +172,7 @@ class InternationalSEOValidator {
     if (stats.languages.size > 1) {
       const avgLengths = new Map();
       for (const [lang, data] of stats.languages) {
-        const totalLength = stats.contentLengthByLang.get(lang) || 0;
+        const totalLength = stats.contentLengthByLang.get(lang) ?? 0;
         avgLengths.set(lang, Math.round(totalLength / data.count));
       }
 
@@ -228,7 +228,7 @@ class InternationalSEOValidator {
         languages: Array.from(stats.languages.entries()).map(([lang, data]) => ({
           language: lang,
           pageCount: data.count,
-          avgContentLength: Math.round((stats.contentLengthByLang.get(lang) || 0) / data.count),
+          avgContentLength: Math.round((stats.contentLengthByLang.get(lang) ?? 0) / data.count),
         })),
         urlStructures: Array.from(stats.urlStructures.entries()).map(([type, count]) => ({ type, count })),
         hreflangCoverage: totalPages > 0 ? Math.round((stats.pagesWithHreflang / totalPages) * 100) : 0,

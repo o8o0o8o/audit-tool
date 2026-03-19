@@ -35,7 +35,7 @@ const SENSITIVE_COMMENT_PATTERNS = [
 ];
 
 class InformationDisclosureAnalyzer {
-  static analyze(pageData: PageInfo, parsedPage: ParsedPage, url: string) {
+  static analyze(pageData: PageInfo, parsedPage: ParsedPage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -54,7 +54,7 @@ class InformationDisclosureAnalyzer {
       sourceMapUrls: [],
     };
 
-    const headers = pageData.responseHeaders || {};
+    const headers = pageData.responseHeaders ?? {};
 
     // 1. Check for server information disclosure in headers
     for (const headerName of DISCLOSURE_HEADERS) {
@@ -93,7 +93,7 @@ class InformationDisclosureAnalyzer {
     // 2. Check for source map references in scripts
     const scripts = parsedPage.querySelectorAll('script[src]');
     for (const script of scripts) {
-      const src = script.getAttribute('src') || '';
+      const src = script.getAttribute('src') ?? '';
       if (src) {
         // Check inline sourceMappingURL comment
         const content = script.textContent || '';

@@ -41,7 +41,7 @@ class MobileFriendlyAnalyzer {
         const text = el.textContent.trim();
         if (text.length === 0) return;
         // Skip if this element's text is same as parent's (nested elements)
-        if (el.parentElement && el.parentElement.textContent.trim() === text) return;
+        if (el.parentElement?.textContent.trim() === text) return;
 
         const style = window.getComputedStyle(el);
         const fontSize = Math.round(parseFloat(style.fontSize));

@@ -57,7 +57,7 @@ function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
 
   for (const page of pages) {
     const tech = page.technologies;
-    const technologies = tech?.technologies || [];
+    const technologies = tech?.technologies ?? [];
 
     for (const t of technologies) {
       if (!allTechs.has(t.name)) {
@@ -134,7 +134,7 @@ function getCategoryIcon(category: string) {
     'SEO Tools': '🔍',
     Other: '🔧',
   };
-  return icons[category] || '📦';
+  return icons[category] ?? '📦';
 }
 
 /**
@@ -155,7 +155,7 @@ function getCategoryColor(category: string) {
     'SEO Tools': '#14b8a6',
     Other: '#6b7280',
   };
-  return colors[category] || '#6b7280';
+  return colors[category] ?? '#6b7280';
 }
 
 /**
@@ -165,7 +165,7 @@ function getCategoryColor(category: string) {
  * @returns {Object} Comparison data
  */
 function compareTechnologies(current: AggregatedTech, previousAudit: AuditSnapshot | null) {
-  if (!previousAudit || !previousAudit.technologies) {
+  if (!previousAudit?.technologies) {
     return {
       newTechs: [] as string[],
       removedTechs: [] as string[],
@@ -235,11 +235,11 @@ function getTechnologyStack(data: ReportSectionData) {
 
           // Build detection method tooltip HTML
           let detectionHtml = '';
-          if (tech && tech.detectedByDetails && tech.detectedByDetails.length > 0) {
+          if (tech?.detectedByDetails && tech.detectedByDetails.length > 0) {
             for (const method of tech.detectedByDetails) {
               detectionHtml += `<div>&bull; ${escapeHtml(formatDetectionMethod(method))}</div>`;
             }
-          } else if (tech && tech.detectedBy && (tech.detectedBy as string[]).length > 0) {
+          } else if (tech?.detectedBy && (tech.detectedBy as string[]).length > 0) {
             const methodLabels: Record<string, string> = {
               html: 'HTML content pattern',
               script: 'Script source URL',
@@ -259,7 +259,7 @@ function getTechnologyStack(data: ReportSectionData) {
           const tooltipContent = `<strong>${escapeHtml(name)}</strong><br><span class="tt-label">${count} pages (${percentage}%)</span><br><br><span class="tt-label">Detected by:</span>${detectionHtml}`;
 
           // Get detection type icons
-          const detectionIcons = ((tech?.detectedBy || []) as string[])
+          const detectionIcons = ((tech?.detectedBy ?? []) as string[])
             .map((type: string) => {
               const icons: Record<string, string> = {
                 html: '📄',

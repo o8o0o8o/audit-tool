@@ -66,7 +66,7 @@ class MixedContentAnalyzer {
     }
 
     // Analyze resources
-    const resources = pageData.resources || [];
+    const resources = pageData.resources ?? [];
     const mixedContent = this.detectMixedContent(resources);
 
     info.activeMixedContent = mixedContent.active;
@@ -140,7 +140,7 @@ class MixedContentAnalyzer {
     const passive: { url: string; type: string; blocked: boolean }[] = [];
 
     for (const resource of resources) {
-      const resourceUrl = resource.url || '';
+      const resourceUrl = resource.url ?? '';
 
       // Skip if not HTTP
       if (!resourceUrl.startsWith('http://')) {
@@ -177,9 +177,9 @@ class MixedContentAnalyzer {
     const mixed = [];
 
     // Check form actions
-    const forms = pageData.forms || [];
+    const forms = pageData.forms ?? [];
     for (const form of forms) {
-      if (form.action && form.action.startsWith('http://')) {
+      if (form.action?.startsWith('http://')) {
         mixed.push({ type: 'form', url: form.action });
       }
     }
@@ -189,16 +189,16 @@ class MixedContentAnalyzer {
       ? (pageData.links as { href?: string; url?: string }[])
       : [];
     for (const link of links) {
-      const href = link.href || link;
+      const href = link.href ?? link;
       if (typeof href === 'string' && href.startsWith('http://')) {
         mixed.push({ type: 'link', url: href });
       }
     }
 
     // Check iframes
-    const iframes = pageData.iframes || [];
+    const iframes = pageData.iframes ?? [];
     for (const iframe of iframes) {
-      if (iframe.src && iframe.src.startsWith('http://')) {
+      if (iframe.src?.startsWith('http://')) {
         mixed.push({ type: 'iframe', url: iframe.src });
       }
     }
@@ -264,7 +264,7 @@ class MixedContentAnalyzer {
         continue;
       }
 
-      const resources = pageData.resources || [];
+      const resources = pageData.resources ?? [];
       const mixedContent = this.detectMixedContent(resources);
 
       if (mixedContent.active.length > 0) {

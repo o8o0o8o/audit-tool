@@ -8,11 +8,11 @@ import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
 // Dangerous directive values
-const DANGEROUS_SOURCES = ["'unsafe-inline'", "'unsafe-eval'", '*', 'data:', 'blob:'];
+const _DANGEROUS_SOURCES = ["'unsafe-inline'", "'unsafe-eval'", '*', 'data:', 'blob:'];
 const SCRIPT_DIRECTIVES = ['script-src', 'script-src-elem', 'script-src-attr'];
 
 class CSPQualityAnalyzer {
-  static analyze(pageData: PageInfo, url: string) {
+  static analyze(pageData: PageInfo, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -31,7 +31,7 @@ class CSPQualityAnalyzer {
       score: 0,
     };
 
-    const headers = pageData.responseHeaders || {};
+    const headers = pageData.responseHeaders ?? {};
 
     const cspHeader =
       headers['content-security-policy'] ||

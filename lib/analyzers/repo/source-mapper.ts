@@ -6,6 +6,37 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+interface FrameworkInfo {
+  framework: string | null;
+  version: string | null;
+  packageJson: Record<string, unknown>;
+  srcDirs: string[];
+  configFile: string | null;
+  router: string | null;
+}
+
+interface SourceLocation {
+  file: string;
+  line: number;
+  context: string;
+  suggestion: string;
+}
+
+interface FindCriteria {
+  positive: RegExp | null;
+  negative: RegExp | null;
+  suggestion: string;
+  context: string;
+  countPattern?: RegExp;
+  minCount?: number;
+}
+
+interface LineSearchCriteria {
+  linePattern: RegExp;
+  suggestion: string;
+  context: string;
+}
+
 class SourceMapper {
   /**
    * Map audit issues to source file locations
@@ -15,10 +46,10 @@ class SourceMapper {
    * @returns {Object<string, Array<{ file: string, line: number, context: string, suggestion: string }>>}
    *   Keyed by issue message, each value is an array of source locations
    */
-  static map(analysisDetails: Record<string, any>, repoPath: string, frameworkInfo: Record<string, any>) {
+  static map(analysisDetails: Record<string, unknown>, repoPath: string, frameworkInfo: FrameworkInfo): Record<string, SourceLocation[]> {
     if (!analysisDetails || !repoPath || !frameworkInfo) return {};
 
-    const mapping: Record<string, any> = {};
+    const mapping: Record<string, SourceLocation[]> = {};
     const { framework, srcDirs } = frameworkInfo;
 
     // Build a set of issue keys present in the analysis
@@ -31,7 +62,7 @@ class SourceMapper {
       if (!matchedKey) continue;
 
       try {
-        const locations = mapper.call(this, repoPath, framework, srcDirs);
+        const locations = mapper.call(this, repoPath, framework ?? '', srcDirs);
         if (locations.length > 0) {
           mapping[matchedKey] = locations;
         }
@@ -361,8 +392,8 @@ class SourceMapper {
    * @param {number} [criteria.minCount] - Minimum count to flag
    * @returns {Array<{ file: string, line: number, context: string, suggestion: string }>}
    */
-  static #findInFiles(repoPath: string, dirs: string[], filePattern: RegExp, criteria: Record<string, any>) {
-    const results: Record<string, any>[] = [];
+  static #findInFiles(repoPath: string, dirs: string[], filePattern: RegExp, criteria: FindCriteria): SourceLocation[] {
+    const results: SourceLocation[] = [];
     const seen = new Set();
     const maxResults = 20;
 
@@ -393,7 +424,7 @@ class SourceMapper {
         // Count pattern check (e.g., multiple h1s)
         if (criteria.countPattern) {
           const matches = content.match(criteria.countPattern);
-          if (!matches || matches.length < (criteria.minCount || 1)) return;
+          if (!matches || matches.length < (criteria.minCount ?? 1)) return;
 
           // Find line number of first occurrence
           const line = this.#findLineNumber(content, criteria.countPattern);
@@ -431,9 +462,9 @@ class SourceMapper {
     repoPath: string,
     dirs: string[],
     filePattern: RegExp,
-    criteria: Record<string, any>,
-  ) {
-    const results: Record<string, any>[] = [];
+    criteria: LineSearchCriteria,
+  ): SourceLocation[] {
+    const results: SourceLocation[] = [];
     const seen = new Set();
     const maxResults = 20;
 

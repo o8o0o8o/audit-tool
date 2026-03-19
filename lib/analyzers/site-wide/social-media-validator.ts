@@ -57,7 +57,7 @@ class SocialMediaValidator {
       // Track social images
       const ogImage = socialData.openGraph?.['og:image'];
       if (ogImage) {
-        socialStats.socialImages.set(ogImage, (socialStats.socialImages.get(ogImage) || 0) + 1);
+        socialStats.socialImages.set(ogImage, (socialStats.socialImages.get(ogImage) ?? 0) + 1);
 
         // Check for relative URLs
         if (!ogImage.startsWith('http')) {
@@ -65,8 +65,8 @@ class SocialMediaValidator {
         }
 
         // Check dimensions
-        const width = parseInt(socialData.openGraph?.['og:image:width'] || '', 10) || 0;
-        const height = parseInt(socialData.openGraph?.['og:image:height'] || '', 10) || 0;
+        const width = parseInt(socialData.openGraph?.['og:image:width'] ?? '', 10) || 0;
+        const height = parseInt(socialData.openGraph?.['og:image:height'] ?? '', 10) || 0;
         if (width > 0 && height > 0 && (width < 1200 || height < 630)) {
           socialStats.imageDimensionIssues.push({
             url,
@@ -84,7 +84,7 @@ class SocialMediaValidator {
 
       // Count issues and warnings
       socialStats.totalIssues += socialData.issues?.length || 0;
-      socialStats.totalWarnings += socialData.warnings?.length || 0;
+      socialStats.totalWarnings += socialData.warnings?.length ?? 0;
     }
 
     const ogCoverage = pagesAnalyzed > 0 ? Math.round((socialStats.pagesWithOpenGraph / pagesAnalyzed) * 100) : 0;

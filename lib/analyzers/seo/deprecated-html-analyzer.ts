@@ -30,7 +30,7 @@ const DEPRECATED_ELEMENTS: Record<string, string> = {
 };
 
 class DeprecatedHTMLAnalyzer {
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {

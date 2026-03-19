@@ -24,6 +24,7 @@ import { parse } from 'node-html-parser';
 
 class SEOData {
   // Internal results state - uses index signature because analyzers add dynamic keys
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Results object is intentionally dynamic; analyzers attach arbitrary keys at runtime
   #results: Record<string, any>;
   #proceed: boolean;
   #perf: boolean;
@@ -73,13 +74,13 @@ class SEOData {
     this.#perf = perf;
     this.#saveHtml = saveHtml;
     this.#concurrency = concurrency;
-    this.#verbose = options.verbose || false;
-    this.#open = options.open || false;
-    this.#exclude = options.exclude || [];
-    this.#limit = options.limit || null;
-    this.#dryRun = options.dryRun || false;
-    this.#cruxApiKey = options.cruxApiKey || null;
-    this.#screenshots = options.screenshots || false;
+    this.#verbose = options.verbose ?? false;
+    this.#open = options.open ?? false;
+    this.#exclude = options.exclude ?? [];
+    this.#limit = options.limit ?? null;
+    this.#dryRun = options.dryRun ?? false;
+    this.#cruxApiKey = options.cruxApiKey ?? null;
+    this.#screenshots = options.screenshots ?? false;
 
     // Initialize incoming links tracking (Map<target, Set<source>>)
     this.#incomingLinksTracking = new Map();
@@ -306,6 +307,7 @@ class SEOData {
 
   async saveData() {
     await this.#progressManager.waitForPendingFlush();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- InternalResults is a superset of ProgressResults
     this.#progressManager.saveProgress(this.#results as any);
   }
 
@@ -319,7 +321,7 @@ class SEOData {
 
     // Register any errors found during parsing
     result.errors.forEach((error: { message: string; detail: string | null; severity: string }) => {
-      this.saveError(error.message, error.detail || '', error.severity);
+      this.saveError(error.message, error.detail ?? '', error.severity);
     });
 
     // Analyze AI crawler rules in robots.txt
@@ -369,14 +371,14 @@ class SEOData {
     this.#initializeManagers();
 
     // Use SitemapParser.processSitemap to parse URLs with full validation
-    const result: Record<string, any> = {
+    const result: { sitemaps: Record<string, unknown>; urls: Record<string, unknown>; total: number; errors: { message: string; detail: string; severity: string }[] } = {
       sitemaps: {},
       urls: {},
       total: 0,
       errors: [],
     };
 
-    SitemapParser.processSitemap(urls as any, this.origin!, this.#sitemapFile!, result as any);
+    SitemapParser.processSitemap(urls as any, this.origin!, this.#sitemapFile!, result as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
     // Store sitemap data
     Object.assign(this.#results.sitemaps, result.sitemaps);
@@ -425,7 +427,7 @@ class SEOData {
       }
 
       // Rebuild sitemaps.urls with only filtered URLs
-      const newUrls: Record<string, any> = {};
+      const newUrls: Record<string, Record<string, unknown>> = {};
       for (const url of filtered) {
         newUrls[url] = this.#results.sitemaps.urls[url];
       }
@@ -434,10 +436,10 @@ class SEOData {
     }
 
     await AuditOrchestrator.analyzePages({
-      results: this.#results as any,
-      crawlerEngine: this.#crawlerEngine as any,
+      results: this.#results as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      crawlerEngine: this.#crawlerEngine as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       incomingLinksTracking: this.#incomingLinksTracking,
-      saveError: this.saveError.bind(this) as any,
+      saveError: this.saveError.bind(this) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       resultsDir: this.resultsDir,
     });
   }
@@ -446,7 +448,7 @@ class SEOData {
    * Print estimated crawl time based on URL count and concurrency
    */
   #printEstimatedTime() {
-    const totalUrls = this.#results.sitemaps?.total || 0;
+    const totalUrls = this.#results.sitemaps?.total ?? 0;
     if (totalUrls === 0) return;
 
     const AVG_TIME_PER_PAGE_SEC = 3; // Conservative estimate
@@ -543,7 +545,7 @@ class SEOData {
       const err = error as Error;
       // Save error with full details including stack trace
       const errorMessage = err.message || String(error);
-      const errorDetail = err.stack || errorMessage;
+      const errorDetail = err.stack ?? errorMessage;
       this.saveError(`Audit failed: ${errorMessage}`, errorDetail, SEVERITY.HIGH);
 
       // Stop timing before exit
@@ -553,7 +555,7 @@ class SEOData {
       this.#calculateSummary();
 
       // Save data before exiting
-      this.saveData();
+      await this.saveData();
 
       console.error('Audit failed with error:', err.message);
       // Re-throw to let the error propagate and trigger restart via start.js
@@ -568,10 +570,10 @@ class SEOData {
 
     // Run all site-wide validations
     await AuditOrchestrator.runSiteWideValidation(
-      this.#results.pageData as any,
+      this.#results.pageData as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- bridging InternalResults to PageDataForValidation
       this.origin!,
       this.#results.isMultiLang,
-      this.saveError.bind(this) as any,
+      this.saveError.bind(this) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     );
 
     // Stop timing
@@ -580,7 +582,7 @@ class SEOData {
     // Calculate final summary statistics
     this.#calculateSummary();
 
-    this.saveData();
+    await this.saveData();
   }
 }
 

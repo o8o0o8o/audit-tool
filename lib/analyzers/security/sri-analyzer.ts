@@ -34,7 +34,7 @@ class SRIAnalyzer {
     // Check external scripts
     const scripts = parsedPage.querySelectorAll('script[src]');
     for (const script of scripts) {
-      const src = script.getAttribute('src') || '';
+      const src = script.getAttribute('src') ?? '';
       if (!src || !this.isExternalOrigin(src, pageOrigin)) continue;
 
       info.externalScripts++;
@@ -48,7 +48,7 @@ class SRIAnalyzer {
     // Check external stylesheets
     const styles = parsedPage.querySelectorAll('link[rel="stylesheet"][href]');
     for (const style of styles) {
-      const href = style.getAttribute('href') || '';
+      const href = style.getAttribute('href') ?? '';
       if (!href || !this.isExternalOrigin(href, pageOrigin)) continue;
 
       info.externalStyles++;
@@ -117,7 +117,7 @@ class SRIAnalyzer {
   private static truncateUrl(url: string): string {
     try {
       const parsed = new URL(url, 'https://example.com');
-      const fileName = parsed.pathname.split('/').pop() || parsed.hostname;
+      const fileName = parsed.pathname.split('/').pop() ?? parsed.hostname;
       return `${parsed.hostname}/${fileName}`;
     } catch {
       return url.substring(0, 60);

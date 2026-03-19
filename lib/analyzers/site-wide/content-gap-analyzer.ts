@@ -1,6 +1,37 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface KeywordIndexEntry {
+  word: string;
+  urls: Set<string>;
+  totalDensity: number;
+  avgDensity: number | string;
+}
+
+interface ClusterData {
+  topic: string;
+  keywords: string[];
+  pages: Set<string>;
+  pageCount: number;
+  avgDensity: number | string;
+}
+
+interface CoverageEntry {
+  topic: string;
+  keywords: string[];
+  pageCount: number;
+  avgDensity: number | string;
+}
+
+interface GapEntry {
+  topic: string;
+  keywords: string[];
+  currentPages: number;
+  opportunityScore: number;
+  suggestion: string;
+  examples: string[];
+}
+
 /**
  * Content Gap Analyzer
  * Identifies content gaps and opportunities by analyzing keyword coverage across pages.
@@ -59,13 +90,13 @@ class ContentGapAnalyzer {
    * @returns {Map} Keyword index
    */
   static buildKeywordIndex(allPages: Record<string, PageInfo>) {
-    const keywordIndex = new Map();
+    const keywordIndex = new Map<string, KeywordIndexEntry>();
 
     for (const url in allPages) {
       const page = allPages[url];
-      const topKeywords = page.contentQuality?.topKeywords || [];
+      const topKeywords = page.contentQuality?.topKeywords ?? [];
 
-      topKeywords.forEach((kw: any) => {
+      topKeywords.forEach((kw: { word: string; count: number; density: number }) => {
         const word = kw.word.toLowerCase();
         if (word.length < 3) return; // Skip very short words
 
@@ -78,9 +109,9 @@ class ContentGapAnalyzer {
           });
         }
 
-        const entry = keywordIndex.get(word);
+        const entry = keywordIndex.get(word)!;
         entry.urls.add(url);
-        entry.totalDensity += parseFloat(kw.density) || 0;
+        entry.totalDensity += kw.density || 0;
       });
     }
 
@@ -97,14 +128,14 @@ class ContentGapAnalyzer {
    * @param {Map} keywordIndex - Keyword index
    * @returns {Map} Clusters: topic -> { keywords: [], pages: Set, avgDensity: number }
    */
-  static clusterKeywords(keywordIndex: Map<string, any>) {
-    const clusters = new Map();
+  static clusterKeywords(keywordIndex: Map<string, KeywordIndexEntry>) {
+    const clusters = new Map<string, ClusterData>();
     const processed = new Set<string>();
 
     // Sort keywords by frequency for better clustering
     const sortedKeywords = Array.from(keywordIndex.entries()).sort((a, b) => b[1].urls.size - a[1].urls.size);
 
-    for (const [keyword, data] of sortedKeywords as [string, any][]) {
+    for (const [keyword, data] of sortedKeywords) {
       if (processed.has(keyword)) continue;
 
       // Find related keywords
@@ -115,10 +146,10 @@ class ContentGapAnalyzer {
       const clusterPages = new Set(data.urls);
       const clusterKeywords = [keyword];
 
-      relatedKeywords.forEach((related: any) => {
+      relatedKeywords.forEach((related: string) => {
         processed.add(related);
         clusterKeywords.push(related);
-        keywordIndex.get(related).urls.forEach((url: any) => clusterPages.add(url));
+        keywordIndex.get(related)!.urls.forEach((url: string) => clusterPages.add(url));
       });
 
       processed.add(keyword);
@@ -142,7 +173,7 @@ class ContentGapAnalyzer {
    * @param {Set} processed - Already processed keywords
    * @returns {Array} Related keywords
    */
-  static findRelatedKeywords(keyword: string, keywordIndex: Map<string, any>, processed: Set<string>) {
+  static findRelatedKeywords(keyword: string, keywordIndex: Map<string, KeywordIndexEntry>, processed: Set<string>) {
     const related: string[] = [];
 
     // Method 1: Prefix matching (first 4 characters)
@@ -185,8 +216,8 @@ class ContentGapAnalyzer {
    * @param {Map} clusters - Keyword clusters
    * @returns {Object} Coverage levels
    */
-  static analyzeCoverage(clusters: Map<string, any>) {
-    const coverage: Record<string, Record<string, any>[]> = {
+  static analyzeCoverage(clusters: Map<string, ClusterData>) {
+    const coverage: Record<string, CoverageEntry[]> = {
       high: [], // 5+ pages
       medium: [], // 2-4 pages
       low: [], // 1 page only
@@ -214,7 +245,7 @@ class ContentGapAnalyzer {
 
     // Sort each by page count descending
     ['high', 'medium', 'low', 'orphan'].forEach((level) => {
-      coverage[level].sort((a: any, b: any) => b.pageCount - a.pageCount);
+      coverage[level].sort((a: CoverageEntry, b: CoverageEntry) => b.pageCount - a.pageCount);
     });
 
     return coverage;
@@ -226,8 +257,8 @@ class ContentGapAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Array} Content gap opportunities
    */
-  static identifyGaps(clusters: Map<string, any>, allPages: Record<string, PageInfo>) {
-    const gaps: Record<string, any>[] = [];
+  static identifyGaps(clusters: Map<string, ClusterData>, allPages: Record<string, PageInfo>) {
+    const gaps: GapEntry[] = [];
     const totalPages = Object.keys(allPages).length;
 
     clusters.forEach((data, topic) => {
@@ -262,11 +293,11 @@ class ContentGapAnalyzer {
    * @param {number} totalPages - Total number of pages
    * @returns {number} Score 0-100
    */
-  static calculateOpportunityScore(clusterData: Record<string, any>, _totalPages: number) {
+  static calculateOpportunityScore(clusterData: ClusterData, _totalPages: number) {
     let score = 0;
 
     // Higher density = more important keyword
-    const density = parseFloat(clusterData.avgDensity) || 0;
+    const density = parseFloat(String(clusterData.avgDensity)) || 0;
     score += Math.min(density * 10, 30); // Max 30 points for density
 
     // More keywords in cluster = bigger topic
@@ -282,7 +313,7 @@ class ContentGapAnalyzer {
 
     // Keyword length bonus (longer keywords = more specific = higher value)
     const avgKeywordLength =
-      clusterData.keywords.reduce((sum: any, k: any) => sum + k.length, 0) / clusterData.keywords.length;
+      clusterData.keywords.reduce((sum: number, k: string) => sum + k.length, 0) / clusterData.keywords.length;
     if (avgKeywordLength >= 8) {
       score += 10;
     } else if (avgKeywordLength >= 5) {
@@ -315,7 +346,7 @@ class ContentGapAnalyzer {
    * @param {Object} coverage - Coverage data
    * @returns {Array} Issues array
    */
-  static generateIssues(gaps: Record<string, any>[], coverage: Record<string, any>) {
+  static generateIssues(gaps: GapEntry[], coverage: Record<string, CoverageEntry[]>) {
     const issues: Issue[] = [];
 
     // Issue 1: Many low-coverage topics
@@ -358,8 +389,8 @@ class ContentGapAnalyzer {
    * @param {Map} clusters - Clusters map
    * @returns {Object} Serializable clusters object
    */
-  static clustersToObject(clusters: Map<string, any>) {
-    const obj: Record<string, any> = {};
+  static clustersToObject(clusters: Map<string, ClusterData>) {
+    const obj: Record<string, { keywords: string[]; pageCount: number; avgDensity: number | string; pages: string[] }> = {};
     clusters.forEach((data, topic) => {
       obj[topic] = {
         keywords: data.keywords.slice(0, 10), // Limit for storage

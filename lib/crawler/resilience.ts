@@ -13,7 +13,7 @@ export const CIRCUIT_COOLDOWN = 60000; // 60 second cooldown
  * Get backoff delay for an error type using exponential backoff
  */
 export function getBackoffDelay(errorType: string, backoffState: Map<string, BackoffState>): number {
-  const state = backoffState.get(errorType) || { attempts: 0, lastAttempt: 0 };
+  const state = backoffState.get(errorType) ?? { attempts: 0, lastAttempt: 0 };
   const now = Date.now();
 
   // Reset if last attempt was more than 5 minutes ago
@@ -202,7 +202,7 @@ export function handlePageError(
   checkAttempts: (url: string) => void,
 ): void {
   const errorType = categorizeError(error);
-  const messageOverall = `${error.name} ${error.message} ${(error as Error & { cause?: string }).cause || ''}`.trim();
+  const messageOverall = `${error.name} ${error.message} ${(error as Error & { cause?: string }).cause ?? ''}`.trim();
   const friendlyMessage = getFriendlyErrorMessage(errorType);
 
   // Log user-friendly message, with raw error in verbose or non-TTY mode

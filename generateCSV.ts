@@ -42,7 +42,7 @@ function escapeCSV(value: string | number | boolean | null | undefined) {
 }
 
 function generatePagesCSV(jsonData: AuditJsonData) {
-  const pages = jsonData.pageData?.pages || {};
+  const pages = jsonData.pageData?.pages ?? {};
   const rows = [
     [
       'URL',
@@ -100,49 +100,49 @@ function generatePagesCSV(jsonData: AuditJsonData) {
     // CSV export reads many dynamic analyzer-added properties on PageInfo
     const data = _data as PageInfo;
     const h1Count = Array.isArray(data.headings)
-      ? (data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h1')?.count || 0
-      : data.headings?.h1?.length || 0;
+      ? (data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h1')?.count ?? 0
+      : data.headings?.h1?.length ?? 0;
     const h2Count = Array.isArray(data.headings)
-      ? (data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h2')?.count || 0
-      : data.headings?.h2?.length || 0;
+      ? (data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h2')?.count ?? 0
+      : data.headings?.h2?.length ?? 0;
 
     rows.push(
       [
         url,
-        data.status || data.statusCode || '',
+        data.status ?? data.statusCode ?? '',
         data.foundIn || 'sitemap',
         data.segment || 'other',
-        data.title || '',
-        data.title?.length || 0,
-        data.description || '',
-        data.description?.length || 0,
+        data.title ?? '',
+        data.title?.length ?? 0,
+        data.description ?? '',
+        data.description?.length ?? 0,
         h1Count,
         h2Count,
-        data.canonical || '',
+        data.canonical ?? '',
         data.canonical === url ? 'Yes' : data.canonical ? 'No' : 'Missing',
-        data.TTFB || data.vitals?.ttfb || '',
-        data.FCP || '',
-        data.LCP || data.vitals?.lcp || '',
-        data.CLS !== undefined ? data.CLS : data.vitals?.cls || '',
-        data.INP || '',
-        data.TBT || '',
-        data.totalResponseSize || data.totalSize || '',
-        data.totalNumberOfRequests || data.numberOfRequests || '',
-        data.redirectCount || 0,
-        data.contentQuality?.wordCount || '',
-        data.contentQuality?.textToHtmlRatio || '',
-        data.contentQuality?.readabilityScore || '',
+        data.TTFB ?? data.vitals?.ttfb ?? '',
+        data.FCP ?? '',
+        data.LCP ?? data.vitals?.lcp ?? '',
+        data.CLS !== undefined ? data.CLS : data.vitals?.cls ?? '',
+        data.INP ?? '',
+        data.TBT ?? '',
+        data.totalResponseSize ?? data.totalSize ?? '',
+        data.totalNumberOfRequests ?? data.numberOfRequests ?? '',
+        data.redirectCount ?? 0,
+        data.contentQuality?.wordCount ?? '',
+        data.contentQuality?.textToHtmlRatio ?? '',
+        data.contentQuality?.readabilityScore ?? '',
         (data.security as unknown as Record<string, unknown> | undefined)?.securityScore ?? '',
         (data.caching as unknown as Record<string, unknown> | undefined)?.cacheScore ?? '',
         (data.accessibility as unknown as Record<string, unknown> | undefined)?.a11yScore ?? '',
         (data.contentQuality as unknown as Record<string, unknown> | undefined)?.contentScore ?? '',
-        data.imageOptimization?.totalImages || '',
-        data.imageOptimization?.withLazyLoading || '',
-        data.incomingLinksCount || 0,
-        data.missingMetaTags?.length || 0,
-        data.resourceOptimization?.renderBlocking?.totalBlocking || '',
-        (data.status || 0) >= 400 || (data.statusCode || 0) >= 400 ? 'Yes' : 'No',
-        data.languageDetection?.detectedLanguage || '',
+        data.imageOptimization?.totalImages ?? '',
+        data.imageOptimization?.withLazyLoading ?? '',
+        data.incomingLinksCount ?? 0,
+        data.missingMetaTags?.length ?? 0,
+        data.resourceOptimization?.renderBlocking?.totalBlocking ?? '',
+        (data.status ?? 0) >= 400 || (data.statusCode ?? 0) >= 400 ? 'Yes' : 'No',
+        data.languageDetection?.detectedLanguage ?? '',
         data.languageDetection?.match != null ? (data.languageDetection.match ? 'Yes' : 'No') : '',
         data.internalPageRank != null ? data.internalPageRank.toFixed(6) : '',
         data.ctaData?.summary?.total ?? '',
@@ -166,7 +166,7 @@ function generatePagesCSV(jsonData: AuditJsonData) {
 }
 
 function generateIssuesCSV(jsonData: AuditJsonData) {
-  const details = jsonData.analysis?.details || {};
+  const details = jsonData.analysis?.details ?? {};
   const rows = [['Issue', 'Severity', 'Affected Pages', 'Example URLs']];
 
   Object.entries(details).forEach(([issue, _data]) => {
@@ -179,7 +179,7 @@ function generateIssuesCSV(jsonData: AuditJsonData) {
 }
 
 function generatePerformanceCSV(jsonData: AuditJsonData) {
-  const pages = jsonData.pageData?.pages || {};
+  const pages = jsonData.pageData?.pages ?? {};
   const rows = [
     [
       'URL',
@@ -205,19 +205,19 @@ function generatePerformanceCSV(jsonData: AuditJsonData) {
       rows.push(
         [
           url,
-          data.TTFB || '',
-          data.FCP || '',
-          data.LCP || '',
+          data.TTFB ?? '',
+          data.FCP ?? '',
+          data.LCP ?? '',
           data.CLS !== undefined ? data.CLS : '',
-          data.INP || '',
-          data.TBT || '',
-          data.TTI || '',
-          data.speedIndex || '',
+          data.INP ?? '',
+          data.TBT ?? '',
+          data.TTI ?? '',
+          data.speedIndex ?? '',
           data.totalResponseSize ? (data.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
-          data.totalNumberOfRequests || '',
-          data.redirectCount || 0,
-          (data.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.bottleneck || '',
-          (data.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation || '',
+          data.totalNumberOfRequests ?? '',
+          data.redirectCount ?? 0,
+          (data.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.bottleneck ?? '',
+          (data.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation ?? '',
         ].map((v) => escapeCSV(v as string | number | boolean | null | undefined)),
       );
     }
@@ -227,20 +227,20 @@ function generatePerformanceCSV(jsonData: AuditJsonData) {
 }
 
 function generateQuickWinsCSV(jsonData: AuditJsonData) {
-  const quickWins = jsonData.analysis?.summary?.quickWins || [];
+  const quickWins = jsonData.analysis?.summary?.quickWins ?? [];
   const rows = [['Priority', 'Issue', 'Severity', 'Impact', 'Effort', 'Affected Pages', 'How to Fix', 'Example URLs']];
 
   quickWins.forEach((win: QuickWin & { examples?: string[]; severity?: string; fix?: string }, index: number) => {
-    const examples = (win.examples || []).slice(0, 3).join('; ');
+    const examples = (win.examples ?? []).slice(0, 3).join('; ');
     rows.push(
       [
         index + 1,
         win.issue || '',
-        win.severity || '',
+        win.severity ?? '',
         win.impact || '',
         win.effort || '',
         win.affectedPages || 0,
-        win.fix || '',
+        win.fix ?? '',
         examples,
       ].map(escapeCSV),
     );
@@ -250,23 +250,23 @@ function generateQuickWinsCSV(jsonData: AuditJsonData) {
 }
 
 function generateSummaryCSV(jsonData: AuditJsonData) {
-  const summary: Partial<AuditSummary> = jsonData.analysis?.summary || {};
-  const score = summary.overallScore || 0;
+  const summary: Partial<AuditSummary> = jsonData.analysis?.summary ?? {};
+  const score = summary.overallScore ?? 0;
   const grade =
     score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
   const rows = [
     ['Metric', 'Value'],
     ['Overall SEO Score', score],
     ['Grade', grade],
-    ['Total Issues', summary.totalIssues || 0],
-    ['Critical Issues', summary.criticalCount || 0],
-    ['High Issues', summary.highCount || 0],
-    ['Medium Issues', summary.mediumCount || 0],
-    ['Low Issues', summary.lowCount || 0],
-    ['Pass Rate (%)', summary.passRate || 0],
-    ['Total URLs in Sitemap', jsonData.sitemaps?.total || 0],
-    ['Pages Crawled', jsonData.pageData?.totalWithoutError || 0],
-    ['Pages with Errors', jsonData.pageData?.totalWithError || 0],
+    ['Total Issues', summary.totalIssues ?? 0],
+    ['Critical Issues', summary.criticalCount ?? 0],
+    ['High Issues', summary.highCount ?? 0],
+    ['Medium Issues', summary.mediumCount ?? 0],
+    ['Low Issues', summary.lowCount ?? 0],
+    ['Pass Rate (%)', summary.passRate ?? 0],
+    ['Total URLs in Sitemap', jsonData.sitemaps?.total ?? 0],
+    ['Pages Crawled', jsonData.pageData?.totalWithoutError ?? 0],
+    ['Pages with Errors', jsonData.pageData?.totalWithError ?? 0],
     ['Multilanguage', jsonData.isMultiLang ? 'Yes' : 'No'],
   ];
 

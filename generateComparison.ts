@@ -410,8 +410,8 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
           const oldIns = oldAudit.insights;
           const newIns = newAudit.insights;
           if (!oldIns && !newIns) return '';
-          const oi: Partial<InsightsSummary> = oldIns || {};
-          const ni: Partial<InsightsSummary> = newIns || {};
+          const oi: Partial<InsightsSummary> = oldIns ?? {};
+          const ni: Partial<InsightsSummary> = newIns ?? {};
           const insightMetrics = [
             {
               label: 'Language Mismatches',

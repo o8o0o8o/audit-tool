@@ -524,21 +524,21 @@ class LanguageDetectionAnalyzer {
 
     // Extract text content from main content area
     const textContent = await chromePage.evaluate(() => {
-      const mainContent = document.querySelector('main, article, [role="main"]') || document.body;
+      const mainContent = document.querySelector('main, article, [role="main"]') ?? document.body;
       const clone = mainContent.cloneNode(true);
       (clone as Element)
         .querySelectorAll(
           'script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], code, pre',
         )
         .forEach((el) => (el as Element).remove());
-      const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+      const text = (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
       return text.substring(0, 5000); // Limit for performance
     });
 
     // Get declared language
-    const htmlLang = parsedPage?.querySelector('html')?.getAttribute('lang') || null;
-    const contentLanguage = (pageData.response?.headers || pageData.responseHeaders || {})['content-language'] || null;
-    const declaredLang = htmlLang || contentLanguage || null;
+    const htmlLang = parsedPage?.querySelector('html')?.getAttribute('lang') ?? null;
+    const contentLanguage = (pageData.response?.headers ?? pageData.responseHeaders ?? {})['content-language'] || null;
+    const declaredLang = htmlLang ?? contentLanguage ?? null;
 
     // Detect language from content
     const detection = LanguageDetectionAnalyzer.#detectLanguage(textContent);

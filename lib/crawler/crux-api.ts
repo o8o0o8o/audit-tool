@@ -120,7 +120,7 @@ class CrUXAPI {
     formFactor: string = 'ALL_FORM_FACTORS',
   ): Promise<CrUXFieldData | null> {
     // Both CrUX and PSI APIs require an API key
-    const key = apiKey || process.env.CRUX_API_KEY || null;
+    const key = apiKey ?? process.env.CRUX_API_KEY ?? null;
 
     if (key) {
       // Try CrUX API first (more detailed)
@@ -152,7 +152,7 @@ class CrUXAPI {
     apiKey: string | null = null,
     formFactor: string = 'ALL_FORM_FACTORS',
   ): Promise<CrUXFieldData | null> {
-    const key = apiKey || process.env.CRUX_API_KEY || null;
+    const key = apiKey ?? process.env.CRUX_API_KEY ?? null;
     if (!key) return null;
     return this.#queryCrUX(url, 'url', key, formFactor);
   }
@@ -241,7 +241,7 @@ class CrUXAPI {
    * @private
    */
   static #parseCrUXResponse(response: CrUXRawResponse, target: string, targetType: string): CrUXFieldData | null {
-    if (!response.record || !response.record.metrics) {
+    if (!response.record?.metrics) {
       return null;
     }
 
@@ -359,8 +359,8 @@ class CrUXAPI {
    */
   static #parsePSIResponse(psiData: PSIRawResponse, origin: string): CrUXFieldData | null {
     // PSI provides origin-level CrUX data in originLoadingExperience
-    const experience = psiData.originLoadingExperience || psiData.loadingExperience;
-    if (!experience || !experience.metrics) return null;
+    const experience = psiData.originLoadingExperience ?? psiData.loadingExperience;
+    if (!experience?.metrics) return null;
 
     const metrics = experience.metrics;
     const result: CrUXFieldData = {
@@ -389,9 +389,9 @@ class CrUXAPI {
 
         if (metric.distributions) {
           data.distribution = {
-            good: Math.round((metric.distributions[0]?.proportion || 0) * 100),
-            needsImprovement: Math.round((metric.distributions[1]?.proportion || 0) * 100),
-            poor: Math.round((metric.distributions[2]?.proportion || 0) * 100),
+            good: Math.round((metric.distributions[0]?.proportion ?? 0) * 100),
+            needsImprovement: Math.round((metric.distributions[1]?.proportion ?? 0) * 100),
+            poor: Math.round((metric.distributions[2]?.proportion ?? 0) * 100),
           };
         }
 
@@ -409,7 +409,7 @@ class CrUXAPI {
    * @returns {object} Comparison results
    */
   static compareLabVsField(labMetrics: LabMetrics, fieldData: CrUXFieldData | null): CrUXComparison {
-    if (!fieldData || !fieldData.metrics) {
+    if (!fieldData?.metrics) {
       return { available: false };
     }
 
@@ -449,7 +449,7 @@ class CrUXAPI {
    * @returns {object} Formatted summary
    */
   static formatFieldDataSummary(fieldData: CrUXFieldData | null): CrUXFieldSummary | null {
-    if (!fieldData || !fieldData.metrics) {
+    if (!fieldData?.metrics) {
       return null;
     }
 

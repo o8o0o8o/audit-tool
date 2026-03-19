@@ -8,7 +8,7 @@ import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage, ParsedPage } from '../../types';
 
 class ReducedMotionAnalyzer {
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string) {
+  static async analyze(chromePage: ChromePage, _parsedPage: ParsedPage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {

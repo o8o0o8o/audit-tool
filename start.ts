@@ -48,7 +48,7 @@ process.on('uncaughtException', (error) => {
 async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
   try {
     // Parse arguments from command line or use restored values
-    let args = restoredArgs || parseArgs(process.argv.slice(2));
+    let args = restoredArgs ?? parseArgs(process.argv.slice(2));
 
     // Handle --version flag
     if (args.version) {
@@ -106,7 +106,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     // Build arguments for child process
     // Use --max-old-space-size to increase heap limit for large sites
     // Also use --expose-gc to allow manual garbage collection hints
-    const heapSize = process.env.NODE_HEAP_SIZE || args.heapSize || 8192;
+    const heapSize = process.env.NODE_HEAP_SIZE ?? args.heapSize ?? 8192;
     const childArgs = [
       `--max-old-space-size=${heapSize}`, // Heap limit (default 8GB, configurable via NODE_HEAP_SIZE env or --heap-size arg)
       '--expose-gc', // Allow gc() calls
@@ -164,8 +164,8 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
             const manifestPath = path.join(latestRun, 'manifest.json.gz');
             if (fs.existsSync(manifestPath)) {
               const data = JSON.parse(zlib.gunzipSync(fs.readFileSync(manifestPath)).toString());
-              const processed = data.pageData?.processedPages?.length || Object.keys(data.pageData?.pages || {}).length;
-              const total = data.sitemaps?.total || 0;
+              const processed = data.pageData?.processedPages?.length ?? Object.keys(data.pageData?.pages ?? {}).length;
+              const total = data.sitemaps?.total ?? 0;
               if (total > 0) {
                 const pct = ((processed / total) * 100).toFixed(1);
                 console.log(`   Progress before crash: ${processed}/${total} pages (${pct}%)`);
@@ -204,7 +204,7 @@ if (watchArgs.watch) {
   const intervalMin = watchArgs.watch;
   console.log(`\nWatch mode: re-auditing every ${intervalMin} minute(s). Press Ctrl+C to stop.\n`);
 
-  (async function watchLoop() {
+  void (async function watchLoop() {
     while (true) {
       try {
         await audit();
@@ -216,5 +216,5 @@ if (watchArgs.watch) {
     }
   })();
 } else {
-  audit().catch(() => process.exit(1));
+  void audit().catch(() => process.exit(1));
 }

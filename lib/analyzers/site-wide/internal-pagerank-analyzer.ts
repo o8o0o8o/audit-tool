@@ -152,7 +152,7 @@ class InternalPageRankAnalyzer {
 
         // Sum contributions from incoming links
         for (const source of inbound[url] || []) {
-          const outDegree = graph.get(source)?.size || 1;
+          const outDegree = graph.get(source)?.size ?? 1;
           rank += damping * (scores[source] / outDegree);
         }
 

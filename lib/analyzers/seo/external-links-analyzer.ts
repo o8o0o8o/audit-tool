@@ -42,20 +42,20 @@ class ExternalLinksAnalyzer {
       ugcLinks: 0,
       sponsoredLinks: 0,
       newTabLinks: 0,
-      brokenLinks: [] as Record<string, any>[],
-      suspiciousLinks: [] as Record<string, any>[],
-      linksByDomain: {} as Record<string, any>,
-      affiliateLinks: [] as Record<string, any>[],
+      brokenLinks: [] as { href: string; status: number }[],
+      suspiciousLinks: [] as { href: string; anchor: string }[],
+      linksByDomain: {} as Record<string, { count: number; followed: number; nofollow: number }>,
+      affiliateLinks: [] as { href: string; hasSponsored: boolean }[],
       socialLinks: [] as string[],
     };
 
-    const links = Array.isArray(pageData.links) ? pageData.links : ([] as any[]);
+    const links = Array.isArray(pageData.links) ? (pageData.links as { href?: string; url?: string; rel?: string; target?: string; text?: string; anchor?: string; status?: number }[]) : [];
     const pageOrigin = this.getOrigin(url);
 
     for (const link of links) {
-      const href = link.href || link.url || link;
-      const rel = (link.rel || '').toLowerCase();
-      const target = link.target || '';
+      const href = String(link.href || link.url || '');
+      const rel = (link.rel ?? '').toLowerCase();
+      const target = link.target ?? '';
 
       // Skip internal links
       if (this.isInternalLink(href, pageOrigin)) {
@@ -114,7 +114,7 @@ class ExternalLinksAnalyzer {
       // Check for suspicious links
       const isSuspicious = SUSPICIOUS_PATTERNS.some((pattern) => pattern.test(href));
       if (isSuspicious) {
-        info.suspiciousLinks.push({ href, anchor: link.text || link.anchor });
+        info.suspiciousLinks.push({ href, anchor: link.text || link.anchor || '' });
 
         if (!hasNofollow) {
           issues.push({
@@ -145,7 +145,7 @@ class ExternalLinksAnalyzer {
 
       // Check broken links if status available
       if (link.status && link.status >= 400) {
-        info.brokenLinks.push({ href, status: link.status });
+        info.brokenLinks.push({ href, status: link.status! });
       }
     }
 
@@ -161,13 +161,13 @@ class ExternalLinksAnalyzer {
 
     // Link equity concentration
     const topDomains = Object.entries(info.linksByDomain)
-      .sort((a, b) => (b[1] as Record<string, any>).followed - (a[1] as Record<string, any>).followed)
+      .sort((a, b) => b[1].followed - a[1].followed)
       .slice(0, 3);
 
-    const topDomainFollowed = topDomains.reduce((sum, [_, data]) => sum + (data as Record<string, any>).followed, 0);
+    const topDomainFollowed = topDomains.reduce((sum, [_, data]) => sum + data.followed, 0);
     if (topDomainFollowed > info.followedLinks * 0.5 && info.followedLinks > 10) {
       const domainList = topDomains
-        .map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed})`)
+        .map(([domain, data]) => `${domain} (${data.followed})`)
         .join(', ');
       warnings.push({
         message: 'Link equity concentrated to few domains',
@@ -258,7 +258,7 @@ class ExternalLinksAnalyzer {
    * @param {object} options - { concurrency, timeout, maxUrls }
    * @returns {Promise<object>} Verification results
    */
-  static async verifyExternalLinks(pages: any, origin: string, options: Record<string, any> = {}) {
+  static async verifyExternalLinks(pages: Record<string, PageInfo>, origin: string, options: { concurrency?: number; timeout?: number; maxUrls?: number } = {}) {
     const { concurrency = 5, timeout = 10000, maxUrls = 500 } = options;
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
@@ -267,10 +267,10 @@ class ExternalLinksAnalyzer {
     const externalUrlMap = new Map<string, Set<string>>(); // url -> Set of source pages
     const pageOrigin = this.getOrigin(origin);
 
-    for (const [pageUrl, pageData] of Object.entries(pages) as [string, any][]) {
-      const links = pageData.links || [];
+    for (const [pageUrl, pageData] of Object.entries(pages)) {
+      const links = (Array.isArray(pageData.links) ? pageData.links : []) as { href?: string; url?: string }[];
       for (const link of links) {
-        const href = link.href || link.url || link;
+        const href = link.href ?? link.url ?? link;
         if (!href || typeof href !== 'string') continue;
         if (!href.startsWith('http://') && !href.startsWith('https://')) continue;
         if (this.isInternalLink(href, pageOrigin)) continue;
@@ -300,10 +300,10 @@ class ExternalLinksAnalyzer {
     const results = {
       checked: 0,
       ok: 0,
-      broken: [] as Record<string, any>[],
-      redirected: [] as Record<string, any>[],
+      broken: [] as { url: string; status: number; foundOnPages: string[]; totalPages: number }[],
+      redirected: [] as { url: string; status: number; finalUrl: string }[],
       timeout: [] as string[],
-      errors: [] as Record<string, any>[],
+      errors: [] as { url: string; error: string }[],
     };
 
     // Process in batches
@@ -353,7 +353,7 @@ class ExternalLinksAnalyzer {
         if (result.error === 'timeout') {
           results.timeout.push(result.url);
         } else if (result.status >= 400) {
-          const sourcePages = Array.from(externalUrlMap.get(result.url) || []);
+          const sourcePages = Array.from(externalUrlMap.get(result.url) ?? []);
           results.broken.push({
             url: result.url,
             status: result.status,
@@ -420,21 +420,33 @@ class ExternalLinksAnalyzer {
   static analyzeSiteWide(pages: Record<string, PageInfo>, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const stats: Record<string, any> = {
+    const stats: {
+      totalExternalLinks: number;
+      totalFollowed: number;
+      totalNofollow: number;
+      totalSponsored: number;
+      uniqueDomains: Set<string>;
+      domainLinkCounts: Record<string, { total: number; followed: number }>;
+      pagesWithManyExternal: number;
+      affiliateLinksTotal: number;
+      suspiciousLinksTotal: number;
+      brokenLinksTotal: number;
+      uniqueDomainsCount?: number;
+    } = {
       totalExternalLinks: 0,
       totalFollowed: 0,
       totalNofollow: 0,
       totalSponsored: 0,
       uniqueDomains: new Set(),
-      domainLinkCounts: {} as Record<string, any>,
+      domainLinkCounts: {},
       pagesWithManyExternal: 0,
       affiliateLinksTotal: 0,
       suspiciousLinksTotal: 0,
       brokenLinksTotal: 0,
     };
 
-    for (const [url, pageData] of Object.entries(pages) as [string, any][]) {
-      const analysis = pageData.externalLinksAnalysis || this.analyze(pageData, url);
+    for (const [url, pageData] of Object.entries(pages)) {
+      const analysis = (pageData as PageInfo & { externalLinksAnalysis?: ReturnType<typeof ExternalLinksAnalyzer.analyze> }).externalLinksAnalysis ?? this.analyze(pageData, url);
 
       stats.totalExternalLinks += analysis.info.totalExternalLinks;
       stats.totalFollowed += analysis.info.followedLinks;
@@ -445,7 +457,7 @@ class ExternalLinksAnalyzer {
       stats.brokenLinksTotal += analysis.info.brokenLinks.length;
 
       // Track domains
-      for (const [domain, data] of Object.entries(analysis.info.linksByDomain) as [string, any][]) {
+      for (const [domain, data] of Object.entries(analysis.info.linksByDomain)) {
         stats.uniqueDomains.add(domain);
         if (!stats.domainLinkCounts[domain]) {
           stats.domainLinkCounts[domain] = { total: 0, followed: 0 };
@@ -463,7 +475,7 @@ class ExternalLinksAnalyzer {
 
     // Convert Set to count
     stats.uniqueDomainsCount = stats.uniqueDomains.size;
-    delete stats.uniqueDomains;
+    delete (stats as Partial<typeof stats>).uniqueDomains;
 
     // Site-wide issues
     if (stats.suspiciousLinksTotal > 0) {
@@ -496,13 +508,13 @@ class ExternalLinksAnalyzer {
 
     // Top linked domains
     const topDomains = Object.entries(stats.domainLinkCounts)
-      .sort((a, b) => (b[1] as Record<string, any>).followed - (a[1] as Record<string, any>).followed)
+      .sort((a, b) => b[1].followed - a[1].followed)
       .slice(0, 10);
 
     if (topDomains.length > 0) {
       const domainSummary = topDomains
         .slice(0, 5)
-        .map(([domain, data]) => `${domain} (${(data as Record<string, any>).followed} followed)`)
+        .map(([domain, data]) => `${domain} (${data.followed} followed)`)
         .join(', ');
 
       warnings.push({

@@ -47,8 +47,8 @@ class ResourceOptimizationAnalyzer {
 
     // Analyze all requests
     for (const [resourceUrl, reqData] of Object.entries(requests) as [string, NetworkRequest][]) {
-      const headers = reqData.headers || {};
-      const size = reqData.size || 0;
+      const headers = reqData.headers ?? {};
+      const size = reqData.size ?? 0;
       const resourceType = reqData.resourceType;
 
       // Check compression

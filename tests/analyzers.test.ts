@@ -14,36 +14,38 @@ import { METRIC_INFO, SIGNAL_CATEGORIES } from '../lib/reports/metrics-metadata'
 import { getJsonSummary } from '../lib/utils/cli-summary';
 import { HistoryManager } from '../historyManager';
 import { getContentInsights } from '../lib/reports/sections/content-insights';
+import type { PageInfo } from '../lib/types';
+
 
 // ============================================================
 // Response Header Analyzer
 // ============================================================
-describe('ResponseHeaderAnalyzer', () => {
-  it('detects X-Robots-Tag noindex in info', () => {
+void describe('ResponseHeaderAnalyzer', () => {
+  void it('detects X-Robots-Tag noindex in info', () => {
     const pageData = {
       responseHeaders: { 'x-robots-tag': 'noindex', 'content-type': 'text/html' },
     };
-    const result = ResponseHeaderAnalyzer.analyze(pageData as any, 'https://example.com/');
+    const result = ResponseHeaderAnalyzer.analyze(pageData as unknown as PageInfo, 'https://example.com/');
     assert.ok(result.info);
     assert.strictEqual(result.info.noindexViaHeader, true);
     assert.strictEqual(result.info.xRobotsTag, 'noindex');
   });
 
-  it('site-wide detects X-Robots-Tag noindex pages', () => {
+  void it('site-wide detects X-Robots-Tag noindex pages', () => {
     const allPages = {
       'https://example.com/': {
         responseHeaderAnalysis: { noindexViaHeader: true },
       },
     };
-    const result = ResponseHeaderAnalyzer.analyzeSiteWide(allPages as any);
-    assert.ok(result.issues.some((i) => (i.title || '').toLowerCase().includes('x-robots-tag')));
+    const result = ResponseHeaderAnalyzer.analyzeSiteWide(allPages as unknown as Record<string, PageInfo>);
+    assert.ok(result.issues.some((i) => (i.title ?? '').toLowerCase().includes('x-robots-tag')));
   });
 
-  it('returns no issues for clean headers', () => {
+  void it('returns no issues for clean headers', () => {
     const pageData = {
       responseHeaders: { 'content-type': 'text/html' },
     };
-    const result = ResponseHeaderAnalyzer.analyze(pageData as any, 'https://example.com/');
+    const result = ResponseHeaderAnalyzer.analyze(pageData as unknown as PageInfo, 'https://example.com/');
     assert.strictEqual(result.issues.length, 0);
   });
 });
@@ -51,16 +53,16 @@ describe('ResponseHeaderAnalyzer', () => {
 // ============================================================
 // Language Detection Analyzer (public API only - needs browser for full test)
 // ============================================================
-describe('LanguageDetectionAnalyzer', () => {
-  it('exports analyzeLanguage method', () => {
+void describe('LanguageDetectionAnalyzer', () => {
+  void it('exports analyzeLanguage method', () => {
     assert.strictEqual(typeof LanguageDetectionAnalyzer.analyzeLanguage, 'function');
   });
 
-  it('exports analyzeSiteWide method', () => {
+  void it('exports analyzeSiteWide method', () => {
     assert.strictEqual(typeof LanguageDetectionAnalyzer.analyzeSiteWide, 'function');
   });
 
-  it('site-wide detects language mismatches', () => {
+  void it('site-wide detects language mismatches', () => {
     const allPages = {
       'https://example.com/': {
         url: 'https://example.com/',
@@ -88,15 +90,15 @@ describe('LanguageDetectionAnalyzer', () => {
       },
     };
     const result = LanguageDetectionAnalyzer.analyzeSiteWide(allPages);
-    assert.ok(result.issues.some((i) => (i.title || i.description || '').toLowerCase().includes('language')));
+    assert.ok(result.issues.some((i) => (i.title ?? i.description ?? '').toLowerCase().includes('language')));
   });
 });
 
 // ============================================================
 // Content Similarity Analyzer
 // ============================================================
-describe('ContentSimilarityAnalyzer', () => {
-  it('detects similar pages', () => {
+void describe('ContentSimilarityAnalyzer', () => {
+  void it('detects similar pages', () => {
     const allPages = {
       'https://example.com/a': {
         contentQuality: {
@@ -134,22 +136,24 @@ describe('ContentSimilarityAnalyzer', () => {
       },
     };
 
-    ContentSimilarityAnalyzer.analyze(allPages as any);
+    ContentSimilarityAnalyzer.analyze(allPages as unknown as Record<string, PageInfo>);
     // Pages A and B should be detected as similar
-    const pageA = allPages['https://example.com/a'] as any;
+    const pageA = allPages['https://example.com/a'] as Record<string, unknown>;
     assert.ok(pageA.contentSimilarity);
-    assert.ok(pageA.contentSimilarity.similarPages.length > 0);
+    const simA = pageA.contentSimilarity as { similarPages: unknown[] };
+    assert.ok(simA.similarPages.length > 0);
     // Page C should not be similar to A/B
-    const pageC = allPages['https://example.com/c'] as any;
-    assert.strictEqual(pageC.contentSimilarity?.similarPages?.length || 0, 0);
+    const pageC = allPages['https://example.com/c'] as Record<string, unknown>;
+    const simC = pageC.contentSimilarity as { similarPages?: unknown[] } | undefined;
+    assert.strictEqual(simC?.similarPages?.length ?? 0, 0);
   });
 
-  it('handles pages without keywords', () => {
+  void it('handles pages without keywords', () => {
     const allPages = {
       'https://example.com/a': { contentQuality: { wordCount: 10 } },
       'https://example.com/b': {},
     };
-    const result = ContentSimilarityAnalyzer.analyze(allPages as any);
+    const result = ContentSimilarityAnalyzer.analyze(allPages as unknown as Record<string, PageInfo>);
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
   });
@@ -158,12 +162,12 @@ describe('ContentSimilarityAnalyzer', () => {
 // ============================================================
 // Internal PageRank Analyzer
 // ============================================================
-describe('InternalPageRankAnalyzer', () => {
-  it('exports analyze method', () => {
+void describe('InternalPageRankAnalyzer', () => {
+  void it('exports analyze method', () => {
     assert.strictEqual(typeof InternalPageRankAnalyzer.analyze, 'function');
   });
 
-  it('returns result with issues array', () => {
+  void it('returns result with issues array', () => {
     const allPages = {
       'https://example.com/': { internalLinks: [{ href: 'https://example.com/about' }] },
       'https://example.com/about': { internalLinks: [{ href: 'https://example.com/' }] },
@@ -172,20 +176,20 @@ describe('InternalPageRankAnalyzer', () => {
       'https://example.com/': ['https://example.com/about'],
       'https://example.com/about': ['https://example.com/'],
     };
-    const result = InternalPageRankAnalyzer.analyze(allPages as any, incomingLinks, 'https://example.com');
+    const result = InternalPageRankAnalyzer.analyze(allPages as unknown as Record<string, PageInfo>, incomingLinks, 'https://example.com');
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
     // Both pages should have PageRank assigned
-    assert.ok((allPages['https://example.com/'] as any).internalPageRank != null);
-    assert.ok((allPages['https://example.com/about'] as any).internalPageRank != null);
+    assert.ok((allPages['https://example.com/'] as Record<string, unknown>).internalPageRank != null);
+    assert.ok((allPages['https://example.com/about'] as Record<string, unknown>).internalPageRank != null);
   });
 });
 
 // ============================================================
 // Code Coverage Analyzer
 // ============================================================
-describe('CodeCoverageAnalyzer', () => {
-  it('exports startCoverage and analyze methods', () => {
+void describe('CodeCoverageAnalyzer', () => {
+  void it('exports startCoverage and analyze methods', () => {
     assert.strictEqual(typeof CodeCoverageAnalyzer.startCoverage, 'function');
     assert.strictEqual(typeof CodeCoverageAnalyzer.analyze, 'function');
   });
@@ -194,8 +198,8 @@ describe('CodeCoverageAnalyzer', () => {
 // ============================================================
 // CTA Detector Analyzer
 // ============================================================
-describe('CTADetectorAnalyzer', () => {
-  it('exports analyzeCTAs method', () => {
+void describe('CTADetectorAnalyzer', () => {
+  void it('exports analyzeCTAs method', () => {
     assert.strictEqual(typeof CTADetectorAnalyzer.analyzeCTAs, 'function');
   });
 });
@@ -203,8 +207,8 @@ describe('CTADetectorAnalyzer', () => {
 // ============================================================
 // Outbound Link Checker
 // ============================================================
-describe('OutboundLinkChecker', () => {
-  it('exports analyze method', () => {
+void describe('OutboundLinkChecker', () => {
+  void it('exports analyze method', () => {
     assert.strictEqual(typeof OutboundLinkChecker.analyze, 'function');
   });
 });
@@ -212,11 +216,11 @@ describe('OutboundLinkChecker', () => {
 // ============================================================
 // Score Calculator - new patterns
 // ============================================================
-describe('ScoreCalculator - new patterns', () => {
+void describe('ScoreCalculator - new patterns', () => {
   // Need at least one page to avoid early return
-  const dummyPages: Record<string, any> = { 'https://example.com/': {} };
+  const dummyPages: Record<string, Record<string, unknown>> = { 'https://example.com/': {} };
 
-  it('categorizes language-related issues to SEO', () => {
+  void it('categorizes language-related issues to SEO', () => {
     const analysisData = {
       bySeverity: {
         critical: [],
@@ -226,11 +230,11 @@ describe('ScoreCalculator - new patterns', () => {
       },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages as unknown as Record<string, PageInfo>);
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
 
-  it('categorizes unused JavaScript to performance', () => {
+  void it('categorizes unused JavaScript to performance', () => {
     const analysisData = {
       bySeverity: {
         critical: [],
@@ -240,11 +244,11 @@ describe('ScoreCalculator - new patterns', () => {
       },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages as unknown as Record<string, PageInfo>);
     assert.ok(scores.performance < 100, `Expected performance < 100, got ${scores.performance}`);
   });
 
-  it('categorizes x-robots-tag to SEO (matches "robots" pattern)', () => {
+  void it('categorizes x-robots-tag to SEO (matches "robots" pattern)', () => {
     const analysisData = {
       bySeverity: {
         critical: [],
@@ -254,14 +258,14 @@ describe('ScoreCalculator - new patterns', () => {
       },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages as unknown as Record<string, PageInfo>);
     // "x-robots-tag" matches "robots" pattern → categorized as SEO
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
 
-  it('scales penalty by affected page count from details', () => {
+  void it('scales penalty by affected page count from details', () => {
     // 2% affected vs 80% affected on same total should differ
-    const pages100: Record<string, any> = {};
+    const pages100: Record<string, Record<string, unknown>> = {};
     for (let i = 0; i < 100; i++) pages100[`https://example.com/${i}`] = {};
 
     const fewAffected = {
@@ -277,15 +281,15 @@ describe('ScoreCalculator - new patterns', () => {
       },
     };
 
-    const scoresFew = ScoreCalculator.calculateCategoryScores(fewAffected, pages100);
-    const scoresMany = ScoreCalculator.calculateCategoryScores(manyAffected, pages100);
+    const scoresFew = ScoreCalculator.calculateCategoryScores(fewAffected, pages100 as unknown as Record<string, PageInfo>);
+    const scoresMany = ScoreCalculator.calculateCategoryScores(manyAffected, pages100 as unknown as Record<string, PageInfo>);
     assert.ok(
       scoresMany.seo < scoresFew.seo,
       `Expected many-affected penalty (${scoresMany.seo}) < few-affected penalty (${scoresFew.seo})`,
     );
   });
 
-  it('reads security score from page.security.securityScore', () => {
+  void it('reads security score from page.security.securityScore', () => {
     const pages = {
       'https://example.com/': { security: { securityScore: 60 } },
       'https://example.com/about': { security: { securityScore: 40 } },
@@ -294,11 +298,11 @@ describe('ScoreCalculator - new patterns', () => {
       bySeverity: { critical: [], high: [], medium: [], low: [] },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as any);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as unknown as Record<string, PageInfo>);
     assert.strictEqual(scores.security, 50, `Expected security=50 (avg of 60,40), got ${scores.security}`);
   });
 
-  it('reads accessibility from formData.accessibilityScore and violations', () => {
+  void it('reads accessibility from formData.accessibilityScore and violations', () => {
     const pages = {
       'https://example.com/': {
         formData: { accessibilityScore: 80 },
@@ -309,12 +313,12 @@ describe('ScoreCalculator - new patterns', () => {
       bySeverity: { critical: [], high: [], medium: [], low: [] },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as any);
+    const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as unknown as Record<string, PageInfo>);
     // Average of 80 (formData) and 80 (violations) = 80
     assert.strictEqual(scores.accessibility, 80, `Expected accessibility=80, got ${scores.accessibility}`);
   });
 
-  it('identifies structural issues as quick wins', () => {
+  void it('identifies structural issues as quick wins', () => {
     const details = {
       'Some pages have redirect chains or loops': {
         severity: 'critical' as const,
@@ -337,8 +341,8 @@ describe('ScoreCalculator - new patterns', () => {
 // ============================================================
 // Config Loader - analysis section
 // ============================================================
-describe('Config Loader - analysis section', () => {
-  it('has analysis defaults', () => {
+void describe('Config Loader - analysis section', () => {
+  void it('has analysis defaults', () => {
     assert.ok(DEFAULT_CONFIG.analysis);
     assert.strictEqual(DEFAULT_CONFIG.analysis.similarityThreshold, 0.6);
     assert.strictEqual(DEFAULT_CONFIG.analysis.maxOutboundChecks, 20);
@@ -351,8 +355,8 @@ describe('Config Loader - analysis section', () => {
 // ============================================================
 // Metrics Metadata - new entries
 // ============================================================
-describe('Metrics Metadata - new entries', () => {
-  it('has all new metric entries', () => {
+void describe('Metrics Metadata - new entries', () => {
+  void it('has all new metric entries', () => {
     const newKeys = [
       'internalPageRank',
       'languageDetected',
@@ -373,7 +377,7 @@ describe('Metrics Metadata - new entries', () => {
     }
   });
 
-  it('has new signal categories', () => {
+  void it('has new signal categories', () => {
     assert.ok(SIGNAL_CATEGORIES.contentInsights);
     assert.ok(SIGNAL_CATEGORIES.codeCoverage);
     assert.ok(SIGNAL_CATEGORIES.advancedLinkAnalysis);
@@ -383,8 +387,8 @@ describe('Metrics Metadata - new entries', () => {
 // ============================================================
 // CLI Summary
 // ============================================================
-describe('CLI Summary', () => {
-  it('getJsonSummary includes insights', () => {
+void describe('CLI Summary', () => {
+  void it('getJsonSummary includes insights', () => {
     const results = {
       analysis: {
         summary: {
@@ -406,7 +410,7 @@ describe('CLI Summary', () => {
         totalWithError: 0,
       },
     };
-    const json = getJsonSummary(results as any, 'example.com', '/tmp/report.html');
+    const json = getJsonSummary(results as unknown as Parameters<typeof getJsonSummary>[0], 'example.com', '/tmp/report.html');
     assert.ok(json.insights);
     assert.strictEqual(json.insights.languageMismatches, 1);
     assert.strictEqual(json.insights.brokenOutboundLinks, 1);
@@ -416,8 +420,8 @@ describe('CLI Summary', () => {
 // ============================================================
 // History Manager - insights extraction
 // ============================================================
-describe('HistoryManager - insights', () => {
-  it('extractInsightsSummary returns metrics', () => {
+void describe('HistoryManager - insights', () => {
+  void it('extractInsightsSummary returns metrics', () => {
     const mgr = new HistoryManager('test-domain', '/tmp/audit-test-results');
     const auditData = {
       pageData: {
@@ -436,7 +440,7 @@ describe('HistoryManager - insights', () => {
         },
       },
     };
-    const insights = mgr.extractInsightsSummary(auditData as any);
+    const insights = mgr.extractInsightsSummary(auditData as unknown as Parameters<typeof mgr.extractInsightsSummary>[0]);
     assert.ok(insights);
     assert.strictEqual(insights!.languageMismatches, 1);
     assert.strictEqual(insights!.brokenOutboundLinks, 1);
@@ -450,9 +454,9 @@ describe('HistoryManager - insights', () => {
 // ============================================================
 // Content Insights Report Section
 // ============================================================
-describe('Content Insights Report', () => {
-  it('generates HTML string', () => {
-    const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } } as any);
+void describe('Content Insights Report', () => {
+  void it('generates HTML string', () => {
+    const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } } as unknown as Parameters<typeof getContentInsights>[0]);
     assert.strictEqual(typeof html, 'string');
     assert.ok(html.includes('content-insights') || html.length === 0 || html.includes('section'));
   });

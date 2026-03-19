@@ -45,9 +45,9 @@ interface CrUXData {
  */
 function getColumnHeader(signalKey: string, displayName: string | null = null, thresholdText: string | null = null) {
   const info = METRIC_INFO[signalKey];
-  const name = displayName || (info ? info.name : signalKey);
+  const name = displayName ?? (info ? info.name : signalKey);
   const description = info ? info.description : '';
-  const threshold = thresholdText || (info ? info.goodLabel : '');
+  const threshold = thresholdText ?? (info ? info.goodLabel : '');
 
   return `
     <th class="sortable" data-type="number" title="${escapeHtml(description)}">
@@ -79,7 +79,7 @@ function getPerfColumnHeader(signalKey: string, displayName: string, thresholdTe
  * Displayed as the first row in the table for easy comparison against per-page lab data.
  */
 function getCrUXBaselineRow(cruxData: CrUXData) {
-  const metrics = cruxData.metrics || {};
+  const metrics = cruxData.metrics ?? {};
   const targetLabel = cruxData.targetType === 'url' ? 'URL-level' : 'Origin-level';
 
   function formatCrUXValue(metric: string): string {
@@ -110,7 +110,7 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
         <td style="text-align:center;font-size:11px;color:#3b82f6;font-weight:700;">🌐</td>
         <td colspan="11" style="font-size:12px;font-weight:600;color:#1d4ed8;padding:8px;">
             CrUX Field Data (${escapeHtml(targetLabel)}) — Real user p75 values
-            <span style="font-weight:400;color:#6b7280;font-size:11px;margin-left:8px;">${escapeHtml(cruxData.target || '')}</span>
+            <span style="font-weight:400;color:#6b7280;font-size:11px;margin-left:8px;">${escapeHtml(cruxData.target ?? '')}</span>
         </td>
         <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX TTFB p75 from real users">${formatCrUXValue('TTFB')}</td>
         <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX FCP p75 from real users">${formatCrUXValue('FCP')}</td>
@@ -136,7 +136,7 @@ function getPagesTable(data: ReportSectionData) {
   }
 
   const { pages, hasPerformanceMetrics = false } = data;
-  const cruxData = (data.jsonData?.cruxData || null) as CrUXData | null;
+  const cruxData = (data.jsonData?.cruxData ?? null) as CrUXData | null;
   const hasCrux = !!cruxData?.metrics;
 
   return `
@@ -397,8 +397,8 @@ function getPerfCell(page: PageInfo, metric: string, labValue: number | undefine
  * Generate a single table row for a page
  */
 function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boolean) {
-  const titleLength = page.title?.length || 0;
-  const descLength = page.description?.length || 0;
+  const titleLength = page.title?.length ?? 0;
+  const descLength = page.description?.length ?? 0;
   const titleColor = getTextLengthColor(titleLength, THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX);
   const descColor = getTextLengthColor(descLength, THRESHOLDS.DESCRIPTION_MIN, THRESHOLDS.DESCRIPTION_MAX);
   const titleTooltip = getTextLengthTooltip(titleLength, THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX, 'Title');
@@ -411,28 +411,28 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
 
   // Handle both old array format and new object format
   const h1Count = Array.isArray(page.headings)
-    ? page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count || 0
-    : page.headings?.h1?.length || 0;
+    ? page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count ?? 0
+    : page.headings?.h1?.length ?? 0;
   const h2Count = Array.isArray(page.headings)
-    ? page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count || 0
-    : page.headings?.h2?.length || 0;
+    ? page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count ?? 0
+    : page.headings?.h2?.length ?? 0;
 
   // Convert object format to array format for structure check
   const headingsArray: HeadingCount[] | null = Array.isArray(page.headings)
     ? page.headings
     : page.headings
       ? [
-          { tag: 'h1', count: page.headings.h1?.length || page.headings.h1Count || 0 },
-          { tag: 'h2', count: page.headings.h2?.length || page.headings.h2Count || 0 },
-          { tag: 'h3', count: page.headings.h3?.length || page.headings.h3Count || 0 },
-          { tag: 'h4', count: page.headings.h4?.length || page.headings.h4Count || 0 },
-          { tag: 'h5', count: page.headings.h5?.length || page.headings.h5Count || 0 },
-          { tag: 'h6', count: page.headings.h6?.length || page.headings.h6Count || 0 },
+          { tag: 'h1', count: (page.headings.h1?.length || page.headings.h1Count) ?? 0 },
+          { tag: 'h2', count: (page.headings.h2?.length || page.headings.h2Count) ?? 0 },
+          { tag: 'h3', count: (page.headings.h3?.length || page.headings.h3Count) ?? 0 },
+          { tag: 'h4', count: (page.headings.h4?.length || page.headings.h4Count) ?? 0 },
+          { tag: 'h5', count: (page.headings.h5?.length || page.headings.h5Count) ?? 0 },
+          { tag: 'h6', count: (page.headings.h6?.length || page.headings.h6Count) ?? 0 },
         ]
       : null;
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
   const missingMeta = getMissingMetaTags(page);
-  const alternatesCount = page.alternates?.length || 0;
+  const alternatesCount = page.alternates?.length ?? 0;
   const linksWithoutText =
     (Array.isArray(page.links) ? page.links : []).filter(
       (link: { text?: string }) => !link.text || link.text.trim() === '',
@@ -440,11 +440,11 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
 
   // Security metrics
   const securityScore = page.security?.securityScore ?? null;
-  const missingSecHeaders = page.security?.missingHeaders?.length || 0;
-  const mixedContent = page.security?.mixedContent || 0;
-  const insecureCookies = page.security?.insecureCookies || 0;
-  const formsWithoutCSRF = page.security?.formsWithoutCSRF || 0;
-  const inlineScripts = page.security?.inlineScripts || 0;
+  const missingSecHeaders = page.security?.missingHeaders?.length ?? 0;
+  const mixedContent = page.security?.mixedContent ?? 0;
+  const insecureCookies = page.security?.insecureCookies ?? 0;
+  const formsWithoutCSRF = page.security?.formsWithoutCSRF ?? 0;
+  const inlineScripts = page.security?.inlineScripts ?? 0;
   const securityTooltip = buildSecurityTooltip(
     page,
     securityScore,
@@ -457,11 +457,11 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
 
   // Caching metrics
   const cacheScore = page.caching?.cacheScore ?? null;
-  const hasCDN = page.caching?.hasCDN || false;
-  const cdnProvider = page.caching?.cdnProvider || null;
-  const uncachedStatic = page.caching?.staticUncached || 0;
-  const cachedStatic = page.caching?.staticCached || 0;
-  const hasServiceWorker = page.caching?.hasServiceWorker || false;
+  const hasCDN = page.caching?.hasCDN ?? false;
+  const cdnProvider = page.caching?.cdnProvider ?? null;
+  const uncachedStatic = page.caching?.staticUncached ?? 0;
+  const cachedStatic = page.caching?.staticCached ?? 0;
+  const hasServiceWorker = page.caching?.hasServiceWorker ?? false;
   const cachingTooltip = buildCachingTooltip(
     page,
     cacheScore,
@@ -473,13 +473,13 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   );
 
   // Keywords for filtering
-  const keywords = (page.contentQuality?.topKeywords || [])
+  const keywords = (page.contentQuality?.topKeywords ?? [])
     .map((k: { word: string }) => k.word.toLowerCase())
     .join(',');
-  const titleWords = (page.title || '').toLowerCase();
+  const titleWords = (page.title ?? '').toLowerCase();
 
   return `
-    <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment || 'other'}" data-has-errors="${(page.status ?? 0) >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB || 0}" data-status="${page.status || ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
+    <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment || 'other'}" data-has-errors="${(page.status ?? 0) >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB ?? 0}" data-status="${page.status ?? ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
         <td style="text-align: center; color: #9ca3af; font-weight: 500; font-size: 12px;">
             ${index + 1}
         </td>
@@ -490,37 +490,37 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             <span class="source-badge source-${page.foundIn || 'sitemap'}" title="${page.foundIn === 'discovered' ? (page.discoveredOn ? 'Found on page: ' + escapeHtml(page.discoveredOn) : 'Found through internal links during crawl') : 'Listed in sitemap'}">${page.foundIn === 'discovered' ? 'Link' : 'Sitemap'}</span>
         </td>
         <td style="text-align: center;">
-            <span class="segment-badge segment-${page.segment || 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment ?? 'other')}; color: white;" title="Page segment: ${page.segment || 'other'}">${getSegmentLabel(page.segment ?? 'other')}</span>
+            <span class="segment-badge segment-${page.segment || 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment || 'other')}; color: white;" title="Page segment: ${page.segment || 'other'}">${getSegmentLabel(page.segment || 'other')}</span>
         </td>
         <td class="incoming-links-cell"
             style="color: ${(page.incomingLinksCount ?? 0) > 0 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center; cursor: ${(page.incomingLinksCount ?? 0) > 0 ? 'pointer' : 'default'}; position: relative;"
             data-url="${escapeHtml(page.url)}"
-            data-count="${page.incomingLinksCount || 0}"
+            data-count="${page.incomingLinksCount ?? 0}"
             title="${(page.incomingLinksCount ?? 0) > 0 ? 'Click to see ' + page.incomingLinksCount + ' incoming link(s)' : 'No incoming links - page is orphaned (only accessible via sitemap)'}">
-            ${page.incomingLinksCount || 0}${(page.incomingLinksCount ?? 0) > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
+            ${page.incomingLinksCount ?? 0}${(page.incomingLinksCount ?? 0) > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.length || 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal'}">
-            ${page.urlAnalysis?.length || 0}
+        <td style="color: ${getMetricColor(page.urlAnalysis?.length ?? 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal'}">
+            ${page.urlAnalysis?.length ?? 0}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.depth || 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
-            ${page.urlAnalysis?.depth || 0}
+        <td style="color: ${getMetricColor(page.urlAnalysis?.depth ?? 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
+            ${page.urlAnalysis?.depth ?? 0}
         </td>
         <td style="color: ${(page.redirectCount ?? 0) > 2 ? '#ef4444' : (page.redirectCount ?? 0) > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.redirectCount ?? 0) > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
-            ${page.redirectCount || 0}
+            ${page.redirectCount ?? 0}
         </td>
         <td style="color: ${(page.httpLinksCount ?? 0) > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.httpLinksCount ?? 0) > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
-            ${page.httpLinksCount || 0}
+            ${page.httpLinksCount ?? 0}
         </td>
         <td><span class="status-badge" style="background: ${getStatusColor(page.status ?? 0)};">${page.status || 'N/A'}</span></td>
         <td class="text-cell" title="${titleTooltip || escapeHtml(page.title || 'No title')}">
             <span style="color: ${titleColor}; font-weight: 600;">${titleLength}</span>
             <span style="color: #9ca3af;"> | </span>
-            <span>${escapeHtml(page.title?.substring(0, 40) || 'No title')}${(page.title?.length || 0) > 40 ? '...' : ''}</span>
+            <span>${escapeHtml(page.title?.substring(0, 40) || 'No title')}${(page.title?.length ?? 0) > 40 ? '...' : ''}</span>
         </td>
         <td class="text-cell" title="${descTooltip || escapeHtml(page.description || 'No description')}">
             <span style="color: ${descColor}; font-weight: 600;">${descLength}</span>
             <span style="color: #9ca3af;"> | </span>
-            <span>${escapeHtml(page.description?.substring(0, 40) || 'No description')}${(page.description?.length || 0) > 40 ? '...' : ''}</span>
+            <span>${escapeHtml(page.description?.substring(0, 40) || 'No description')}${(page.description?.length ?? 0) > 40 ? '...' : ''}</span>
         </td>
         ${
           hasPerformanceMetrics
@@ -534,10 +534,10 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             : ''
         }
         <td class="metric-cell" style="color: ${getMetricColor(page.totalResponseSize, THRESHOLDS.PAGE_SIZE, true)};" title="${getMetricTooltip(page.totalResponseSize, THRESHOLDS.PAGE_SIZE, 'Page Size', ' bytes', true)}">
-            ${formatBytes(page.totalResponseSize || 0)}
+            ${formatBytes(page.totalResponseSize ?? 0)}
         </td>
         <td class="metric-cell" style="color: ${getMetricColor(page.totalNumberOfRequests, THRESHOLDS.REQUEST_COUNT, true)};" title="${getMetricTooltip(page.totalNumberOfRequests, THRESHOLDS.REQUEST_COUNT, 'Requests', '', true)}">
-            ${page.totalNumberOfRequests || 0}
+            ${page.totalNumberOfRequests ?? 0}
         </td>
         <td style="text-align: center;">
             ${
@@ -575,7 +575,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
         <td style="color: ${securityScore === null ? '#9ca3af' : securityScore >= 70 ? '#10b981' : securityScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${securityTooltip}">
             ${securityScore !== null ? securityScore : 'N/A'}
         </td>
-        <td style="color: ${missingSecHeaders === 0 ? '#10b981' : missingSecHeaders <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') || '')}">
+        <td style="color: ${missingSecHeaders === 0 ? '#10b981' : missingSecHeaders <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') ?? '')}">
             ${missingSecHeaders}
         </td>
         <td style="color: ${insecureCookies === 0 ? '#10b981' : insecureCookies <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${insecureCookies === 0 ? 'Good: All cookies are secure' : 'Warning: ' + insecureCookies + ' cookie(s) without Secure/HttpOnly flags'}">
@@ -646,7 +646,7 @@ function buildSecurityTooltip(
     scoreBreakdown.push('✓ All security headers present');
   } else {
     scoreBreakdown.push(
-      '✗ Missing ' + missingSecHeaders + ' security header(s): ' + (page.security?.missingHeaders?.join(', ') || ''),
+      '✗ Missing ' + missingSecHeaders + ' security header(s): ' + (page.security?.missingHeaders?.join(', ') ?? ''),
     );
   }
 
@@ -739,8 +739,8 @@ function buildCachingTooltip(
   }
 
   // Dynamic Content (10 points max)
-  const dynamicCached = page.caching?.dynamicCached || 0;
-  const dynamicUncached = page.caching?.dynamicUncached || 0;
+  const dynamicCached = page.caching?.dynamicCached ?? 0;
+  const dynamicUncached = page.caching?.dynamicUncached ?? 0;
   const totalDynamic = dynamicCached + dynamicUncached;
   if (totalDynamic > 0) {
     const dynamicRatio = dynamicCached / totalDynamic;
@@ -777,18 +777,18 @@ function buildCachingTooltip(
  * Generate image optimization cells
  */
 function getImageOptimizationCells(page: PageInfo) {
-  const imgOpt = page.imageOptimization || {};
-  const resOpt = page.resourceOptimization || {};
+  const imgOpt = page.imageOptimization ?? {};
+  const resOpt = page.resourceOptimization ?? {};
 
-  const totalImages = imgOpt.totalImages || 0;
-  const lazyImages = imgOpt.withLazyLoading || 0;
-  const totalImageSize = imgOpt.totalImageSize || 0;
-  const modernFormats = imgOpt.modernFormats || 0;
-  const legacyFormats = imgOpt.legacyFormats || 0;
+  const totalImages = imgOpt.totalImages ?? 0;
+  const lazyImages = imgOpt.withLazyLoading ?? 0;
+  const totalImageSize = imgOpt.totalImageSize ?? 0;
+  const modernFormats = imgOpt.modernFormats ?? 0;
+  const legacyFormats = imgOpt.legacyFormats ?? 0;
 
-  const renderBlocking = resOpt.renderBlocking?.totalBlocking || 0;
-  const uncompressed = resOpt.compression?.uncompressed || 0;
-  const unminified = (resOpt.minification?.unminifiedJS || 0) + (resOpt.minification?.unminifiedCSS || 0);
+  const renderBlocking = resOpt.renderBlocking?.totalBlocking ?? 0;
+  const uncompressed = resOpt.compression?.uncompressed ?? 0;
+  const unminified = (resOpt.minification?.unminifiedJS ?? 0) + (resOpt.minification?.unminifiedCSS ?? 0);
 
   return `
     <td style="color: ${totalImages > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${totalImages} total images">
@@ -822,16 +822,16 @@ function getAccessibilityCells(page: PageInfo) {
   const a11y = page.accessibility ?? ({} as AccessibilityAnalysis);
 
   const a11yScore = a11y.a11yScore ?? 'N/A';
-  const ariaValid = a11y.aria?.valid || 0;
-  const ariaInvalid = a11y.aria?.invalid || 0;
-  const inputsWithLabels = a11y.forms?.inputsWithLabels || 0;
-  const inputsWithoutLabels = a11y.forms?.inputsWithoutLabels || 0;
+  const ariaValid = a11y.aria?.valid ?? 0;
+  const ariaInvalid = a11y.aria?.invalid ?? 0;
+  const inputsWithLabels = a11y.forms?.inputsWithLabels ?? 0;
+  const inputsWithoutLabels = a11y.forms?.inputsWithoutLabels ?? 0;
   const totalInputs = inputsWithLabels + inputsWithoutLabels;
-  const hasMain = a11y.semantic?.hasMain || false;
-  const hasNav = a11y.semantic?.hasNav || false;
-  const hasHeader = a11y.semantic?.hasHeader || false;
-  const focusIssues = a11y.keyboard?.elementsWithoutFocus || 0;
-  const positiveTabindex = a11y.keyboard?.positiveTabindex || 0;
+  const hasMain = a11y.semantic?.hasMain ?? false;
+  const hasNav = a11y.semantic?.hasNav ?? false;
+  const hasHeader = a11y.semantic?.hasHeader ?? false;
+  const focusIssues = a11y.keyboard?.elementsWithoutFocus ?? 0;
+  const positiveTabindex = a11y.keyboard?.positiveTabindex ?? 0;
 
   return `
     <td style="color: ${a11yScore >= 70 ? '#10b981' : a11yScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Accessibility Score: ${a11yScore}/100">
@@ -913,9 +913,9 @@ function getContentQualityCells(page: PageInfo) {
   const contentScore: number | string = content.contentScore ?? 'N/A';
   const contentScoreNum = typeof contentScore === 'number' ? contentScore : 0;
   const wordCount = content.wordCount || 0;
-  const textToHtmlRatio = content.textToHtmlRatio || 0;
-  const readability = content.readabilityScore || 0;
-  const topKeywords = content.topKeywords || [];
+  const textToHtmlRatio = content.textToHtmlRatio ?? 0;
+  const readability = content.readabilityScore ?? 0;
+  const topKeywords = content.topKeywords ?? [];
   const topKeywordsStr = topKeywords
     .slice(0, 3)
     .map((k: { word: string; density: number }) => `${k.word}(${k.density}%)`)
@@ -951,7 +951,7 @@ function getNewInsightCells(page: PageInfo) {
   const langMatch = lang?.match;
   const langColor = langMatch === false ? '#ef4444' : langMatch === true ? '#10b981' : '#6b7280';
   const langTitle = lang
-    ? `Detected: ${lang.detectedLanguage || 'unknown'} (${Math.round((lang.detectedConfidence || 0) * 100)}% confidence), Declared: ${lang.declaredLanguage || 'none'}`
+    ? `Detected: ${lang.detectedLanguage || 'unknown'} (${Math.round((lang.detectedConfidence ?? 0) * 100)}% confidence), Declared: ${lang.declaredLanguage || 'none'}`
     : '';
 
   // PageRank
@@ -999,77 +999,77 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   if (!p) return null;
 
   const h1Count = Array.isArray(p.headings)
-    ? p.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count || 0
-    : p.headings?.h1?.length || 0;
+    ? p.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count ?? 0
+    : p.headings?.h1?.length ?? 0;
   const h2Count = Array.isArray(p.headings)
-    ? p.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count || 0
-    : p.headings?.h2?.length || 0;
+    ? p.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count ?? 0
+    : p.headings?.h2?.length ?? 0;
 
   const headingsArray: HeadingCount[] | null = Array.isArray(p.headings)
     ? p.headings
     : p.headings
       ? [
-          { tag: 'h1', count: p.headings.h1?.length || p.headings.h1Count || 0 },
-          { tag: 'h2', count: p.headings.h2?.length || p.headings.h2Count || 0 },
-          { tag: 'h3', count: p.headings.h3?.length || p.headings.h3Count || 0 },
-          { tag: 'h4', count: p.headings.h4?.length || p.headings.h4Count || 0 },
-          { tag: 'h5', count: p.headings.h5?.length || p.headings.h5Count || 0 },
-          { tag: 'h6', count: p.headings.h6?.length || p.headings.h6Count || 0 },
+          { tag: 'h1', count: (p.headings.h1?.length || p.headings.h1Count) ?? 0 },
+          { tag: 'h2', count: (p.headings.h2?.length || p.headings.h2Count) ?? 0 },
+          { tag: 'h3', count: (p.headings.h3?.length || p.headings.h3Count) ?? 0 },
+          { tag: 'h4', count: (p.headings.h4?.length || p.headings.h4Count) ?? 0 },
+          { tag: 'h5', count: (p.headings.h5?.length || p.headings.h5Count) ?? 0 },
+          { tag: 'h6', count: (p.headings.h6?.length || p.headings.h6Count) ?? 0 },
         ]
       : null;
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
   const missingMeta = getMissingMetaTags(p);
-  const alternatesCount = p.alternates?.length || 0;
+  const alternatesCount = p.alternates?.length ?? 0;
   const linksWithoutText = (Array.isArray(p.links) ? p.links : []).filter(
     (link: { text?: string }) => !link.text || link.text.trim() === '',
   ).length || 0;
 
   // Security
   const securityScore = p.security?.securityScore ?? null;
-  const missingSecHeaders = p.security?.missingHeaders?.length || 0;
-  const mixedContent = p.security?.mixedContent || 0;
-  const insecureCookies = p.security?.insecureCookies || 0;
-  const formsWithoutCSRF = p.security?.formsWithoutCSRF || 0;
-  const inlineScripts = p.security?.inlineScripts || 0;
+  const missingSecHeaders = p.security?.missingHeaders?.length ?? 0;
+  const mixedContent = p.security?.mixedContent ?? 0;
+  const insecureCookies = p.security?.insecureCookies ?? 0;
+  const formsWithoutCSRF = p.security?.formsWithoutCSRF ?? 0;
+  const inlineScripts = p.security?.inlineScripts ?? 0;
 
   // Caching
   const cacheScore = p.caching?.cacheScore ?? null;
-  const hasCDN = p.caching?.hasCDN || false;
-  const uncachedStatic = p.caching?.staticUncached || 0;
-  const cachedStatic = p.caching?.staticCached || 0;
-  const hasServiceWorker = p.caching?.hasServiceWorker || false;
+  const hasCDN = p.caching?.hasCDN ?? false;
+  const uncachedStatic = p.caching?.staticUncached ?? 0;
+  const cachedStatic = p.caching?.staticCached ?? 0;
+  const hasServiceWorker = p.caching?.hasServiceWorker ?? false;
 
   // Image optimization
-  const imgOpt = p.imageOptimization || {};
-  const resOpt = p.resourceOptimization || {};
-  const totalImages = imgOpt.totalImages || 0;
-  const lazyImages = imgOpt.withLazyLoading || 0;
-  const totalImageSize = imgOpt.totalImageSize || 0;
-  const modernFormats = imgOpt.modernFormats || 0;
-  const renderBlocking = resOpt.renderBlocking?.totalBlocking || 0;
-  const uncompressed = resOpt.compression?.uncompressed || 0;
-  const unminified = (resOpt.minification?.unminifiedJS || 0) + (resOpt.minification?.unminifiedCSS || 0);
+  const imgOpt = p.imageOptimization ?? {};
+  const resOpt = p.resourceOptimization ?? {};
+  const totalImages = imgOpt.totalImages ?? 0;
+  const lazyImages = imgOpt.withLazyLoading ?? 0;
+  const totalImageSize = imgOpt.totalImageSize ?? 0;
+  const modernFormats = imgOpt.modernFormats ?? 0;
+  const renderBlocking = resOpt.renderBlocking?.totalBlocking ?? 0;
+  const uncompressed = resOpt.compression?.uncompressed ?? 0;
+  const unminified = (resOpt.minification?.unminifiedJS ?? 0) + (resOpt.minification?.unminifiedCSS ?? 0);
 
   // Accessibility
   const a11y = p.accessibility ?? ({} as AccessibilityAnalysis);
   const a11yScore = a11y.a11yScore ?? null;
-  const ariaValid = a11y.aria?.valid || 0;
-  const ariaInvalid = a11y.aria?.invalid || 0;
-  const inputsWithLabels = a11y.forms?.inputsWithLabels || 0;
-  const inputsWithoutLabels = a11y.forms?.inputsWithoutLabels || 0;
+  const ariaValid = a11y.aria?.valid ?? 0;
+  const ariaInvalid = a11y.aria?.invalid ?? 0;
+  const inputsWithLabels = a11y.forms?.inputsWithLabels ?? 0;
+  const inputsWithoutLabels = a11y.forms?.inputsWithoutLabels ?? 0;
   const totalInputs = inputsWithLabels + inputsWithoutLabels;
-  const hasMain = a11y.semantic?.hasMain || false;
-  const hasNav = a11y.semantic?.hasNav || false;
-  const hasHeader = a11y.semantic?.hasHeader || false;
-  const focusIssues = (a11y.keyboard?.elementsWithoutFocus || 0) + (a11y.keyboard?.positiveTabindex || 0);
+  const hasMain = a11y.semantic?.hasMain ?? false;
+  const hasNav = a11y.semantic?.hasNav ?? false;
+  const hasHeader = a11y.semantic?.hasHeader ?? false;
+  const focusIssues = (a11y.keyboard?.elementsWithoutFocus ?? 0) + (a11y.keyboard?.positiveTabindex ?? 0);
 
   // Content quality
   const content = p.contentQuality ?? ({} as ContentQualityAnalysis);
   const contentScore = content.contentScore ?? null;
   const wordCount = content.wordCount || 0;
-  const textToHtmlRatio = content.textToHtmlRatio || 0;
-  const readability = content.readabilityScore || 0;
-  const topKeywords = (content.topKeywords || [])
+  const textToHtmlRatio = content.textToHtmlRatio ?? 0;
+  const readability = content.readabilityScore ?? 0;
+  const topKeywords = (content.topKeywords ?? [])
     .slice(0, 3)
     .map((k: { word: string; density: number }) => `${k.word}(${k.density}%)`)
     .join(', ');
@@ -1086,7 +1086,7 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const mainWords = (pWcs && !Array.isArray(pWcs)) ? (pWcs as Record<string, number>).main ?? null : null;
 
   const status = (p.status as number) || (p.statusCode as number) || 0;
-  const incomingCount = incomingLinks[p.url]?.length || p.incomingLinksCount || 0;
+  const incomingCount = (incomingLinks[p.url]?.length || p.incomingLinksCount) ?? 0;
 
   // Canonical symbol
   const canonicalSymbol = p.canonical ? (p.canonical === p.url ? '=' : '~') : 'x';
@@ -1094,11 +1094,11 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   return {
     status, source: p.foundIn === 'discovered' ? 'Link' : 'Sitemap',
     segment: p.segment || 'other', incomingCount,
-    urlLength: p.urlAnalysis?.length || 0, urlDepth: p.urlAnalysis?.depth || 0,
-    redirects: p.redirectCount || 0, httpLinks: p.httpLinksCount || 0,
-    titleLength: p.title?.length || 0, descLength: p.description?.length || 0,
+    urlLength: p.urlAnalysis?.length ?? 0, urlDepth: p.urlAnalysis?.depth ?? 0,
+    redirects: p.redirectCount ?? 0, httpLinks: p.httpLinksCount ?? 0,
+    titleLength: p.title?.length ?? 0, descLength: p.description?.length ?? 0,
     TTFB: p.TTFB, FCP: p.FCP, LCP: p.LCP, CLS: p.CLS, INP: p.INP,
-    pageSize: p.totalResponseSize || 0, requests: p.totalNumberOfRequests || 0,
+    pageSize: p.totalResponseSize ?? 0, requests: p.totalNumberOfRequests ?? 0,
     canonicalSymbol, h1Count, h2Count, hStructure: hasHStructureIssue ? 'x' : '=',
     missingMeta: missingMeta.length, alternatesCount, linksWithoutText,
     securityScore, missingSecHeaders, insecureCookies, mixedContent, formsWithoutCSRF, inlineScripts,
@@ -1136,8 +1136,8 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     compareByUrl[url] = page;
   }
 
-  const originIncoming = (data.pageData?.incomingLinks || {}) as Record<string, string[]>;
-  const compareIncoming = (comparison.comparePageData?.incomingLinks || {}) as Record<string, string[]>;
+  const originIncoming = (data.pageData?.incomingLinks ?? {}) as Record<string, string[]>;
+  const compareIncoming = (comparison.comparePageData?.incomingLinks ?? {}) as Record<string, string[]>;
 
   // Helper: format o/c dual value, underline when different
   const dual = (oVal: string | number, cVal: string | number) => {

@@ -261,7 +261,7 @@ class CrawlBudgetAnalyzer {
     }
 
     // Check status code
-    const status = pageData.statusCode || pageData.status;
+    const status = pageData.statusCode ?? pageData.status;
     if (status && (status < 200 || status >= 300)) {
       return false;
     }

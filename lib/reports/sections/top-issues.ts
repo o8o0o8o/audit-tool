@@ -184,14 +184,14 @@ function getTopIssues(data: ReportSectionData) {
   }
 
   const { jsonData } = data;
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const bySeverity = (analysisObj.bySeverity || {}) as Record<string, string[]>;
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, string[]>;
 
   const allIssues = [
-    ...(bySeverity.critical || []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
-    ...(bySeverity.high || []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
-    ...(bySeverity.medium || []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
-    ...(bySeverity.low || []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
+    ...(bySeverity.critical ?? []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
+    ...(bySeverity.high ?? []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
+    ...(bySeverity.medium ?? []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
+    ...(bySeverity.low ?? []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
   ].filter((item: { issue: string; severity: string; severityLabel: string }) => !isCrawlerError(item.issue)); // Filter out crawler errors
 
   const topIssues = allIssues.slice(0, 10);
@@ -228,10 +228,10 @@ function getIssueCard(
 ) {
   // Strip severity suffix from issue key (format: "Error message [severity]")
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const detailsMap = (analysisObj.details || {}) as Record<string, Record<string, unknown>>;
-  const details = detailsMap[issueKey] || ({} as Record<string, unknown>);
-  const examples = (details.examples || []) as string[];
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const detailsMap = (analysisObj.details ?? {}) as Record<string, Record<string, unknown>>;
+  const details = detailsMap[issueKey] ?? ({} as Record<string, unknown>);
+  const examples = (details.examples ?? []) as string[];
   const affectedCount = examples.length;
 
   const totalCount = (details.count as number) || affectedCount;
@@ -298,13 +298,13 @@ function getIssueCard(
 
 function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: ComparisonData) {
   const extractIssues = (data: Record<string, unknown>) => {
-    const analysisObj = (data.analysis || {}) as Record<string, unknown>;
-    const bySeverity = (analysisObj.bySeverity || {}) as Record<string, string[]>;
+    const analysisObj = (data.analysis ?? {}) as Record<string, unknown>;
+    const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, string[]>;
     return [
-      ...(bySeverity.critical || []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
-      ...(bySeverity.high || []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
-      ...(bySeverity.medium || []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
-      ...(bySeverity.low || []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
+      ...(bySeverity.critical ?? []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
+      ...(bySeverity.high ?? []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
+      ...(bySeverity.medium ?? []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
+      ...(bySeverity.low ?? []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
     ].filter((item) => !isCrawlerError(item.issue));
   };
 
@@ -321,7 +321,7 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
   for (const issue of allIssueKeys) {
     const originItem = originIssues.find(i => i.issue === issue);
     const compareItem = compareIssues.find(i => i.issue === issue);
-    const item = originItem || compareItem!;
+    const item = originItem ?? compareItem!;
     const key = issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
 
     let status = 'both';
@@ -362,10 +362,10 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
 
 function getIssueCardWithBadge(item: { issue: string; severity: string; severityLabel: string }, index: number, jsonData: Record<string, unknown>, extraBadge: string) {
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const detailsMap = (analysisObj.details || {}) as Record<string, Record<string, unknown>>;
-  const details = detailsMap[issueKey] || ({} as Record<string, unknown>);
-  const examples = (details.examples || []) as string[];
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const detailsMap = (analysisObj.details ?? {}) as Record<string, Record<string, unknown>>;
+  const details = detailsMap[issueKey] ?? ({} as Record<string, unknown>);
+  const examples = (details.examples ?? []) as string[];
   const totalCount = (details.count as number) || examples.length;
 
   const education = findEducation(issueKey);

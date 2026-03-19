@@ -5,7 +5,7 @@
 
 import type { PageInfo } from '../../types';
 import { SEVERITY } from '../../constants';
-import * as tls from 'tls';
+import type * as tls from 'tls';
 import * as https from 'https';
 
 interface CertificateDetails {
@@ -190,7 +190,7 @@ class SSLCertificateAnalyzer {
 
       // Check if hostname matches certificate
       const hostname = parsedUrl.hostname;
-      const certHostnames = [certDetails.subject?.CN, ...(certDetails.altNames || [])];
+      const certHostnames = [certDetails.subject?.CN, ...(certDetails.altNames ?? [])];
       const hostnameMatches = certHostnames.some((cn) => this.hostnameMatches(hostname, cn!));
 
       if (!hostnameMatches) {
@@ -256,7 +256,7 @@ class SSLCertificateAnalyzer {
 
         resolve({
           isValid,
-          validationError: (validationError as unknown as string | null) || null,
+          validationError: (validationError as unknown as string | null) ?? null,
           validFrom: validFrom.toISOString().split('T')[0],
           validTo: validTo.toISOString().split('T')[0],
           daysUntilExpiry,

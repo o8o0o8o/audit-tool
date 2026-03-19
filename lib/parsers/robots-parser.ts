@@ -508,8 +508,8 @@ class RobotsParser {
 
     for (const rules of Object.values(result.userAgents)) {
       for (const path of [...rules.allow, ...rules.disallow]) {
-        if (path && path.includes('*')) hasWildcard = true;
-        if (path && path.includes('$')) hasDollarSign = true;
+        if (path?.includes('*')) hasWildcard = true;
+        if (path?.includes('$')) hasDollarSign = true;
       }
     }
 
@@ -693,7 +693,7 @@ class RobotsParser {
 export { RobotsParser };
 // CLI testing
 if (require.main === module) {
-  (async () => {
+  void (async () => {
     const testUrl = process.argv[2] || 'https://example.com';
     console.log(`Testing RobotsParser with ${testUrl}\n`);
 

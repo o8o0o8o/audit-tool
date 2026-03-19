@@ -3,7 +3,7 @@
  * Fetches and parses XML sitemaps according to the sitemap protocol
  */
 
-import { parse, HTMLElement } from 'node-html-parser';
+import { parse, type HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
 
 interface SitemapEntry {
@@ -119,7 +119,7 @@ class SitemapParser {
         }
       } catch (error: unknown) {
         const err = error as Error;
-        const message = `Error during processing sitemap ${sitemapUrl} ${err.name} ${err.message} ${err.cause || ''}`;
+        const message = `Error during processing sitemap ${sitemapUrl} ${err.name} ${err.message} ${err.cause ?? ''}`;
         result.errors.push({
           message,
           detail: '',
@@ -311,7 +311,7 @@ import { RobotsParser } from './robots-parser';
 const isMainModule = typeof require !== 'undefined' && require.main === module;
 const isDirectRun = process.argv[1]?.endsWith('sitemap-parser.ts') || process.argv[1]?.endsWith('sitemap-parser.js');
 if (isMainModule || isDirectRun) {
-  (async () => {
+  void (async () => {
     const testUrl = process.argv[2] || 'https://example.com';
     console.log(`Testing SitemapParser with ${testUrl}\n`);
 

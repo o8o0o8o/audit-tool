@@ -8,7 +8,7 @@ import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage } from '../../types';
 
 class InterstitialAnalyzer {
-  static async analyze(chromePage: ChromePage, url: string) {
+  static async analyze(chromePage: ChromePage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -97,8 +97,6 @@ class InterstitialAnalyzer {
 
         // Check for known popup/modal libraries
         const libraries: string[] = [];
-        const htmlContent = document.documentElement.outerHTML;
-
         if (document.querySelector('.optinmonster, [data-optinmonster]'))
           libraries.push('OptinMonster');
         if (document.querySelector('.sumo-overlay, .sumome'))

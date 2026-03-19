@@ -28,7 +28,7 @@ process.on('SIGINT', () => {
   if (_seoInstance) {
     try {
       console.log('Saving progress before exit...');
-      _seoInstance.saveData();
+      void _seoInstance.saveData();
       console.log('Progress saved. Resume with --proceed flag.');
     } catch (e: unknown) {
       console.error('Could not save progress:', (e as Error).message);
@@ -81,16 +81,16 @@ async function audit() {
         try {
           const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, {
             verbose: args.verbose,
-            limit: args.limit || 20, // Default limit for batch mode
+            limit: args.limit ?? 20, // Default limit for batch mode
           });
           await batchSeo.audit();
 
-          const score = batchSeo.data.analysis?.summary?.overallScore || 0;
-          const issues = batchSeo.data.analysis?.summary?.totalIssues || 0;
+          const score = batchSeo.data.analysis?.summary?.overallScore ?? 0;
+          const issues = batchSeo.data.analysis?.summary?.totalIssues ?? 0;
           results.push({ url: urls[i], score, issues, status: 'ok' });
           console.log(`  Score: ${score}/100 | Issues: ${issues}`);
 
-          batchSeo.saveData();
+          await batchSeo.saveData();
           const batchHtmlPath = batchSeo.fileManager.getHtmlFilePath();
           generateHTML(batchSeo.file, batchSeo.domainName!, batchHtmlPath);
         } catch (e: unknown) {
@@ -126,7 +126,7 @@ async function audit() {
         const config = loadConfig(args.config);
         console.log('Config is valid.');
         console.log(`  Thresholds: ${Object.keys(config.thresholds ?? {}).length} defined`);
-        console.log(`  Crawl concurrency: ${config.crawl?.concurrency || 5}`);
+        console.log(`  Crawl concurrency: ${config.crawl?.concurrency ?? 5}`);
         console.log(`  Query param mode: ${config.queryParams?.mode || 'strip_tracking'}`);
         process.exit(0);
       } catch (e: unknown) {
@@ -237,7 +237,7 @@ async function audit() {
     }
 
     // Apply config to concurrency only if not explicitly set via CLI
-    if (!args.concurrencyExplicit && config.crawl && config.crawl.concurrency) {
+    if (!args.concurrencyExplicit && config.crawl?.concurrency) {
       args.concurrency = config.crawl.concurrency;
     }
 
@@ -291,8 +291,8 @@ async function audit() {
         }
       }
 
-      const originLabel = args.origin || args.sitemap;
-      const compareLabel = args.compare || args.compareSitemap;
+      const originLabel = args.origin ?? args.sitemap;
+      const compareLabel = args.compare ?? args.compareSitemap;
       console.log(`🔀 Comparison mode: ${originLabel} vs ${compareLabel}`);
 
       // Warn if comparing same domain (only when both are URLs)
@@ -326,7 +326,7 @@ async function audit() {
       limit: args.limit,
       dryRun: args.dryRun,
       screenshots: args.screenshots,
-      cruxApiKey: config.apiKeys?.crux || null,
+      cruxApiKey: config.apiKeys?.crux ?? null,
     });
     _seoInstance = seo;
 
@@ -334,7 +334,7 @@ async function audit() {
 
     // Dry run: show what would be audited and exit
     if (args.dryRun) {
-      const urls = Object.keys(seo.data.sitemaps?.urls || {});
+      const urls = Object.keys(seo.data.sitemaps?.urls ?? {});
       const concurrency = args.concurrency || 5;
       const estSecondsPerPage = args.perf ? 8 : 4;
       const estTotalSeconds = Math.ceil(urls.length / concurrency) * estSecondsPerPage;
@@ -367,10 +367,10 @@ async function audit() {
 
           // Merge repo issues into the main error aggregator
           for (const issue of repoAnalysis.issues || []) {
-            seo.saveError(issue.message || '', issue.detail || '', issue.severity);
+            seo.saveError(issue.message ?? '', issue.detail ?? '', issue.severity);
           }
           for (const warning of repoAnalysis.warnings || []) {
-            seo.saveError(warning.message || '', warning.detail || '', warning.severity);
+            seo.saveError(warning.message ?? '', warning.detail ?? '', warning.severity);
           }
 
           const issueCount = (repoAnalysis.issues?.length || 0) + (repoAnalysis.warnings?.length || 0);
@@ -389,7 +389,7 @@ async function audit() {
         // Get previous score before adding new snapshot
         try {
           const history = manager.loadHistory();
-          if (history && history.audits && history.audits.length > 0) {
+          if (history?.audits && history.audits.length > 0) {
             const lastAudit = history.audits[history.audits.length - 1];
             seo.data.previousScore = lastAudit.summary?.overallScore || null;
           }
@@ -417,7 +417,7 @@ async function audit() {
     // Generate SVG score badge
     try {
       const badgePath = path.join(seo.fileManager.resultsDir, 'badge.svg');
-      const score = seo.data.analysis?.summary?.overallScore || 0;
+      const score = seo.data.analysis?.summary?.overallScore ?? 0;
       fs.writeFileSync(badgePath, generateBadgeSVG(score, seo.domainName!));
     } catch {
       /* badge generation is optional */
@@ -437,7 +437,7 @@ async function audit() {
 
     // CI mode: exit with code 1 if score is below threshold
     if (args.ci !== null && args.ci !== undefined) {
-      const score = seo.data.analysis?.summary?.overallScore || 0;
+      const score = seo.data.analysis?.summary?.overallScore ?? 0;
       if (score < args.ci) {
         console.error(`\nCI check failed: score ${score} is below threshold ${args.ci}`);
         process.exit(1);
@@ -448,11 +448,11 @@ async function audit() {
     // Send Slack notification if configured
     if (args.slack) {
       try {
-        const score = seo.data.analysis?.summary?.overallScore || 0;
-        const issues = seo.data.analysis?.summary?.totalIssues || 0;
+        const score = seo.data.analysis?.summary?.overallScore ?? 0;
+        const issues = seo.data.analysis?.summary?.totalIssues ?? 0;
         const emoji = score >= 80 ? ':white_check_mark:' : score >= 60 ? ':warning:' : ':x:';
         const slackPayload = JSON.stringify({
-          text: `${emoji} *SEO Audit Complete: ${seo.domainName}*\nScore: *${score}/100* | Issues: ${issues}\nCritical: ${seo.data.analysis?.summary?.criticalCount || 0} | High: ${seo.data.analysis?.summary?.highCount || 0}`,
+          text: `${emoji} *SEO Audit Complete: ${seo.domainName}*\nScore: *${score}/100* | Issues: ${issues}\nCritical: ${seo.data.analysis?.summary?.criticalCount ?? 0} | High: ${seo.data.analysis?.summary?.highCount ?? 0}`,
         });
         const slackUrl = new URL(args.slack);
         const req = https.request(slackUrl, {
@@ -490,8 +490,8 @@ async function audit() {
 
     // Send desktop notification (best effort, no dependency required)
     try {
-      const score = seo.data.analysis?.summary?.overallScore || 0;
-      const totalPages = Object.keys(seo.data.pageData?.pages || {}).length;
+      const score = seo.data.analysis?.summary?.overallScore ?? 0;
+      const totalPages = Object.keys(seo.data.pageData?.pages ?? {}).length;
       if (process.platform === 'darwin') {
         execFile('osascript', [
           '-e',
@@ -504,7 +504,7 @@ async function audit() {
 
     // Append to audit log
     try {
-      const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${seo.data.analysis?.summary?.overallScore || 0} | Issues: ${seo.data.analysis?.summary?.totalIssues || 0} | Pages: ${Object.keys(seo.data.pageData?.pages || {}).length}\n`;
+      const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${seo.data.analysis?.summary?.overallScore ?? 0} | Issues: ${seo.data.analysis?.summary?.totalIssues ?? 0} | Pages: ${Object.keys(seo.data.pageData?.pages ?? {}).length}\n`;
       fs.appendFileSync('audit-results/audit.log', logEntry);
     } catch {
       /* log is optional */
@@ -550,5 +550,5 @@ export { SEOData };
 const isMainModule = typeof require !== 'undefined' && require.main === module;
 const isDirectRun = process.argv[1]?.endsWith('robots.ts') || process.argv[1]?.endsWith('robots.js');
 if (isMainModule || isDirectRun) {
-  audit();
+  void audit();
 }

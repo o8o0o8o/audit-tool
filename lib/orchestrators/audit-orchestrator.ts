@@ -218,7 +218,7 @@ class AuditOrchestrator {
    * @private
    */
   static #detectMultilanguage(results: AnalyzeContext['results']) {
-    const isMultiLang = results.isMultiLang || false;
+    const isMultiLang = results.isMultiLang ?? false;
 
     if (!isMultiLang) {
       // Check sitemap for alternates (xhtml:link rel="alternate")
@@ -404,7 +404,7 @@ class AuditOrchestrator {
   ) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
-    const analysisConfig = config.analysis || {};
+    const analysisConfig = config.analysis ?? {};
     const validators = [
       {
         name: 'Duplicate Content',
@@ -428,7 +428,7 @@ class AuditOrchestrator {
       },
       {
         name: 'Link Structure',
-        run: () => LinkStructureAnalyzer.analyzeLinkStructure(pageData.pages, pageData.incomingLinks || {}),
+        run: () => LinkStructureAnalyzer.analyzeLinkStructure(pageData.pages, pageData.incomingLinks ?? {}),
       },
       {
         name: 'Social Media Implementation',
@@ -440,7 +440,7 @@ class AuditOrchestrator {
       },
       {
         name: 'Link Depth & Architecture',
-        run: () => LinkDepthAnalyzer.analyze(pageData.pages, pageData.incomingLinks || {}, origin),
+        run: () => LinkDepthAnalyzer.analyze(pageData.pages, pageData.incomingLinks ?? {}, origin),
       },
       {
         name: 'URL Architecture (Site-Wide)',
@@ -576,7 +576,7 @@ class AuditOrchestrator {
       },
       {
         name: 'Internal PageRank',
-        run: () => InternalPageRankAnalyzer.analyze(pageData.pages, pageData.incomingLinks || {}, origin),
+        run: () => InternalPageRankAnalyzer.analyze(pageData.pages, pageData.incomingLinks ?? {}, origin),
       },
       {
         name: 'Code Coverage (Site-Wide)',
@@ -721,12 +721,12 @@ class AuditOrchestrator {
    */
   static #processValidationResult(result: ValidationResult, saveError: SaveErrorFn) {
     // Process issues (support both message/detail and title/description field names)
-    for (const issue of result.issues || []) {
+    for (const issue of result.issues ?? []) {
       saveError(issue.message || issue.title || '', issue.detail || issue.description, issue.severity);
     }
 
     // Process warnings
-    for (const warning of result.warnings || []) {
+    for (const warning of result.warnings ?? []) {
       saveError(warning.message || warning.title || '', warning.detail || warning.description, warning.severity);
     }
   }

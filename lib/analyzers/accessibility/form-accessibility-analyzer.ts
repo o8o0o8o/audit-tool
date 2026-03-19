@@ -4,7 +4,22 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo, FormInput } from '../../types';
+
+interface FormAnalysis {
+  index: number;
+  hasAction: boolean;
+  method: string;
+  hasSubmitButton: boolean;
+  hasFieldset: boolean;
+  hasRadioGroups: boolean;
+  hasPositiveTabindex: boolean;
+  inputs: FormInput[];
+  inputsWithoutLabels: number;
+  inputsWithoutAutocomplete: number;
+  requiredWithoutAria: number;
+  placeholderAsLabel: number;
+}
 
 class FormAccessibilityAnalyzer {
   /**
@@ -19,7 +34,7 @@ class FormAccessibilityAnalyzer {
     const warnings: Issue[] = [];
 
     const formData = {
-      forms: [] as Record<string, any>[],
+      forms: [] as FormAnalysis[],
       totalForms: 0,
       totalInputs: 0,
       inputsWithoutLabels: 0,
@@ -40,7 +55,7 @@ class FormAccessibilityAnalyzer {
     for (let i = 0; i < forms.length; i++) {
       const form = forms[i];
       const formAnalysis = await this.#analyzeForm(form, i, chromePage);
-      (formData.forms as Record<string, any>[]).push(formAnalysis);
+      formData.forms.push(formAnalysis);
 
       formData.totalInputs += formAnalysis.inputs.length;
       formData.inputsWithoutLabels += formAnalysis.inputsWithoutLabels;
@@ -64,8 +79,8 @@ class FormAccessibilityAnalyzer {
 
     // Missing autocomplete (UX and accessibility)
     const autocompleteInputCount = formData.forms.reduce(
-      (sum: number, f: Record<string, any>) =>
-        sum + f.inputs.filter((i: Record<string, any>) => i.shouldHaveAutocomplete).length,
+      (sum: number, f: FormAnalysis) =>
+        sum + f.inputs.filter((i: FormInput) => i.shouldHaveAutocomplete).length,
       0,
     );
     if (formData.inputsWithoutAutocomplete > 0 && autocompleteInputCount > 0) {
@@ -137,8 +152,8 @@ class FormAccessibilityAnalyzer {
    * Analyze a single form
    * @private
    */
-  static async #analyzeForm(form: any, index: number, _chromePage: ChromePage) {
-    const analysis = {
+  static async #analyzeForm(form: ParsedPage, index: number, _chromePage: ChromePage): Promise<FormAnalysis> {
+    const analysis: FormAnalysis = {
       index,
       hasAction: !!form.getAttribute('action'),
       method: form.getAttribute('method') || 'get',
@@ -146,7 +161,7 @@ class FormAccessibilityAnalyzer {
       hasFieldset: form.querySelectorAll('fieldset').length > 0,
       hasRadioGroups: false,
       hasPositiveTabindex: false,
-      inputs: [] as Record<string, any>[],
+      inputs: [],
       inputsWithoutLabels: 0,
       inputsWithoutAutocomplete: 0,
       requiredWithoutAria: 0,
@@ -197,7 +212,7 @@ class FormAccessibilityAnalyzer {
    * Build map of label associations
    * @private
    */
-  static #buildLabelMap(form: any) {
+  static #buildLabelMap(form: ParsedPage) {
     const labelMap = new Map();
 
     // Labels with "for" attribute
@@ -216,7 +231,7 @@ class FormAccessibilityAnalyzer {
    * Analyze a single input
    * @private
    */
-  static #analyzeInput(input: any, labelMap: Map<string, string>) {
+  static #analyzeInput(input: ParsedPage, labelMap: Map<string, string>): FormInput {
     const type = input.getAttribute('type') || (input.tagName === 'TEXTAREA' ? 'textarea' : 'text');
     const id = input.getAttribute('id');
     const name = input.getAttribute('name');
@@ -226,7 +241,7 @@ class FormAccessibilityAnalyzer {
     const autocomplete = input.getAttribute('autocomplete');
     const required = input.hasAttribute('required');
     const ariaRequired = input.getAttribute('aria-required') === 'true';
-    const tabindex = parseInt(input.getAttribute('tabindex'), 10) || 0;
+    const tabindex = parseInt(input.getAttribute('tabindex') ?? '', 10) || 0;
     const title = input.getAttribute('title');
 
     // Skip hidden and submit-like inputs
@@ -240,17 +255,17 @@ class FormAccessibilityAnalyzer {
     }
 
     // Check for label
-    const hasExplicitLabel = id && labelMap.has(id);
+    const hasExplicitLabel = !!(id && labelMap.has(id));
     const hasImplicitLabel = input.closest('label') !== null;
     const hasAriaLabel = !!ariaLabel || !!ariaLabelledBy;
     const hasTitle = !!title;
-    const hasLabel = hasExplicitLabel || hasImplicitLabel || hasAriaLabel || hasTitle;
+    const hasLabel = !!(hasExplicitLabel || hasImplicitLabel || hasAriaLabel || hasTitle);
 
     // Check if using placeholder as label (anti-pattern)
     const placeholderAsLabel = !hasLabel && !!placeholder;
 
     // Determine if autocomplete should be used
-    const shouldHaveAutocomplete = this.#shouldHaveAutocomplete(type, name);
+    const shouldHaveAutocomplete = this.#shouldHaveAutocomplete(type, name ?? null);
     const hasAutocomplete = !!autocomplete && autocomplete !== 'off';
 
     return {

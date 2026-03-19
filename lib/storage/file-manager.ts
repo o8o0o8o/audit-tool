@@ -90,7 +90,7 @@ class FileManager {
     this.incomingLinksFile = path.join(this.runDir, 'incoming-links.json.gz');
     this.repoAnalysisFile = path.join(this.runDir, 'repo-analysis.json.gz');
     // Allow batch size to be configured via options (from config file)
-    this.batchSize = options.batchSize || CRAWL_SETTINGS.BATCH_SIZE;
+    this.batchSize = options.batchSize ?? CRAWL_SETTINGS.BATCH_SIZE;
     this.currentBatchNumber = 0;
   }
 

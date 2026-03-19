@@ -98,7 +98,7 @@ class SecurityAnalyzer {
       const allResources = parsedPage.querySelectorAll('script[src], link[href], img[src], iframe[src]');
       for (const resource of allResources) {
         const src = resource.getAttribute('src') || resource.getAttribute('href');
-        if (src && src.startsWith('http://')) {
+        if (src?.startsWith('http://')) {
           securityIssues.mixedContent++;
         }
       }
@@ -111,7 +111,7 @@ class SecurityAnalyzer {
       if (method === 'post') {
         // Check for CSRF token (common patterns)
         const hasCSRFToken = Array.from(form.querySelectorAll('input')).some((input) => {
-          const name = input.getAttribute('name')?.toLowerCase() || '';
+          const name = input.getAttribute('name')?.toLowerCase() ?? '';
           return name.includes('csrf') || name.includes('token') || name.includes('_token');
         });
         if (!hasCSRFToken) {

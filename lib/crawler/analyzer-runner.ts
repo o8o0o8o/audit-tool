@@ -105,7 +105,7 @@ function extractSettledResults(results: PromiseSettledResult<unknown>[], fallbac
       return result.value;
     }
     // Log the failure but continue with fallback
-    console.log(`⚠️  Analyzer ${index} failed for ${url}: ${result.reason?.message || result.reason}`);
+    console.log(`⚠️  Analyzer ${index} failed for ${url}: ${result.reason?.message ?? result.reason}`);
     return fallbacks[index];
   });
 }
@@ -114,11 +114,11 @@ function extractSettledResults(results: PromiseSettledResult<unknown>[], fallbac
  * Report issues and warnings from analyzer result
  */
 function reportIssues(result: AnalyzerResult, reportIssue: ReportIssueFn): void {
-  for (const issue of result.issues || []) {
-    reportIssue(issue.message || '', issue.detail || '', issue.severity);
+  for (const issue of result.issues ?? []) {
+    reportIssue(issue.message ?? '', issue.detail ?? '', issue.severity);
   }
-  for (const warning of result.warnings || []) {
-    reportIssue(warning.message || '', warning.detail || '', warning.severity);
+  for (const warning of result.warnings ?? []) {
+    reportIssue(warning.message ?? '', warning.detail ?? '', warning.severity);
   }
 }
 
@@ -213,8 +213,8 @@ export async function runAnalyzers(
         chromePage,
         parsedPage,
         url,
-        pageData.status || 0,
-        pageData.responseHeaders || {},
+        pageData.status ?? 0,
+        pageData.responseHeaders ?? {},
       ),
       CrawlabilityAnalyzer.analyzeCrawlability(chromePage, parsedPage, url, pageData),
       InternationalSEOAnalyzer.analyzeInternationalSEO(chromePage, parsedPage, url, pageData.responseHeaders),
@@ -239,7 +239,7 @@ export async function runAnalyzers(
       ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
       FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
       ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, options.origin),
-      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics || {}, url),
+      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics ?? {}, url),
       ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
 
       // Advanced
@@ -255,11 +255,11 @@ export async function runAnalyzers(
         chromePage,
         parsedPage,
         pageContent,
-        pageData.responseHeaders || {},
+        pageData.responseHeaders ?? {},
         analyzerRequests,
       ).catch(() => {
         const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
-        return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders || {}, scriptSrcs);
+        return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders ?? {}, scriptSrcs);
       }),
 
       // CTA Detection
@@ -468,7 +468,7 @@ export async function runAnalyzers(
   const syncResultsSettled = await withTimeout(
     Promise.allSettled([
       UrlArchitectureAnalyzer.analyze(url, pageData, options.origin),
-      FreshnessAnalyzer.analyze(pageData, pageData.response || {}, parsedPage),
+      FreshnessAnalyzer.analyze(pageData, pageData.response ?? {}, parsedPage),
       EEATAnalyzer.analyze(parsedPage, url, pageData),
       AdvancedSchemaValidator.validate(pageData, url),
       TechnicalSEOAnalyzer.analyze(parsedPage, url, pageData),

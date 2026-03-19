@@ -20,7 +20,7 @@ class CrawlabilityAnalyzer {
 
     // 1. Use pre-captured redirect chain (avoid navigation)
 
-    const capturedRedirectChain = pageData.redirectChain || [];
+    const capturedRedirectChain = pageData.redirectChain ?? [];
     if (capturedRedirectChain.length > 0) {
       crawlabilityData.redirectChain = capturedRedirectChain.map((r: { url: string }) => r.url);
 
@@ -39,7 +39,7 @@ class CrawlabilityAnalyzer {
     }
 
     // 3. Check for JavaScript-heavy content (potential crawl issue)
-    const bodyContent = parsedPage.querySelector('body')?.textContent?.trim() || '';
+    const bodyContent = parsedPage.querySelector('body')?.textContent?.trim() ?? '';
     const scriptTags = parsedPage.querySelectorAll('script').length;
 
     if (scriptTags > 20 && bodyContent.length < 500) {
@@ -54,7 +54,7 @@ class CrawlabilityAnalyzer {
 
     // 5. Check load time (use TTFB from page data if available)
 
-    crawlabilityData.loadTime = pageData.TTFB || pageData.loadTime || 0;
+    crawlabilityData.loadTime = pageData.TTFB ?? pageData.loadTime ?? 0;
     if (crawlabilityData.loadTime > 10000) {
       crawlabilityData.warnings.push(
         `Very slow load time (${Math.round(crawlabilityData.loadTime / 1000)}s) - may timeout for crawlers`,
@@ -73,7 +73,7 @@ class CrawlabilityAnalyzer {
     let sortingLinks = 0;
 
     for (const link of allLinks) {
-      const href = link.getAttribute('href') || '';
+      const href = link.getAttribute('href') ?? '';
       if (href.match(/[?&](year|month|date|calendar)=/i)) calendarLinks++;
       if (href.match(/[?&](sort|order|filter)=/i)) sortingLinks++;
     }

@@ -380,7 +380,7 @@ function validateConfig(config: ConfigRecord) {
         return false;
       }
       // Check for too many wildcards using simple string counting (safe from ReDoS)
-      const wildcardCount = (pattern.match(/\*/g) || []).length;
+      const wildcardCount = (pattern.match(/\*/g) ?? []).length;
       if (wildcardCount > 2) {
         warnings.push(`excludeUrls[${index}] has too many wildcards (${wildcardCount}, max 2)`);
         return false;
@@ -547,7 +547,7 @@ function validateMergedConfig(config: ConfigRecord) {
  */
 function deepMerge(target: ConfigRecord, source: ConfigRecord, options: { replaceArrays?: string[] } = {}) {
   const result: ConfigRecord = { ...target };
-  const replaceArrays = options.replaceArrays || ['whitelist']; // These arrays replace, not merge
+  const replaceArrays = options.replaceArrays ?? ['whitelist']; // These arrays replace, not merge
 
   for (const key of Object.keys(source)) {
     const sourceVal = source[key];
@@ -759,25 +759,25 @@ function getConfigSummary(config: ConfigRecord) {
   lines.push('Active Configuration:');
 
   // Thresholds
-  const th = config.thresholds || {};
+  const th = config.thresholds ?? {};
   lines.push(`  Thresholds: TTFB≤${th.TTFB}ms LCP≤${th.LCP}ms CLS≤${th.CLS} Title:${th.TITLE_MIN}-${th.TITLE_MAX}ch`);
 
   // Crawl
-  const cr = config.crawl || {};
+  const cr = config.crawl ?? {};
   lines.push(
     `  Crawl: concurrency=${cr.concurrency} timeout=${cr.timeout}ms retries=${cr.retryAttempts} batch=${cr.batchSize}`,
   );
 
   // Analysis
-  const an = config.analysis || {};
+  const an = config.analysis ?? {};
   if (an.similarityThreshold !== undefined || an.jsUnusedThreshold !== undefined) {
     lines.push(
-      `  Analysis: similarity=${an.similarityThreshold || 0.6} jsUnused=${an.jsUnusedThreshold || 50}% outbound=${an.maxOutboundChecks || 20}`,
+      `  Analysis: similarity=${an.similarityThreshold ?? 0.6} jsUnused=${an.jsUnusedThreshold ?? 50}% outbound=${an.maxOutboundChecks ?? 20}`,
     );
   }
 
   // Query params
-  const qp = config.queryParams || {};
+  const qp = config.queryParams ?? {};
   lines.push(`  Query params: mode=${qp.mode}`);
 
   // Excludes

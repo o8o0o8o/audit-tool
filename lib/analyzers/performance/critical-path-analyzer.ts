@@ -6,6 +6,25 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage, ParsedPage, PageInfo, NetworkRequest } from '../../types';
 
+interface BlockingCSSEntry {
+  href: string | undefined;
+  media: string;
+  size: number;
+  isBlocking: true;
+}
+
+interface BlockingJSEntry {
+  src: string;
+  size: number;
+  inHead: boolean;
+  isBlocking: true;
+  isInline: boolean;
+}
+
+interface InlineResourceEntry {
+  size: number;
+}
+
 class CriticalPathAnalyzer {
   /**
    * Analyze critical rendering path
@@ -20,13 +39,29 @@ class CriticalPathAnalyzer {
     chromePage: ChromePage,
     parsedPage: ParsedPage,
     requests: NetworkRequest[],
-    metrics: Record<string, any>,
+    metrics: Record<string, unknown>,
     url: string,
   ) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    const criticalPathData: Record<string, any> = {
+    const criticalPathData: {
+      blockingCSS: BlockingCSSEntry[];
+      blockingJS: BlockingJSEntry[];
+      criticalCSSSize: number;
+      criticalJSSize: number;
+      totalBlockingTime: number;
+      documentSize: number;
+      htmlParseTime: number;
+      domContentLoaded: number;
+      firstPaint: number;
+      recommendations: string[];
+      inlineCSS?: InlineResourceEntry[];
+      inlineJS?: InlineResourceEntry[];
+      inlineCSSSize?: number;
+      inlineJSSize?: number;
+      hasCriticalCSS?: boolean;
+    } = {
       blockingCSS: [],
       blockingJS: [],
       criticalCSSSize: 0,
@@ -42,14 +77,14 @@ class CriticalPathAnalyzer {
     // 1. Find render-blocking CSS
     criticalPathData.blockingCSS = this.#findBlockingCSS(parsedPage, requests);
     criticalPathData.criticalCSSSize = criticalPathData.blockingCSS.reduce(
-      (sum: number, r: any) => sum + (r.size || 0),
+      (sum: number, r: BlockingCSSEntry) => sum + (r.size || 0),
       0,
     );
 
     // 2. Find render-blocking JavaScript
     criticalPathData.blockingJS = this.#findBlockingJS(parsedPage, requests);
     criticalPathData.criticalJSSize = criticalPathData.blockingJS.reduce(
-      (sum: number, r: any) => sum + (r.size || 0),
+      (sum: number, r: BlockingJSEntry) => sum + (r.size || 0),
       0,
     );
 
@@ -62,7 +97,7 @@ class CriticalPathAnalyzer {
     // 4. Calculate document size
     const docRequest = Object.entries(requests).find(([reqUrl]) => reqUrl === url || reqUrl === url + '/');
     if (docRequest) {
-      criticalPathData.documentSize = (docRequest[1] as Record<string, any>).size || 0;
+      criticalPathData.documentSize = ((docRequest[1] as unknown) as { size?: number }).size ?? 0;
     }
 
     // 5. Analyze inline styles/scripts
@@ -97,13 +132,13 @@ class CriticalPathAnalyzer {
     }
 
     // Blocking JavaScript in head
-    const headBlockingJS = criticalPathData.blockingJS.filter((js: any) => js.inHead);
+    const headBlockingJS = criticalPathData.blockingJS.filter((js) => js.inHead);
     if (headBlockingJS.length > 0) {
       issues.push({
         message: 'Render-blocking JavaScript in <head>',
         detail: `<a href="${url}">${url}</a> has ${headBlockingJS.length} blocking script(s) in <head>: ${headBlockingJS
           .slice(0, 3)
-          .map((s: any) => s.src?.split('/').pop() || 'inline')
+          .map((s) => s.src?.split('/').pop() || 'inline')
           .join(', ')}. Move to end of body or add async/defer.`,
         severity: SEVERITY.HIGH,
       });
@@ -149,7 +184,7 @@ class CriticalPathAnalyzer {
    * @private
    */
   static #findBlockingCSS(parsedPage: ParsedPage, requests: NetworkRequest[]) {
-    const blocking: Record<string, any>[] = [];
+    const blocking: BlockingCSSEntry[] = [];
 
     // External stylesheets without media="print" or disabled
     const stylesheets = parsedPage.querySelectorAll('link[rel="stylesheet"]');
@@ -170,7 +205,7 @@ class CriticalPathAnalyzer {
         continue;
       }
 
-      const size = href ? (requests as unknown as Record<string, Record<string, any>>)[href]?.size || 0 : 0;
+      const size = href ? (requests as unknown as Record<string, Record<string, unknown>>)[href]?.size as number || 0 : 0;
 
       blocking.push({
         href,
@@ -188,7 +223,7 @@ class CriticalPathAnalyzer {
    * @private
    */
   static #findBlockingJS(parsedPage: ParsedPage, requests: NetworkRequest[]) {
-    const blocking: Record<string, any>[] = [];
+    const blocking: BlockingJSEntry[] = [];
 
     const scripts = parsedPage.querySelectorAll('script');
     const head = parsedPage.querySelector('head');
@@ -211,9 +246,9 @@ class CriticalPathAnalyzer {
         continue;
       }
 
-      const inHead = (head as unknown as Element | null)?.contains(script as unknown as Node) || false;
+      const inHead = (head as unknown as Element | null)?.contains(script as unknown as Node) ?? false;
       const size = src
-        ? (requests as unknown as Record<string, Record<string, any>>)[src]?.size || 0
+        ? (requests as unknown as Record<string, Record<string, unknown>>)[src]?.size as number || 0
         : script.textContent?.length || 0;
 
       blocking.push({
@@ -242,7 +277,7 @@ class CriticalPathAnalyzer {
         return {
           htmlParseTime: navEntry ? navEntry.domInteractive - navEntry.responseEnd : 0,
           domContentLoaded: navEntry ? navEntry.domContentLoadedEventEnd - navEntry.startTime : 0,
-          firstPaint: firstPaint?.startTime || 0,
+          firstPaint: firstPaint?.startTime ?? 0,
         };
       });
     } catch {
@@ -257,8 +292,8 @@ class CriticalPathAnalyzer {
   static #analyzeInlineResources(parsedPage: ParsedPage) {
     let inlineCSSSize = 0;
     let inlineJSSize = 0;
-    const inlineCSS: Record<string, any>[] = [];
-    const inlineJS: Record<string, any>[] = [];
+    const inlineCSS: InlineResourceEntry[] = [];
+    const inlineJS: InlineResourceEntry[] = [];
 
     // Inline styles
     const styles = parsedPage.querySelectorAll('style');
@@ -317,7 +352,13 @@ class CriticalPathAnalyzer {
    * Generate recommendations
    * @private
    */
-  static #generateRecommendations(data: Record<string, any>) {
+  static #generateRecommendations(data: {
+    blockingCSS: BlockingCSSEntry[];
+    blockingJS: BlockingJSEntry[];
+    criticalCSSSize: number;
+    hasCriticalCSS?: boolean;
+    documentSize: number;
+  }) {
     const recommendations: string[] = [];
 
     if (data.blockingCSS.length > 2) {
@@ -328,7 +369,7 @@ class CriticalPathAnalyzer {
       recommendations.push('Extract and inline critical (above-the-fold) CSS');
     }
 
-    if (data.blockingJS.filter((js: any) => js.inHead).length > 0) {
+    if (data.blockingJS.filter((js) => js.inHead).length > 0) {
       recommendations.push('Move scripts to end of body or add defer attribute');
     }
 
@@ -345,8 +386,8 @@ class CriticalPathAnalyzer {
    * @returns {Object} Analysis results
    */
   static analyzeSiteWide(pages: Record<string, PageInfo>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+    const issues: Issue[] = [];
+    const warnings: Issue[] = [];
 
     let pagesWithBlockingCSS = 0;
     let pagesWithBlockingJS = 0;
@@ -355,7 +396,7 @@ class CriticalPathAnalyzer {
         if ((page.criticalPathData.blockingCSS?.length ?? 0) > 2) {
           pagesWithBlockingCSS++;
         }
-        if ((page.criticalPathData.blockingJS?.filter((js: any) => js.inHead).length ?? 0) > 0) {
+        if ((page.criticalPathData.blockingJS?.filter((js) => js.inHead).length ?? 0) > 0) {
           pagesWithBlockingJS++;
         }
       }

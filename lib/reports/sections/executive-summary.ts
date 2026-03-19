@@ -10,8 +10,8 @@ import type { PageInfo, ReportSectionData, CategoryScores, ComparisonData } from
 
 /** Helper to extract summary from jsonData */
 function extractSummary(jsonData: Record<string, unknown>) {
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  return (analysisObj.summary || {}) as Record<string, unknown>;
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  return (analysisObj.summary ?? {}) as Record<string, unknown>;
 }
 
 function getScoreColor(score: number): string {
@@ -44,8 +44,8 @@ function getExecutiveSummary(data: ReportSectionData) {
 function getSingleExecutiveSummary(data: ReportSectionData) {
   const { jsonData } = data;
   const summary = extractSummary(jsonData);
-  const overallScore = (summary.overallScore || 0) as number;
-  const categoryScores = (summary.categoryScores || {}) as Record<string, number>;
+  const overallScore = (summary.overallScore ?? 0) as number;
+  const categoryScores = (summary.categoryScores ?? {}) as Record<string, number>;
 
   let scoreClass = 'bad';
   if (overallScore >= 80) scoreClass = 'good';
@@ -77,29 +77,29 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
 
       <div class="summary-grid">
         <div class="summary-card">
-          <div class="summary-card-value">${summary.totalIssues || 0}</div>
+          <div class="summary-card-value">${summary.totalIssues ?? 0}</div>
           <div class="summary-card-label">Total Issues</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #fca5a5;">${summary.criticalCount || 0}</div>
+          <div class="summary-card-value" style="color: #fca5a5;">${summary.criticalCount ?? 0}</div>
           <div class="summary-card-label">Critical</div>
-          ${((summary.criticalCount as number) || 0) > 0 ? '<div class="summary-card-hint">Fix immediately</div>' : ''}
+          ${((summary.criticalCount as number) ?? 0) > 0 ? '<div class="summary-card-hint">Fix immediately</div>' : ''}
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #fdba74;">${summary.highCount || 0}</div>
+          <div class="summary-card-value" style="color: #fdba74;">${summary.highCount ?? 0}</div>
           <div class="summary-card-label">High</div>
-          ${((summary.highCount as number) || 0) > 0 ? '<div class="summary-card-hint">Fix this week</div>' : ''}
+          ${((summary.highCount as number) ?? 0) > 0 ? '<div class="summary-card-hint">Fix this week</div>' : ''}
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #fde047;">${summary.mediumCount || 0}</div>
+          <div class="summary-card-value" style="color: #fde047;">${summary.mediumCount ?? 0}</div>
           <div class="summary-card-label">Medium</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #a5f3fc;">${summary.lowCount || 0}</div>
+          <div class="summary-card-value" style="color: #a5f3fc;">${summary.lowCount ?? 0}</div>
           <div class="summary-card-label">Low</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value">${summary.passRate || 0}%</div>
+          <div class="summary-card-value">${summary.passRate ?? 0}%</div>
           <div class="summary-card-label">Pass Rate</div>
         </div>
       </div>
@@ -118,15 +118,15 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
   const originSummary = extractSummary(jsonData);
   const compareSummary = extractSummary(comparison.compareJsonData);
 
-  const originScore = (originSummary.overallScore || 0) as number;
-  const compareScore = (compareSummary.overallScore || 0) as number;
+  const originScore = (originSummary.overallScore ?? 0) as number;
+  const compareScore = (compareSummary.overallScore ?? 0) as number;
   const scoreDelta = compareScore - originScore;
 
   const originLabel = shortDomain(comparison.originDomainName);
   const compareLabel = shortDomain(comparison.compareDomainName);
 
-  const originCategoryScores = (originSummary.categoryScores || {}) as Record<string, number>;
-  const compareCategoryScores = (compareSummary.categoryScores || {}) as Record<string, number>;
+  const originCategoryScores = (originSummary.categoryScores ?? {}) as Record<string, number>;
+  const compareCategoryScores = (compareSummary.categoryScores ?? {}) as Record<string, number>;
 
   return `
     <div class="executive-summary">
@@ -161,11 +161,11 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
 
       <!-- Dual issue counts -->
       <div class="summary-grid">
-        ${getDualSummaryCard('Total Issues', originSummary.totalIssues as number || 0, compareSummary.totalIssues as number || 0, originLabel, compareLabel, '', true)}
-        ${getDualSummaryCard('Critical', originSummary.criticalCount as number || 0, compareSummary.criticalCount as number || 0, originLabel, compareLabel, '#fca5a5', true)}
-        ${getDualSummaryCard('High', originSummary.highCount as number || 0, compareSummary.highCount as number || 0, originLabel, compareLabel, '#fdba74', true)}
-        ${getDualSummaryCard('Medium', originSummary.mediumCount as number || 0, compareSummary.mediumCount as number || 0, originLabel, compareLabel, '#fde047', true)}
-        ${getDualSummaryCard('Low', originSummary.lowCount as number || 0, compareSummary.lowCount as number || 0, originLabel, compareLabel, '#a5f3fc', true)}
+        ${getDualSummaryCard('Total Issues', (originSummary.totalIssues as number) ?? 0, (compareSummary.totalIssues as number) ?? 0, originLabel, compareLabel, '', true)}
+        ${getDualSummaryCard('Critical', (originSummary.criticalCount as number) ?? 0, (compareSummary.criticalCount as number) ?? 0, originLabel, compareLabel, '#fca5a5', true)}
+        ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, '#fdba74', true)}
+        ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, '#fde047', true)}
+        ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, '#a5f3fc', true)}
         ${getDualSummaryCard('Pass Rate', originSummary.passRate as number || 0, compareSummary.passRate as number || 0, originLabel, compareLabel, '', false, '%')}
       </div>
 
@@ -207,9 +207,9 @@ function getDualSummaryCard(label: string, originVal: number, compareVal: number
 
 /** Estimated score after fixes section */
 function getEstimatedScoreAfterFixes(summary: Record<string, unknown>, overallScore: number): string {
-  if (((summary.criticalCount as number) || 0) + ((summary.highCount as number) || 0) === 0) return '';
+  if (((summary.criticalCount as number) ?? 0) + ((summary.highCount as number) ?? 0) === 0) return '';
 
-  const cats = (summary.categoryScores || {}) as Record<string, number>;
+  const cats = (summary.categoryScores ?? {}) as Record<string, number>;
   const weights: Record<string, number> = { seo: 0.3, performance: 0.25, technical: 0.2, accessibility: 0.15, security: 0.1 };
   let potentialGain = 0;
   for (const [cat, w] of Object.entries(weights)) {
@@ -244,7 +244,7 @@ function getInsightHighlights(jsonData: Record<string, unknown>) {
     );
   }
 
-  const brokenOutbound = pages.reduce((s: number, p: PageInfo) => s + (p.outboundLinkHealth?.broken?.length || 0), 0);
+  const brokenOutbound = pages.reduce((s: number, p: PageInfo) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
   if (brokenOutbound > 0) {
     badges.push(
       `<span class="insight-badge warn">🔗 ${brokenOutbound} broken outbound link${brokenOutbound > 1 ? 's' : ''}</span>`,
@@ -300,11 +300,11 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
  */
 function getCategoryBars(categoryScores: Partial<CategoryScores>) {
   const categories = [
-    { key: 'seo', name: 'SEO', score: categoryScores.seo || 0 },
-    { key: 'performance', name: 'Performance', score: categoryScores.performance || 0 },
-    { key: 'accessibility', name: 'Accessibility', score: categoryScores.accessibility || 0 },
-    { key: 'security', name: 'Security', score: categoryScores.security || 0 },
-    { key: 'technical', name: 'Technical', score: categoryScores.technical || 0 },
+    { key: 'seo', name: 'SEO', score: categoryScores.seo ?? 0 },
+    { key: 'performance', name: 'Performance', score: categoryScores.performance ?? 0 },
+    { key: 'accessibility', name: 'Accessibility', score: categoryScores.accessibility ?? 0 },
+    { key: 'security', name: 'Security', score: categoryScores.security ?? 0 },
+    { key: 'technical', name: 'Technical', score: categoryScores.technical ?? 0 },
   ];
 
   return categories
@@ -335,7 +335,7 @@ function getCategoryBars(categoryScores: Partial<CategoryScores>) {
 /**
  * Generate dual-origin category bars (two bars per category with delta)
  */
-function getDualCategoryBars(originScores: Record<string, number>, compareScores: Record<string, number>, originLabel: string, compareLabel: string) {
+function getDualCategoryBars(originScores: Record<string, number>, compareScores: Record<string, number>, _originLabel: string, _compareLabel: string) {
   const categories = [
     { key: 'seo', name: 'SEO' },
     { key: 'performance', name: 'Performance' },

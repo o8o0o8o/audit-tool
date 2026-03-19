@@ -137,13 +137,13 @@ class ComparisonAudit {
     this.#originUrl = originUrl;
     this.#compareUrl = compareUrl;
     this.#options = {
-      proceed: options.proceed || false,
-      perf: options.perf || false,
-      saveHtml: options.saveHtml || false,
-      concurrency: options.concurrency || 5,
-      sitemap: options.sitemap || null,
-      compareSitemap: options.compareSitemap || null,
-      open: options.open || false,
+      proceed: options.proceed ?? false,
+      perf: options.perf ?? false,
+      saveHtml: options.saveHtml ?? false,
+      concurrency: options.concurrency ?? 5,
+      sitemap: options.sitemap ?? null,
+      compareSitemap: options.compareSitemap ?? null,
+      open: options.open ?? false,
     };
     this.#originResults = null;
     this.#compareResults = null;
@@ -249,7 +249,7 @@ class ComparisonAudit {
       this.originDomain = seo.domainName;
     }
 
-    console.log(`\n✅ Origin audit complete: ${Object.keys(seo.data.pageData.pages || {}).length} pages`);
+    console.log(`\n✅ Origin audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
   }
 
   /**
@@ -279,7 +279,7 @@ class ComparisonAudit {
       this.compareDomain = seo.domainName;
     }
 
-    console.log(`\n✅ Compare audit complete: ${Object.keys(seo.data.pageData.pages || {}).length} pages`);
+    console.log(`\n✅ Compare audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
   }
 
   /**
@@ -291,7 +291,7 @@ class ComparisonAudit {
    */
   #loadPagesFromDisk(auditResult: AuditSiteResult): Record<string, PageInfo> {
     const data = auditResult.data as { pageData?: { pages?: Record<string, PageInfo> } };
-    const pages = data.pageData?.pages || {};
+    const pages = data.pageData?.pages ?? {};
 
     // If pages are already in memory, use them
     if (Object.keys(pages).length > 0) {
@@ -362,8 +362,8 @@ class ComparisonAudit {
     // Calculate score comparisons
     const originData = this.#originResults!.data as { analysis?: { summary?: Partial<AuditSummary> } };
     const compareData = this.#compareResults!.data as { analysis?: { summary?: Partial<AuditSummary> } };
-    const originSummary = originData.analysis?.summary || {};
-    const compareSummary = compareData.analysis?.summary || {};
+    const originSummary = originData.analysis?.summary ?? {};
+    const compareSummary = compareData.analysis?.summary ?? {};
 
     this.#comparisonResults = {
       meta: {
@@ -384,53 +384,53 @@ class ComparisonAudit {
         matchPercentage: matchStats.matchPercentage,
         scoreComparison: {
           origin: {
-            overall: originSummary.overallScore || 0,
-            seo: originSummary.categoryScores?.seo || 0,
-            performance: originSummary.categoryScores?.performance || 0,
-            accessibility: originSummary.categoryScores?.accessibility || 0,
-            security: originSummary.categoryScores?.security || 0,
-            technical: originSummary.categoryScores?.technical || 0,
+            overall: originSummary.overallScore ?? 0,
+            seo: originSummary.categoryScores?.seo ?? 0,
+            performance: originSummary.categoryScores?.performance ?? 0,
+            accessibility: originSummary.categoryScores?.accessibility ?? 0,
+            security: originSummary.categoryScores?.security ?? 0,
+            technical: originSummary.categoryScores?.technical ?? 0,
           },
           compare: {
-            overall: compareSummary.overallScore || 0,
-            seo: compareSummary.categoryScores?.seo || 0,
-            performance: compareSummary.categoryScores?.performance || 0,
-            accessibility: compareSummary.categoryScores?.accessibility || 0,
-            security: compareSummary.categoryScores?.security || 0,
-            technical: compareSummary.categoryScores?.technical || 0,
+            overall: compareSummary.overallScore ?? 0,
+            seo: compareSummary.categoryScores?.seo ?? 0,
+            performance: compareSummary.categoryScores?.performance ?? 0,
+            accessibility: compareSummary.categoryScores?.accessibility ?? 0,
+            security: compareSummary.categoryScores?.security ?? 0,
+            technical: compareSummary.categoryScores?.technical ?? 0,
           },
           delta: {
-            overall: (originSummary.overallScore || 0) - (compareSummary.overallScore || 0),
-            seo: (originSummary.categoryScores?.seo || 0) - (compareSummary.categoryScores?.seo || 0),
+            overall: (originSummary.overallScore ?? 0) - (compareSummary.overallScore ?? 0),
+            seo: (originSummary.categoryScores?.seo ?? 0) - (compareSummary.categoryScores?.seo ?? 0),
             performance:
-              (originSummary.categoryScores?.performance || 0) - (compareSummary.categoryScores?.performance || 0),
+              (originSummary.categoryScores?.performance ?? 0) - (compareSummary.categoryScores?.performance ?? 0),
             accessibility:
-              (originSummary.categoryScores?.accessibility || 0) - (compareSummary.categoryScores?.accessibility || 0),
-            security: (originSummary.categoryScores?.security || 0) - (compareSummary.categoryScores?.security || 0),
-            technical: (originSummary.categoryScores?.technical || 0) - (compareSummary.categoryScores?.technical || 0),
+              (originSummary.categoryScores?.accessibility ?? 0) - (compareSummary.categoryScores?.accessibility ?? 0),
+            security: (originSummary.categoryScores?.security ?? 0) - (compareSummary.categoryScores?.security ?? 0),
+            technical: (originSummary.categoryScores?.technical ?? 0) - (compareSummary.categoryScores?.technical ?? 0),
           },
         },
         issueComparison: {
           origin: {
-            total: originSummary.totalIssues || 0,
-            critical: originSummary.criticalCount || 0,
-            high: originSummary.highCount || 0,
-            medium: originSummary.mediumCount || 0,
-            low: originSummary.lowCount || 0,
+            total: originSummary.totalIssues ?? 0,
+            critical: originSummary.criticalCount ?? 0,
+            high: originSummary.highCount ?? 0,
+            medium: originSummary.mediumCount ?? 0,
+            low: originSummary.lowCount ?? 0,
           },
           compare: {
-            total: compareSummary.totalIssues || 0,
-            critical: compareSummary.criticalCount || 0,
-            high: compareSummary.highCount || 0,
-            medium: compareSummary.mediumCount || 0,
-            low: compareSummary.lowCount || 0,
+            total: compareSummary.totalIssues ?? 0,
+            critical: compareSummary.criticalCount ?? 0,
+            high: compareSummary.highCount ?? 0,
+            medium: compareSummary.mediumCount ?? 0,
+            low: compareSummary.lowCount ?? 0,
           },
           delta: {
-            total: (originSummary.totalIssues || 0) - (compareSummary.totalIssues || 0),
-            critical: (originSummary.criticalCount || 0) - (compareSummary.criticalCount || 0),
-            high: (originSummary.highCount || 0) - (compareSummary.highCount || 0),
-            medium: (originSummary.mediumCount || 0) - (compareSummary.mediumCount || 0),
-            low: (originSummary.lowCount || 0) - (compareSummary.lowCount || 0),
+            total: (originSummary.totalIssues ?? 0) - (compareSummary.totalIssues ?? 0),
+            critical: (originSummary.criticalCount ?? 0) - (compareSummary.criticalCount ?? 0),
+            high: (originSummary.highCount ?? 0) - (compareSummary.highCount ?? 0),
+            medium: (originSummary.mediumCount ?? 0) - (compareSummary.mediumCount ?? 0),
+            low: (originSummary.lowCount ?? 0) - (compareSummary.lowCount ?? 0),
           },
         },
       },
@@ -452,46 +452,46 @@ class ComparisonAudit {
     const compare = match.comparePage;
 
     // Get performance metrics
-    const originPerf = origin.performanceMetrics || {};
-    const comparePerf = compare.performanceMetrics || {};
+    const originPerf = origin.performanceMetrics ?? {};
+    const comparePerf = compare.performanceMetrics ?? {};
 
     // Calculate metric deltas (positive = origin is worse)
     const deltas = {
-      LCP: (originPerf.LCP || 0) - (comparePerf.LCP || 0),
-      CLS: (originPerf.CLS || 0) - (comparePerf.CLS || 0),
-      TTFB: (originPerf.TTFB || 0) - (comparePerf.TTFB || 0),
-      FCP: (originPerf.FCP || 0) - (comparePerf.FCP || 0),
-      pageSize: (origin.pageSize || 0) - (compare.pageSize || 0),
-      requestCount: (origin.requestCount || 0) - (compare.requestCount || 0),
+      LCP: (originPerf.LCP ?? 0) - (comparePerf.LCP ?? 0),
+      CLS: (originPerf.CLS ?? 0) - (comparePerf.CLS ?? 0),
+      TTFB: (originPerf.TTFB ?? 0) - (comparePerf.TTFB ?? 0),
+      FCP: (originPerf.FCP ?? 0) - (comparePerf.FCP ?? 0),
+      pageSize: (origin.pageSize ?? 0) - (compare.pageSize ?? 0),
+      requestCount: (origin.requestCount ?? 0) - (compare.requestCount ?? 0),
     };
 
     // Check for content changes
     const changes = {
       title: {
-        origin: origin.title || '',
-        compare: compare.title || '',
-        changed: (origin.title || '') !== (compare.title || ''),
+        origin: origin.title ?? '',
+        compare: compare.title ?? '',
+        changed: (origin.title ?? '') !== (compare.title ?? ''),
       },
       description: {
-        origin: origin.description || '',
-        compare: compare.description || '',
-        changed: (origin.description || '') !== (compare.description || ''),
+        origin: origin.description ?? '',
+        compare: compare.description ?? '',
+        changed: (origin.description ?? '') !== (compare.description ?? ''),
       },
       canonical: {
-        origin: origin.canonical || '',
-        compare: compare.canonical || '',
-        changed: (origin.canonical || '') !== (compare.canonical || ''),
+        origin: origin.canonical ?? '',
+        compare: compare.canonical ?? '',
+        changed: (origin.canonical ?? '') !== (compare.canonical ?? ''),
       },
       h1: {
-        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : origin.h1 || '',
-        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : compare.h1 || '',
-        changed: String(origin.h1 || '') !== String(compare.h1 || ''),
+        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : origin.h1 ?? '',
+        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : compare.h1 ?? '',
+        changed: String(origin.h1 ?? '') !== String(compare.h1 ?? ''),
       },
     };
 
     // Categorize issues
-    const originIssues = new Set(origin.issues?.map((i: Issue) => i.message || String(i)) || []);
-    const compareIssues = new Set(compare.issues?.map((i: Issue) => i.message || String(i)) || []);
+    const originIssues = new Set(origin.issues?.map((i: Issue) => i.message ?? String(i)) ?? []);
+    const compareIssues = new Set(compare.issues?.map((i: Issue) => i.message ?? String(i)) ?? []);
 
     const issues = {
       fixed: [...compareIssues].filter((i) => !originIssues.has(i)), // In compare but not origin = fixed
@@ -504,8 +504,8 @@ class ComparisonAudit {
       originUrl: match.originUrl,
       compareUrl: match.compareUrl,
       status: {
-        origin: origin.statusCode || 200,
-        compare: compare.statusCode || 200,
+        origin: origin.statusCode ?? 200,
+        compare: compare.statusCode ?? 200,
       },
       deltas,
       changes,
@@ -543,9 +543,9 @@ class ComparisonAudit {
     for (const page of pages) {
       result[page.path] = {
         url: page.url,
-        title: page.page?.title || '',
-        status: page.page?.statusCode || 200,
-        issues: page.page?.issues?.length || 0,
+        title: page.page?.title ?? '',
+        status: page.page?.statusCode ?? 200,
+        issues: page.page?.issues?.length ?? 0,
       };
     }
     return result;

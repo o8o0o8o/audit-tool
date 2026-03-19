@@ -9,12 +9,12 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
+import type { Issue, ChromePage, PageInfo, NetworkRequest, CodeCoverageFile } from '../../types';
 
 interface CDPClient {
-  send(method: string, params?: Record<string, unknown>): Promise<any>;
+  send(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
   detach(): Promise<void>;
-  on(event: string, handler: (params: any) => void): void;
+  on(event: string, handler: (params: Record<string, unknown>) => void): void;
 }
 
 interface StyleSheetInfo {
@@ -36,7 +36,7 @@ class CodeCoverageAnalyzer {
     try {
       // Reuse existing CDP session if provided, otherwise create a new one
       // Creating multiple CDP sessions on the same page can cause conflicts
-      const client = (existingClient || (await chromePage.context().newCDPSession(chromePage))) as CDPClient;
+      const client = (existingClient ?? (await chromePage.context().newCDPSession(chromePage))) as CDPClient;
       await client.send('Profiler.enable');
       await client.send('Profiler.startPreciseCoverage', {
         callCount: false,
@@ -49,12 +49,12 @@ class CodeCoverageAnalyzer {
       // Next.js/CSS-in-JS sites), reporting near-zero used bytes.
       // Using the same CDP session as JS profiling gives accurate results.
       const styleSheets = new Map<string, StyleSheetInfo>();
-      client.on('CSS.styleSheetAdded', (params: any) => {
-        const header = params.header;
-        styleSheets.set(header.styleSheetId, {
-          styleSheetId: header.styleSheetId,
-          sourceURL: header.sourceURL || '',
-          length: header.length || 0,
+      client.on('CSS.styleSheetAdded', (params: Record<string, unknown>) => {
+        const header = params.header as Record<string, unknown>;
+        styleSheets.set(header.styleSheetId as string, {
+          styleSheetId: header.styleSheetId as string,
+          sourceURL: (header.sourceURL as string) || '',
+          length: (header.length as number) || 0,
         });
       });
       await client.send('DOM.enable');
@@ -85,8 +85,8 @@ class CodeCoverageAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      js: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as Record<string, any>[] },
-      css: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as Record<string, any>[] },
+      js: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as CodeCoverageFile[] },
+      css: { total: 0, used: 0, unused: 0, ratio: 0, files: [] as CodeCoverageFile[] },
       totalUnusedBytes: 0,
       totalBytes: 0,
       unusedRatio: 0,
@@ -101,19 +101,22 @@ class CodeCoverageAnalyzer {
     try {
       // Collect JS coverage
       const jsCoverage = await client.send('Profiler.takePreciseCoverage');
-      if (jsCoverage?.result) {
-        for (const entry of jsCoverage.result) {
+      const jsCoverageResult = jsCoverage?.result as
+        | { url: string; functions: { ranges: { startOffset: number; endOffset: number; count: number }[] }[] }[]
+        | undefined;
+      if (jsCoverageResult) {
+        for (const entry of jsCoverageResult) {
           const scriptUrl = entry.url;
           if (!scriptUrl || scriptUrl.startsWith('data:')) continue;
 
-          const totalLength = entry.functions.reduce((sum: number, fn: any) => {
-            return Math.max(sum, ...fn.ranges.map((r: any) => r.endOffset));
+          const totalLength = entry.functions.reduce((sum: number, fn: { ranges: { startOffset: number; endOffset: number; count: number }[] }) => {
+            return Math.max(sum, ...fn.ranges.map((r) => r.endOffset));
           }, 0);
 
           // V8's detailed coverage uses nested ranges: each function's first range
           // covers the entire body (count > 0 if called). Inner ranges with count === 0
           // are the precise uncovered "holes". Summing count === 0 ranges gives actual unused bytes.
-          const unusedRanges: Record<string, any>[] = [];
+          const unusedRanges: { startOffset: number; endOffset: number }[] = [];
           for (const fn of entry.functions) {
             for (const range of fn.ranges) {
               if (range.count === 0) {
@@ -143,7 +146,9 @@ class CodeCoverageAnalyzer {
       // Collect CSS coverage using CDP rule usage tracking directly.
       // CDP CSS.stopRuleUsageTracking returns per-rule byte offsets with used boolean.
       // We group by stylesheet, get the text, and compute used vs unused byte ranges.
-      const ruleUsageResult = await client.send('CSS.stopRuleUsageTracking');
+      const ruleUsageResult = await client.send('CSS.stopRuleUsageTracking') as {
+        ruleUsage?: { styleSheetId: string; startOffset: number; endOffset: number; used: boolean }[];
+      };
       if (ruleUsageResult?.ruleUsage && styleSheets) {
         // Group rule usage by stylesheet
         const sheetUsage = new Map<
@@ -168,13 +173,13 @@ class CodeCoverageAnalyzer {
           const sheetInfo = styleSheets.get(sheetId);
           // Get the actual text length for accurate total
           let textLength = 0;
-          let sheetUrl = sheetInfo?.sourceURL || '';
+          let sheetUrl = sheetInfo?.sourceURL ?? '';
           try {
-            const textResult = await client.send('CSS.getStyleSheetText', { styleSheetId: sheetId });
-            textLength = textResult?.text?.length || 0;
+            const textResult = await client.send('CSS.getStyleSheetText', { styleSheetId: sheetId }) as { text?: string };
+            textLength = textResult?.text?.length ?? 0;
           } catch {
             // Stylesheet may have been removed; use length from header
-            textLength = sheetInfo?.length || 0;
+            textLength = sheetInfo?.length ?? 0;
           }
           if (textLength === 0) continue;
           if (sheetUrl.startsWith('data:')) continue;
@@ -234,9 +239,9 @@ class CodeCoverageAnalyzer {
     }
 
     // Sort files by unused bytes
-    info.js.files.sort((a: any, b: any) => b.unused - a.unused);
+    info.js.files.sort((a, b) => b.unused - a.unused);
     info.js.files = info.js.files.slice(0, 10); // Top 10
-    info.css.files.sort((a: any, b: any) => b.unused - a.unused);
+    info.css.files.sort((a, b) => b.unused - a.unused);
     info.css.files = info.css.files.slice(0, 10);
 
     // Report issues with top offending files for actionable insights
@@ -247,8 +252,8 @@ class CodeCoverageAnalyzer {
           ? '<br>Top unused scripts:<ul style="margin:4px 0;">' +
             topFiles
               .map(
-                (f: any) =>
-                  `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
+                (f) =>
+                  `<li><code>${f.url.split('/').pop() ?? f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
               )
               .join('') +
             '</ul>'
@@ -267,8 +272,8 @@ class CodeCoverageAnalyzer {
           ? '<br>Top unused stylesheets:<ul style="margin:4px 0;">' +
             topCssFiles
               .map(
-                (f: any) =>
-                  `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
+                (f) =>
+                  `<li><code>${f.url.split('/').pop() ?? f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
               )
               .join('') +
             '</ul>'
@@ -287,8 +292,8 @@ class CodeCoverageAnalyzer {
           ? '<br>Largest unused bundles:<ul style="margin:4px 0;">' +
             topFiles
               .map(
-                (f: any) =>
-                  `<li><code>${f.url.split('/').pop() || f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB of ${(f.total / 1024).toFixed(0)}KB)</li>`,
+                (f) =>
+                  `<li><code>${f.url.split('/').pop() ?? f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB of ${(f.total / 1024).toFixed(0)}KB)</li>`,
               )
               .join('') +
             '</ul>'
@@ -320,20 +325,20 @@ class CodeCoverageAnalyzer {
     let pagesWithData = 0;
 
     // Track commonly unused scripts across pages
-    const unusedScripts: Record<string, any> = {};
+    const unusedScripts: Record<string, { url: string; count: number; avgUnused: number }> = {};
 
     for (const page of pages) {
       const coverage = page.codeCoverage;
       if (!coverage) continue;
 
       pagesWithData++;
-      totalJS += coverage.js?.total || 0;
-      totalUnusedJS += coverage.js?.unused || 0;
-      totalCSS += coverage.css?.total || 0;
-      totalUnusedCSS += coverage.css?.unused || 0;
+      totalJS += coverage.js?.total ?? 0;
+      totalUnusedJS += coverage.js?.unused ?? 0;
+      totalCSS += coverage.css?.total ?? 0;
+      totalUnusedCSS += coverage.css?.unused ?? 0;
 
       // Track frequently unused scripts
-      for (const file of coverage.js?.files || []) {
+      for (const file of coverage.js?.files ?? []) {
         if (file.unusedPercent > 60) {
           const key = file.url;
           if (!unusedScripts[key]) {
@@ -368,14 +373,14 @@ class CodeCoverageAnalyzer {
     }
 
     // Report commonly unused scripts
-    const frequentlyUnused = (Object.values(unusedScripts) as Record<string, any>[])
-      .filter((s: any) => s.count >= Math.min(3, pagesWithData * 0.5))
-      .sort((a: any, b: any) => b.count - a.count);
+    const frequentlyUnused = Object.values(unusedScripts)
+      .filter((s) => s.count >= Math.min(3, pagesWithData * 0.5))
+      .sort((a, b) => b.count - a.count);
 
     if (frequentlyUnused.length > 0) {
       const list = frequentlyUnused
         .slice(0, 5)
-        .map((s: any) => {
+        .map((s) => {
           s.avgUnused = Math.round(s.avgUnused / s.count);
           return `<li>${s.url} - ${s.avgUnused}% unused on ${s.count} pages</li>`;
         })
@@ -396,12 +401,12 @@ class CodeCoverageAnalyzer {
    * @returns {number} Total unique bytes covered
    * @private
    */
-  static #mergeAndSum(ranges: Record<string, any>[]) {
+  static #mergeAndSum(ranges: { startOffset: number; endOffset: number }[]) {
     if (ranges.length === 0) return 0;
 
     const sorted = ranges
-      .map((r: any) => ({ start: r.startOffset, end: r.endOffset }))
-      .sort((a: any, b: any) => a.start - b.start);
+      .map((r) => ({ start: r.startOffset, end: r.endOffset }))
+      .sort((a, b) => a.start - b.start);
 
     let total = 0;
     let current = sorted[0];

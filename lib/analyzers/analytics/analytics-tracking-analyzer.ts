@@ -68,7 +68,7 @@ class AnalyticsTrackingAnalyzer {
 
     // Check for analytics.js or ga.js
     const hasAnalyticsJs =
-      parsedPage.querySelector('script[src*="google-analytics.com/analytics.js"]') ||
+      parsedPage.querySelector('script[src*="google-analytics.com/analytics.js"]') ??
       parsedPage.querySelector('script[src*="google-analytics.com/ga.js"]');
     if (hasAnalyticsJs && !analyticsData.hasUniversalAnalytics) {
       analyticsData.warnings.push('Google Analytics script loaded but no UA tracking ID found');
@@ -230,7 +230,7 @@ class AnalyticsTrackingAnalyzer {
     // Validation: Check script placement in <head>
     const headScripts = parsedPage.querySelectorAll('head script');
     const hasAnalyticsInHead = Array.from(headScripts).some((script) => {
-      const src = script.getAttribute('src') || '';
+      const src = script.getAttribute('src') ?? '';
       const content = script.textContent || '';
       return (
         src.includes('googletagmanager.com') ||

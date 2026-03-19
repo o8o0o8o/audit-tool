@@ -79,7 +79,7 @@ class PaginationAnalyzer {
     if (canonical) {
       paginationData.hasCanonical = true;
       const canonicalHref = canonical.getAttribute('href');
-      paginationData.canonicalPointsToSelf = this.#canonicalMatchesUrl(canonicalHref || null, url);
+      paginationData.canonicalPointsToSelf = this.#canonicalMatchesUrl(canonicalHref ?? null, url);
     }
 
     // Generate issues
@@ -135,7 +135,7 @@ class PaginationAnalyzer {
     // Check for pagination-specific noindex (sometimes intentional)
     const metaRobots = parsedPage.querySelector('meta[name="robots"]');
     if (metaRobots && paginationData.hasPagination && paginationData.currentPage! > 1) {
-      const robotsContent = metaRobots.getAttribute('content') || '';
+      const robotsContent = metaRobots.getAttribute('content') ?? '';
       if (robotsContent.toLowerCase().includes('noindex')) {
         warnings.push({
           message: 'Paginated page is noindexed',
@@ -157,9 +157,9 @@ class PaginationAnalyzer {
     const nextLink = parsedPage.querySelector('link[rel="next"]');
 
     return {
-      hasPrevNext: !!(prevLink || nextLink),
-      prev: prevLink?.getAttribute('href') || null,
-      next: nextLink?.getAttribute('href') || null,
+      hasPrevNext: !!(prevLink ?? nextLink),
+      prev: prevLink?.getAttribute('href') ?? null,
+      next: nextLink?.getAttribute('href') ?? null,
     };
   }
 

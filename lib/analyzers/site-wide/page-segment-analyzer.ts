@@ -1,5 +1,36 @@
-import type { PageInfo } from '../../types';
+import type { Issue, PageInfo } from '../../types';
 import { SEVERITY } from '../../constants';
+
+interface StatusBreakdown {
+  '2xx': number;
+  '3xx': number;
+  '4xx': number;
+  '5xx': number;
+  [key: string]: number;
+}
+
+interface SegmentData {
+  type: string;
+  label: string;
+  count: number;
+  pages?: string[];
+  avgWordCount: number;
+  totalWordCount?: number;
+  issueCount: number;
+  avgScore: number;
+  totalScore?: number;
+  statusBreakdown: StatusBreakdown;
+}
+
+interface SegmentIssue extends Issue {
+  segment: string;
+}
+
+interface DistributionEntry {
+  label: string;
+  count: number;
+  percentage: number;
+}
 
 /**
  * Page Segment Analyzer
@@ -48,7 +79,7 @@ class PageSegmentAnalyzer {
   static analyzeSegments(allPages: Record<string, PageInfo>) {
     console.log('\nAnalyzing page segments...');
 
-    const segments: Record<string, any> = {};
+    const segments: Record<string, SegmentData> = {};
     const urlSegmentMap: Record<string, string> = {}; // URL -> segment type
 
     // Initialize segment categories
@@ -90,15 +121,15 @@ class PageSegmentAnalyzer {
 
       const segment = segments[segmentType];
       segment.count++;
-      segment.pages.push(url);
+      segment.pages!.push(url);
 
       // Aggregate word count
-      const wordCount = page.contentQuality?.wordCount || 0;
-      segment.totalWordCount += wordCount;
+      const wordCount = page.contentQuality?.wordCount ?? 0;
+      segment.totalWordCount = (segment.totalWordCount ?? 0) + wordCount;
 
       // Aggregate score
-      const score = page.score?.overall || 0;
-      segment.totalScore += score;
+      const score = page.score?.overall ?? 0;
+      segment.totalScore = (segment.totalScore ?? 0) + score;
 
       // Count issues
       const pageIssues = this.countPageIssues(page);
@@ -116,8 +147,8 @@ class PageSegmentAnalyzer {
     Object.keys(segments).forEach((type) => {
       const segment = segments[type];
       if (segment.count > 0) {
-        segment.avgWordCount = Math.round(segment.totalWordCount / segment.count);
-        segment.avgScore = Math.round(segment.totalScore / segment.count);
+        segment.avgWordCount = Math.round((segment.totalWordCount ?? 0) / segment.count);
+        segment.avgScore = Math.round((segment.totalScore ?? 0) / segment.count);
       }
       // Don't include full page list in output (too large)
       delete segment.pages;
@@ -126,7 +157,7 @@ class PageSegmentAnalyzer {
     });
 
     // Remove empty segments
-    const activeSegments: Record<string, any> = {};
+    const activeSegments: Record<string, SegmentData> = {};
     Object.keys(segments).forEach((type) => {
       if (segments[type].count > 0) {
         activeSegments[type] = segments[type];
@@ -210,10 +241,10 @@ class PageSegmentAnalyzer {
    * @param {Object} segments - Segment data
    * @returns {Object} Largest segment info
    */
-  static findLargestSegment(segments: Record<string, any>) {
+  static findLargestSegment(segments: Record<string, SegmentData>) {
     let largest = { type: 'other', label: 'Other', count: 0 };
 
-    Object.values(segments).forEach((segment: Record<string, any>) => {
+    Object.values(segments).forEach((segment: SegmentData) => {
       if (segment.count > largest.count) {
         largest = { type: segment.type, label: segment.label, count: segment.count };
       }
@@ -228,10 +259,10 @@ class PageSegmentAnalyzer {
    * @param {number} total - Total page count
    * @returns {Object} Distribution percentages
    */
-  static calculateDistribution(segments: Record<string, any>, total: number) {
-    const distribution: Record<string, any> = {};
+  static calculateDistribution(segments: Record<string, SegmentData>, total: number) {
+    const distribution: Record<string, DistributionEntry> = {};
 
-    Object.entries(segments).forEach(([type, segment]: [string, any]) => {
+    Object.entries(segments).forEach(([type, segment]: [string, SegmentData]) => {
       distribution[type] = {
         label: segment.label,
         count: segment.count,
@@ -248,8 +279,8 @@ class PageSegmentAnalyzer {
    * @param {Object} allPages - All page data
    * @returns {Array} Issues array
    */
-  static generateSegmentIssues(segments: Record<string, any>, allPages: Record<string, PageInfo>) {
-    const issues: Record<string, any>[] = [];
+  static generateSegmentIssues(segments: Record<string, SegmentData>, allPages: Record<string, PageInfo>) {
+    const issues: SegmentIssue[] = [];
     const totalPages = Object.keys(allPages).length;
 
     // Issue 1: Search pages being indexed (potential duplicate content)
@@ -266,7 +297,7 @@ class PageSegmentAnalyzer {
     }
 
     // Issue 2: Thin content in specific segments
-    Object.values(segments).forEach((segment: Record<string, any>) => {
+    Object.values(segments).forEach((segment: SegmentData) => {
       if (
         segment.count > 5 &&
         segment.avgWordCount < 100 &&
@@ -285,7 +316,7 @@ class PageSegmentAnalyzer {
     });
 
     // Issue 3: High error rate in segment
-    Object.values(segments).forEach((segment: Record<string, any>) => {
+    Object.values(segments).forEach((segment: SegmentData) => {
       const errorRate =
         segment.count > 0
           ? ((segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']) / segment.count) * 100

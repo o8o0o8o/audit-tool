@@ -35,11 +35,11 @@ class ThinContentAnalyzer {
 
     // Get content quality data if available
     const cq =
-      pageData.contentQuality || ({} as { wordCount?: number; paragraphCount?: number; textToHtmlRatio?: number });
+      pageData.contentQuality ?? ({} as { wordCount?: number; paragraphCount?: number; textToHtmlRatio?: number });
 
-    metrics.wordCount = cq.wordCount || 0;
-    metrics.paragraphCount = cq.paragraphCount || 0;
-    metrics.textToHtmlRatio = cq.textToHtmlRatio || 0;
+    metrics.wordCount = cq.wordCount ?? 0;
+    metrics.paragraphCount = cq.paragraphCount ?? 0;
+    metrics.textToHtmlRatio = cq.textToHtmlRatio ?? 0;
 
     // Skip non-content pages
     if (this.isNonContentPage(url)) {
@@ -188,7 +188,7 @@ class ThinContentAnalyzer {
     for (const [url, page] of Object.entries(pages)) {
       if (this.isNonContentPage(url)) continue;
 
-      const wordCount = page.contentQuality?.wordCount || 0;
+      const wordCount = page.contentQuality?.wordCount ?? 0;
       analyzedPages++;
       totalWords += wordCount;
 

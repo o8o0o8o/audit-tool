@@ -238,8 +238,8 @@ class VitalsCollector {
             return {
               value: entry.value,
               startTime: entry.startTime,
-              sources: (entry.sources || []).map((s) => ({
-                node: s.node?.nodeName || null,
+              sources: (entry.sources ?? []).map((s) => ({
+                node: s.node?.nodeName ?? null,
                 currentRect: s.currentRect
                   ? {
                       x: Math.round(s.currentRect.x),
@@ -346,7 +346,7 @@ class VitalsCollector {
           if (entries.length > 0) {
             const nav = entries[0] as PerformanceNavigationTiming;
             const activationStart =
-              (nav as PerformanceNavigationTiming & { activationStart?: number }).activationStart || 0;
+              (nav as PerformanceNavigationTiming & { activationStart?: number }).activationStart ?? 0;
             metrics.TTFB = Math.max(nav.responseStart - activationStart, 0);
             metrics.domContentLoaded = nav.domContentLoadedEventEnd - activationStart;
             metrics.domComplete = nav.domComplete - activationStart;
@@ -499,8 +499,8 @@ class VitalsCollector {
                   taskEntry.attribution?.map((a) => ({
                     name: a.name,
                     containerType: a.containerType,
-                    containerSrc: a.containerSrc?.substring(0, 100) || '',
-                  })) || [],
+                    containerSrc: a.containerSrc?.substring(0, 100) ?? '',
+                  })) ?? [],
               });
             }
           });
@@ -710,7 +710,7 @@ class VitalsCollector {
       for (const source of entry.sources || []) {
         if (source.node) {
           const key = source.node;
-          elementCounts.set(key, (elementCounts.get(key) || 0) + 1);
+          elementCounts.set(key, (elementCounts.get(key) ?? 0) + 1);
         }
       }
     }
@@ -751,7 +751,7 @@ class VitalsCollector {
     for (const task of longTasks) {
       for (const attr of task.attribution || []) {
         if (attr.containerSrc) {
-          scriptCounts.set(attr.containerSrc, (scriptCounts.get(attr.containerSrc) || 0) + task.blockingTime);
+          scriptCounts.set(attr.containerSrc, (scriptCounts.get(attr.containerSrc) ?? 0) + task.blockingTime);
         }
       }
     }

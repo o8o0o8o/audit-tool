@@ -78,7 +78,7 @@ class HistoryManager {
           try {
             // Verify we can read the compressed file
             const verifyData = FileManager.readJsonFile(this.historyFile);
-            if (verifyData && verifyData.audits && verifyData.audits.length === uncompressedHistory.audits.length) {
+            if (verifyData?.audits && verifyData.audits.length === uncompressedHistory.audits.length) {
               // Safe to remove old uncompressed file
               try {
                 fs.unlinkSync(this.historyFileUncompressed);
@@ -166,25 +166,25 @@ class HistoryManager {
     const snapshot = {
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleDateString(),
-      runTimestamp: runTimestamp || null, // Link to run directory
+      runTimestamp: runTimestamp ?? null, // Link to run directory
       summary: {
-        overallScore: auditData.analysis?.summary?.overallScore || 0,
-        totalIssues: auditData.analysis?.summary?.totalIssues || 0,
-        criticalCount: auditData.analysis?.summary?.criticalCount || 0,
-        highCount: auditData.analysis?.summary?.highCount || 0,
-        mediumCount: auditData.analysis?.summary?.mediumCount || 0,
-        lowCount: auditData.analysis?.summary?.lowCount || 0,
-        passRate: auditData.analysis?.summary?.passRate || 0,
-        categoryScores: auditData.analysis?.summary?.categoryScores || {},
-        totalPages: Object.keys(auditData.pageData?.pages || {}).length,
-        pagesWithErrors: auditData.pageData?.totalWithError || 0,
-        sitemapUrls: auditData.sitemaps?.total || 0,
+        overallScore: auditData.analysis?.summary?.overallScore ?? 0,
+        totalIssues: auditData.analysis?.summary?.totalIssues ?? 0,
+        criticalCount: auditData.analysis?.summary?.criticalCount ?? 0,
+        highCount: auditData.analysis?.summary?.highCount ?? 0,
+        mediumCount: auditData.analysis?.summary?.mediumCount ?? 0,
+        lowCount: auditData.analysis?.summary?.lowCount ?? 0,
+        passRate: auditData.analysis?.summary?.passRate ?? 0,
+        categoryScores: auditData.analysis?.summary?.categoryScores ?? {},
+        totalPages: Object.keys(auditData.pageData?.pages ?? {}).length,
+        pagesWithErrors: auditData.pageData?.totalWithError ?? 0,
+        sitemapUrls: auditData.sitemaps?.total ?? 0,
       },
       issues: this.extractIssuesSummary(auditData),
       performance: this.extractPerformanceSummary(auditData),
       technologies: this.extractTechnologiesSummary(auditData),
       insights: this.extractInsightsSummary(auditData),
-      quickWins: ((auditData.analysis?.summary?.quickWins || []) as QuickWinFull[]).map((qw) => ({
+      quickWins: ((auditData.analysis?.summary?.quickWins ?? []) as QuickWinFull[]).map((qw) => ({
         issue: qw.issue,
         affectedPages: qw.affectedPages,
         severity: (qw.severity || 'medium') as SeverityLevel,
@@ -201,13 +201,13 @@ class HistoryManager {
   }
 
   extractIssuesSummary(auditData: Partial<AuditResults>): Record<string, IssueSummary> {
-    const details = auditData.analysis?.details || {};
+    const details = auditData.analysis?.details ?? {};
     const summary: Record<string, IssueSummary> = {};
 
     Object.entries(details).forEach(([issue, data]) => {
       summary[issue] = {
         severity: data.severity,
-        count: data.examples?.length || 0,
+        count: data.examples?.length ?? 0,
       };
     });
 
@@ -215,7 +215,7 @@ class HistoryManager {
   }
 
   extractPerformanceSummary(auditData: Partial<AuditResults>): PerformanceSummary | null {
-    const pages = auditData.pageData?.pages || {};
+    const pages = auditData.pageData?.pages ?? {};
     const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter((p) => p.vitals || p.TTFB);
 
     if (pagesWithPerf.length === 0) return null;
@@ -228,8 +228,8 @@ class HistoryManager {
     };
 
     // Support both old (vitals.ttfb) and new (TTFB) formats
-    const ttfbValues = pagesWithPerf.map((p) => p.TTFB || (p.vitals?.ttfb as number) || 0).filter((v) => v > 0);
-    const lcpValues = pagesWithPerf.map((p) => p.LCP || (p.vitals?.lcp as number) || 0).filter((v) => v > 0);
+    const ttfbValues = pagesWithPerf.map((p) => p.TTFB ?? (p.vitals?.ttfb as number) ?? 0).filter((v) => v > 0);
+    const lcpValues = pagesWithPerf.map((p) => p.LCP ?? (p.vitals?.lcp as number) ?? 0).filter((v) => v > 0);
     // CLS=0 is a perfect score (no layout shift) — don't filter it out
     const clsValues = pagesWithPerf
       .map((p) => p.CLS ?? (p.vitals?.cls as number | undefined) ?? null)
@@ -247,11 +247,11 @@ class HistoryManager {
   }
 
   extractInsightsSummary(auditData: Partial<AuditResults>): InsightsSummary | null {
-    const pages = Object.values(auditData.pageData?.pages || {}) as PageInfo[];
+    const pages = Object.values(auditData.pageData?.pages ?? {}) as PageInfo[];
     if (pages.length === 0) return null;
 
     const langMismatches = pages.filter((p) => p.languageDetection?.match === false).length;
-    const brokenOutbound = pages.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length || 0), 0);
+    const brokenOutbound = pages.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
     const similarPages = pages.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length;
     const noCta = pages.filter((p) => p.ctaData?.summary?.total === 0).length;
 
@@ -281,12 +281,12 @@ class HistoryManager {
   }
 
   extractTechnologiesSummary(auditData: Partial<AuditResults>): string[] {
-    const pages = auditData.pageData?.pages || {};
+    const pages = auditData.pageData?.pages ?? {};
     const allTechs = new Set<string>();
 
     for (const page of Object.values(pages) as PageInfo[]) {
       const tech = page.technologies;
-      const technologies = tech?.technologies || [];
+      const technologies = tech?.technologies ?? [];
       for (const t of technologies) {
         allTechs.add(t.name);
       }
@@ -338,8 +338,8 @@ class HistoryManager {
     if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
       comparison.categoryDeltas = {};
       (['seo', 'performance', 'accessibility', 'security', 'technical'] as const).forEach((cat) => {
-        const oldScore = oldAudit.summary.categoryScores[cat] || 0;
-        const newScore = newAudit.summary.categoryScores[cat] || 0;
+        const oldScore = oldAudit.summary.categoryScores[cat] ?? 0;
+        const newScore = newAudit.summary.categoryScores[cat] ?? 0;
         comparison.categoryDeltas![cat] = newScore - oldScore;
       });
     }
@@ -420,11 +420,11 @@ class HistoryManager {
       criticalIssues: history.audits.map((a) => a.summary.criticalCount),
       highIssues: history.audits.map((a) => a.summary.highCount),
       categoryScores: {
-        seo: history.audits.map((a) => a.summary.categoryScores?.seo || 0),
-        performance: history.audits.map((a) => a.summary.categoryScores?.performance || 0),
-        accessibility: history.audits.map((a) => a.summary.categoryScores?.accessibility || 0),
-        security: history.audits.map((a) => a.summary.categoryScores?.security || 0),
-        technical: history.audits.map((a) => a.summary.categoryScores?.technical || 0),
+        seo: history.audits.map((a) => a.summary.categoryScores?.seo ?? 0),
+        performance: history.audits.map((a) => a.summary.categoryScores?.performance ?? 0),
+        accessibility: history.audits.map((a) => a.summary.categoryScores?.accessibility ?? 0),
+        security: history.audits.map((a) => a.summary.categoryScores?.security ?? 0),
+        technical: history.audits.map((a) => a.summary.categoryScores?.technical ?? 0),
       },
       performance: {
         // Keep nulls to maintain alignment with labels array (Chart.js handles null as gaps)
@@ -455,14 +455,14 @@ class HistoryManager {
     // Collect all unique issues across all audits
     const allIssues = new Set<string>();
     audits.forEach((audit) => {
-      Object.keys(audit.issues || {}).forEach((issue) => allIssues.add(issue));
+      Object.keys(audit.issues ?? {}).forEach((issue) => allIssues.add(issue));
     });
 
     const trends: Record<string, IssueTrend> = {};
     const labels = audits.map((a) => a.date);
 
     allIssues.forEach((issue) => {
-      const counts = audits.map((audit) => audit.issues?.[issue]?.count || 0);
+      const counts = audits.map((audit) => audit.issues?.[issue]?.count ?? 0);
       const latestAudit = audits[audits.length - 1];
       const severity =
         latestAudit.issues?.[issue]?.severity ||
@@ -474,7 +474,7 @@ class HistoryManager {
       const reverseIndex = [...counts].reverse().findIndex((c) => c > 0);
       // Handle case when all counts are 0 (reverseIndex would be -1)
       const lastNonZero = reverseIndex === -1 ? -1 : counts.length - 1 - reverseIndex;
-      const latestCount = counts[counts.length - 1] || 0;
+      const latestCount = counts[counts.length - 1] ?? 0;
 
       let trend: IssueTrend['trend'];
       if (firstNonZero === -1) {
@@ -501,7 +501,7 @@ class HistoryManager {
       }
 
       // Calculate change from first occurrence to latest
-      const firstCount = counts[firstNonZero] || 0;
+      const firstCount = counts[firstNonZero] ?? 0;
       // latestCount already defined above
       const change = latestCount - firstCount;
       const changePercent = firstCount > 0 ? (((latestCount - firstCount) / firstCount) * 100).toFixed(0) : 0;

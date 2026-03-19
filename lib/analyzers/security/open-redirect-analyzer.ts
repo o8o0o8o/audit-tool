@@ -58,7 +58,7 @@ class OpenRedirectAnalyzer {
     // 2. Check links on the page for redirect parameters
     const links = parsedPage.querySelectorAll('a[href]');
     for (const link of links) {
-      const href = link.getAttribute('href') || '';
+      const href = link.getAttribute('href') ?? '';
       try {
         const linkUrl = new URL(href, url);
         for (const [param, value] of linkUrl.searchParams.entries()) {
@@ -71,8 +71,6 @@ class OpenRedirectAnalyzer {
         // Skip invalid URLs
       }
     }
-
-    const totalSuspicious = info.suspiciousParams.length + info.suspiciousLinks.length;
 
     if (info.suspiciousParams.length > 0) {
       warnings.push({

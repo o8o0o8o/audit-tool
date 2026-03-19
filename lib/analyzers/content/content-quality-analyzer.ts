@@ -14,9 +14,10 @@ class ContentQualityAnalyzer {
           textToHtmlRatio: 0,
           readabilityScore: 0,
           keywords: {} as Record<string, number>,
-          topKeywords: [] as Record<string, any>[],
+          topKeywords: [] as { word: string; count: number; density: string }[],
           contentScore: 100,
           issues: [] as string[],
+          wordCountBySection: null as Record<string, number> | null,
         };
 
         // Helper: Count syllables in a word (approximation)
@@ -32,7 +33,7 @@ class ContentQualityAnalyzer {
           // Adjust for silent e
           if (word.endsWith('e')) syllableCount--;
           // Adjust for double vowels
-          syllableCount -= (word.match(/[aeiouy]{2,}/g) || []).length * 0.5;
+          syllableCount -= (word.match(/[aeiouy]{2,}/g) ?? []).length * 0.5;
 
           return Math.max(1, Math.round(syllableCount));
         };
@@ -41,7 +42,7 @@ class ContentQualityAnalyzer {
         const calculateReadability = (text: string, wordCount: number, sentenceCount: number) => {
           if (wordCount === 0 || sentenceCount === 0) return 0;
 
-          const syllables = text.split(/\s+/).reduce((count: any, word: any) => {
+          const syllables = text.split(/\s+/).reduce((count: number, word: string) => {
             return count + countSyllables(word);
           }, 0);
 
@@ -54,24 +55,24 @@ class ContentQualityAnalyzer {
         };
 
         // Extract main content text
-        const mainContent = document.querySelector('main, article, [role="main"]') || document.body;
+        const mainContent = document.querySelector('main, article, [role="main"]') ?? document.body;
 
         // Remove script, style, nav, header, footer from analysis
         const contentClone = mainContent.cloneNode(true);
         const elementsToRemove = (contentClone as Element).querySelectorAll(
           'script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"]',
         );
-        elementsToRemove.forEach((el: any) => el.remove());
+        elementsToRemove.forEach((el: Element) => el.remove());
 
-        let textContent = contentClone.textContent || '';
+        let textContent = contentClone.textContent ?? '';
         let cleanText = textContent.replace(/\s+/g, ' ').trim();
 
         // Fallback: if stripping nav/header/footer left no text, use body with only script/style removed
         let activeClone = contentClone;
         if (cleanText.length === 0) {
           const bodyClone = document.body.cloneNode(true);
-          (bodyClone as Element).querySelectorAll('script, style').forEach((el: any) => el.remove());
-          textContent = bodyClone.textContent || '';
+          (bodyClone as Element).querySelectorAll('script, style').forEach((el: Element) => el.remove());
+          textContent = bodyClone.textContent ?? '';
           cleanText = textContent.replace(/\s+/g, ' ').trim();
           activeClone = bodyClone;
         }
@@ -238,7 +239,7 @@ class ContentQualityAnalyzer {
           }));
 
         // Check for keyword stuffing
-        const maxKeywordDensity = analysis.topKeywords.length > 0 ? parseFloat(analysis.topKeywords[0].density) : 0;
+        const maxKeywordDensity = analysis.topKeywords.length > 0 ? parseFloat(analysis.topKeywords[0].density as string) : 0;
 
         // Content scoring
         if (analysis.wordCount < thresholds.CONTENT_MIN) {
@@ -290,14 +291,14 @@ class ContentQualityAnalyzer {
         analysis.contentScore = Math.max(0, analysis.contentScore);
 
         // Word count by content section
-        const sections = { main: 0, nav: 0, header: 0, footer: 0, sidebar: 0, other: 0 };
+        const sections: Record<string, number> = { main: 0, nav: 0, header: 0, footer: 0, sidebar: 0, other: 0 };
 
         const countWords = (el: Element | null) => {
           if (!el) return 0;
           const clone = el.cloneNode(true) as Element;
           clone.querySelectorAll('script, style').forEach((s) => s.remove());
           const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
-          return text.split(/\s+/).filter((w: any) => w.length > 0).length;
+          return text.split(/\s+/).filter((w: string) => w.length > 0).length;
         };
 
         // Main content
@@ -325,11 +326,11 @@ class ContentQualityAnalyzer {
         // Calculate boilerplate
         const totalSectionWords = Object.values(sections).reduce((a, b) => a + b, 0);
         const boilerplate = sections.nav + sections.header + sections.footer;
-        (sections as Record<string, any>).boilerplate = boilerplate;
-        (sections as Record<string, any>).boilerplateRatio =
+        sections.boilerplate = boilerplate;
+        sections.boilerplateRatio =
           totalSectionWords > 0 ? Math.round((boilerplate / totalSectionWords) * 100) : 0;
 
-        (analysis as Record<string, any>).wordCountBySection = sections;
+        analysis.wordCountBySection = sections;
 
         return analysis;
       },

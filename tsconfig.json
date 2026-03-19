@@ -16,7 +16,9 @@
     "allowJs": false,
     "noEmit": false,
     "incremental": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
   },
   "include": [
     "**/*.ts"

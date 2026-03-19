@@ -75,7 +75,7 @@ class CompressionAnalyzer {
       info.uncompressedResources++;
 
       // Check if HTML is large enough to benefit
-      const htmlSize = pageData.htmlSize || pageData.contentLength || 0;
+      const htmlSize = pageData.htmlSize ?? pageData.contentLength ?? 0;
       if (htmlSize > MIN_SIZE_FOR_COMPRESSION) {
         const estimatedSavings = Math.round(htmlSize * 0.7); // ~70% compression ratio
         info.potentialSavings += estimatedSavings;
@@ -89,7 +89,7 @@ class CompressionAnalyzer {
     }
 
     // Check resource compression
-    const resources = pageData.resources || [];
+    const resources = pageData.resources ?? [];
     for (const resource of resources) {
       const resourceInfo = this.analyzeResource(resource);
       info.resources.push(resourceInfo);
@@ -229,7 +229,7 @@ class CompressionAnalyzer {
       } else {
         stats.pagesWithoutCompression++;
         stats.compressionTypes.none++;
-        const size = pageData.htmlSize || pageData.contentLength || 0;
+        const size = pageData.htmlSize ?? pageData.contentLength ?? 0;
         if (size > MIN_SIZE_FOR_COMPRESSION) {
           uncompressedPages.push({ url, size });
           stats.totalPotentialSavings += Math.round(size * 0.7);

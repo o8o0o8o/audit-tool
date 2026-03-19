@@ -6,6 +6,18 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface TitleConflictPage {
+  url: string;
+  title: string;
+}
+
+interface H1ConflictPage {
+  url: string;
+  h1: string;
+}
+
+type ConflictPage = TitleConflictPage | H1ConflictPage;
+
 const STOPWORDS = new Set([
   'a',
   'an',
@@ -159,7 +171,7 @@ class KeywordCannibalisationAnalyzer {
    * Remove keywords that are subsets of other keywords in the same conflict set
    * e.g. if "corporate solutions form" is flagged, remove "corporate solutions" and "solutions form"
    */
-  static deduplicateSubsumedPhrases(conflicts: Map<string, any[]>): Map<string, any[]> {
+  static deduplicateSubsumedPhrases<T extends ConflictPage>(conflicts: Map<string, T[]>): Map<string, T[]> {
     const keywords = Array.from(conflicts.keys());
     const toRemove = new Set<string>();
 
@@ -168,8 +180,8 @@ class KeywordCannibalisationAnalyzer {
         if (shorter === longer) continue;
         if (shorter.split(' ').length >= longer.split(' ').length) continue;
         if (longer.includes(shorter)) {
-          const shorterPages = new Set(conflicts.get(shorter)!.map((p: any) => p.url));
-          const longerPages = conflicts.get(longer)!.map((p: any) => p.url);
+          const shorterPages = new Set(conflicts.get(shorter)!.map((p: ConflictPage) => p.url));
+          const longerPages = conflicts.get(longer)!.map((p: ConflictPage) => p.url);
           // If all pages of the longer phrase are also in the shorter phrase, remove shorter
           if (longerPages.every((url: string) => shorterPages.has(url))) {
             toRemove.add(shorter);
@@ -196,9 +208,9 @@ class KeywordCannibalisationAnalyzer {
     const brandWords = this.detectBrandName(pages);
 
     // Build keyword maps
-    const titleKeywords = new Map(); // keyword -> [urls]
-    const h1Keywords = new Map(); // keyword -> [urls]
-    const topicClusters = new Map(); // topic -> [urls]
+    const titleKeywords = new Map<string, TitleConflictPage[]>(); // keyword -> [urls]
+    const h1Keywords = new Map<string, H1ConflictPage[]>(); // keyword -> [urls]
+    const topicClusters = new Map<string, string[]>(); // topic -> [urls]
 
     for (const [url, page] of Object.entries(pages)) {
       // Skip error pages
@@ -211,7 +223,7 @@ class KeywordCannibalisationAnalyzer {
           if (!titleKeywords.has(keyword)) {
             titleKeywords.set(keyword, []);
           }
-          titleKeywords.get(keyword).push({ url, title: page.title });
+          titleKeywords.get(keyword)!.push({ url, title: page.title });
         }
       }
 
@@ -223,7 +235,7 @@ class KeywordCannibalisationAnalyzer {
           if (!h1Keywords.has(keyword)) {
             h1Keywords.set(keyword, []);
           }
-          h1Keywords.get(keyword).push({ url, h1 });
+          h1Keywords.get(keyword)!.push({ url, h1 });
         }
       }
 
@@ -233,7 +245,7 @@ class KeywordCannibalisationAnalyzer {
         if (!topicClusters.has(topic)) {
           topicClusters.set(topic, []);
         }
-        topicClusters.get(topic).push(url);
+        topicClusters.get(topic)!.push(url);
       }
     }
 
@@ -246,7 +258,7 @@ class KeywordCannibalisationAnalyzer {
           message: `Multiple pages targeting keyword: "${keyword}"`,
           detail: `${pages.length} pages have this keyword in title: ${pages
             .slice(0, 3)
-            .map((p: any) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`)
+            .map((p: ConflictPage) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`)
             .join(', ')}${pages.length > 3 ? ` (+${pages.length - 3} more)` : ''}`,
           severity: pages.length > 3 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
         });
@@ -266,7 +278,7 @@ class KeywordCannibalisationAnalyzer {
           message: `Multiple pages with similar H1 keyword: "${keyword}"`,
           detail: `${pages.length} pages target this in H1: ${pages
             .slice(0, 3)
-            .map((p: any) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`)
+            .map((p: ConflictPage) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`)
             .join(', ')}`,
           severity: SEVERITY.MEDIUM,
         });
@@ -289,7 +301,7 @@ class KeywordCannibalisationAnalyzer {
     for (const group of nearDuplicates) {
       issues.push({
         message: 'Near-duplicate page titles detected',
-        detail: `These pages have very similar titles: ${group.map((p) => `<a href="${p.url}">"${this.truncate(p.title || '', 40)}"</a>`).join(', ')}`,
+        detail: `These pages have very similar titles: ${group.map((p) => `<a href="${p.url}">"${this.truncate(p.title ?? '', 40)}"</a>`).join(', ')}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -313,7 +325,7 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Extract significant keywords from text
    */
-  static extractKeywords(text: string) {
+  static extractKeywords(text: string): string[] {
     if (!text) return [];
 
     // Normalize text
@@ -325,7 +337,7 @@ class KeywordCannibalisationAnalyzer {
 
     // Extract 2-4 word phrases
     const words = normalized.split(' ').filter((w) => w.length > 2);
-    const keywords = new Set();
+    const keywords = new Set<string>();
 
     // Single significant words (4+ chars, not stopwords)
     for (const word of words) {
@@ -377,8 +389,8 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Find keywords with multiple pages
    */
-  static findConflicts(keywordMap: Map<string, Record<string, any>[]>, minCount: number) {
-    const conflicts = new Map();
+  static findConflicts<T extends ConflictPage>(keywordMap: Map<string, T[]>, minCount: number) {
+    const conflicts = new Map<string, T[]>();
 
     for (const [keyword, pages] of keywordMap) {
       if (pages.length >= minCount) {
@@ -421,12 +433,12 @@ class KeywordCannibalisationAnalyzer {
       if (processed.has(pageList[i].url)) continue;
 
       const group = [pageList[i]];
-      const baseTitle = this.normalizeForComparison(pageList[i].title || '');
+      const baseTitle = this.normalizeForComparison(pageList[i].title ?? '');
 
       for (let j = i + 1; j < pageList.length; j++) {
         if (processed.has(pageList[j].url)) continue;
 
-        const compareTitle = this.normalizeForComparison(pageList[j].title || '');
+        const compareTitle = this.normalizeForComparison(pageList[j].title ?? '');
         const similarity = this.calculateSimilarity(baseTitle, compareTitle);
 
         if (similarity > 0.85) {

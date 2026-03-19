@@ -6,6 +6,52 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface AboveFoldHeading {
+  tag: string;
+  text: string;
+}
+
+interface AboveFoldImage {
+  src: string;
+  size: number | undefined;
+  loading: string | undefined;
+  fetchPriority: string | undefined;
+}
+
+interface AboveFoldCta {
+  text: string;
+  type: string;
+}
+
+interface CriticalResource {
+  url: string;
+  type: string;
+  size: number;
+}
+
+interface PageResource {
+  url: string;
+  type?: string;
+  renderBlocking?: boolean;
+  media?: string;
+  async?: boolean;
+  defer?: boolean;
+  inHead?: boolean;
+  size?: number;
+  [key: string]: unknown;
+}
+
+interface PageImage {
+  src: string;
+  rect?: { top: number; bottom: number; left: number; right: number };
+  boundingRect?: { top: number; bottom: number; left: number; right: number };
+  size?: number;
+  fileSize?: number;
+  loading?: string;
+  fetchPriority?: string;
+  [key: string]: unknown;
+}
+
 // Default viewport dimensions (mobile-first)
 const DEFAULT_VIEWPORT = {
   width: 414,
@@ -23,15 +69,15 @@ class AboveFoldAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      viewport: pageData.viewport || DEFAULT_VIEWPORT,
+      viewport: pageData.viewport ?? DEFAULT_VIEWPORT,
       hasContentAboveFold: false,
       aboveFoldElements: {
-        headings: [] as Record<string, any>[],
-        images: [] as Record<string, any>[],
-        text: [] as Record<string, any>[],
-        cta: [] as Record<string, any>[],
+        headings: [] as AboveFoldHeading[],
+        images: [] as AboveFoldImage[],
+        text: [] as Record<string, unknown>[],
+        cta: [] as AboveFoldCta[],
       },
-      criticalResources: [] as Record<string, any>[],
+      criticalResources: [] as CriticalResource[],
       lcpInViewport: false,
       renderBlockingResources: 0,
       aboveFoldImageSize: 0,
@@ -39,7 +85,7 @@ class AboveFoldAnalyzer {
     };
 
     // Analyze LCP element position
-    const lcpRect = pageData.lcpRect || pageData.vitals?.lcpRect;
+    const lcpRect = pageData.lcpRect ?? pageData.vitals?.lcpRect;
 
     if (lcpRect) {
       info.lcpInViewport = this.isInViewport(lcpRect, info.viewport);
@@ -54,15 +100,15 @@ class AboveFoldAnalyzer {
     }
 
     // Analyze above-fold images
-    const images = (pageData.images as Record<string, any>[] | undefined) || [];
+    const images = (pageData.images as PageImage[] | undefined) ?? [];
     let lazyLoadedAboveFold = 0;
 
     for (const image of images) {
-      const rect = image.rect || image.boundingRect;
+      const rect = image.rect ?? image.boundingRect;
       if (rect && this.isInViewport(rect, info.viewport)) {
         info.aboveFoldElements.images.push({
           src: image.src,
-          size: image.size || image.fileSize,
+          size: image.size ?? image.fileSize,
           loading: image.loading,
           fetchPriority: image.fetchPriority,
         });
@@ -102,7 +148,7 @@ class AboveFoldAnalyzer {
     // Analyze headings presence
     // Note: headings structure is {h1: ["text", ...], h2: [...], ...} from HeadingAnalyzer
     // We don't have bounding rect data, so we can only note their existence
-    const headings = pageData.headings || ({} as Record<string, any>);
+    const headings = pageData.headings ?? ({} as Record<string, string[]>);
     const hasH1 = headings.h1 && headings.h1.length > 0;
 
     if (hasH1) {
@@ -116,19 +162,19 @@ class AboveFoldAnalyzer {
     }
 
     // Analyze render-blocking resources
-    const resources = pageData.resources || [];
+    const resources = (pageData.resources ?? []) as PageResource[];
     const renderBlocking = resources.filter(
-      (r: any) =>
+      (r) =>
         r.renderBlocking ||
         (r.type === 'stylesheet' && !r.media) ||
         (r.type === 'script' && !r.async && !r.defer && r.inHead),
     );
 
     info.renderBlockingResources = renderBlocking.length;
-    info.criticalResources = renderBlocking.slice(0, 10).map((r: any) => ({
+    info.criticalResources = renderBlocking.slice(0, 10).map((r) => ({
       url: r.url,
-      type: r.type,
-      size: r.size,
+      type: r.type ?? 'unknown',
+      size: r.size ?? 0,
     }));
 
     if (renderBlocking.length > 5) {
@@ -167,9 +213,9 @@ class AboveFoldAnalyzer {
     }
 
     // Analyze CTA buttons above fold
-    const ctas = pageData.ctas || pageData.buttons || [];
+    const ctas = pageData.ctas ?? pageData.buttons ?? [];
     for (const cta of ctas) {
-      const rect = cta.rect || cta.boundingRect;
+      const rect = cta.rect ?? cta.boundingRect;
       if (rect && this.isInViewport(rect, info.viewport)) {
         info.aboveFoldElements.cta.push({
           text: cta.text,
@@ -237,14 +283,14 @@ class AboveFoldAnalyzer {
 
       if (analysis.info.lcpInViewport) {
         stats.pagesWithLcpAboveFold++;
-      } else if (pageData.lcpRect || pageData.vitals?.lcpRect) {
+      } else if (pageData.lcpRect ?? pageData.vitals?.lcpRect) {
         stats.pagesWithLcpBelowFold++;
       }
 
       totalRenderBlocking += analysis.info.renderBlockingResources;
       totalAboveFoldImageSize += analysis.info.aboveFoldImageSize;
 
-      if (analysis.issues.some((i: any) => i.message.includes('lazy loading'))) {
+      if (analysis.issues.some((i) => i.message?.includes('lazy loading'))) {
         stats.pagesWithLazyAboveFold++;
       }
     }

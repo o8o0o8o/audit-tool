@@ -196,14 +196,14 @@ class ProgressManager {
     this.#writtenBatches = batches.map((b) => ({
       file: b.file,
       count: b.count,
-      urls: b.urls || [],
+      urls: b.urls ?? [],
     }));
     this.fileManager.setCurrentBatchNumber(batches.length);
 
     console.log(`✓ Progress restored successfully`);
     console.log(`  - Processed pages: ${restoredResults.pageData.processedPages.size}`);
     console.log(`  - Total pages in memory: ${Object.keys(pages).length}`);
-    console.log(`  - Total URLs in sitemap: ${restoredResults.sitemaps?.total || 0}\n`);
+    console.log(`  - Total URLs in sitemap: ${restoredResults.sitemaps?.total ?? 0}\n`);
 
     return {
       results: restoredResults,
@@ -507,7 +507,7 @@ class ProgressManager {
       sitemaps: results.sitemaps,
       isMultiLang: results.isMultiLang,
       timing: results.timing,
-      cruxData: results.cruxData || null,
+      cruxData: results.cruxData ?? null,
     };
     this.fileManager.writeMetadata(metadata);
 
@@ -521,7 +521,7 @@ class ProgressManager {
     this.fileManager.writeAnalysis(analysisData);
 
     // Write incoming links
-    const incomingLinks = results.pageData.incomingLinks || {};
+    const incomingLinks = results.pageData.incomingLinks ?? {};
     this.fileManager.writeIncomingLinks(incomingLinks);
 
     // Build and write manifest
@@ -660,7 +660,7 @@ class ProgressManager {
       const byType: Record<string, number> = {};
       let totalSize = 0;
       for (const [, req] of entries) {
-        byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] || 0) + 1;
+        byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] ?? 0) + 1;
         if (req.size) totalSize += req.size;
       }
       dyn['requests'] = { totalRequests: entries.length, byType, totalSize };

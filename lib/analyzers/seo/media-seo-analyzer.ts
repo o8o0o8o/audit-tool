@@ -6,6 +6,35 @@
 import { SEVERITY } from '../../constants';
 import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
+interface NativeVideoInfo {
+  type: 'native';
+  src: string | null;
+  sources: (string | null)[];
+  hasPoster: boolean;
+  poster: string | null;
+  hasTitle: boolean;
+  title: string | null;
+  hasCaption: boolean;
+  captionKind: string | null;
+  autoplay: boolean;
+  muted: boolean;
+}
+
+interface EmbeddedVideoInfo {
+  type: 'embedded';
+  platform: string;
+  src: string;
+  hasTitle: boolean;
+  title: string | null;
+  hasCaption: boolean;
+}
+
+interface AudioInfo {
+  src: string | null;
+  hasTitle: boolean;
+  hasTranscript: boolean;
+}
+
 class MediaSEOAnalyzer {
   /**
    * Analyze media SEO
@@ -20,17 +49,18 @@ class MediaSEOAnalyzer {
     const warnings: Issue[] = [];
 
     const mediaData = {
-      videos: [] as Record<string, any>[],
-      audios: [] as Record<string, any>[],
+      videos: [] as (NativeVideoInfo | EmbeddedVideoInfo)[],
+      audios: [] as AudioInfo[],
       hasVideoSchema: false,
       videoSchemaValid: false,
       totalVideos: 0,
       totalAudios: 0,
-      embeddedVideos: [] as Record<string, any>[],
-      nativeVideos: [] as Record<string, any>[],
+      embeddedVideos: [] as EmbeddedVideoInfo[],
+      nativeVideos: [] as NativeVideoInfo[],
       videosWithoutCaptions: 0,
       videosWithoutPoster: 0,
       videosWithoutTitle: 0,
+      videoSchemaIssues: [] as string[],
     };
 
     // 1. Find native video elements
@@ -52,12 +82,12 @@ class MediaSEOAnalyzer {
     const videoSchema = this.#checkVideoSchema(pageData);
     mediaData.hasVideoSchema = videoSchema.hasSchema;
     mediaData.videoSchemaValid = videoSchema.isValid;
-    (mediaData as Record<string, any>).videoSchemaIssues = videoSchema.issues;
+    mediaData.videoSchemaIssues = videoSchema.issues;
 
     // 5. Count issues
-    for (const video of [...nativeVideos, ...embeddedVideos]) {
+    for (const video of [...nativeVideos, ...embeddedVideos] as (NativeVideoInfo | EmbeddedVideoInfo)[]) {
       if (!video.hasCaption) mediaData.videosWithoutCaptions++;
-      if (!video.hasPoster && video.type === 'native') mediaData.videosWithoutPoster++;
+      if ('hasPoster' in video && !video.hasPoster && video.type === 'native') mediaData.videosWithoutPoster++;
       if (!video.hasTitle) mediaData.videosWithoutTitle++;
     }
 
@@ -76,7 +106,7 @@ class MediaSEOAnalyzer {
     if (mediaData.hasVideoSchema && !mediaData.videoSchemaValid) {
       issues.push({
         message: 'Invalid VideoObject schema',
-        detail: `<a href="${url}">${url}</a> has VideoObject schema with issues: ${(mediaData as Record<string, any>).videoSchemaIssues.join(', ')}`,
+        detail: `<a href="${url}">${url}</a> has VideoObject schema with issues: ${mediaData.videoSchemaIssues.join(', ')}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -109,7 +139,7 @@ class MediaSEOAnalyzer {
     }
 
     // Check for autoplay with sound (UX issue)
-    const autoplayVideos = nativeVideos.filter((v: any) => v.autoplay && !v.muted);
+    const autoplayVideos = nativeVideos.filter((v: NativeVideoInfo) => v.autoplay && !v.muted);
     if (autoplayVideos.length > 0) {
       warnings.push({
         message: 'Autoplaying video with sound',
@@ -125,8 +155,8 @@ class MediaSEOAnalyzer {
    * Analyze native video elements
    * @private
    */
-  static async #analyzeNativeVideos(chromePage: ChromePage, parsedPage: ParsedPage) {
-    const videos: Record<string, any>[] = [];
+  static async #analyzeNativeVideos(chromePage: ChromePage, parsedPage: ParsedPage): Promise<NativeVideoInfo[]> {
+    const videos: NativeVideoInfo[] = [];
     const videoElements = parsedPage.querySelectorAll('video');
 
     for (const video of videoElements) {
@@ -139,23 +169,23 @@ class MediaSEOAnalyzer {
       // Check for track elements (captions)
       const tracks = video.querySelectorAll('track');
       const captionTrack = Array.from(tracks).find(
-        (t: any) => t.getAttribute('kind') === 'captions' || t.getAttribute('kind') === 'subtitles',
+        (t) => t.getAttribute('kind') === 'captions' || t.getAttribute('kind') === 'subtitles',
       );
 
       // Check for source elements
       const sources = video.querySelectorAll('source');
-      const sourceUrls = Array.from(sources).map((s: any) => s.getAttribute('src'));
+      const sourceUrls = Array.from(sources).map((s) => s.getAttribute('src') ?? null);
 
       videos.push({
         type: 'native',
-        src: src || sourceUrls[0] || null,
+        src: src ?? sourceUrls[0] ?? null,
         sources: sourceUrls,
         hasPoster: !!poster,
-        poster,
+        poster: poster ?? null,
         hasTitle: !!title,
-        title,
+        title: title ?? null,
         hasCaption: !!captionTrack,
-        captionKind: (captionTrack as unknown as Element | null)?.getAttribute('kind'),
+        captionKind: captionTrack?.getAttribute('kind') ?? null,
         autoplay,
         muted,
       });
@@ -168,8 +198,8 @@ class MediaSEOAnalyzer {
    * Find embedded videos (YouTube, Vimeo, etc.)
    * @private
    */
-  static #findEmbeddedVideos(parsedPage: ParsedPage) {
-    const videos: Record<string, any>[] = [];
+  static #findEmbeddedVideos(parsedPage: ParsedPage): EmbeddedVideoInfo[] {
+    const videos: EmbeddedVideoInfo[] = [];
     const iframes = parsedPage.querySelectorAll('iframe');
 
     const videoPatterns = [
@@ -183,7 +213,7 @@ class MediaSEOAnalyzer {
     ];
 
     for (const iframe of iframes) {
-      const src = iframe.getAttribute('src') || '';
+      const src = iframe.getAttribute('src') ?? '';
       const title = iframe.getAttribute('title');
       const ariaLabel = iframe.getAttribute('aria-label');
 
@@ -196,8 +226,8 @@ class MediaSEOAnalyzer {
             type: 'embedded',
             platform,
             src: src.substring(0, 150),
-            hasTitle: !!(title || ariaLabel),
-            title: title || ariaLabel,
+            hasTitle: !!(title ?? ariaLabel),
+            title: title ?? ariaLabel ?? null,
             hasCaption, // Can't fully determine for embeds
           });
           break;
@@ -212,8 +242,8 @@ class MediaSEOAnalyzer {
    * Find audio elements
    * @private
    */
-  static #findAudioElements(parsedPage: ParsedPage) {
-    const audios: Record<string, any>[] = [];
+  static #findAudioElements(parsedPage: ParsedPage): AudioInfo[] {
+    const audios: AudioInfo[] = [];
     const audioElements = parsedPage.querySelectorAll('audio');
 
     for (const audio of audioElements) {
@@ -225,7 +255,7 @@ class MediaSEOAnalyzer {
       const hasTranscript = tracks.length > 0;
 
       audios.push({
-        src,
+        src: src ?? null,
         hasTitle: !!title,
         hasTranscript,
       });
@@ -246,7 +276,7 @@ class MediaSEOAnalyzer {
     };
 
     const structuredData = pageData.structuredData;
-    if (!structuredData || !structuredData.jsonLdSchemas) {
+    if (!structuredData?.jsonLdSchemas) {
       return result;
     }
 
@@ -305,7 +335,7 @@ class MediaSEOAnalyzer {
           pagesWithVideoSchema++;
         }
 
-        totalVideosWithoutCaptions += page.mediaData?.videosWithoutCaptions || 0;
+        totalVideosWithoutCaptions += page.mediaData?.videosWithoutCaptions ?? 0;
       }
     }
 

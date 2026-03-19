@@ -28,7 +28,7 @@ class SocialMediaAnalyzer {
     for (const property in ogTags) {
       const tag = parsedPage.querySelector(`meta[property="${property}"]`);
       if (tag) {
-        ogTags[property] = tag.getAttribute('content') || null;
+        ogTags[property] = tag.getAttribute('content') ?? null;
         socialData.hasOpenGraph = true;
       }
     }
@@ -49,7 +49,7 @@ class SocialMediaAnalyzer {
     for (const name in twitterTags) {
       const tag = parsedPage.querySelector(`meta[name="${name}"]`);
       if (tag) {
-        twitterTags[name] = tag.getAttribute('content') || null;
+        twitterTags[name] = tag.getAttribute('content') ?? null;
         socialData.hasTwitterCard = true;
       }
     }

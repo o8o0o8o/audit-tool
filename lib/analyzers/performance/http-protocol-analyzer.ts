@@ -36,7 +36,7 @@ class HTTPProtocolAnalyzer {
     info.protocolVersion = this.parseProtocolVersion(protocol);
 
     // Check Alt-Svc header for HTTP/3 support
-    const altSvc = pageData.headers?.['alt-svc'] || pageData.altSvc;
+    const altSvc = pageData.headers?.['alt-svc'] ?? pageData.altSvc;
     if (altSvc) {
       info.altSvc = altSvc;
       if (altSvc.includes('h3')) {
@@ -45,7 +45,7 @@ class HTTPProtocolAnalyzer {
     }
 
     // Analyze resource protocols
-    const resources = pageData.resources || [];
+    const resources = pageData.resources ?? [];
     for (const resource of resources) {
       const resourceProtocol = resource.protocol || resource.httpVersion || 'unknown';
       if (!info.resourceProtocols[resourceProtocol]) {
@@ -126,7 +126,7 @@ class HTTPProtocolAnalyzer {
     if (pageData.timing?.protocol) return pageData.timing.protocol;
 
     // Check performance entries
-    const perfEntry = pageData.performanceEntry || pageData.navigationTiming;
+    const perfEntry = pageData.performanceEntry ?? pageData.navigationTiming;
     if (perfEntry?.nextHopProtocol) return perfEntry.nextHopProtocol;
 
     return 'unknown';
@@ -228,7 +228,7 @@ class HTTPProtocolAnalyzer {
       if (version! >= 3 || pageData.headers?.['alt-svc']?.includes('h3')) stats.supportsHttp3++;
       if (version === 1 || version === 1.1) stats.http1Only++;
 
-      totalResources += (pageData.resources || []).length;
+      totalResources += (pageData.resources ?? []).length;
     }
 
     if (stats.pagesAnalyzed > 0) {

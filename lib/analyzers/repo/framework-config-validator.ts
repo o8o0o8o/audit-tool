@@ -7,6 +7,26 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SEVERITY } from '../../constants';
 
+interface FrameworkInfo {
+  framework: string | null;
+  version: string | null;
+  packageJson: Record<string, unknown>;
+  srcDirs: string[];
+  configFile: string | null;
+  router: string | null;
+}
+
+interface ValidationIssue {
+  message: string;
+  detail: string;
+  severity: string;
+}
+
+interface ValidationResult {
+  issues: ValidationIssue[];
+  warnings: ValidationIssue[];
+}
+
 class FrameworkConfigValidator {
   /**
    * Validate framework-specific SEO configuration
@@ -14,7 +34,7 @@ class FrameworkConfigValidator {
    * @param {object} frameworkInfo - Output from RepoFrameworkDetector.detect()
    * @returns {{ issues: Array, warnings: Array }}
    */
-  static validate(repoPath: string, frameworkInfo: Record<string, any>) {
+  static validate(repoPath: string, frameworkInfo: FrameworkInfo): ValidationResult {
     const { framework } = frameworkInfo;
 
     switch (framework) {
@@ -34,9 +54,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Next.js SEO configuration
    */
-  static #validateNextJs(repoPath: string, frameworkInfo: Record<string, any>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+  static #validateNextJs(repoPath: string, frameworkInfo: FrameworkInfo): ValidationResult {
+    const issues: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
     const { router, configFile } = frameworkInfo;
 
     // Check next.config
@@ -158,9 +178,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Nuxt SEO configuration
    */
-  static #validateNuxt(repoPath: string, frameworkInfo: Record<string, any>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+  static #validateNuxt(repoPath: string, frameworkInfo: FrameworkInfo): ValidationResult {
+    const issues: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
     const { configFile } = frameworkInfo;
 
     if (configFile) {
@@ -226,9 +246,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Gatsby SEO configuration
    */
-  static #validateGatsby(repoPath: string, frameworkInfo: Record<string, any>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+  static #validateGatsby(repoPath: string, frameworkInfo: FrameworkInfo): ValidationResult {
+    const issues: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
     const { configFile } = frameworkInfo;
 
     if (configFile) {
@@ -289,9 +309,9 @@ class FrameworkConfigValidator {
   /**
    * Validate Astro SEO configuration
    */
-  static #validateAstro(repoPath: string, frameworkInfo: Record<string, any>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+  static #validateAstro(repoPath: string, frameworkInfo: FrameworkInfo): ValidationResult {
+    const issues: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
     const { configFile } = frameworkInfo;
 
     if (configFile) {
@@ -341,9 +361,9 @@ class FrameworkConfigValidator {
   /**
    * Generic validation for unrecognized frameworks
    */
-  static #validateGeneric(repoPath: string) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+  static #validateGeneric(repoPath: string): ValidationResult {
+    const issues: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
 
     // Check for robots.txt
     if (

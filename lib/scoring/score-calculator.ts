@@ -401,7 +401,7 @@ class ScoreCalculator {
             effortMinutes,
             fix: recommendation.fix,
             example: recommendation.example,
-            resources: recommendation.resources || [],
+            resources: recommendation.resources ?? [],
             impactScore,
             examples: (data.examples || []).slice(0, 3), // First 3 examples
           });

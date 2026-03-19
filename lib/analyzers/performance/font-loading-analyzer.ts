@@ -6,6 +6,32 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage, ParsedPage, PageInfo, NetworkRequest } from '../../types';
 
+interface FontFileInfo {
+  url: string;
+  size: number;
+  format: string;
+  status: number | undefined;
+}
+
+interface FontPreloadInfo {
+  href: string | undefined;
+  crossorigin: string | undefined;
+}
+
+interface FontFaceInfo {
+  family: string;
+  display: string;
+  src: string | undefined;
+}
+
+interface NetworkRequestEntry {
+  size?: number;
+  resourceType?: string;
+  status?: number;
+  duration?: number;
+  [key: string]: unknown;
+}
+
 class FontLoadingAnalyzer {
   /**
    * Analyze font loading strategy
@@ -18,15 +44,27 @@ class FontLoadingAnalyzer {
   static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: NetworkRequest[], url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const fontData: Record<string, any> = {
-      fonts: [] as Record<string, any>[],
+    const fontData: {
+      fonts: FontFileInfo[];
+      totalFontSize: number;
+      hasPreload: boolean;
+      hasFontDisplay: boolean;
+      fontDisplayValues: string[];
+      webFontCount: number;
+      systemFonts: boolean;
+      issues: Issue[];
+      preloadedFonts?: FontPreloadInfo[];
+      fontFaces?: FontFaceInfo[];
+      externalFontServices?: { services: string[]; hasPreconnect: boolean };
+    } = {
+      fonts: [],
       totalFontSize: 0,
       hasPreload: false,
       hasFontDisplay: false,
-      fontDisplayValues: [] as string[],
+      fontDisplayValues: [],
       webFontCount: 0,
       systemFonts: false,
-      issues: [] as Record<string, any>[],
+      issues: [],
     };
 
     // 1. Analyze font requests from network
@@ -44,7 +82,7 @@ class FontLoadingAnalyzer {
     const fontFaceAnalysis = await this.#analyzeFontFace(chromePage);
     fontData.fontFaces = fontFaceAnalysis.fontFaces;
     fontData.hasFontDisplay = fontFaceAnalysis.hasFontDisplay;
-    fontData.fontDisplayValues = fontFaceAnalysis.fontDisplayValues;
+    fontData.fontDisplayValues = fontFaceAnalysis.fontDisplayValues as string[];
 
     // 4. Check for system font fallbacks
     fontData.systemFonts = await this.#checkSystemFontFallback(chromePage);
@@ -125,16 +163,16 @@ class FontLoadingAnalyzer {
    * @private
    */
   static #analyzeFontRequests(requests: NetworkRequest[]) {
-    const fonts: Record<string, any>[] = [];
+    const fonts: FontFileInfo[] = [];
     let totalSize = 0;
 
     const fontExtensions = ['.woff2', '.woff', '.ttf', '.otf', '.eot'];
 
-    for (const [reqUrl, req] of Object.entries(requests) as [string, any][]) {
+    for (const [reqUrl, req] of Object.entries(requests) as unknown as [string, NetworkRequestEntry][]) {
       const isFont = fontExtensions.some((ext) => reqUrl.toLowerCase().includes(ext)) || req.resourceType === 'font';
 
       if (isFont) {
-        const size = req.size || 0;
+        const size = req.size ?? 0;
         totalSize += size;
 
         fonts.push({
@@ -167,7 +205,7 @@ class FontLoadingAnalyzer {
    * @private
    */
   static #checkFontPreload(parsedPage: ParsedPage) {
-    const preloaded: Record<string, any>[] = [];
+    const preloaded: FontPreloadInfo[] = [];
     const preloadLinks = parsedPage.querySelectorAll('link[rel="preload"][as="font"]');
 
     for (const link of preloadLinks) {
@@ -289,7 +327,7 @@ class FontLoadingAnalyzer {
     // Check for preconnect
     const preconnects = parsedPage.querySelectorAll('link[rel="preconnect"]');
     for (const link of preconnects) {
-      const href = link.getAttribute('href') || '';
+      const href = link.getAttribute('href') ?? '';
       if (fontServiceDomains.some((d) => href.includes(d))) {
         hasPreconnect = true;
         break;
@@ -311,13 +349,14 @@ class FontLoadingAnalyzer {
     let pagesWithoutFontDisplay = 0;
     const fontFilesUsed = new Set();
 
-    for (const [_url, page] of Object.entries(pages) as [string, any][]) {
+    for (const [_url, page] of Object.entries(pages)) {
       if (page.fontData) {
-        if (page.fontData.webFontCount > 0 && !page.fontData.hasFontDisplay) {
+        const fd = page.fontData as { webFontCount?: number; hasFontDisplay?: boolean; fonts?: FontFileInfo[] };
+        if ((fd.webFontCount ?? 0) > 0 && !fd.hasFontDisplay) {
           pagesWithoutFontDisplay++;
         }
 
-        for (const font of page.fontData.fonts || []) {
+        for (const font of fd.fonts ?? []) {
           fontFilesUsed.add(font.url);
         }
       }

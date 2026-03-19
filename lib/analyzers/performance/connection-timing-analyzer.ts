@@ -6,6 +6,46 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
+interface ResourceTimingEntry {
+  url: string;
+  origin: string;
+  initiatorType: string;
+  dns: number;
+  tcp: number;
+  tls: number;
+  ttfb: number;
+  download: number;
+  total: number;
+  size: number;
+  protocol: string;
+}
+
+interface SlowEntry {
+  url: string;
+  origin: string;
+  time: number;
+}
+
+interface OriginTimingEntry {
+  isFirstParty: boolean;
+  requestCount: number;
+  totalDns: number;
+  totalTcp: number;
+  totalTls: number;
+  totalSize: number;
+  protocol: string;
+}
+
+interface NavigationTimingResult {
+  dns: number;
+  tcp: number;
+  tls: number;
+  ttfb: number;
+  download: number;
+  total: number;
+  protocol: string;
+}
+
 class ConnectionTimingAnalyzer {
   /**
    * Analyze connection timing
@@ -19,14 +59,14 @@ class ConnectionTimingAnalyzer {
     const warnings: Issue[] = [];
 
     const timingData = {
-      document: null as Record<string, any> | null,
-      dns: { total: 0, slow: [] as Record<string, any>[] },
-      tcp: { total: 0, slow: [] as Record<string, any>[] },
-      tls: { total: 0, slow: [] as Record<string, any>[] },
-      ttfb: { total: 0, slow: [] as Record<string, any>[] },
+      document: null as NavigationTimingResult | null,
+      dns: { total: 0, slow: [] as SlowEntry[] },
+      tcp: { total: 0, slow: [] as SlowEntry[] },
+      tls: { total: 0, slow: [] as SlowEntry[] },
+      ttfb: { total: 0, slow: [] as SlowEntry[] },
       uniqueOrigins: [] as string[],
-      originTimings: {} as Record<string, any>,
-      resourceTimings: [] as Record<string, any>[],
+      originTimings: {} as Record<string, OriginTimingEntry>,
+      resourceTimings: [] as ResourceTimingEntry[],
     };
 
     // 1. Get Navigation Timing for main document
@@ -50,9 +90,9 @@ class ConnectionTimingAnalyzer {
     timingData.ttfb.slow = slowAnalysis.slowTtfb;
 
     // Calculate totals
-    timingData.dns.total = resourceTimings.reduce((sum: number, r: any) => sum + (r.dns || 0), 0);
-    timingData.tcp.total = resourceTimings.reduce((sum: number, r: any) => sum + (r.tcp || 0), 0);
-    timingData.tls.total = resourceTimings.reduce((sum: number, r: any) => sum + (r.tls || 0), 0);
+    timingData.dns.total = resourceTimings.reduce((sum: number, r: ResourceTimingEntry) => sum + (r.dns || 0), 0);
+    timingData.tcp.total = resourceTimings.reduce((sum: number, r: ResourceTimingEntry) => sum + (r.tcp || 0), 0);
+    timingData.tls.total = resourceTimings.reduce((sum: number, r: ResourceTimingEntry) => sum + (r.tls || 0), 0);
 
     // Generate issues
 
@@ -186,8 +226,8 @@ class ConnectionTimingAnalyzer {
    * Analyze timings by origin
    * @private
    */
-  static #analyzeByOrigin(resourceTimings: Record<string, any>[], pageUrl: string) {
-    const timings: Record<string, any> = {};
+  static #analyzeByOrigin(resourceTimings: ResourceTimingEntry[], pageUrl: string) {
+    const timings: Record<string, OriginTimingEntry> = {};
     const pageOrigin = new URL(pageUrl).origin;
 
     for (const resource of resourceTimings) {
@@ -223,11 +263,11 @@ class ConnectionTimingAnalyzer {
    * Find slow connections
    * @private
    */
-  static #findSlowConnections(resourceTimings: Record<string, any>[]) {
-    const slowDns: Record<string, any>[] = [];
-    const slowTcp: Record<string, any>[] = [];
-    const slowTls: Record<string, any>[] = [];
-    const slowTtfb: Record<string, any>[] = [];
+  static #findSlowConnections(resourceTimings: ResourceTimingEntry[]) {
+    const slowDns: SlowEntry[] = [];
+    const slowTcp: SlowEntry[] = [];
+    const slowTls: SlowEntry[] = [];
+    const slowTtfb: SlowEntry[] = [];
 
     for (const resource of resourceTimings) {
       if (resource.dns > 50) {
@@ -251,7 +291,7 @@ class ConnectionTimingAnalyzer {
    * Get origins with slow total connection time
    * @private
    */
-  static #getSlowOrigins(originTimings: Record<string, any>) {
+  static #getSlowOrigins(originTimings: Record<string, OriginTimingEntry>) {
     const slowOrigins: string[] = [];
 
     for (const [origin, data] of Object.entries(originTimings)) {
@@ -295,11 +335,11 @@ class ConnectionTimingAnalyzer {
    * @returns {Object} Analysis results
    */
   static analyzeSiteWide(pages: Record<string, PageInfo>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+    const issues: Issue[] = [];
+    const warnings: Issue[] = [];
 
     let pagesWithSlowTtfb = 0;
-    const totalUniqueOrigins = new Set();
+    const totalUniqueOrigins = new Set<string>();
 
     for (const [_url, page] of Object.entries(pages)) {
       if (page.timingData) {
@@ -307,7 +347,7 @@ class ConnectionTimingAnalyzer {
         if ((page.timingData.document?.ttfb ?? 0) > 600) {
           pagesWithSlowTtfb++;
         }
-        for (const origin of page.timingData.uniqueOrigins || []) {
+        for (const origin of page.timingData.uniqueOrigins ?? []) {
           totalUniqueOrigins.add(origin);
         }
       }

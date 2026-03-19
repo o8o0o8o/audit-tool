@@ -6,6 +6,20 @@
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
+interface SchemaValidationResult {
+  issues: Issue[];
+  warnings: Issue[];
+  valid: boolean;
+}
+
+// JSON-LD schemas are inherently dynamic; this recursive type allows property access
+// without resorting to `any` while still permitting nested property chains.
+interface SchemaObject {
+  [key: string]: SchemaValue;
+}
+type SchemaValue = string | number | boolean | null | undefined | SchemaObject | SchemaValue[];
+type SchemaValidator = (schema: SchemaObject, url: string) => SchemaValidationResult;
+
 class AdvancedSchemaValidator {
   /**
    * Validate schema markup on a page
@@ -18,10 +32,10 @@ class AdvancedSchemaValidator {
     const warnings: Issue[] = [];
     const schemaData = {
       types: [] as string[],
-      validationResults: {} as Record<string, any>,
+      validationResults: {} as Record<string, SchemaValidationResult>,
     };
 
-    const schemas = pageData.structuredData?.jsonLdSchemas || [];
+    const schemas = pageData.structuredData?.jsonLdSchemas ?? [];
     if (schemas.length === 0) {
       return { issues, warnings, schemaData };
     }
@@ -57,8 +71,8 @@ class AdvancedSchemaValidator {
   /**
    * Get validator function for schema type
    */
-  static getValidator(type: string) {
-    const validators: Record<string, any> = {
+  static getValidator(type: string): SchemaValidator | undefined {
+    const validators: Record<string, SchemaValidator> = {
       Article: this.validateArticle,
       NewsArticle: this.validateArticle,
       BlogPosting: this.validateArticle,
@@ -82,7 +96,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Article schema
    */
-  static validateArticle(schema: Record<string, any>, url: string) {
+  static validateArticle(schema: SchemaObject, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['headline', 'author', 'datePublished'];
@@ -109,10 +123,11 @@ class AdvancedSchemaValidator {
     }
 
     // Validate headline length
-    if (schema.headline && schema.headline.length > 110) {
+    const headline = schema.headline as string | undefined;
+    if (headline && headline.length > 110) {
       warnings.push({
         message: 'Article headline too long for rich results',
-        detail: `Headline is ${schema.headline.length} chars (max 110 recommended)`,
+        detail: `Headline is ${headline.length} chars (max 110 recommended)`,
         severity: SEVERITY.LOW,
       });
     }
@@ -120,9 +135,9 @@ class AdvancedSchemaValidator {
     // Validate image
     if (schema.image) {
       const images = Array.isArray(schema.image) ? schema.image : [schema.image];
-      const hasValidImage = images.some((img: any) => {
-        const imgUrl = typeof img === 'string' ? img : img.url;
-        return imgUrl && imgUrl.startsWith('http');
+      const hasValidImage = images.some((img: SchemaValue) => {
+        const imgUrl = typeof img === 'string' ? img : (img as SchemaObject)?.url;
+        return typeof imgUrl === 'string' && imgUrl.startsWith('http');
       });
       if (!hasValidImage) {
         warnings.push({
@@ -139,7 +154,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Product schema
    */
-  static validateProduct(schema: Record<string, any>, url: string) {
+  static validateProduct(schema: SchemaObject, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name'];
@@ -161,10 +176,11 @@ class AdvancedSchemaValidator {
         severity: SEVERITY.HIGH,
       });
     } else {
-      const offers = schema.offers || schema.offer;
+      const offers = schema.offers ?? schema.offer;
       const offerList = Array.isArray(offers) ? offers : [offers];
 
-      for (const offer of offerList) {
+      for (const offerRaw of offerList) {
+        const offer = offerRaw as SchemaObject;
         if (offer.price == null && !offer.priceRange) {
           warnings.push({
             message: 'Product offer missing price',
@@ -199,7 +215,7 @@ class AdvancedSchemaValidator {
     }
 
     if (schema.aggregateRating) {
-      const rating = schema.aggregateRating;
+      const rating = schema.aggregateRating as SchemaObject;
       if (rating.ratingValue == null || !rating.reviewCount) {
         warnings.push({
           message: 'Incomplete aggregateRating',
@@ -209,7 +225,8 @@ class AdvancedSchemaValidator {
       }
       const worstRating = Number(rating.worstRating) || 1;
       const bestRating = Number(rating.bestRating) || 5;
-      if (rating.ratingValue != null && (rating.ratingValue < worstRating || rating.ratingValue > bestRating)) {
+      const ratingValue = Number(rating.ratingValue);
+      if (rating.ratingValue != null && (ratingValue < worstRating || ratingValue > bestRating)) {
         issues.push({
           message: 'Invalid rating value',
           detail: `Rating ${rating.ratingValue} should be between ${worstRating} and ${bestRating}`,
@@ -224,7 +241,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate FAQ schema
    */
-  static validateFAQ(schema: Record<string, any>, url: string) {
+  static validateFAQ(schema: SchemaObject, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -256,7 +273,7 @@ class AdvancedSchemaValidator {
     }
 
     for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
+      const q = questions[i] as SchemaObject;
 
       if (q['@type'] !== 'Question') {
         issues.push({
@@ -280,7 +297,7 @@ class AdvancedSchemaValidator {
           detail: 'Each Question must have an acceptedAnswer',
           severity: SEVERITY.MEDIUM,
         });
-      } else if (!q.acceptedAnswer.text) {
+      } else if (!(q.acceptedAnswer as SchemaObject).text) {
         issues.push({
           message: `FAQ Question ${i + 1} answer missing text`,
           detail: 'acceptedAnswer must have a text property',
@@ -295,7 +312,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate HowTo schema
    */
-  static validateHowTo(schema: Record<string, any>, _url: string) {
+  static validateHowTo(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -327,7 +344,7 @@ class AdvancedSchemaValidator {
     }
 
     for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
+      const step = steps[i] as SchemaObject;
 
       if (!step.name && !step.text) {
         issues.push({
@@ -361,7 +378,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate BreadcrumbList schema
    */
-  static validateBreadcrumb(schema: Record<string, any>, _url: string) {
+  static validateBreadcrumb(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -386,7 +403,8 @@ class AdvancedSchemaValidator {
 
     // Check position sequence
     let expectedPosition = 1;
-    for (const item of items) {
+    for (const itemRaw of items) {
+      const item = itemRaw as SchemaObject;
       if (!item.position) {
         issues.push({
           message: 'Breadcrumb item missing position',
@@ -401,7 +419,7 @@ class AdvancedSchemaValidator {
         });
       }
 
-      if (!item.name && !item.item?.name) {
+      if (!item.name && !(item.item as SchemaObject | undefined)?.name) {
         issues.push({
           message: 'Breadcrumb item missing name',
           detail: 'Each breadcrumb needs a name',
@@ -418,7 +436,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate LocalBusiness schema
    */
-  static validateLocalBusiness(schema: Record<string, any>, _url: string) {
+  static validateLocalBusiness(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'address'];
@@ -446,7 +464,7 @@ class AdvancedSchemaValidator {
 
     // Validate address
     if (schema.address) {
-      const addr = schema.address;
+      const addr = schema.address as SchemaObject;
       if (!addr.streetAddress || !addr.addressLocality || !addr.addressCountry) {
         warnings.push({
           message: 'LocalBusiness address incomplete',
@@ -458,7 +476,8 @@ class AdvancedSchemaValidator {
 
     // Validate geo coordinates
     if (schema.geo) {
-      if (!schema.geo.latitude || !schema.geo.longitude) {
+      const geo = schema.geo as SchemaObject;
+      if (!geo.latitude || !geo.longitude) {
         warnings.push({
           message: 'LocalBusiness geo coordinates incomplete',
           detail: 'Include both latitude and longitude',
@@ -473,7 +492,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Organization schema
    */
-  static validateOrganization(schema: Record<string, any>, _url: string) {
+  static validateOrganization(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -515,7 +534,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Person schema
    */
-  static validatePerson(schema: Record<string, any>, _url: string) {
+  static validatePerson(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -544,7 +563,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Review schema
    */
-  static validateReview(schema: Record<string, any>, _url: string) {
+  static validateReview(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -578,7 +597,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Event schema
    */
-  static validateEvent(schema: Record<string, any>, _url: string) {
+  static validateEvent(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'startDate', 'location'];
@@ -595,7 +614,7 @@ class AdvancedSchemaValidator {
 
     // Validate date
     if (schema.startDate) {
-      const startDate = new Date(schema.startDate);
+      const startDate = new Date(schema.startDate as string | number);
       if (isNaN(startDate.getTime())) {
         issues.push({
           message: 'Event has invalid startDate format',
@@ -625,7 +644,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate Recipe schema
    */
-  static validateRecipe(schema: Record<string, any>, _url: string) {
+  static validateRecipe(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'image'];
@@ -657,7 +676,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate VideoObject schema
    */
-  static validateVideo(schema: Record<string, any>, _url: string) {
+  static validateVideo(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const required = ['name', 'description', 'thumbnailUrl', 'uploadDate'];
@@ -694,7 +713,7 @@ class AdvancedSchemaValidator {
   /**
    * Validate WebPage schema
    */
-  static validateWebPage(schema: Record<string, any>, _url: string) {
+  static validateWebPage(schema: SchemaObject, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 

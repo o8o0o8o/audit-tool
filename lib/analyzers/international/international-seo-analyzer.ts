@@ -80,7 +80,7 @@ class InternationalSEOAnalyzer {
     if (metaCharset) {
       intlData.charset = metaCharset.getAttribute('charset') ?? null;
     } else if (metaContentType) {
-      const content = metaContentType.getAttribute('content') || '';
+      const content = metaContentType.getAttribute('content') ?? '';
       const match = content.match(/charset=([^;]+)/i);
       if (match) {
         intlData.charset = match[1];
@@ -188,7 +188,7 @@ class InternationalSEOAnalyzer {
     }
 
     // 7. Check for localized content signals
-    const bodyText = parsedPage.querySelector('body')?.textContent || '';
+    const bodyText = parsedPage.querySelector('body')?.textContent ?? '';
 
     // Check for currency symbols (localization signal)
     const currencies = {
@@ -214,8 +214,8 @@ class InternationalSEOAnalyzer {
     }
 
     // 9. Content language detection (basic heuristic)
-    const metaDescription = parsedPage.querySelector('meta[name="description"]')?.getAttribute('content') || '';
-    const title = parsedPage.querySelector('title')?.textContent || '';
+    const metaDescription = parsedPage.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
+    const title = parsedPage.querySelector('title')?.textContent ?? '';
     const sampleText = (title + ' ' + metaDescription).toLowerCase();
 
     // Detect common non-Latin scripts

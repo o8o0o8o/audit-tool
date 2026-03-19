@@ -19,8 +19,8 @@ class WebComponentAnalyzer {
     const warnings: Issue[] = [];
 
     const webComponentData = {
-      customElements: [] as Record<string, any>[],
-      shadowRoots: [] as Record<string, any>[],
+      customElements: [] as { tagName: string; count: number; hasShadowRoot: boolean; isConnected: boolean }[],
+      shadowRoots: [] as { hostTag: string; mode: string; childCount: number; textLength: number }[],
       totalCustomElements: 0,
       totalShadowRoots: 0,
       contentInShadowDom: {
@@ -32,6 +32,7 @@ class WebComponentAnalyzer {
       shadowDomTextLength: 0,
       lightDomTextLength: 0,
       framework: null as string | null,
+      hasDeclarativeShadowDom: false,
     };
 
     // 1. Detect custom elements
@@ -51,7 +52,7 @@ class WebComponentAnalyzer {
     webComponentData.framework = await this.#detectFramework(chromePage, parsedPage);
 
     // 4. Check for declarative shadow DOM
-    (webComponentData as Record<string, any>).hasDeclarativeShadowDom = this.#checkDeclarativeShadowDom(parsedPage);
+    webComponentData.hasDeclarativeShadowDom = this.#checkDeclarativeShadowDom(parsedPage);
 
     // Generate issues
 
@@ -101,7 +102,7 @@ class WebComponentAnalyzer {
     }
 
     // Custom elements without declarative shadow DOM
-    if (webComponentData.totalShadowRoots > 0 && !(webComponentData as Record<string, any>).hasDeclarativeShadowDom) {
+    if (webComponentData.totalShadowRoots > 0 && !webComponentData.hasDeclarativeShadowDom) {
       warnings.push({
         message: 'No declarative Shadow DOM fallback',
         detail: `<a href="${url}">${url}</a> uses Shadow DOM but lacks declarative shadow DOM (template with shadowrootmode). Content may not be visible without JavaScript.`,
@@ -128,7 +129,7 @@ class WebComponentAnalyzer {
   static async #detectCustomElements(chromePage: ChromePage) {
     try {
       return await chromePage.evaluate(() => {
-        const customElements: Record<string, any>[] = [];
+        const customElements: { tagName: string; count: number; hasShadowRoot: boolean; isConnected: boolean }[] = [];
         const allElements = document.querySelectorAll('*');
 
         for (const el of allElements) {
@@ -210,7 +211,7 @@ class WebComponentAnalyzer {
                 result.contentInShadow.images = true;
               }
 
-              (result.shadowRoots as Record<string, any>[]).push({
+              (result.shadowRoots as { hostTag: string; mode: string; childCount: number; textLength: number }[]).push({
                 hostTag: el.tagName.toLowerCase(),
                 mode: shadowRoot.mode,
                 childCount: shadowRoot.childElementCount,
@@ -269,9 +270,9 @@ class WebComponentAnalyzer {
     try {
       return await chromePage.evaluate(() => {
         // Check for framework-specific globals
-        if ((window as Record<string, any>).Lit) return 'Lit';
-        if ((window as Record<string, any>).Stencil) return 'Stencil';
-        if ((window as Record<string, any>).Polymer) return 'Polymer';
+        if ((window as unknown as Record<string, unknown>).Lit) return 'Lit';
+        if ((window as unknown as Record<string, unknown>).Stencil) return 'Stencil';
+        if ((window as unknown as Record<string, unknown>).Polymer) return 'Polymer';
         return null;
       });
     } catch {

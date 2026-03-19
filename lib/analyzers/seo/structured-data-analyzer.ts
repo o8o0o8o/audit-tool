@@ -1,12 +1,26 @@
 import type { ChromePage } from '../../types';
 
+interface JsonLdSchemaInfo {
+  type: string;
+  context?: string;
+  raw?: Record<string, unknown>;
+  error?: string;
+  errors?: string[];
+  warnings?: string[];
+}
+
+interface MicrodataItem {
+  type: string | undefined;
+  full: string;
+}
+
 class StructuredDataAnalyzer {
   static async analyzeStructuredData(page: ChromePage) {
     return await page.evaluate(() => {
       const result = {
         hasStructuredData: false,
-        jsonLdSchemas: [] as Record<string, any>[],
-        microdataItems: [] as Record<string, any>[],
+        jsonLdSchemas: [] as JsonLdSchemaInfo[],
+        microdataItems: [] as MicrodataItem[],
         total: 0,
         validationErrors: [] as string[],
         validationWarnings: [] as string[],
@@ -81,7 +95,7 @@ class StructuredDataAnalyzer {
       };
 
       // Helper function to validate a schema object
-      const validateSchema = (schema: Record<string, any>, type: string) => {
+      const validateSchema = (schema: Record<string, unknown>, type: string) => {
         const rules = schemaRules[type];
         if (!rules) return; // No validation rules for this type
 
@@ -106,7 +120,7 @@ class StructuredDataAnalyzer {
       };
 
       // Helper to get nested @type (handles array or string)
-      const getSchemaType = (schema: Record<string, any>) => {
+      const getSchemaType = (schema: Record<string, unknown>) => {
         if (!schema['@type']) return null;
         return Array.isArray(schema['@type']) ? schema['@type'][0] : schema['@type'];
       };
@@ -116,16 +130,16 @@ class StructuredDataAnalyzer {
 
       for (const script of jsonLdScripts) {
         try {
-          const data = JSON.parse(script.textContent);
+          const data = JSON.parse(script.textContent!) as Record<string, unknown> | Record<string, unknown>[];
           const schemas = Array.isArray(data) ? data : [data];
 
           for (const schema of schemas) {
             const type = getSchemaType(schema);
 
             if (type) {
-              const schemaInfo: any = {
+              const schemaInfo: JsonLdSchemaInfo = {
                 type: type,
-                context: schema['@context'] || 'unknown',
+                context: (schema['@context'] as string) || 'unknown',
                 raw: schema, // Store full schema for detailed analysis
               };
 
@@ -145,12 +159,12 @@ class StructuredDataAnalyzer {
               result.jsonLdSchemas.push(schemaInfo);
             } else if (schema['@graph']) {
               // Handle @graph format (multiple schemas in one script)
-              for (const graphItem of schema['@graph']) {
+              for (const graphItem of schema['@graph'] as Record<string, unknown>[]) {
                 const graphType = getSchemaType(graphItem);
                 if (graphType) {
-                  const graphSchemaInfo: any = {
+                  const graphSchemaInfo: JsonLdSchemaInfo = {
                     type: graphType,
-                    context: schema['@context'] || 'unknown',
+                    context: (schema['@context'] as string) || 'unknown',
                     raw: graphItem,
                   };
 
@@ -171,10 +185,10 @@ class StructuredDataAnalyzer {
               }
             }
           }
-        } catch (e) {
+        } catch (e: unknown) {
           result.jsonLdSchemas.push({
             type: 'invalid',
-            error: 'Failed to parse JSON-LD: ' + (e as Record<string, any>).message,
+            error: 'Failed to parse JSON-LD: ' + (e as Error).message,
           });
           result.validationErrors.push('Invalid JSON-LD syntax');
         }

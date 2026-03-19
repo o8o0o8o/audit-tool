@@ -5,6 +5,7 @@
 
 import { SEVERITY } from '../../constants';
 import type { ChromePage, Issue, PageInfo } from '../../types';
+import type { ConsoleMessage } from 'playwright';
 
 interface ConsoleEntry {
   type: string;
@@ -54,7 +55,7 @@ class ConsoleErrorAnalyzer {
     const pageerrors: ConsoleEntry[] = [];
 
     // Console message handler
-    const consoleHandler = (msg: import('playwright').ConsoleMessage) => {
+    const consoleHandler = (msg: ConsoleMessage) => {
       const type = msg.type();
       const text = msg.text();
       const location = msg.location();
@@ -135,9 +136,9 @@ class ConsoleErrorAnalyzer {
     const warnings: Issue[] = [];
 
     const data = consoleData as { errors?: ConsoleEntry[]; warnings?: ConsoleEntry[]; pageerrors?: ConsoleEntry[] };
-    const errors = data.errors || [];
-    const consoleWarnings = data.warnings || [];
-    const pageerrors = data.pageerrors || [];
+    const errors = data.errors ?? [];
+    const consoleWarnings = data.warnings ?? [];
+    const pageerrors = data.pageerrors ?? [];
 
     // Combine errors and page errors
     const allErrors = [...errors, ...pageerrors];
@@ -207,7 +208,7 @@ class ConsoleErrorAnalyzer {
       errors: allErrors.slice(0, 10).map((e) => ({
         text: e.text,
         type: e.type,
-        url: e.url || '',
+        url: e.url ?? '',
         isCritical: criticalErrors.includes(e),
       })),
       hasErrors: allErrors.length > 0,
@@ -243,14 +244,14 @@ class ConsoleErrorAnalyzer {
 
         // Track common errors
 
-        for (const error of page.consoleAnalysis.errors || []) {
+        for (const error of page.consoleAnalysis.errors ?? []) {
           // Normalize error text for grouping
           const normalized = error.text
             .replace(/https?:\/\/[^\s]+/g, '[URL]')
             .replace(/\d+/g, 'N')
             .substring(0, 100);
 
-          commonErrors.set(normalized, (commonErrors.get(normalized) || 0) + 1);
+          commonErrors.set(normalized, (commonErrors.get(normalized) ?? 0) + 1);
         }
       }
     }

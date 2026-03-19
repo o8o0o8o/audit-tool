@@ -7,7 +7,7 @@ import { SEVERITY } from '../../constants';
 import type { Issue, ChromePage } from '../../types';
 
 class AriaLiveAnalyzer {
-  static async analyze(chromePage: ChromePage, url: string) {
+  static async analyze(chromePage: ChromePage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {

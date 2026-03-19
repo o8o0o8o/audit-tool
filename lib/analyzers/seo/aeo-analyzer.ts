@@ -5,7 +5,27 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { ParsedPage, ChromePage, Issue, PageInfo } from '../../types';
+import type { ParsedPage, ChromePage, Issue, PageInfo, AeoData } from '../../types';
+
+interface AeoInfo extends AeoData {
+  hasFAQSchema?: boolean;
+  hasHowToSchema?: boolean;
+  hasContentLists?: boolean;
+  hasStructuredTables?: boolean;
+  hasBlockquotes?: boolean;
+}
+
+interface AiCrawlerRule {
+  owner: string;
+  hasRules: boolean;
+  blocked: boolean;
+  rules?: { allow: string[]; disallow: string[] };
+  fallbackToWildcard?: boolean;
+}
+
+interface RobotsDataInput {
+  userAgents?: Record<string, { allow: string[]; disallow: string[] }>;
+}
 
 // AI crawler user-agents to check in robots.txt
 const AI_CRAWLERS = [
@@ -57,7 +77,7 @@ class AEOAnalyzer {
   static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const info = {
+    const info: AeoInfo = {
       semanticHTMLRatio: 0,
       semanticElements: {},
       genericElements: 0,
@@ -103,7 +123,7 @@ class AEOAnalyzer {
    */
   static #analyzeSemanticHTML(
     parsedPage: ParsedPage,
-    info: Record<string, any>,
+    info: AeoInfo,
     issues: Issue[],
     warnings: Issue[],
     url: string,
@@ -157,7 +177,7 @@ class AEOAnalyzer {
    * Analyze content structure for AI extraction
    * @private
    */
-  static #analyzeContentStructure(parsedPage: ParsedPage, info: Record<string, any>, _warnings: Issue[], _url: string) {
+  static #analyzeContentStructure(parsedPage: ParsedPage, info: AeoInfo, _warnings: Issue[], _url: string) {
     // Check heading hierarchy
     const headings: { level: number; text: string }[] = [];
     for (let i = 1; i <= 6; i++) {
@@ -187,7 +207,7 @@ class AEOAnalyzer {
 
     // Check for ordered/unordered lists with content (good for step-by-step)
     const lists = parsedPage.querySelectorAll('ol, ul');
-    const contentLists = Array.from(lists).filter((list: any) => {
+    const contentLists = Array.from(lists).filter((list) => {
       const items = list.querySelectorAll('li');
       return items.length >= 3;
     });
@@ -196,14 +216,14 @@ class AEOAnalyzer {
 
     // Check for tables with headers (good for structured data extraction)
     const tables = parsedPage.querySelectorAll('table');
-    info.hasStructuredTables = Array.from(tables).some((table: any) => table.querySelector('th') !== null);
+    info.hasStructuredTables = Array.from(tables).some((table) => table.querySelector('th') !== null);
   }
 
   /**
    * Analyze FAQ and Q&A content patterns
    * @private
    */
-  static #analyzeFAQContent(parsedPage: ParsedPage, info: Record<string, any>) {
+  static #analyzeFAQContent(parsedPage: ParsedPage, info: AeoInfo) {
     const html = parsedPage.toString();
 
     // Check for FAQ schema
@@ -224,7 +244,7 @@ class AEOAnalyzer {
    * Analyze citation-friendly signals
    * @private
    */
-  static #analyzeCitationSignals(parsedPage: ParsedPage, info: Record<string, any>, _warnings: Issue[], _url: string) {
+  static #analyzeCitationSignals(parsedPage: ParsedPage, info: AeoInfo, _warnings: Issue[], _url: string) {
     // Check for author info
     const authorMeta = parsedPage.querySelector('meta[name="author"]');
     const authorSchema = parsedPage.toString().includes('"author"');
@@ -248,7 +268,7 @@ class AEOAnalyzer {
    * Analyze datetime markup
    * @private
    */
-  static #analyzeDatetimeMarkup(parsedPage: ParsedPage, info: Record<string, any>) {
+  static #analyzeDatetimeMarkup(parsedPage: ParsedPage, info: AeoInfo) {
     const timeElements = parsedPage.querySelectorAll('time[datetime]');
     const dateMeta = parsedPage.querySelector(
       'meta[property="article:published_time"], meta[property="article:modified_time"]',
@@ -261,7 +281,7 @@ class AEOAnalyzer {
    * Calculate overall content structure score (0-100)
    * @private
    */
-  static #calculateContentScore(info: Record<string, any>) {
+  static #calculateContentScore(info: AeoInfo) {
     let score = 0;
 
     // Semantic HTML (up to 20 points)
@@ -299,17 +319,17 @@ class AEOAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Object} AI crawler analysis
    */
-  static analyzeRobotsTxt(robotsData: Record<string, any>, _origin: string) {
+  static analyzeRobotsTxt(robotsData: RobotsDataInput, _origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      aiCrawlerRules: {} as Record<string, any>,
+      aiCrawlerRules: {} as Record<string, AiCrawlerRule>,
       blockedCrawlers: [] as string[],
       allowedCrawlers: [] as string[],
       noCrawlerRules: [] as string[],
     };
 
-    if (!robotsData || !robotsData.userAgents) {
+    if (!robotsData?.userAgents) {
       return { issues, warnings, info };
     }
 
@@ -409,7 +429,7 @@ class AEOAnalyzer {
         signal: AbortSignal.timeout(10000),
       });
 
-      const contentType = response.headers.get('content-type') || '';
+      const contentType = response.headers.get('content-type') ?? '';
       if (response.ok && contentType.includes('text/')) {
         info.hasLlmsTxt = true;
         const content = await response.text();
@@ -451,7 +471,7 @@ class AEOAnalyzer {
       const fullResponse = await fetch(`${origin}/llms-full.txt`, {
         signal: AbortSignal.timeout(10000),
       });
-      const fullContentType = fullResponse.headers.get('content-type') || '';
+      const fullContentType = fullResponse.headers.get('content-type') ?? '';
       if (fullResponse.ok && fullContentType.includes('text/')) {
         info.hasLlmsFullTxt = true;
       }

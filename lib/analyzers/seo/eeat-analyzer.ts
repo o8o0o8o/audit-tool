@@ -135,7 +135,7 @@ class EEATAnalyzer {
     if (!result.author) {
       const metaAuthor = parsedPage.querySelector('meta[name="author"]');
       if (metaAuthor) {
-        result.author = metaAuthor.getAttribute('content') || null;
+        result.author = metaAuthor.getAttribute('content') ?? null;
       }
     }
 
@@ -200,7 +200,7 @@ class EEATAnalyzer {
     if (!result.publishDate) {
       const timeEl = parsedPage.querySelector('time[datetime]');
       if (timeEl) {
-        result.publishDate = timeEl.getAttribute('datetime') || null;
+        result.publishDate = timeEl.getAttribute('datetime') ?? null;
       }
     }
 
@@ -306,7 +306,7 @@ class EEATAnalyzer {
     };
 
     for (const link of links) {
-      const href = (link.getAttribute('href') || '').toLowerCase();
+      const href = (link.getAttribute('href') ?? '').toLowerCase();
       const text = (link.textContent || '').toLowerCase();
 
       if (/about|who.we.are|our.team|our.story/i.test(href) || /about|who we are/i.test(text)) {

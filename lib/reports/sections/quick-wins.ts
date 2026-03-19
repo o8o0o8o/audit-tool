@@ -14,9 +14,9 @@ import type { ReportSectionData, QuickWinFull } from '../../types';
  */
 function getQuickWins(data: ReportSectionData) {
   const { jsonData } = data;
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const summaryObj = (analysisObj.summary || {}) as Record<string, unknown>;
-  const quickWins = (summaryObj.quickWins || []) as QuickWinFull[];
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const summaryObj = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const quickWins = (summaryObj.quickWins ?? []) as QuickWinFull[];
 
   if (quickWins.length === 0) return '';
 

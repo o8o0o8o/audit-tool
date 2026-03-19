@@ -25,10 +25,10 @@ function safeJsonStringify(data: unknown) {
  * @returns {Object} Minimal data needed for charts
  */
 function calculateChartData(jsonData: Record<string, unknown>) {
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const summary = (analysisObj.summary || {}) as Record<string, unknown>;
-  const details = (analysisObj.details || {}) as Record<string, unknown>;
-  const pages = ((jsonData.pageData as Record<string, unknown>)?.pages || {}) as Record<string, PageInfo>;
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const summary = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const details = (analysisObj.details ?? {}) as Record<string, unknown>;
+  const pages = ((jsonData.pageData as Record<string, unknown>)?.pages ?? {}) as Record<string, PageInfo>;
 
   // Pre-calculate top 10 issues for frequency chart
   const topIssues = Object.entries(details)
@@ -44,21 +44,21 @@ function calculateChartData(jsonData: Record<string, unknown>) {
   const pagesWithPerf = pagesArray.filter((p: PageInfo) => p.TTFB || p.LCP || p.CLS);
   const avgTTFB =
     pagesWithPerf.length > 0
-      ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.TTFB || 0), 0) / pagesWithPerf.length)
+      ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.TTFB ?? 0), 0) / pagesWithPerf.length)
       : 0;
   const avgLCP =
     pagesWithPerf.length > 0
-      ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.LCP || 0), 0) / pagesWithPerf.length)
+      ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.LCP ?? 0), 0) / pagesWithPerf.length)
       : 0;
   const avgCLS =
     pagesWithPerf.length > 0
-      ? (pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.CLS || 0), 0) / pagesWithPerf.length).toFixed(3)
+      ? (pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.CLS ?? 0), 0) / pagesWithPerf.length).toFixed(3)
       : 0;
 
   // Pre-calculate status code distribution
   const statusCodes: Record<string, number> = {};
   pagesArray.forEach((page: PageInfo) => {
-    const code = page.status || page.statusCode;
+    const code = page.status ?? page.statusCode;
     if (!code || isNaN(code)) return;
     const codeGroup = Math.floor(code / 100) * 100;
     const label =
@@ -86,7 +86,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
     'Comprehensive (1000+)': 0,
   };
   pagesArray.forEach((page: PageInfo) => {
-    const wordCount = page.contentQuality?.wordCount || 0;
+    const wordCount = page.contentQuality?.wordCount ?? 0;
     if (wordCount < 100) wordCountBuckets['Thin (0-100)']++;
     else if (wordCount < 300) wordCountBuckets['Short (100-300)']++;
     else if (wordCount < 600) wordCountBuckets['Medium (300-600)']++;
@@ -131,7 +131,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
     const sorted = coveragePages
       .sort(
         ([, a]: [string, unknown], [, b]: [string, unknown]) =>
-          ((b as PageInfo).codeCoverage?.js?.ratio || 0) - ((a as PageInfo).codeCoverage?.js?.ratio || 0),
+          ((b as PageInfo).codeCoverage?.js?.ratio ?? 0) - ((a as PageInfo).codeCoverage?.js?.ratio ?? 0),
       )
       .slice(0, 10);
     sorted.forEach(([url, p]: [string, unknown]) => {
@@ -141,8 +141,8 @@ function calculateChartData(jsonData: Record<string, unknown>) {
       } catch {
         coverageData.labels.push(url);
       }
-      coverageData.jsUnused.push(pg.codeCoverage?.js?.ratio || 0);
-      coverageData.cssUnused.push(pg.codeCoverage?.css?.ratio || 0);
+      coverageData.jsUnused.push(pg.codeCoverage?.js?.ratio ?? 0);
+      coverageData.cssUnused.push(pg.codeCoverage?.css?.ratio ?? 0);
     });
   }
 
@@ -190,15 +190,15 @@ function calculateChartData(jsonData: Record<string, unknown>) {
 
   return {
     summary: {
-      criticalCount: summary.criticalCount || 0,
-      highCount: summary.highCount || 0,
-      mediumCount: summary.mediumCount || 0,
-      lowCount: summary.lowCount || 0,
-      overallScore: summary.overallScore || 0,
-      totalIssues: summary.totalIssues || 0,
-      passRate: summary.passRate || 0,
-      categoryScores: summary.categoryScores || {},
-      quickWins: summary.quickWins || [],
+      criticalCount: summary.criticalCount ?? 0,
+      highCount: summary.highCount ?? 0,
+      mediumCount: summary.mediumCount ?? 0,
+      lowCount: summary.lowCount ?? 0,
+      overallScore: summary.overallScore ?? 0,
+      totalIssues: summary.totalIssues ?? 0,
+      passRate: summary.passRate ?? 0,
+      categoryScores: summary.categoryScores ?? {},
+      quickWins: summary.quickWins ?? [],
     },
     topIssues,
     performance: {
@@ -223,39 +223,39 @@ function calculateChartData(jsonData: Record<string, unknown>) {
  * @returns {Array} Array of minimal page data
  */
 function createPagesExportData(jsonData: Record<string, unknown>) {
-  const pages = (jsonData.pageData as Record<string, unknown>)?.pages || {};
+  const pages = (jsonData.pageData as Record<string, unknown>)?.pages ?? {};
   return Object.entries(pages).map(([url, data]: [string, unknown]) => {
     const d = data as PageInfo;
     return {
       url,
 
-      status: d.status || d.statusCode || '',
+      status: d.status ?? d.statusCode ?? '',
 
-      title: d.title || '',
+      title: d.title ?? '',
 
-      description: d.description || '',
+      description: d.description ?? '',
 
       h1Count:
-        d.headings?.h1?.length ||
+        d.headings?.h1?.length ??
         (Array.isArray(d.headings)
-          ? d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count || 0
+          ? d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count ?? 0
           : 0),
 
-      canonical: d.canonical || '',
+      canonical: d.canonical ?? '',
 
-      TTFB: d.TTFB || '',
+      TTFB: d.TTFB ?? '',
 
-      LCP: d.LCP || '',
+      LCP: d.LCP ?? '',
 
-      CLS: d.CLS || '',
+      CLS: d.CLS ?? '',
 
       pageSize: d.totalResponseSize ? (d.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
 
-      requests: d.totalNumberOfRequests || d.numberOfRequests || '',
+      requests: d.totalNumberOfRequests ?? d.numberOfRequests ?? '',
 
       hasErrors: (d.status ?? 0) >= 400 || (d.errors?.length ?? 0) > 0 ? 'Yes' : 'No',
 
-      loadTime: d.loadEvent || '',
+      loadTime: d.loadEvent ?? '',
     };
   });
 }
@@ -289,7 +289,7 @@ function getScripts(data: ReportSectionData) {
 
   // Extract details with limited examples for modal popups (max 100 per issue)
   const detailsForModals: Record<string, { severity: string; examples: string[] }> = {};
-  const details = (jsonData.analysis as Record<string, unknown>)?.details || {};
+  const details = (jsonData.analysis as Record<string, unknown>)?.details ?? {};
   for (const [issue, data] of Object.entries(details as Record<string, unknown>)) {
     const d = data as AnalysisDetail;
     detailsForModals[issue] = {
@@ -300,7 +300,7 @@ function getScripts(data: ReportSectionData) {
 
   // Limit incoming links data to first 10 per page
   const limitedIncomingLinks: Record<string, string[]> = {};
-  for (const [url, links] of Object.entries(pageData.incomingLinks || {}) as [string, string[]][]) {
+  for (const [url, links] of Object.entries(pageData.incomingLinks ?? {}) as [string, string[]][]) {
     limitedIncomingLinks[url] = (links || []).slice(0, 10);
   }
 
@@ -1576,7 +1576,7 @@ function getScripts(data: ReportSectionData) {
           const pagesExportData = ${safeJsonStringify(pagesExportData)};
           const comparePagesExportData = ${safeJsonStringify(comparePagesExportData)};
           const summaryData = ${safeJsonStringify(chartData.summary)};
-          const compareSummaryData = ${safeJsonStringify(compareChartData?.summary || null)};
+          const compareSummaryData = ${safeJsonStringify(compareChartData?.summary ?? null)};
           let content = '';
           let filename = '';
 

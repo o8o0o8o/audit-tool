@@ -4,7 +4,34 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
+import type { Issue, ChromePage, PageInfo, NetworkRequest, ThirdPartyScript } from '../../types';
+
+interface ThirdPartyCategoryMutable {
+  count: number;
+  size: number;
+  time: number;
+  hosts: Set<string>;
+}
+
+interface ThirdPartyCategorySerialized {
+  count: number;
+  size: number;
+  time: number;
+  hosts: string[];
+}
+
+interface BlockingScript {
+  src: string;
+  host: string;
+}
+
+interface NetworkRequestEntry {
+  size?: number;
+  duration?: number;
+  resourceType?: string;
+  status?: number;
+  [key: string]: unknown;
+}
 
 class ThirdPartyAnalyzer {
   // Known third-party categories
@@ -86,17 +113,24 @@ class ThirdPartyAnalyzer {
     const warnings: Issue[] = [];
 
     const originHost = new URL(origin).hostname;
-    const thirdPartyData: Record<string, any> = {
-      scripts: [] as Record<string, any>[],
+    const thirdPartyBuild: {
+      scripts: ThirdPartyScript[];
+      totalSize: number;
+      totalTime: number;
+      byCategory: Record<string, ThirdPartyCategoryMutable>;
+      blockingScripts: BlockingScript[];
+      count: number;
+    } = {
+      scripts: [],
       totalSize: 0,
       totalTime: 0,
-      byCategory: {} as Record<string, any>,
-      blockingScripts: [] as Record<string, any>[],
+      byCategory: {},
+      blockingScripts: [],
       count: 0,
     };
 
     // Analyze requests
-    for (const [reqUrl, req] of Object.entries(requests) as [string, any][]) {
+    for (const [reqUrl, req] of Object.entries(requests) as unknown as [string, NetworkRequestEntry][]) {
       try {
         const reqHost = new URL(reqUrl).hostname;
 
@@ -106,8 +140,8 @@ class ThirdPartyAnalyzer {
         }
 
         const category = this.#categorize(reqHost);
-        const size = req.size || 0;
-        const duration = req.duration || 0;
+        const size = req.size ?? 0;
+        const duration = req.duration ?? 0;
 
         const scriptInfo = {
           url: reqUrl.substring(0, 150),
@@ -115,40 +149,55 @@ class ThirdPartyAnalyzer {
           category,
           size,
           duration,
-          resourceType: req.resourceType,
-          status: req.status,
+          resourceType: (req.resourceType as string) || '',
+          status: (req.status as number) || 0,
         };
 
-        thirdPartyData.scripts.push(scriptInfo);
-        thirdPartyData.totalSize += size;
-        thirdPartyData.totalTime += duration;
-        thirdPartyData.count++;
+        thirdPartyBuild.scripts.push(scriptInfo);
+        thirdPartyBuild.totalSize += size;
+        thirdPartyBuild.totalTime += duration;
+        thirdPartyBuild.count++;
 
         // Track by category
-        if (!thirdPartyData.byCategory[category]) {
-          thirdPartyData.byCategory[category] = {
+        if (!thirdPartyBuild.byCategory[category]) {
+          thirdPartyBuild.byCategory[category] = {
             count: 0,
             size: 0,
             time: 0,
             hosts: new Set(),
           };
         }
-        thirdPartyData.byCategory[category].count++;
-        thirdPartyData.byCategory[category].size += size;
-        thirdPartyData.byCategory[category].time += duration;
-        thirdPartyData.byCategory[category].hosts.add(reqHost);
+        thirdPartyBuild.byCategory[category].count++;
+        thirdPartyBuild.byCategory[category].size += size;
+        thirdPartyBuild.byCategory[category].time += duration;
+        thirdPartyBuild.byCategory[category].hosts.add(reqHost);
       } catch {
         // Invalid URL, skip
       }
     }
 
     // Check for render-blocking third-party scripts
-    thirdPartyData.blockingScripts = await this.#findBlockingScripts(chromePage, originHost);
+    thirdPartyBuild.blockingScripts = await this.#findBlockingScripts(chromePage, originHost);
 
     // Convert Sets to Arrays for serialization
-    for (const cat of Object.keys(thirdPartyData.byCategory)) {
-      thirdPartyData.byCategory[cat].hosts = Array.from(thirdPartyData.byCategory[cat].hosts);
+    const serializedByCategory: Record<string, ThirdPartyCategorySerialized> = {};
+    for (const cat of Object.keys(thirdPartyBuild.byCategory)) {
+      const catData = thirdPartyBuild.byCategory[cat];
+      serializedByCategory[cat] = {
+        count: catData.count,
+        size: catData.size,
+        time: catData.time,
+        hosts: Array.from(catData.hosts),
+      };
     }
+    const thirdPartyData = {
+      scripts: thirdPartyBuild.scripts,
+      totalSize: thirdPartyBuild.totalSize,
+      totalTime: thirdPartyBuild.totalTime,
+      byCategory: serializedByCategory,
+      blockingScripts: thirdPartyBuild.blockingScripts,
+      count: thirdPartyBuild.count,
+    };
 
     // Generate issues
 
@@ -184,7 +233,7 @@ class ThirdPartyAnalyzer {
         message: 'Render-blocking third-party scripts',
         detail: `<a href="${url}">${url}</a> has ${thirdPartyData.blockingScripts.length} render-blocking third-party script(s): ${thirdPartyData.blockingScripts
           .slice(0, 3)
-          .map((s: any) => s.host)
+          .map((s) => s.host)
           .join(', ')}. Add async or defer.`,
         severity: SEVERITY.HIGH,
       });
@@ -283,12 +332,12 @@ class ThirdPartyAnalyzer {
    * @returns {Object} Analysis results
    */
   static analyzeSiteWide(pages: Record<string, PageInfo>) {
-    const issues: Record<string, any>[] = [];
-    const warnings: Record<string, any>[] = [];
+    const issues: Issue[] = [];
+    const warnings: Issue[] = [];
 
     let pagesWithBlockingScripts = 0;
-    const allHosts = new Set();
-    const categoryTotals: Record<string, any> = {};
+    const allHosts = new Set<string>();
+    const categoryTotals: Record<string, { size: number; count: number }> = {};
 
     for (const [_url, page] of Object.entries(pages)) {
       if (page.thirdPartyData) {
@@ -296,11 +345,11 @@ class ThirdPartyAnalyzer {
           pagesWithBlockingScripts++;
         }
 
-        for (const script of page.thirdPartyData.scripts || []) {
+        for (const script of page.thirdPartyData.scripts ?? []) {
           allHosts.add(script.host);
         }
 
-        for (const [cat, data] of Object.entries(page.thirdPartyData.byCategory || {}) as [string, any][]) {
+        for (const [cat, data] of Object.entries(page.thirdPartyData.byCategory ?? {}) as [string, { size: number; count: number }][]) {
           if (!categoryTotals[cat]) {
             categoryTotals[cat] = { size: 0, count: 0 };
           }

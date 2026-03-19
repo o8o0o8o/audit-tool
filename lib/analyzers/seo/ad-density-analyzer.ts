@@ -37,7 +37,7 @@ const AD_SELECTORS = [
 ];
 
 class AdDensityAnalyzer {
-  static async analyze(chromePage: ChromePage, url: string) {
+  static async analyze(chromePage: ChromePage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {

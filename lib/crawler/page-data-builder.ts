@@ -7,10 +7,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
-  ParsedPage,
   PageInfo,
   SitemapUrl,
   Issue,
+  HeadingAnalysis,
+  UrlAnalysis,
 } from '../types';
 import type {
   CrawlResults,
@@ -23,6 +24,7 @@ import type {
   CollectLinksParams,
   ReportIssueFn,
   CrawlerInternalOptions,
+  QueryParamConfig,
 } from './crawler-types';
 import {
   SEVERITY,
@@ -34,7 +36,6 @@ import {
 } from '../constants';
 import { normalizeUrl, createSafeFilename } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
-import { VitalsCollector } from './vitals-collector';
 import type { ChromePage } from '../types';
 
 /**
@@ -47,7 +48,7 @@ export function processTitle(
   reportIssue: ReportIssueFn,
 ): { title: string | null; titleLength: number } {
   const escapedUrl = escapeHtml(url);
-  const maxTitleLength = CRAWL_SETTINGS.MAX_TITLE_LENGTH || 500;
+  const maxTitleLength = CRAWL_SETTINGS.MAX_TITLE_LENGTH ?? 500;
 
   if (!title) {
     reportIssue(
@@ -100,7 +101,7 @@ export function processTitle(
  */
 function checkMissingMetaTags(pageData: PageInfo, url: string, reportIssue: ReportIssueFn): void {
   const escapedUrl = escapeHtml(url);
-  const presentTags = new Set(Object.keys(pageData.metaMap || {}));
+  const presentTags = new Set(Object.keys(pageData.metaMap ?? {}));
 
   // Check critical tags only - description
   // (Social tags are handled by SocialMediaAnalyzer to avoid duplicate errors)
@@ -153,7 +154,7 @@ export function processMetaTags(
 
     // Special handling for description
     if (name === 'description') {
-      const maxDescLength = CRAWL_SETTINGS.MAX_DESCRIPTION_LENGTH || 1000;
+      const maxDescLength = CRAWL_SETTINGS.MAX_DESCRIPTION_LENGTH ?? 1000;
       const descLength = content ? content.length : 0;
       // Truncate excessively long descriptions to prevent memory issues
       const processedContent =
@@ -235,12 +236,12 @@ function validateCanonicalMatchesSitemap(
   reportIssue: ReportIssueFn,
 ): void {
   const escapedUrl = escapeHtml(url);
-  const canonical = pageData.canonical || '';
+  const canonical = pageData.canonical ?? '';
   const normalizedCanonical = canonical.startsWith('http')
     ? canonical
     : new URL(canonical, origin).href;
   const escapedCanonical = escapeHtml(normalizedCanonical);
-  const matchingCanonical = sitemapUrls[canonical] || sitemapUrls[normalizedCanonical];
+  const matchingCanonical = sitemapUrls[canonical] ?? sitemapUrls[normalizedCanonical];
 
   if (matchingCanonical) {
     if (matchingCanonical.alternates) {
@@ -384,7 +385,7 @@ export function processRedirects(
 export function collectLinks(
   params: CollectLinksParams,
   origin: string,
-  queryParams: import('./crawler-types').QueryParamConfig,
+  queryParams: QueryParamConfig,
   reportIssue: ReportIssueFn,
 ): { links: LinkEntry[]; httpLinksCount: number } {
   const {
@@ -442,7 +443,7 @@ export function collectLinks(
       incomingLinksTracking.get(normalizedHref)!.add(url);
 
       // Handle URL discovery with limit to prevent unbounded growth
-      const maxDiscoveredUrls = CRAWL_SETTINGS.MAX_DISCOVERED_URLS || 100000;
+      const maxDiscoveredUrls = CRAWL_SETTINGS.MAX_DISCOVERED_URLS ?? 100000;
 
       if (addMissing) {
         if (!collectedURLs.has(normalizedHref)) {
@@ -508,7 +509,7 @@ export function checkVitalsThresholds(
   CLS: number,
   reportIssue: ReportIssueFn,
 ): void {
-  const vitals = pageData.vitals || {};
+  const vitals = pageData.vitals ?? {};
 
   const escapedUrlForVitals = escapeHtml(url);
 
@@ -564,7 +565,7 @@ export function checkVitalsThresholds(
   // TBT check (Total Blocking Time)
   const TBT = pageData.TBT;
   if (TBT && TBT > THRESHOLDS.TBT) {
-    const longTaskCount = (vitals.longTasks as unknown[] | undefined)?.length || 0;
+    const longTaskCount = (vitals.longTasks as unknown[] | undefined)?.length ?? 0;
     const tbtInfo = longTaskCount > 0 ? ` (${longTaskCount} long tasks detected)` : '';
     reportIssue(
       `Some pages have TBT more than ${THRESHOLDS.TBT}ms`,
@@ -593,7 +594,7 @@ export function checkVitalsThresholds(
         resourceLoad: 'Resource Load Time',
         renderDelay: 'Render Delay',
       };
-      const rec = (recommendation || (recommendations as string[] | undefined)?.[0] || '') as string;
+      const rec = (recommendation || ((recommendations as string[] | undefined)?.[0] ?? '')) as string;
       // percentages may be undefined if memory optimization already ran
       const pct = percentages as Record<string, number> | undefined;
       const breakdown = pct
@@ -630,7 +631,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     const byType: Record<string, number> = {};
     let totalSize = 0;
     for (const [, req] of entries) {
-      byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] || 0) + 1;
+      byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] ?? 0) + 1;
       if (req.size) totalSize += req.size;
     }
     pageData.requests = { totalRequests: entries.length, byType, totalSize };
@@ -674,9 +675,9 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 7. Strip linkAnalysis (keep counts, issues, and fields needed by site-wide LinkStructureAnalyzer)
   if (pageData.linkAnalysis) {
     pageData.linkAnalysis = {
-      internalLinks: pageData.linkAnalysis.internalLinks || 0,
-      externalLinks: pageData.linkAnalysis.externalLinks || 0,
-      brokenLinks: pageData.linkAnalysis.brokenLinks || 0,
+      internalLinks: pageData.linkAnalysis.internalLinks ?? 0,
+      externalLinks: pageData.linkAnalysis.externalLinks ?? 0,
+      brokenLinks: pageData.linkAnalysis.brokenLinks ?? 0,
       anchorTextMap: pageData.linkAnalysis.anchorTextMap,
       externalDomains: pageData.linkAnalysis.externalDomains,
       genericAnchorLinks: pageData.linkAnalysis.genericAnchorLinks,
@@ -699,7 +700,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   if (pageData.thirdPartyData?.scripts) {
     pageData.thirdPartyData = {
       totalScripts: pageData.thirdPartyData.scripts.length,
-      totalSize: pageData.thirdPartyData.totalSize || 0,
+      totalSize: pageData.thirdPartyData.totalSize ?? 0,
       issues: pageData.thirdPartyData.issues,
       warnings: pageData.thirdPartyData.warnings,
     };
@@ -708,7 +709,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 10. Strip timing data (keep slow resources sample)
   if (pageData.timingData?.resourceTimings) {
     pageData.timingData = {
-      slowResources: (pageData.timingData.slowResources || []).slice(0, 5),
+      slowResources: (pageData.timingData.slowResources ?? []).slice(0, 5),
       issues: pageData.timingData.issues,
       warnings: pageData.timingData.warnings,
     };
@@ -717,8 +718,8 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 11. Strip critical path data (keep counts)
   if (pageData.criticalPathData?.blockingCSS) {
     pageData.criticalPathData = {
-      blockingCSSCount: pageData.criticalPathData.blockingCSS?.length || 0,
-      blockingJSCount: pageData.criticalPathData.blockingJS?.length || 0,
+      blockingCSSCount: pageData.criticalPathData.blockingCSS?.length ?? 0,
+      blockingJSCount: pageData.criticalPathData.blockingJS?.length ?? 0,
       issues: pageData.criticalPathData.issues,
       warnings: pageData.criticalPathData.warnings,
     };
@@ -746,10 +747,10 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     const imgOpt = pageData.imageOptimization;
     pageData.imageOptimization = {
       totalImages: imgOpt.images!.length,
-      withLazyLoading: imgOpt.withLazyLoading || 0,
-      modernFormats: imgOpt.modernFormats || 0,
-      legacyFormats: imgOpt.legacyFormats || 0,
-      totalImageSize: imgOpt.totalImageSize || 0,
+      withLazyLoading: imgOpt.withLazyLoading ?? 0,
+      modernFormats: imgOpt.modernFormats ?? 0,
+      legacyFormats: imgOpt.legacyFormats ?? 0,
+      totalImageSize: imgOpt.totalImageSize ?? 0,
       issues: imgOpt.issues,
       warnings: imgOpt.warnings,
     };
@@ -758,8 +759,8 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 15. Strip console analysis (keep count)
   if (pageData.consoleAnalysis?.errors) {
     pageData.consoleAnalysis = {
-      errorCount: pageData.consoleAnalysis.errors?.length || 0,
-      warningCount: pageData.consoleAnalysis.warnings?.length || 0,
+      errorCount: pageData.consoleAnalysis.errors?.length ?? 0,
+      warningCount: pageData.consoleAnalysis.warnings?.length ?? 0,
       issues: pageData.consoleAnalysis.issues,
     };
   }
@@ -769,9 +770,9 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     pageData.formData = {
       formCount: pageData.formData.forms.length,
       accessibilityScore: pageData.formData.accessibilityScore,
-      totalInputs: pageData.formData.totalInputs || 0,
-      inputsWithoutLabels: pageData.formData.inputsWithoutLabels || 0,
-      inputsWithoutAutocomplete: pageData.formData.inputsWithoutAutocomplete || 0,
+      totalInputs: pageData.formData.totalInputs ?? 0,
+      inputsWithoutLabels: pageData.formData.inputsWithoutLabels ?? 0,
+      inputsWithoutAutocomplete: pageData.formData.inputsWithoutAutocomplete ?? 0,
       issues: pageData.formData.issues,
       warnings: pageData.formData.warnings,
     };
@@ -781,14 +782,14 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   if (pageData.resourceOptimization?.renderBlockingResources) {
     const resOpt = pageData.resourceOptimization;
     pageData.resourceOptimization = {
-      renderBlockingCount: resOpt.renderBlockingResources?.length || 0,
+      renderBlockingCount: resOpt.renderBlockingResources?.length ?? 0,
       renderBlocking: {
-        totalBlocking: resOpt.renderBlocking?.totalBlocking || resOpt.renderBlockingResources?.length || 0,
+        totalBlocking: resOpt.renderBlocking?.totalBlocking ?? resOpt.renderBlockingResources?.length ?? 0,
       },
-      compression: { uncompressed: resOpt.compression?.uncompressed || 0 },
+      compression: { uncompressed: resOpt.compression?.uncompressed ?? 0 },
       minification: {
-        unminifiedJS: resOpt.minification?.unminifiedJS || 0,
-        unminifiedCSS: resOpt.minification?.unminifiedCSS || 0,
+        unminifiedJS: resOpt.minification?.unminifiedJS ?? 0,
+        unminifiedCSS: resOpt.minification?.unminifiedCSS ?? 0,
       },
       issues: resOpt.issues,
       warnings: resOpt.warnings,
@@ -806,47 +807,47 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     const h6Arr = hdg.h6 as string[] | undefined;
     pageData.headings = {
       h1Count: h1Arr.length,
-      h2Count: h2Arr?.length || 0,
-      h3Count: h3Arr?.length || 0,
-      h4Count: h4Arr?.length || 0,
-      h5Count: h5Arr?.length || 0,
-      h6Count: h6Arr?.length || 0,
+      h2Count: h2Arr?.length ?? 0,
+      h3Count: h3Arr?.length ?? 0,
+      h4Count: h4Arr?.length ?? 0,
+      h5Count: h5Arr?.length ?? 0,
+      h6Count: h6Arr?.length ?? 0,
       h1: h1Arr.map((h: string) => (typeof h === 'string' ? h.substring(0, 100) : h)),
       issues: hdg.issues,
       warnings: hdg.warnings,
-    } as unknown as import('../types').HeadingAnalysis;
+    } as unknown as HeadingAnalysis;
   }
 
   // 19. Strip accessibility data (keep scores and summary counts for report)
   if (pageData.accessibility?.aria || pageData.accessibility?.violations) {
     const a11y = pageData.accessibility;
     pageData.accessibility = {
-      violationCount: a11y.violations?.length || 0,
+      violationCount: a11y.violations?.length ?? 0,
       a11yScore: a11y.a11yScore ?? null,
       aria: a11y.aria
         ? {
-            valid: a11y.aria.valid || 0,
-            invalid: a11y.aria.invalid || 0,
+            valid: a11y.aria.valid ?? 0,
+            invalid: a11y.aria.invalid ?? 0,
           }
         : null,
       forms: a11y.forms
         ? {
-            inputsWithLabels: a11y.forms.inputsWithLabels || 0,
-            inputsWithoutLabels: a11y.forms.inputsWithoutLabels || 0,
+            inputsWithLabels: a11y.forms.inputsWithLabels ?? 0,
+            inputsWithoutLabels: a11y.forms.inputsWithoutLabels ?? 0,
           }
         : null,
       semantic: a11y.semantic
         ? {
-            hasMain: a11y.semantic.hasMain || false,
-            hasNav: a11y.semantic.hasNav || false,
-            hasHeader: a11y.semantic.hasHeader || false,
-            hasFooter: a11y.semantic.hasFooter || false,
+            hasMain: a11y.semantic.hasMain ?? false,
+            hasNav: a11y.semantic.hasNav ?? false,
+            hasHeader: a11y.semantic.hasHeader ?? false,
+            hasFooter: a11y.semantic.hasFooter ?? false,
           }
         : null,
       keyboard: a11y.keyboard
         ? {
-            elementsWithoutFocus: a11y.keyboard.elementsWithoutFocus || 0,
-            positiveTabindex: a11y.keyboard.positiveTabindex || 0,
+            elementsWithoutFocus: a11y.keyboard.elementsWithoutFocus ?? 0,
+            positiveTabindex: a11y.keyboard.positiveTabindex ?? 0,
           }
         : null,
       issues: a11y.issues,
@@ -859,15 +860,15 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     const cache = pageData.caching;
     pageData.caching = {
       cacheScore: cache.cacheScore ?? null,
-      hasCDN: cache.hasCDN || false,
-      cdnProvider: cache.cdnProvider || null,
-      staticCached: cache.staticCached || 0,
-      staticUncached: cache.staticUncached || 0,
-      dynamicCached: cache.dynamicCached || 0,
-      dynamicUncached: cache.dynamicUncached || 0,
-      hasServiceWorker: cache.hasServiceWorker || false,
-      cachedCount: cache.cachedCount || 0,
-      uncachedCount: cache.uncachedCount || 0,
+      hasCDN: cache.hasCDN ?? false,
+      cdnProvider: cache.cdnProvider ?? null,
+      staticCached: cache.staticCached ?? 0,
+      staticUncached: cache.staticUncached ?? 0,
+      dynamicCached: cache.dynamicCached ?? 0,
+      dynamicUncached: cache.dynamicUncached ?? 0,
+      hasServiceWorker: cache.hasServiceWorker ?? false,
+      cachedCount: cache.cachedCount ?? 0,
+      uncachedCount: cache.uncachedCount ?? 0,
       issues: cache.issues,
       warnings: cache.warnings,
     };
@@ -876,8 +877,8 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 21. Strip media data (keep counts)
   if (pageData.mediaData?.videos || pageData.mediaData?.audios) {
     pageData.mediaData = {
-      videoCount: pageData.mediaData.videos?.length || 0,
-      audioCount: pageData.mediaData.audios?.length || 0,
+      videoCount: pageData.mediaData.videos?.length ?? 0,
+      audioCount: pageData.mediaData.audios?.length ?? 0,
       issues: pageData.mediaData.issues,
       warnings: pageData.mediaData.warnings,
     } as unknown as typeof pageData.mediaData;
@@ -886,7 +887,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 22. Strip web component data
   if (pageData.webComponentData?.components) {
     pageData.webComponentData = {
-      componentCount: pageData.webComponentData.components?.length || 0,
+      componentCount: pageData.webComponentData.components?.length ?? 0,
       issues: pageData.webComponentData.issues,
       warnings: pageData.webComponentData.warnings,
     };
@@ -906,7 +907,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 24. Strip anchor text data
   if (pageData.anchorTextData?.anchors) {
     pageData.anchorTextData = {
-      anchorCount: pageData.anchorTextData.anchors?.length || 0,
+      anchorCount: pageData.anchorTextData.anchors?.length ?? 0,
       issues: pageData.anchorTextData.issues,
       warnings: pageData.anchorTextData.warnings,
     };
@@ -915,7 +916,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   // 25. Strip external links data
   if (pageData.externalLinksData?.links) {
     pageData.externalLinksData = {
-      externalLinkCount: pageData.externalLinksData.links?.length || 0,
+      externalLinkCount: pageData.externalLinksData.links?.length ?? 0,
       issues: pageData.externalLinksData.issues,
       warnings: pageData.externalLinksData.warnings,
     };
@@ -934,7 +935,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
       length: urlA.length as number,
       hasParameters: urlA.hasParameters as boolean,
       issues: urlA.issues as Issue[],
-    } as unknown as import('../types').UrlAnalysis;
+    } as unknown as UrlAnalysis;
   }
 
   // 28. Strip response object (headers are large and rarely needed after analysis)
@@ -1055,7 +1056,7 @@ export async function saveScreenshot(chromePage: ChromePage, url: string, option
  */
 export function populateIncomingLinksCount(results: CrawlResults): void {
   for (const url in results.pageData.pages) {
-    const incomingLinksArray = results.pageData.incomingLinks?.[url] || [];
+    const incomingLinksArray = results.pageData.incomingLinks?.[url] ?? [];
     const incomingLinksCount = Array.isArray(incomingLinksArray) ? incomingLinksArray.length : 0;
     results.pageData.pages[url].incomingLinksCount = incomingLinksCount;
     results.pageData.pages[url].hasIncomingLinks = incomingLinksCount > 0;

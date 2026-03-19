@@ -126,23 +126,23 @@ function emptyLine() {
  * Print audit summary to console
  */
 function printAuditSummary(results: AuditResultsExtended, domainName: string, htmlPath: string) {
-  const analysis = results.analysis || {};
-  const summary = analysis.summary || {};
-  const pageData = results.pageData || {};
+  const analysis = results.analysis ?? {};
+  const summary = analysis.summary ?? {};
+  const pageData = results.pageData ?? {};
 
-  const criticalCount = summary.criticalCount || 0;
-  const highCount = summary.highCount || 0;
-  const mediumCount = summary.mediumCount || 0;
-  const lowCount = summary.lowCount || 0;
-  const totalIssues = summary.totalIssues || 0;
+  const criticalCount = summary.criticalCount ?? 0;
+  const highCount = summary.highCount ?? 0;
+  const mediumCount = summary.mediumCount ?? 0;
+  const lowCount = summary.lowCount ?? 0;
+  const totalIssues = summary.totalIssues ?? 0;
 
-  const totalPages = pageData.total || Object.keys(pageData.pages || {}).length;
-  const successPages = pageData.totalWithoutError || 0;
-  const failedPages = pageData.totalWithError || 0;
+  const totalPages = pageData.total ?? Object.keys(pageData.pages ?? {}).length;
+  const successPages = pageData.totalWithoutError ?? 0;
+  const failedPages = pageData.totalWithError ?? 0;
   const successRate = totalPages > 0 ? ((successPages / totalPages) * 100).toFixed(1) : 0;
 
-  const overallScore = summary.overallScore || 0;
-  const categoryScores: Record<string, number> = (summary.categoryScores || {}) as Record<string, number>;
+  const overallScore = summary.overallScore ?? 0;
+  const categoryScores: Record<string, number> = (summary.categoryScores ?? {}) as Record<string, number>;
 
   const quickWins = getTopQuickWins(analysis, 3);
 
@@ -187,7 +187,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
       { key: 'technical', name: 'Technical', icon: '🔧' },
     ];
     for (const cat of categories) {
-      const score = categoryScores[cat.key] || 0;
+      const score = categoryScores[cat.key] ?? 0;
       const catBar = bar(score, 100, 15);
       const scoreStr = String(score).padStart(3);
       line(`  ${cat.icon} ${cat.name.padEnd(14)} ${catBar} ${scoreStr}/100`);
@@ -202,7 +202,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   if (failedPages > 0) {
     line(`  ${C.RED}✗${C.RESET} ${failedPages} failed`);
     // Error type breakdown — show array entries (URLs) with their count, skip total_* keys
-    const byError = pageData.byError || {};
+    const byError = pageData.byError ?? {};
     const errorTypes = Object.entries(byError)
       .filter(([, val]) => Array.isArray(val))
       .map(([key, urls]) => [key, (urls as string[]).length] as [string, number])
@@ -216,8 +216,8 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     }
   }
   // Sitemap/robots info
-  const sitemapTotal = results.sitemaps?.total || 0;
-  const sitemapCount = results.robots?.sitemaps?.length || 0;
+  const sitemapTotal = results.sitemaps?.total ?? 0;
+  const sitemapCount = results.robots?.sitemaps?.length ?? 0;
   if (sitemapTotal > 0 || sitemapCount > 0) {
     line(`  ${C.CYAN}📋${C.RESET} ${sitemapCount} sitemap(s), ${sitemapTotal} URLs`);
   }
@@ -243,7 +243,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   }
 
   // New insights summary
-  const pagesObj = pageData.pages || {};
+  const pagesObj = pageData.pages ?? {};
   const pagesArray = Object.values(pagesObj);
   const insightLines = getInsightLines(pagesArray);
   if (insightLines.length > 0) {
@@ -256,7 +256,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   // Top 3 slowest pages (if performance data available)
   const slowestPages = Object.entries(pagesObj)
     .filter(([, p]) => p.TTFB && p.TTFB > 0)
-    .sort(([, a], [, b]) => ((b.TTFB as number) || 0) - ((a.TTFB as number) || 0))
+    .sort(([, a], [, b]) => ((b.TTFB as number) ?? 0) - ((a.TTFB as number) ?? 0))
     .slice(0, 3);
 
   if (slowestPages.length > 0) {
@@ -297,7 +297,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     const weights = { seo: 0.3, performance: 0.25, technical: 0.2, accessibility: 0.15, security: 0.1 };
     let potentialGain = 0;
     for (const [cat, w] of Object.entries(weights)) {
-      const headroom = 100 - (categoryScores[cat] || 100);
+      const headroom = 100 - (categoryScores[cat] ?? 100);
       potentialGain += headroom * 0.6 * w;
     }
     const predicted = Math.min(100, Math.round(overallScore + potentialGain));
@@ -341,7 +341,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
  */
 function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: number) {
   const quickWins: { title: string; count: number }[] = [];
-  const details = analysis.details || {};
+  const details = analysis.details ?? {};
 
   const issuePatterns = [
     { pattern: /meta description/i, title: 'Missing meta descriptions' },
@@ -383,11 +383,11 @@ function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: numb
  * Generate JSON summary for --json mode
  */
 function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlPath: string) {
-  const summary = results.analysis?.summary || {};
-  const pageData = results.pageData || {};
-  const totalPages = pageData.total || Object.keys(pageData.pages || {}).length;
+  const summary = results.analysis?.summary ?? {};
+  const pageData = results.pageData ?? {};
+  const totalPages = pageData.total ?? Object.keys(pageData.pages ?? {}).length;
 
-  const score = summary.overallScore || 0;
+  const score = summary.overallScore ?? 0;
   const grade =
     score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
 
@@ -395,27 +395,27 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
     domain: domainName,
     score,
     grade,
-    categoryScores: summary.categoryScores || {},
+    categoryScores: summary.categoryScores ?? {},
     pages: {
       total: totalPages,
-      successful: pageData.totalWithoutError || 0,
-      failed: pageData.totalWithError || 0,
+      successful: pageData.totalWithoutError ?? 0,
+      failed: pageData.totalWithError ?? 0,
     },
     issues: {
-      total: summary.totalIssues || 0,
-      critical: summary.criticalCount || 0,
-      high: summary.highCount || 0,
-      medium: summary.mediumCount || 0,
-      low: summary.lowCount || 0,
+      total: summary.totalIssues ?? 0,
+      critical: summary.criticalCount ?? 0,
+      high: summary.highCount ?? 0,
+      medium: summary.mediumCount ?? 0,
+      low: summary.lowCount ?? 0,
     },
-    duration: results.timing?.elapsedTimeFormatted || null,
+    duration: results.timing?.elapsedTimeFormatted ?? null,
     report: htmlPath,
     insights: (() => {
-      const pArr = Object.values(pageData.pages || {}) as PageInfo[];
+      const pArr = Object.values(pageData.pages ?? {}) as PageInfo[];
       if (pArr.length === 0) return undefined;
       return {
         languageMismatches: pArr.filter((p) => p.languageDetection?.match === false).length,
-        brokenOutboundLinks: pArr.reduce((s: number, p) => s + (p.outboundLinkHealth?.broken?.length || 0), 0),
+        brokenOutboundLinks: pArr.reduce((s: number, p) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0),
         nearDuplicatePages: pArr.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length,
       };
     })(),
@@ -436,7 +436,7 @@ function getInsightLines(pagesArray: PageInfo[]) {
   }
 
   // Broken outbound links
-  const brokenOutbound = pagesArray.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length || 0), 0);
+  const brokenOutbound = pagesArray.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
   if (brokenOutbound > 0) {
     lines.push(`${C.RED}🔗${C.RESET} ${brokenOutbound} broken outbound link(s)`);
   }

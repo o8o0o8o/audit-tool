@@ -38,7 +38,7 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
   const isComparison = !!comparisonOpts;
 
   // Determine output path
-  const htmlOutputPath = outputPath || `${safeDomainName}.html`;
+  const htmlOutputPath = outputPath ?? `${safeDomainName}.html`;
 
   // Load all data using the data processor with error recovery
   let reportData;
@@ -178,11 +178,11 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
                       <span class="stat-value" style="color: #ef4444;">${pageData.totalWithError || 0}</span>
                   </div>
                   ${
-                    (jsonData.sitemaps?.total || 0) > pages.length
+                    (jsonData.sitemaps?.total ?? 0) > pages.length
                       ? `
                   <div class="stat">
                       <span class="stat-label">Not Crawled:</span>
-                      <span class="stat-value" style="color: #f59e0b;">${(jsonData.sitemaps?.total || 0) - pages.length}</span>
+                      <span class="stat-value" style="color: #f59e0b;">${(jsonData.sitemaps?.total ?? 0) - pages.length}</span>
                   </div>
                   `
                       : ''

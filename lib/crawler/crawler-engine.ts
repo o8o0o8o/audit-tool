@@ -14,7 +14,7 @@ import type {
   CrawlerEngineOptions,
   CrawlerCallbacks,
 } from '../types';
-import type { CollectedVitals } from './vitals-collector';
+import type { CollectedVitals, CLSEntry, LongTaskEntry } from './vitals-collector';
 
 import type {
   CrawlerInternalOptions,
@@ -26,7 +26,6 @@ import type {
   BasicTestResult,
   PerformanceMetrics,
   CrawlPagesParams,
-  CrawlResults,
   CrawlSinglePageParams,
   ProcessPageDataParams,
   CrawlPageResult,
@@ -101,7 +100,7 @@ class CrawlerEngine {
     callbacks: CrawlerCallbacks,
   ) {
     // Use config from options if provided, otherwise load fresh (for backward compat)
-    const config = (options.config || loadConfig()) as Record<string, Record<string, unknown>>;
+    const config = (options.config ?? loadConfig()) as Record<string, Record<string, unknown>>;
 
     this.#options = {
       concurrency: options.concurrency || 5,
@@ -109,14 +108,14 @@ class CrawlerEngine {
       screenshots: options.screenshots || false,
       analysis: (config.analysis || {}) as Record<string, unknown>,
       perf: options.perf || false,
-      origin: options.origin || '',
+      origin: options.origin ?? '',
       networkConditions: options.networkConditions,
       cpuConditions: options.cpuConditions,
       verbose: options.verbose || false,
       userAgent: ((config.crawl as Record<string, unknown> | undefined)?.userAgent as string | null) ?? null,
-      cruxApiKey: options.cruxApiKey || null,
-      queryParams: options.queryParams ||
-        (config.queryParams as unknown as QueryParamConfig | undefined) || {
+      cruxApiKey: options.cruxApiKey ?? null,
+      queryParams: options.queryParams ??
+        (config.queryParams as unknown as QueryParamConfig | undefined) ?? {
           mode: 'strip_tracking',
           whitelist: [],
           blacklist: [
@@ -247,7 +246,7 @@ class CrawlerEngine {
     page.on('request', requestHandler);
     page.on('response', responseHandler);
 
-    let response: import('playwright').Response | null | undefined,
+    let response: PlaywrightResponse | null | undefined,
       status: number | undefined,
       redirectChain: RedirectEntry[],
       vitals: Partial<CollectedVitals>,
@@ -304,7 +303,7 @@ class CrawlerEngine {
           const redirectResponse = await redirectedFrom.response();
           redirectChain.unshift({
             url: redirectedFrom.url(),
-            status: redirectResponse?.status() || 'unknown',
+            status: redirectResponse?.status() ?? 'unknown',
           });
           currentRequest = redirectedFrom;
         } else {
@@ -315,7 +314,7 @@ class CrawlerEngine {
       // Add final URL to chain
       if (redirectChain.length > 0) {
         redirectChain.push({
-          url: response?.url() || url,
+          url: response?.url() ?? url,
           status: status ?? 0,
         });
       }
@@ -434,7 +433,7 @@ class CrawlerEngine {
 
       // Fetch CrUX data for the origin (only once at start)
       if (this.#options.perf && !results.cruxData) {
-        const cruxApiKey = process.env.CRUX_API_KEY || this.#options.cruxApiKey || null;
+        const cruxApiKey = (process.env.CRUX_API_KEY || this.#options.cruxApiKey) ?? null;
         console.log(`\n📊 Fetching Chrome UX Report (CrUX) field data...${cruxApiKey ? ' (API key found)' : ''}`);
         try {
           results.cruxData = await CrUXAPI.fetchCrUXData(this.#options.origin, cruxApiKey);
@@ -448,7 +447,7 @@ class CrawlerEngine {
                   metric === 'CLS'
                     ? Number(data.percentiles.p75).toFixed(2)
                     : `${Math.round(Number(data.percentiles.p75))}ms`;
-                console.log(`     ${metric}: p75=${p75} (${data.distribution?.good || 0}% good)`);
+                console.log(`     ${metric}: p75=${p75} (${data.distribution?.good ?? 0}% good)`);
               }
             }
           } else if (!cruxApiKey) {
@@ -680,7 +679,7 @@ class CrawlerEngine {
 
       // Fetch per-URL CrUX field data (only in perf mode with API key)
       if (this.#options.perf && !abortRequested) {
-        const cruxApiKey = process.env.CRUX_API_KEY || this.#options.cruxApiKey || null;
+        const cruxApiKey = (process.env.CRUX_API_KEY || this.#options.cruxApiKey) ?? null;
         if (cruxApiKey) {
           const processedUrls = Array.from(results.pageData.processedPages);
           const successUrls = processedUrls.filter(
@@ -921,7 +920,7 @@ class CrawlerEngine {
     } = page;
 
     // Defensive check for corrupted state
-    if (!results.pageData || !results.pageData.pages) {
+    if (!results.pageData?.pages) {
       throw new Error(`Corrupted results state: pageData or pages is undefined for URL ${url}`);
     }
 
@@ -942,7 +941,7 @@ class CrawlerEngine {
     pageData.urlAnalysis = analyzeUrlStructure(url, this.#options.origin);
     for (const issue of pageData.urlAnalysis.issues) {
       const escapedUrl = escapeHtml(url);
-      const msg = issue.message || '';
+      const msg = issue.message ?? '';
       this.#callbacks.saveError(
         msg.split('(')[0].trim(),
         `<a href="${escapedUrl}">${escapedUrl}</a>: ${escapeHtml(msg)}`,
@@ -988,13 +987,13 @@ class CrawlerEngine {
 
     // Analyze CLS sources if available
     if (clsEntries && CLS != null && CLS > THRESHOLDS.CLS) {
-      const clsAnalysis = VitalsCollector.analyzeCLSSources(clsEntries as import('./vitals-collector').CLSEntry[]);
+      const clsAnalysis = VitalsCollector.analyzeCLSSources(clsEntries as CLSEntry[]);
       pageData.vitals.clsAnalysis = clsAnalysis;
     }
 
     // Analyze long tasks if TBT is high
     if (longTasks && TBT != null && TBT > THRESHOLDS.TBT) {
-      const tbtAnalysis = VitalsCollector.analyzeLongTasks(longTasks as import('./vitals-collector').LongTaskEntry[]);
+      const tbtAnalysis = VitalsCollector.analyzeLongTasks(longTasks as LongTaskEntry[]);
       pageData.vitals.tbtAnalysis = tbtAnalysis;
     }
 

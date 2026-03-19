@@ -5,13 +5,13 @@
 
 import type {
   PageInfo,
+  ParsedPage,
   NetworkCondition,
   CpuCondition,
   SitemapUrl,
   Issue,
   ChromePage,
 } from '../types';
-import type { CollectedVitals } from './vitals-collector';
 import type { CrUXFieldData } from './crux-api';
 import type { BrowserContext } from 'playwright';
 
@@ -161,7 +161,7 @@ export interface ProcessPageDataParams {
 }
 
 export interface CollectLinksParams {
-  parsedPage: import('../types').ParsedPage;
+  parsedPage: ParsedPage;
   url: string;
   results: CrawlResults;
   incomingLinksTracking: Map<string, Set<string>>;

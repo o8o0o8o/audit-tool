@@ -26,10 +26,10 @@ class RedirectChainAnalyzer {
     };
 
     // Extract redirect chain from page data
-    const redirectChain = pageData.redirectChain || [];
+    const redirectChain = pageData.redirectChain ?? [];
     info.redirectCount = redirectChain.length;
     info.redirectChain = redirectChain;
-    info.finalUrl = pageData.finalUrl || url;
+    info.finalUrl = pageData.finalUrl ?? url;
 
     if (redirectChain.length === 0) {
       return { issues, warnings, info };
@@ -108,7 +108,7 @@ class RedirectChainAnalyzer {
     // Check for redirect loops (same URL appears twice in chain, excluding the expected original→final structure)
     const urlCounts = new Map();
     for (const redirect of redirectChain) {
-      urlCounts.set(redirect.url, (urlCounts.get(redirect.url) || 0) + 1);
+      urlCounts.set(redirect.url, (urlCounts.get(redirect.url) ?? 0) + 1);
     }
     const loopUrls = [...urlCounts.entries()].filter(([, count]) => count > 1);
     if (loopUrls.length > 0) {
@@ -164,7 +164,7 @@ class RedirectChainAnalyzer {
     const pagesWithLongChains: { url: string; length: number }[] = [];
 
     for (const [url, pageData] of Object.entries(pages)) {
-      const chain = pageData.redirectChain || [];
+      const chain = pageData.redirectChain ?? [];
 
       if (chain.length > 0) {
         stats.pagesWithRedirects++;

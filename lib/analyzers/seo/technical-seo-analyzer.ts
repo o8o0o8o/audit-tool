@@ -150,7 +150,7 @@ class TechnicalSEOAnalyzer {
     const metaRefresh = parsedPage.querySelector('meta[http-equiv="refresh"]');
     if (!metaRefresh) return null;
 
-    const content = metaRefresh.getAttribute('content') || '';
+    const content = metaRefresh.getAttribute('content') ?? '';
     const match = content.match(/^(\d+)(?:\s*;\s*url\s*=\s*['"]?([^'">\s]+))?/i);
 
     if (match) {
@@ -436,7 +436,7 @@ class TechnicalSEOAnalyzer {
     // Check charset (already partially covered by international-seo-analyzer,
     // but this checks from a rendering/technical perspective)
     const hasCharset =
-      parsedPage.querySelector('meta[charset]') || parsedPage.querySelector('meta[http-equiv="Content-Type"]');
+      parsedPage.querySelector('meta[charset]') ?? parsedPage.querySelector('meta[http-equiv="Content-Type"]');
     if (!hasCharset) {
       warnings.push({
         message: 'Missing character encoding declaration',
@@ -465,7 +465,7 @@ class TechnicalSEOAnalyzer {
     const contentIframes: string[] = [];
 
     for (const iframe of iframes) {
-      const src = iframe.getAttribute('src') || '';
+      const src = iframe.getAttribute('src') ?? '';
       const width = iframe.getAttribute('width');
       const height = iframe.getAttribute('height');
 
@@ -513,8 +513,8 @@ class TechnicalSEOAnalyzer {
    * Check for robots tag conflicts
    */
   static checkRobotsTagConflicts(pageData: PageInfo, issues: Issue[]) {
-    const metaRobots = (pageData.meta?.find((m: any) => m.robots) as any)?.robots || '';
-    const xRobotsTag = pageData.response?.headers?.['x-robots-tag'] || '';
+    const metaRobots = (pageData.meta?.find((m: unknown) => (m as Record<string, unknown>).robots) as Record<string, string> | undefined)?.robots ?? '';
+    const xRobotsTag = pageData.response?.headers?.['x-robots-tag'] ?? '';
 
     if (metaRobots && xRobotsTag) {
       // Check for conflicts
@@ -553,12 +553,12 @@ class TechnicalSEOAnalyzer {
 
         if (page.technical.jsFramework) {
           const fw = page.technical.jsFramework;
-          frameworks.set(fw, (frameworks.get(fw) || 0) + 1);
+          frameworks.set(fw, (frameworks.get(fw) ?? 0) + 1);
         }
 
         if (page.technical.cms) {
           const cms = page.technical.cms;
-          cmsCount.set(cms, (cmsCount.get(cms) || 0) + 1);
+          cmsCount.set(cms, (cmsCount.get(cms) ?? 0) + 1);
         }
 
         if (page.technical.amp) ampPages++;

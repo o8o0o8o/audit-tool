@@ -4,7 +4,29 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo, ConsentData } from '../../types';
+
+interface CookieInfo {
+  name: string;
+  domain: string;
+  isThirdParty: boolean;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: string;
+  expires: number;
+}
+
+interface ConsentBannerDetection {
+  detected: boolean;
+  platform: string | null;
+  method: string | null;
+}
+
+interface PolicyLinks {
+  hasPrivacyPolicy: boolean;
+  hasCookiePolicy: boolean;
+  links: { type: string; href: string }[];
+}
 
 class CookieConsentAnalyzer {
   // Common cookie consent platforms
@@ -53,11 +75,12 @@ class CookieConsentAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- requests may be NetworkRequest[] or Record<string, unknown> depending on caller
   static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    const consentData: Record<string, any> = {
+    const consentData: ConsentData & { policyLinks?: { type: string; href: string }[]; cookies?: CookieInfo[] } = {
       hasConsentBanner: false,
       consentPlatform: null,
       hasCookiePolicy: false,
@@ -149,8 +172,9 @@ class CookieConsentAnalyzer {
    * Detect consent banner
    * @private
    */
-  static async #detectConsentBanner(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>) {
-    const result: Record<string, any> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- requests may be NetworkRequest[] or Record<string, unknown>
+  static async #detectConsentBanner(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>): Promise<ConsentBannerDetection> {
+    const result: ConsentBannerDetection = {
       detected: false,
       platform: null,
       method: null,
@@ -237,8 +261,8 @@ class CookieConsentAnalyzer {
    * Find privacy/cookie policy links
    * @private
    */
-  static #findPolicyLinks(parsedPage: ParsedPage) {
-    const result: Record<string, any> = {
+  static #findPolicyLinks(parsedPage: ParsedPage): PolicyLinks {
+    const result: PolicyLinks = {
       hasPrivacyPolicy: false,
       hasCookiePolicy: false,
       links: [],
@@ -247,7 +271,7 @@ class CookieConsentAnalyzer {
     const links = parsedPage.querySelectorAll('a');
 
     for (const link of links) {
-      const href = link.getAttribute('href') || '';
+      const href = link.getAttribute('href') ?? '';
       const text = link.textContent.toLowerCase();
 
       if (text.includes('privacy') || href.includes('privacy')) {
@@ -275,7 +299,7 @@ class CookieConsentAnalyzer {
       let thirdParty = 0;
       const pageHost = new URL(chromePage.url()).hostname;
 
-      const cookieList = cookies.map((cookie: any) => {
+      const cookieList = cookies.map((cookie) => {
         const isThirdParty = !cookie.domain.includes(pageHost) && !pageHost.includes(cookie.domain.replace(/^\./, ''));
         if (isThirdParty) thirdParty++;
 
@@ -304,7 +328,7 @@ class CookieConsentAnalyzer {
    * Check for tracking cookies
    * @private
    */
-  static #checkTrackingCookies(cookies: Record<string, any>[]) {
+  static #checkTrackingCookies(cookies: CookieInfo[]) {
     const trackingCookies = [];
 
     for (const cookie of cookies) {
@@ -323,6 +347,7 @@ class CookieConsentAnalyzer {
    * Analyze tracking before consent
    * @private
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- requests may be NetworkRequest[] or Record<string, unknown>
   static #analyzeTrackingBeforeConsent(requests: Record<string, any>, _hasConsent: boolean) {
     const trackingScripts = [];
 

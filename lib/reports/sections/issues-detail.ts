@@ -59,18 +59,18 @@ function getIssuesDetail(data: ReportSectionData) {
   }
 
   const { jsonData } = data;
-  const analysisObj = (jsonData.analysis || {}) as Record<string, unknown>;
-  const details = (analysisObj.details || {}) as Record<string, AnalysisDetail>;
+  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const details = (analysisObj.details ?? {}) as Record<string, AnalysisDetail>;
   const fixes = ScoreCalculator.getFixRecommendations();
 
   // Build issue list
   const issues: IssueEntry[] = [];
   for (const [key, detail] of Object.entries(details)) {
     if (isCrawlerError(key)) continue;
-    const count = detail.count || detail.examples?.length || 0;
+    const count = detail.count ?? detail.examples?.length ?? 0;
     if (count === 0) continue;
 
-    const fix = fixes[key] || null;
+    const fix = fixes[key] ?? null;
     const impactScore = ScoreCalculator.calculateImpactScore(detail.severity, count);
     const effortMinutes = fix?.effort ? ScoreCalculator.parseEffort(fix.effort) : 999;
 
@@ -177,9 +177,9 @@ function renderFilterPill(value: string, label: string, count: number, active = 
 function renderIssueRow(issue: IssueEntry, idx: number) {
   const { key, detail, fix, isQuickWin } = issue;
   const sev = detail.severity;
-  const styles = SEVERITY_STYLES[sev] || SEVERITY_STYLES.medium;
-  const count = detail.count || detail.examples?.length || 0;
-  const examples = detail.examples || [];
+  const styles = SEVERITY_STYLES[sev] ?? SEVERITY_STYLES.medium;
+  const count = detail.count ?? detail.examples?.length ?? 0;
+  const examples = detail.examples ?? [];
 
   return `
     <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
@@ -270,11 +270,11 @@ interface ComparisonIssueEntry extends IssueEntry {
 }
 
 function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison: ComparisonData) {
-  const originAnalysis = (jsonData.analysis || {}) as Record<string, unknown>;
-  const originDetails = (originAnalysis.details || {}) as Record<string, AnalysisDetail>;
+  const originAnalysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const originDetails = (originAnalysis.details ?? {}) as Record<string, AnalysisDetail>;
 
-  const compareAnalysis = (comparison.compareJsonData.analysis || {}) as Record<string, unknown>;
-  const compareDetails = (compareAnalysis.details || {}) as Record<string, AnalysisDetail>;
+  const compareAnalysis = (comparison.compareJsonData.analysis ?? {}) as Record<string, unknown>;
+  const compareDetails = (compareAnalysis.details ?? {}) as Record<string, AnalysisDetail>;
 
   const fixes = ScoreCalculator.getFixRecommendations();
 
@@ -288,13 +288,13 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
     const originDetail = originDetails[key];
     const compareDetail = compareDetails[key];
 
-    const originCount = originDetail ? (originDetail.count || originDetail.examples?.length || 0) : 0;
-    const compareCount = compareDetail ? (compareDetail.count || compareDetail.examples?.length || 0) : 0;
+    const originCount = originDetail ? (originDetail.count ?? originDetail.examples?.length ?? 0) : 0;
+    const compareCount = compareDetail ? (compareDetail.count ?? compareDetail.examples?.length ?? 0) : 0;
 
     if (originCount === 0 && compareCount === 0) continue;
 
-    const detail = originDetail || compareDetail;
-    const fix = fixes[key] || null;
+    const detail = originDetail ?? compareDetail;
+    const fix = fixes[key] ?? null;
     const impactScore = ScoreCalculator.calculateImpactScore(detail.severity, Math.max(originCount, compareCount));
     const effortMinutes = fix?.effort ? ScoreCalculator.parseEffort(fix.effort) : 999;
 
@@ -410,9 +410,9 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
 function renderComparisonIssueRow(issue: ComparisonIssueEntry, idx: number) {
   const { key, detail, fix, isQuickWin, compareCount, status } = issue;
   const sev = detail.severity;
-  const styles = SEVERITY_STYLES[sev] || SEVERITY_STYLES.medium;
-  const originCount = detail.count || detail.examples?.length || 0;
-  const examples = detail.examples || [];
+  const styles = SEVERITY_STYLES[sev] ?? SEVERITY_STYLES.medium;
+  const originCount = detail.count ?? detail.examples?.length ?? 0;
+  const examples = detail.examples ?? [];
 
   const statusBadge = status === 'fixed'
     ? '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">FIXED</span>'

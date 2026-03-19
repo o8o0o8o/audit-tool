@@ -476,7 +476,7 @@ class CrawlerEngine {
       const colorScheme = addMissing ? 'default' : 'discovered';
       const progress = new ProgressReporter(
         pagesToCrawl.length,
-        2000,
+        CRAWL_SETTINGS.PROGRESS_REPORT_INTERVAL_MS,
         alreadyProcessedCount,
         colorScheme,
         this.#options.verbose,
@@ -507,7 +507,8 @@ class CrawlerEngine {
 
         // Check circuit breaker before processing batch
         if (isCircuitOpen(this.#failureTracker)) {
-          const cooldownRemaining = 60000 - (Date.now() - this.#failureTracker.circuitOpenTime);
+          const cooldownRemaining =
+            CRAWL_SETTINGS.CIRCUIT_BREAKER_COOLDOWN_MS - (Date.now() - this.#failureTracker.circuitOpenTime);
           console.warn(`⚡ Circuit breaker open. Waiting ${Math.ceil(cooldownRemaining / 1000)}s before retrying...`);
           await new Promise((resolve) => setTimeout(resolve, Math.min(cooldownRemaining, 10000)));
           continue; // Re-check circuit state
@@ -609,7 +610,7 @@ class CrawlerEngine {
         // Save checkpoint frequently to flush pages to disk and free memory
         // Save every 5 batches (~25 pages) to reduce data loss on crash
         saveCounter++;
-        if (saveCounter % 5 === 0) {
+        if (saveCounter % CRAWL_SETTINGS.CHECKPOINT_SAVE_INTERVAL === 0) {
           await this.#callbacks.saveData();
         }
       }
@@ -635,7 +636,7 @@ class CrawlerEngine {
             console.log(`   Retry ${attempt}/${maxRetries}: ${url}`);
 
             // Wait before retry with increasing delay
-            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            await new Promise((r) => setTimeout(r, CRAWL_SETTINGS.RETRY_DELAY_BASE_MS * attempt));
 
             const startTime = Date.now();
             const pageResult = await this.#crawlSinglePage({
@@ -684,9 +685,8 @@ class CrawlerEngine {
           console.log(`\n🌐 Fetching per-URL CrUX field data for ${successUrls.length} page(s)...`);
           let cruxFound = 0;
           // Fetch in small batches to respect rate limits
-          const CRUX_BATCH_SIZE = 5;
-          for (let i = 0; i < successUrls.length; i += CRUX_BATCH_SIZE) {
-            const urlBatch = successUrls.slice(i, i + CRUX_BATCH_SIZE);
+          for (let i = 0; i < successUrls.length; i += CRAWL_SETTINGS.CRUX_BATCH_SIZE) {
+            const urlBatch = successUrls.slice(i, i + CRAWL_SETTINGS.CRUX_BATCH_SIZE);
             const cruxResults = await Promise.allSettled(
               urlBatch.map((url) => CrUXAPI.fetchCrUXForUrl(url, cruxApiKey)),
             );
@@ -713,8 +713,8 @@ class CrawlerEngine {
               }
             }
             // Small delay between batches to avoid rate limiting
-            if (i + CRUX_BATCH_SIZE < successUrls.length) {
-              await new Promise((r) => setTimeout(r, 200));
+            if (i + CRAWL_SETTINGS.CRUX_BATCH_SIZE < successUrls.length) {
+              await new Promise((r) => setTimeout(r, CRAWL_SETTINGS.CRUX_BATCH_DELAY_MS));
             }
           }
           console.log(`   ✓ CrUX URL-level data found for ${cruxFound}/${successUrls.length} page(s)`);
@@ -726,7 +726,7 @@ class CrawlerEngine {
 
       // Convert incomingLinksTracking Map to results.pageData.incomingLinks
       // Process in chunks to prevent memory spikes on large sites
-      const MAX_INCOMING_LINKS = CRAWL_SETTINGS.MAX_INCOMING_LINKS || 100000;
+      const MAX_INCOMING_LINKS = CRAWL_SETTINGS.MAX_INCOMING_LINKS;
       const CHUNK_SIZE = 1000;
 
       results.pageData.incomingLinks = {};
@@ -742,7 +742,10 @@ class CrawlerEngine {
         }
         // Limit sources per target to prevent memory explosion
         const sourcesArray = Array.from(sources);
-        results.pageData.incomingLinks[target] = sourcesArray.length > 100 ? sourcesArray.slice(0, 100) : sourcesArray;
+        results.pageData.incomingLinks[target] =
+          sourcesArray.length > CRAWL_SETTINGS.INCOMING_LINKS_PER_TARGET_MAX
+            ? sourcesArray.slice(0, CRAWL_SETTINGS.INCOMING_LINKS_PER_TARGET_MAX)
+            : sourcesArray;
         processedCount++;
 
         // Allow garbage collection periodically

@@ -5,7 +5,7 @@
 
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
-import { SEVERITY } from '../constants';
+import { SEVERITY, CRAWL_SETTINGS } from '../constants';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
 import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel } from '../types';
@@ -64,8 +64,7 @@ interface ValidationResult {
   [key: string]: unknown;
 }
 
-// Default timeout for validators (30 seconds)
-const VALIDATOR_TIMEOUT_MS = 30000;
+const VALIDATOR_TIMEOUT_MS = CRAWL_SETTINGS.VALIDATOR_TIMEOUT_MS;
 
 // Site-wide validators
 import { DuplicateChecker } from '../analyzers/site-wide/duplicate-checker';
@@ -323,7 +322,6 @@ class AuditOrchestrator {
 
     // Extended patterns: en-us, en-gb, de-de, etc.
     const langRegionPattern = /^\/([a-z]{2})(-[a-z]{2})?\//i;
-    const _subdomainPattern = /^([a-z]{2})(-[a-z]{2})?\.(?!www\.)/i;
 
     const detectedLanguages = new Set<string>();
     let urlsChecked = 0;
@@ -597,81 +595,84 @@ class AuditOrchestrator {
       }
     }
 
-    // Run DNS & IPv6 analyzer (async, site-level)
-    try {
-      const dnsResult = await DNSIPv6Analyzer.analyze(origin);
-      AuditOrchestrator.#processValidationResult(dnsResult, saveError);
-      pageData.dnsData = dnsResult.info;
-    } catch (error: unknown) {
-      console.error('Error running DNS & IPv6 analyzer:', (error as Error).message);
-    }
+    // Run async/data-storing validators that need special result handling
+    await AuditOrchestrator.#runDataStoringValidators(pageData, origin, saveError);
+  }
 
-    // Run Page Segment Analyzer and store results
-    try {
-      const segmentResult = PageSegmentAnalyzer.analyzeSegments(pageData.pages);
+  /**
+   * Run validators that store extra data on pageData (async or with side effects)
+   * @private
+   */
+  static async #runDataStoringValidators(pageData: PageDataForValidation, origin: string, saveError: SaveErrorFn) {
+    // Each entry: { name, run (async fn returning result), apply (stores data on pageData) }
+    const dataValidators: Array<{
+      name: string;
+      run: () => Promise<ValidationResult & Record<string, unknown>>;
+      apply: (result: ValidationResult & Record<string, unknown>) => void;
+    }> = [
+      {
+        name: 'DNS & IPv6',
+        run: () => DNSIPv6Analyzer.analyze(origin),
+        apply: (result) => {
+          pageData.dnsData = result.info;
+        },
+      },
+      {
+        name: 'Page Segments',
+        run: async () => {
+          const segmentResult = PageSegmentAnalyzer.analyzeSegments(pageData.pages);
+          pageData.segments = segmentResult.segments;
+          pageData.segmentStats = segmentResult.stats;
+          for (const url in segmentResult.urlSegmentMap) {
+            if (pageData.pages[url]) {
+              pageData.pages[url].segment = segmentResult.urlSegmentMap[url];
+            }
+          }
+          return { issues: segmentResult.issues as Issue[] };
+        },
+        apply: () => {},
+      },
+      {
+        name: 'Content Gap',
+        run: async () => ContentGapAnalyzer.analyze(pageData.pages),
+        apply: (result) => {
+          pageData.contentGaps = result.gaps;
+          pageData.contentCoverage = result.coverage;
+          pageData.contentGapStats = result.stats;
+        },
+      },
+      {
+        name: 'Linking Opportunities',
+        run: async () => LinkingOpportunityAnalyzer.analyze(pageData.pages, origin),
+        apply: (result) => {
+          pageData.linkingOpportunities = result.opportunities;
+          pageData.linkingStats = result.stats;
+        },
+      },
+      {
+        name: 'External Link Verification',
+        run: async () => {
+          console.log('\nVerifying external links...');
+          return ExternalLinksAnalyzer.verifyExternalLinks(pageData.pages, origin, {
+            concurrency: CRAWL_SETTINGS.EXTERNAL_LINK_VERIFY_CONCURRENCY,
+            timeout: CRAWL_SETTINGS.EXTERNAL_LINK_VERIFY_TIMEOUT,
+            maxUrls: CRAWL_SETTINGS.EXTERNAL_LINK_VERIFY_MAX_URLS,
+          });
+        },
+        apply: (result) => {
+          pageData.externalLinkVerification = result.stats;
+        },
+      },
+    ];
 
-      // Store segment data on pageData for use in reports
-      pageData.segments = segmentResult.segments;
-      pageData.segmentStats = segmentResult.stats;
-
-      // Add segment type to each page
-      for (const url in segmentResult.urlSegmentMap) {
-        if (pageData.pages[url]) {
-          pageData.pages[url].segment = segmentResult.urlSegmentMap[url];
-        }
+    for (const validator of dataValidators) {
+      try {
+        const result = await validator.run();
+        validator.apply(result);
+        AuditOrchestrator.#processValidationResult(result, saveError);
+      } catch (error: unknown) {
+        console.error(`Error running ${validator.name} analyzer:`, (error as Error).message);
       }
-
-      // Process segment issues
-      AuditOrchestrator.#processValidationResult({ issues: segmentResult.issues as Issue[] }, saveError);
-    } catch (error: unknown) {
-      console.error('Error running Page Segment analyzer:', (error as Error).message);
-    }
-
-    // Run Content Gap Analyzer and store results
-    try {
-      const contentGapResult = ContentGapAnalyzer.analyze(pageData.pages);
-
-      // Store content gap data on pageData for use in reports
-      pageData.contentGaps = contentGapResult.gaps;
-      pageData.contentCoverage = contentGapResult.coverage;
-      pageData.contentGapStats = contentGapResult.stats;
-
-      // Process content gap issues
-      AuditOrchestrator.#processValidationResult({ issues: contentGapResult.issues }, saveError);
-    } catch (error: unknown) {
-      console.error('Error running Content Gap analyzer:', (error as Error).message);
-    }
-
-    // Run Internal Linking Opportunity Analyzer and store results
-    try {
-      const linkingResult = LinkingOpportunityAnalyzer.analyze(pageData.pages, origin);
-
-      // Store linking opportunity data on pageData for use in reports
-      pageData.linkingOpportunities = linkingResult.opportunities;
-      pageData.linkingStats = linkingResult.stats;
-
-      // Process linking opportunity issues
-      AuditOrchestrator.#processValidationResult({ issues: linkingResult.issues }, saveError);
-    } catch (error: unknown) {
-      console.error('Error running Linking Opportunity analyzer:', (error as Error).message);
-    }
-
-    // Run External Link HTTP Verification (async, potentially slow)
-    try {
-      console.log('\nVerifying external links...');
-      const externalVerifyResult = await ExternalLinksAnalyzer.verifyExternalLinks(pageData.pages, origin, {
-        concurrency: 5,
-        timeout: 10000,
-        maxUrls: 500,
-      });
-
-      // Store verification data
-      pageData.externalLinkVerification = externalVerifyResult.stats;
-
-      // Process issues
-      AuditOrchestrator.#processValidationResult(externalVerifyResult, saveError);
-    } catch (error: unknown) {
-      console.error('Error verifying external links:', (error as Error).message);
     }
   }
 
@@ -732,18 +733,60 @@ class AuditOrchestrator {
   }
 
   /**
-   * Get list of all validators for inspection/testing
+   * Get list of all validator names for inspection/testing
    * @returns {Array} List of validator names
    */
   static getValidatorNames() {
     return [
       'DuplicateChecker',
-      'InternationalSEOValidator',
+      'InternationalSEOValidator (Consistency)',
+      'InternationalSEOValidator (Hreflang)',
       'StructuredDataValidator',
       'IndexabilityValidator',
       'LinkStructureAnalyzer',
       'SocialMediaValidator',
       'AnalyticsValidator',
+      'LinkDepthAnalyzer',
+      'UrlArchitectureAnalyzer',
+      'FreshnessAnalyzer',
+      'EEATAnalyzer',
+      'TechnicalSEOAnalyzer',
+      'ThinContentAnalyzer',
+      'KeywordCannibalisationAnalyzer',
+      'Soft404Analyzer',
+      'ConsoleErrorAnalyzer',
+      'PaginationAnalyzer',
+      'MediaSEOAnalyzer',
+      'WebComponentAnalyzer',
+      'FontLoadingAnalyzer',
+      'ThirdPartyAnalyzer',
+      'CriticalPathAnalyzer',
+      'ConnectionTimingAnalyzer',
+      'FormAccessibilityAnalyzer',
+      'CookieConsentAnalyzer',
+      'RedirectChainAnalyzer',
+      'CompressionAnalyzer',
+      'ResourceHintsAnalyzer',
+      'MixedContentAnalyzer',
+      'HTTPProtocolAnalyzer',
+      'PWAAnalyzer',
+      'AboveFoldAnalyzer',
+      'JavaScriptRenderingAnalyzer',
+      'AnchorTextAnalyzer',
+      'ExternalLinksAnalyzer',
+      'CrawlBudgetAnalyzer',
+      'AEOAnalyzer',
+      'ResponseHeaderAnalyzer',
+      'CTADetectorAnalyzer',
+      'LanguageDetectionAnalyzer',
+      'ContentSimilarityAnalyzer',
+      'InternalPageRankAnalyzer',
+      'CodeCoverageAnalyzer',
+      'OutboundLinkChecker',
+      'DNSIPv6Analyzer',
+      'PageSegmentAnalyzer',
+      'ContentGapAnalyzer',
+      'LinkingOpportunityAnalyzer',
     ];
   }
 }

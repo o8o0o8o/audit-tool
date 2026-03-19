@@ -600,22 +600,55 @@ export function checkVitalsThresholds(
 }
 
 /**
- * Optimize page data memory footprint after all processing is complete
- * Converts detailed arrays to summaries while preserving all issues/warnings for the report
+ * Limit issues/warnings arrays to a max count
+ */
+function limitIssueArrays(obj: Record<string, unknown>, max = 20): void {
+  if (Array.isArray(obj?.issues)) {
+    obj.issues = (obj.issues as unknown[]).slice(0, max);
+  }
+  if (Array.isArray(obj?.warnings)) {
+    obj.warnings = (obj.warnings as unknown[]).slice(0, max);
+  }
+}
+
+/**
+ * Optimize page data memory footprint after all processing is complete.
+ * Converts detailed arrays to summaries while preserving all issues/warnings for the report.
  */
 export function optimizePageDataMemory(pageData: PageInfo): void {
-  // PageInfo has [key: string]: any index signature, allowing dynamic property access
-  // Analyzer results often have more fields than the strict type definitions
+  stripSchemaData(pageData);
+  stripRequestsToSummary(pageData);
+  stripLinksToProblematic(pageData);
+  stripImagesToProblematic(pageData);
+  stripVitalsDetails(pageData);
 
-  // 1. Strip raw schema data (can be huge for e-commerce Product schemas)
+  // Delete heavy objects not needed for report
+  delete pageData.metrics;
+  delete pageData.blockers;
+
+  stripLinkAnalysis(pageData);
+  stripContentQuality(pageData);
+  stripAnalyzerDataFields(pageData);
+  stripHeadings(pageData);
+  stripAccessibility(pageData);
+  stripCaching(pageData);
+  stripMetaAndResponse(pageData);
+  stripRedirectChain(pageData);
+  limitAllIssueArrays(pageData);
+}
+
+/** Strip raw schema data (can be huge for e-commerce Product schemas) */
+function stripSchemaData(pageData: PageInfo): void {
   const sd = pageData.structuredData as Record<string, unknown> | undefined;
   if (sd?.jsonLdSchemas) {
     for (const schema of sd.jsonLdSchemas as Array<Record<string, unknown>>) {
       delete schema.raw;
     }
   }
+}
 
-  // 2. Reduce requests object to summary (keeps type breakdown for report)
+/** Reduce requests object to type summary */
+function stripRequestsToSummary(pageData: PageInfo): void {
   if (pageData.requests && typeof pageData.requests === 'object' && !pageData.requests.totalRequests) {
     const entries = Object.entries(pageData.requests) as Array<[string, RequestInfo]>;
     const byType: Record<string, number> = {};
@@ -626,16 +659,20 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     }
     pageData.requests = { totalRequests: entries.length, byType, totalSize };
   }
+}
 
-  // 3. Keep only problematic links (links without text)
+/** Keep only problematic links (without text) */
+function stripLinksToProblematic(pageData: PageInfo): void {
   if (Array.isArray(pageData.links)) {
     pageData.linksCount = pageData.links.length;
     pageData.internalLinksCount = pageData.links.filter((l: LinkEntry) => l.isInternal).length;
     pageData.externalLinksCount = pageData.links.filter((l: LinkEntry) => !l.isInternal).length;
     pageData.links = pageData.links.filter((l: LinkEntry) => !l.text || l.text.trim() === '').slice(0, 20);
   }
+}
 
-  // 4. Reduce images array (keep problematic ones)
+/** Reduce images array (keep problematic ones) */
+function stripImagesToProblematic(pageData: PageInfo): void {
   const imagesArr = pageData.images as unknown;
   if (Array.isArray(imagesArr)) {
     pageData.imagesCount = imagesArr.length;
@@ -644,8 +681,10 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
       .filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '')
       .slice(0, 10) as unknown as typeof pageData.images;
   }
+}
 
-  // 5. Strip vitals detail arrays (keep analysis summaries)
+/** Strip vitals detail arrays, keep analysis summaries */
+function stripVitalsDetails(pageData: PageInfo): void {
   if (pageData.vitals) {
     delete pageData.vitals.lcpSubParts;
     delete pageData.vitals.clsEntries;
@@ -657,12 +696,10 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
       };
     }
   }
+}
 
-  // 6. Delete heavy objects not needed for report
-  delete pageData.metrics;
-  delete pageData.blockers;
-
-  // 7. Strip linkAnalysis (keep counts, issues, and fields needed by site-wide LinkStructureAnalyzer)
+/** Strip linkAnalysis to counts and fields needed by site-wide LinkStructureAnalyzer */
+function stripLinkAnalysis(pageData: PageInfo): void {
   if (pageData.linkAnalysis) {
     pageData.linkAnalysis = {
       internalLinks: pageData.linkAnalysis.internalLinks ?? 0,
@@ -676,8 +713,10 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
       warnings: pageData.linkAnalysis.warnings,
     };
   }
+}
 
-  // 8. Strip contentQuality (keep scores and top keywords)
+/** Strip contentQuality (keep scores and top keywords) */
+function stripContentQuality(pageData: PageInfo): void {
   if (pageData.contentQuality) {
     const cq = pageData.contentQuality as unknown as Record<string, unknown>;
     delete cq.keywords;
@@ -685,8 +724,11 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
       cq.topKeywords = (cq.topKeywords as unknown[]).slice(0, 5);
     }
   }
+}
 
-  // 9. Strip third-party data (keep summary)
+/** Strip all analyzer data fields that follow the "keep counts, drop arrays" pattern */
+function stripAnalyzerDataFields(pageData: PageInfo): void {
+  // Third-party data
   if (pageData.thirdPartyData?.scripts) {
     pageData.thirdPartyData = {
       totalScripts: pageData.thirdPartyData.scripts.length,
@@ -696,7 +738,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 10. Strip timing data (keep slow resources sample)
+  // Timing data
   if (pageData.timingData?.resourceTimings) {
     pageData.timingData = {
       slowResources: (pageData.timingData.slowResources ?? []).slice(0, 5),
@@ -705,7 +747,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 11. Strip critical path data (keep counts)
+  // Critical path data
   if (pageData.criticalPathData?.blockingCSS) {
     pageData.criticalPathData = {
       blockingCSSCount: pageData.criticalPathData.blockingCSS?.length ?? 0,
@@ -715,7 +757,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 12. Strip font data (keep count)
+  // Font data
   if (pageData.fontData?.fonts) {
     pageData.fontData = {
       totalFonts: (pageData.fontData.fonts as unknown[]).length,
@@ -724,7 +766,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 13. Strip compression data
+  // Compression data
   if (pageData.compressionData?.resources) {
     pageData.compressionData = {
       issues: pageData.compressionData.issues,
@@ -732,7 +774,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 14. Strip image optimization data (keep counts needed by report)
+  // Image optimization
   if (pageData.imageOptimization?.images) {
     const imgOpt = pageData.imageOptimization;
     pageData.imageOptimization = {
@@ -746,7 +788,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 15. Strip console analysis (keep count)
+  // Console analysis
   if (pageData.consoleAnalysis?.errors) {
     pageData.consoleAnalysis = {
       errorCount: pageData.consoleAnalysis.errors?.length ?? 0,
@@ -755,7 +797,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 16. Strip form data (keep count and accessibility score)
+  // Form data
   if (pageData.formData?.forms) {
     pageData.formData = {
       formCount: pageData.formData.forms.length,
@@ -768,7 +810,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 17. Strip resource optimization (keep counts needed by report)
+  // Resource optimization
   if (pageData.resourceOptimization?.renderBlockingResources) {
     const resOpt = pageData.resourceOptimization;
     pageData.resourceOptimization = {
@@ -786,85 +828,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 18. Strip headings (keep counts for all levels and first h1)
-  const hdg = pageData.headings as Record<string, unknown> | undefined;
-  if (hdg?.h1 && Array.isArray(hdg.h1)) {
-    const h1Arr = hdg.h1 as string[];
-    const h2Arr = hdg.h2 as string[] | undefined;
-    const h3Arr = hdg.h3 as string[] | undefined;
-    const h4Arr = hdg.h4 as string[] | undefined;
-    const h5Arr = hdg.h5 as string[] | undefined;
-    const h6Arr = hdg.h6 as string[] | undefined;
-    pageData.headings = {
-      h1Count: h1Arr.length,
-      h2Count: h2Arr?.length ?? 0,
-      h3Count: h3Arr?.length ?? 0,
-      h4Count: h4Arr?.length ?? 0,
-      h5Count: h5Arr?.length ?? 0,
-      h6Count: h6Arr?.length ?? 0,
-      h1: h1Arr.map((h: string) => (typeof h === 'string' ? h.substring(0, 100) : h)),
-      issues: hdg.issues,
-      warnings: hdg.warnings,
-    } as unknown as HeadingAnalysis;
-  }
-
-  // 19. Strip accessibility data (keep scores and summary counts for report)
-  if (pageData.accessibility?.aria || pageData.accessibility?.violations) {
-    const a11y = pageData.accessibility;
-    pageData.accessibility = {
-      violationCount: a11y.violations?.length ?? 0,
-      a11yScore: a11y.a11yScore ?? null,
-      aria: a11y.aria
-        ? {
-            valid: a11y.aria.valid ?? 0,
-            invalid: a11y.aria.invalid ?? 0,
-          }
-        : null,
-      forms: a11y.forms
-        ? {
-            inputsWithLabels: a11y.forms.inputsWithLabels ?? 0,
-            inputsWithoutLabels: a11y.forms.inputsWithoutLabels ?? 0,
-          }
-        : null,
-      semantic: a11y.semantic
-        ? {
-            hasMain: a11y.semantic.hasMain ?? false,
-            hasNav: a11y.semantic.hasNav ?? false,
-            hasHeader: a11y.semantic.hasHeader ?? false,
-            hasFooter: a11y.semantic.hasFooter ?? false,
-          }
-        : null,
-      keyboard: a11y.keyboard
-        ? {
-            elementsWithoutFocus: a11y.keyboard.elementsWithoutFocus ?? 0,
-            positiveTabindex: a11y.keyboard.positiveTabindex ?? 0,
-          }
-        : null,
-      issues: a11y.issues,
-      warnings: a11y.warnings,
-    };
-  }
-
-  // 20. Strip caching data (keep scores and counts for report)
-  if (pageData.caching?.resources || pageData.caching?.cacheScore != null) {
-    const cache = pageData.caching;
-    pageData.caching = {
-      cacheScore: cache.cacheScore ?? null,
-      hasCDN: cache.hasCDN ?? false,
-      cdnProvider: cache.cdnProvider ?? null,
-      staticCached: cache.staticCached ?? 0,
-      staticUncached: cache.staticUncached ?? 0,
-      dynamicCached: cache.dynamicCached ?? 0,
-      dynamicUncached: cache.dynamicUncached ?? 0,
-      hasServiceWorker: cache.hasServiceWorker ?? false,
-      cachedCount: cache.cachedCount ?? 0,
-      uncachedCount: cache.uncachedCount ?? 0,
-      issues: cache.issues,
-      warnings: cache.warnings,
-    };
-  }
-
-  // 21. Strip media data (keep counts)
+  // Media data
   if (pageData.mediaData?.videos || pageData.mediaData?.audios) {
     pageData.mediaData = {
       videoCount: pageData.mediaData.videos?.length ?? 0,
@@ -874,7 +838,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     } as unknown as typeof pageData.mediaData;
   }
 
-  // 22. Strip web component data
+  // Web component data
   if (pageData.webComponentData?.components) {
     pageData.webComponentData = {
       componentCount: pageData.webComponentData.components?.length ?? 0,
@@ -883,7 +847,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 23. Strip above-fold data (keep key metrics)
+  // Above-fold data
   if (pageData.aboveFoldData?.aboveFoldElements) {
     pageData.aboveFoldData = {
       lcpInViewport: pageData.aboveFoldData.lcpInViewport,
@@ -894,7 +858,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 24. Strip anchor text data
+  // Anchor text data
   if (pageData.anchorTextData?.anchors) {
     pageData.anchorTextData = {
       anchorCount: pageData.anchorTextData.anchors?.length ?? 0,
@@ -903,7 +867,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 25. Strip external links data
+  // External links data
   if (pageData.externalLinksData?.links) {
     pageData.externalLinksData = {
       externalLinkCount: pageData.externalLinksData.links?.length ?? 0,
@@ -912,12 +876,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     };
   }
 
-  // 26. Strip meta array (metaMap is more useful and smaller)
-  if (Array.isArray(pageData.meta) && pageData.metaMap) {
-    delete pageData.meta;
-  }
-
-  // 27. Strip URL analysis (keep issues only)
+  // URL analysis (keep issues only)
   const urlA = pageData.urlAnalysis as Record<string, unknown> | undefined;
   if (urlA?.components) {
     pageData.urlAnalysis = {
@@ -927,31 +886,101 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
       issues: urlA.issues as Issue[],
     } as unknown as UrlAnalysis;
   }
+}
 
-  // 28. Strip response object (headers are large and rarely needed after analysis)
+/** Strip headings to counts and first h1 */
+function stripHeadings(pageData: PageInfo): void {
+  const hdg = pageData.headings as Record<string, unknown> | undefined;
+  if (hdg?.h1 && Array.isArray(hdg.h1)) {
+    const h1Arr = hdg.h1 as string[];
+    pageData.headings = {
+      h1Count: h1Arr.length,
+      h2Count: (hdg.h2 as string[] | undefined)?.length ?? 0,
+      h3Count: (hdg.h3 as string[] | undefined)?.length ?? 0,
+      h4Count: (hdg.h4 as string[] | undefined)?.length ?? 0,
+      h5Count: (hdg.h5 as string[] | undefined)?.length ?? 0,
+      h6Count: (hdg.h6 as string[] | undefined)?.length ?? 0,
+      h1: h1Arr.map((h: string) => (typeof h === 'string' ? h.substring(0, 100) : h)),
+      issues: hdg.issues,
+      warnings: hdg.warnings,
+    } as unknown as HeadingAnalysis;
+  }
+}
+
+/** Strip accessibility data to scores and summary counts */
+function stripAccessibility(pageData: PageInfo): void {
+  if (!pageData.accessibility?.aria && !pageData.accessibility?.violations) return;
+
+  const a11y = pageData.accessibility;
+  pageData.accessibility = {
+    violationCount: a11y.violations?.length ?? 0,
+    a11yScore: a11y.a11yScore ?? null,
+    aria: a11y.aria ? { valid: a11y.aria.valid ?? 0, invalid: a11y.aria.invalid ?? 0 } : null,
+    forms: a11y.forms
+      ? { inputsWithLabels: a11y.forms.inputsWithLabels ?? 0, inputsWithoutLabels: a11y.forms.inputsWithoutLabels ?? 0 }
+      : null,
+    semantic: a11y.semantic
+      ? {
+          hasMain: a11y.semantic.hasMain ?? false,
+          hasNav: a11y.semantic.hasNav ?? false,
+          hasHeader: a11y.semantic.hasHeader ?? false,
+          hasFooter: a11y.semantic.hasFooter ?? false,
+        }
+      : null,
+    keyboard: a11y.keyboard
+      ? {
+          elementsWithoutFocus: a11y.keyboard.elementsWithoutFocus ?? 0,
+          positiveTabindex: a11y.keyboard.positiveTabindex ?? 0,
+        }
+      : null,
+    issues: a11y.issues,
+    warnings: a11y.warnings,
+  };
+}
+
+/** Strip caching data to scores and counts */
+function stripCaching(pageData: PageInfo): void {
+  if (!pageData.caching?.resources && pageData.caching?.cacheScore == null) return;
+
+  const cache = pageData.caching;
+  pageData.caching = {
+    cacheScore: cache.cacheScore ?? null,
+    hasCDN: cache.hasCDN ?? false,
+    cdnProvider: cache.cdnProvider ?? null,
+    staticCached: cache.staticCached ?? 0,
+    staticUncached: cache.staticUncached ?? 0,
+    dynamicCached: cache.dynamicCached ?? 0,
+    dynamicUncached: cache.dynamicUncached ?? 0,
+    hasServiceWorker: cache.hasServiceWorker ?? false,
+    cachedCount: cache.cachedCount ?? 0,
+    uncachedCount: cache.uncachedCount ?? 0,
+    issues: cache.issues,
+    warnings: cache.warnings,
+  };
+}
+
+/** Strip meta array and response headers */
+function stripMetaAndResponse(pageData: PageInfo): void {
+  if (Array.isArray(pageData.meta) && pageData.metaMap) {
+    delete pageData.meta;
+  }
   if (pageData.response?.headers) {
     delete pageData.response;
   }
   delete pageData.responseHeaders;
+}
 
-  // 29. Strip redirect chain (keep URLs for tooltip, limit to 10)
+/** Strip redirect chain, limit to 10 entries */
+function stripRedirectChain(pageData: PageInfo): void {
   const rc = pageData.redirectChain;
   if (rc && Array.isArray(rc) && rc.length > 0) {
     pageData.redirectCount = rc.length;
     pageData.redirectChain = rc.slice(0, 10).map((r: RedirectEntry) => ({ url: r.url, status: r.status }));
   }
+}
 
-  // 30. Limit issues/warnings arrays on all analyzers to 20 each
-  const limitArrays = (obj: Record<string, unknown>) => {
-    if (obj?.issues && Array.isArray(obj.issues)) {
-      obj.issues = obj.issues.slice(0, 20);
-    }
-    if (obj?.warnings && Array.isArray(obj.warnings)) {
-      obj.warnings = obj.warnings.slice(0, 20);
-    }
-  };
-
-  // Apply limits to all analyzer outputs
+/** Limit issues/warnings arrays on all analyzer outputs */
+function limitAllIssueArrays(pageData: PageInfo): void {
   const analyzerFields = [
     pageData.linkAnalysis,
     pageData.accessibility,
@@ -978,7 +1007,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   ];
   for (const field of analyzerFields) {
     if (field && typeof field === 'object') {
-      limitArrays(field as Record<string, unknown>);
+      limitIssueArrays(field as Record<string, unknown>);
     }
   }
 }

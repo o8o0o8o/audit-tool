@@ -4,15 +4,15 @@
  * Lighthouse thresholds: >800 warning, >1400 failure for total nodes
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS as GLOBAL_THRESHOLDS } from '../../constants';
 import type { Issue, ChromePage } from '../../types';
 
 // Lighthouse thresholds
 const THRESHOLDS = {
-  TOTAL_NODES_WARNING: 800,
-  TOTAL_NODES_FAILURE: 1400,
-  MAX_DEPTH_WARNING: 32,
-  MAX_CHILDREN_WARNING: 60,
+  TOTAL_NODES_WARNING: GLOBAL_THRESHOLDS.DOM_NODES_WARNING,
+  TOTAL_NODES_FAILURE: GLOBAL_THRESHOLDS.DOM_NODES_CRITICAL,
+  MAX_DEPTH_WARNING: GLOBAL_THRESHOLDS.DOM_DEPTH_WARNING,
+  MAX_CHILDREN_WARNING: GLOBAL_THRESHOLDS.DOM_CHILDREN_WARNING,
 };
 
 class DOMComplexityAnalyzer {

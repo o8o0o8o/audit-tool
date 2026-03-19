@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { formatBytes } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ResourceAnalysisEntry {
@@ -82,7 +83,7 @@ class CompressionAnalyzer {
 
         issues.push({
           message: 'HTML not compressed',
-          detail: `Page HTML (${this.formatBytes(htmlSize)}) is not using gzip/brotli compression. Potential savings: ~${this.formatBytes(estimatedSavings)}`,
+          detail: `Page HTML (${formatBytes(htmlSize)}) is not using gzip/brotli compression. Potential savings: ~${formatBytes(estimatedSavings)}`,
           severity: SEVERITY.HIGH,
         });
       }
@@ -117,12 +118,12 @@ class CompressionAnalyzer {
       const totalSavings = uncompressedLarge.reduce((sum: number, r) => sum + r.potentialSavings, 0);
       const examples = uncompressedLarge
         .slice(0, 3)
-        .map((r) => `${this.getFileName(r.url)} (${this.formatBytes(r.size)})`)
+        .map((r) => `${this.getFileName(r.url)} (${formatBytes(r.size)})`)
         .join(', ');
 
       issues.push({
         message: 'Large resources not compressed',
-        detail: `${uncompressedLarge.length} resources over 10KB lack compression. Examples: ${examples}. Total potential savings: ~${this.formatBytes(totalSavings)}`,
+        detail: `${uncompressedLarge.length} resources over 10KB lack compression. Examples: ${examples}. Total potential savings: ~${formatBytes(totalSavings)}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -244,7 +245,7 @@ class CompressionAnalyzer {
       const percentage = ((uncompressedPages.length / totalPages) * 100).toFixed(1);
       issues.push({
         message: 'Pages served without compression',
-        detail: `${uncompressedPages.length} pages (${percentage}%) lack gzip/brotli compression. Total potential savings: ~${this.formatBytes(stats.totalPotentialSavings)}`,
+        detail: `${uncompressedPages.length} pages (${percentage}%) lack gzip/brotli compression. Total potential savings: ~${formatBytes(stats.totalPotentialSavings)}`,
         severity: uncompressedPages.length > totalPages * 0.5 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
       });
     }
@@ -270,18 +271,6 @@ class CompressionAnalyzer {
     return { issues, warnings, stats };
   }
 
-  /**
-   * Format bytes to human readable
-   * @param {number} bytes
-   * @returns {string}
-   */
-  static formatBytes(bytes: number) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
 
   /**
    * Get filename from URL

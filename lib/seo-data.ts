@@ -23,7 +23,6 @@ import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { parse } from 'node-html-parser';
 
 class SEOData {
-  // Internal results state - uses index signature because analyzers add dynamic keys
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Results object is intentionally dynamic; analyzers attach arbitrary keys at runtime
   #results: Record<string, any>;
   #proceed: boolean;
@@ -134,11 +133,15 @@ class SEOData {
    * Called from constructor when origin is known, or after deriving origin from sitemap file.
    */
   #initializeManagers() {
+    if (!this.origin || !this.domainName) {
+      throw new Error('Cannot initialize managers: origin and domainName must be set');
+    }
+
     // Initialize FileManager
     // If proceeding, find and use the latest run's timestamp
     let timestamp = null;
     if (this.#proceed) {
-      const latestRun = FileManager.findLatestRun(this.domainName!);
+      const latestRun = FileManager.findLatestRun(this.domainName);
       if (latestRun) {
         // Extract timestamp from path
         timestamp = path.basename(latestRun);
@@ -158,7 +161,7 @@ class SEOData {
       }
     }
 
-    this.fileManager = new FileManager(this.domainName!, 'audit-results', timestamp);
+    this.fileManager = new FileManager(this.domainName, 'audit-results', timestamp);
     this.resultsDir = this.fileManager.resultsDir;
     this.file = this.fileManager.manifestFile; // Use manifest for multi-file format
 
@@ -274,7 +277,7 @@ class SEOData {
 
   async #restoreProgress() {
     try {
-      const restored = await this.#progressManager.loadProgress(this.domainName!, this.resultsDir);
+      const restored = await this.#progressManager.loadProgress(this.domainName ?? '', this.resultsDir);
 
       // Update instance state from restored data
       this.#results = restored.results;
@@ -307,13 +310,12 @@ class SEOData {
 
   async saveData() {
     await this.#progressManager.waitForPendingFlush();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- InternalResults is a superset of ProgressResults
-    this.#progressManager.saveProgress(this.#results as any);
+    this.#progressManager.saveProgress(this.#results as Parameters<ProgressManager['saveProgress']>[0]);
   }
 
   async #analyzeRobotsTxt() {
     // Use RobotsParser module to parse robots.txt
-    const result = await RobotsParser.parseRobotsTxt(this.origin!);
+    const result = await RobotsParser.parseRobotsTxt(this.origin ?? '');
 
     // Update results with parsed data
     this.#results.robots.sitemaps = result.sitemaps;
@@ -325,14 +327,14 @@ class SEOData {
     });
 
     // Analyze AI crawler rules in robots.txt
-    const aeoRobotsResult = AEOAnalyzer.analyzeRobotsTxt(result, this.origin!);
+    const aeoRobotsResult = AEOAnalyzer.analyzeRobotsTxt(result, this.origin ?? '');
     aeoRobotsResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
     aeoRobotsResult.warnings.forEach((w) => this.saveError(w.message!, w.detail!, w.severity));
     this.#results.aeo = { robotsTxt: aeoRobotsResult.info };
 
     // Check for llms.txt
     try {
-      const llmsResult = await AEOAnalyzer.analyzeLlmsTxt(this.origin!);
+      const llmsResult = await AEOAnalyzer.analyzeLlmsTxt(this.origin ?? '');
       llmsResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
       llmsResult.warnings.forEach((w) => this.saveError(w.message!, w.detail!, w.severity));
       this.#results.aeo.llmsTxt = llmsResult.info;
@@ -347,7 +349,7 @@ class SEOData {
   #parseSitemapFile() {
     console.log(`📄 Parsing local sitemap file: ${this.#sitemapFile}`);
 
-    const xml = fs.readFileSync(this.#sitemapFile!, 'utf-8');
+    const xml = fs.readFileSync(this.#sitemapFile ?? '', 'utf-8');
     const parsed = parse(xml);
     const urls = parsed.querySelectorAll('url');
 
@@ -383,7 +385,7 @@ class SEOData {
       errors: [],
     };
 
-    SitemapParser.processSitemap(urls as any, this.origin!, this.#sitemapFile!, result as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    SitemapParser.processSitemap(urls as any, this.origin ?? '', this.#sitemapFile ?? '', result as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
     // Store sitemap data
     Object.assign(this.#results.sitemaps, result.sitemaps);
@@ -400,7 +402,7 @@ class SEOData {
 
   async #analyzeSitemaps() {
     // Use SitemapParser module
-    const result = await SitemapParser.parseSitemaps(this.origin!, this.#results.robots.sitemaps);
+    const result = await SitemapParser.parseSitemaps(this.origin ?? '', this.#results.robots.sitemaps);
 
     // Store sitemap data
     Object.assign(this.#results.sitemaps, result.sitemaps);
@@ -440,11 +442,12 @@ class SEOData {
       this.#results.sitemaps.total = filtered.length;
     }
 
+    // Bridge internal results to the orchestrator's expected shape
     await AuditOrchestrator.analyzePages({
-      results: this.#results as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      crawlerEngine: this.#crawlerEngine as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      results: this.#results as Parameters<typeof AuditOrchestrator.analyzePages>[0]['results'],
+      crawlerEngine: this.#crawlerEngine as unknown as Parameters<typeof AuditOrchestrator.analyzePages>[0]['crawlerEngine'],
       incomingLinksTracking: this.#incomingLinksTracking,
-      saveError: this.saveError.bind(this) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      saveError: this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.analyzePages>[0]['saveError'],
       resultsDir: this.resultsDir,
     });
   }
@@ -574,11 +577,12 @@ class SEOData {
     this.#progressManager.reloadEvictedPages(this.#results.pageData.pages);
 
     // Run all site-wide validations
+    // Bridge internal pageData to the orchestrator's expected shape
     await AuditOrchestrator.runSiteWideValidation(
-      this.#results.pageData as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- bridging InternalResults to PageDataForValidation
-      this.origin!,
+      this.#results.pageData as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[0],
+      this.origin ?? '',
       this.#results.isMultiLang,
-      this.saveError.bind(this) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[3],
     );
 
     // Stop timing

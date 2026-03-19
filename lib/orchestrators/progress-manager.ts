@@ -365,7 +365,7 @@ class ProgressManager {
       // Notify any waiting flush calls
       if (this.#flushWaiters.length > 0) {
         const notify = this.#flushWaiters.shift();
-        notify!();
+        notify?.();
       }
     }
   }

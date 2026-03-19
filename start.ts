@@ -216,5 +216,8 @@ if (watchArgs.watch) {
     }
   })();
 } else {
-  void audit().catch(() => process.exit(1));
+  void audit().catch((err: unknown) => {
+    console.error('Audit failed:', (err as Error).message ?? err);
+    process.exit(1);
+  });
 }

@@ -4,7 +4,7 @@
  */
 
 import type { PageInfo } from '../../types';
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
 import type * as tls from 'tls';
 import * as https from 'https';
 
@@ -32,8 +32,8 @@ interface SSLFinding {
 }
 
 // Days before expiry to warn
-const EXPIRY_WARNING_DAYS = 30;
-const EXPIRY_CRITICAL_DAYS = 7;
+const EXPIRY_WARNING_DAYS = THRESHOLDS.SSL_EXPIRY_WARNING;
+const EXPIRY_CRITICAL_DAYS = THRESHOLDS.SSL_EXPIRY_CRITICAL;
 
 // Weak cipher patterns
 const WEAK_CIPHERS = ['RC4', 'DES', 'MD5', 'NULL', 'EXPORT', 'anon', '3DES'];

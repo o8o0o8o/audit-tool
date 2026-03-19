@@ -3,7 +3,8 @@
  * Analyzes critical content and resources in the initial viewport
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { formatBytes } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface AboveFoldHeading {
@@ -191,11 +192,10 @@ class AboveFoldAnalyzer {
     }
 
     // Check above-fold image size
-    if (info.aboveFoldImageSize > 500000) {
-      // 500KB
+    if (info.aboveFoldImageSize > THRESHOLDS.ABOVE_FOLD_IMAGE_SIZE) {
       issues.push({
         message: 'Large above-fold image payload',
-        detail: `Above-fold images total ${this.formatBytes(info.aboveFoldImageSize)}. Optimize images for faster LCP.`,
+        detail: `Above-fold images total ${formatBytes(info.aboveFoldImageSize)}. Optimize images for faster LCP.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -242,18 +242,6 @@ class AboveFoldAnalyzer {
     return rect.top < viewport.height && rect.bottom > 0 && rect.left < viewport.width && rect.right > 0;
   }
 
-  /**
-   * Format bytes to human readable
-   * @param {number} bytes
-   * @returns {string}
-   */
-  static formatBytes(bytes: number) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
 
   /**
    * Analyze above-fold content across the site
@@ -324,10 +312,10 @@ class AboveFoldAnalyzer {
       });
     }
 
-    if (stats.avgAboveFoldImageSize > 300000) {
+    if (stats.avgAboveFoldImageSize > THRESHOLDS.ABOVE_FOLD_IMAGE_AVG) {
       warnings.push({
         message: 'Large average above-fold image payload',
-        detail: `Average ${this.formatBytes(stats.avgAboveFoldImageSize)} in above-fold images. Optimize images site-wide.`,
+        detail: `Average ${formatBytes(stats.avgAboveFoldImageSize)} in above-fold images. Optimize images site-wide.`,
         severity: SEVERITY.MEDIUM,
       });
     }

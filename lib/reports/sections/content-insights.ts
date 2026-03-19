@@ -101,7 +101,8 @@ function getComparisonCTASection(
       email = 0,
       noCTAs = 0;
     for (const page of withCTA) {
-      const s = page.ctaData!.summary;
+      const s = page.ctaData?.summary;
+      if (!s) continue;
       forms += s.forms ?? 0;
       buttons += s.ctaButtons ?? 0;
       phone += s.phoneLinks ?? 0;
@@ -206,14 +207,16 @@ function getComparisonOutboundLinksSection(
       redirected = 0;
     const brokenUrls = new Map<string, { status: number; count: number; site: string }>();
     for (const page of withData) {
-      const h = page.outboundLinkHealth!;
+      const h = page.outboundLinkHealth;
+      if (!h) continue;
       checked += h.totalChecked ?? 0;
       broken += h.broken?.length ?? 0;
       redirected += h.redirected?.length ?? 0;
       for (const b of h.broken ?? []) {
         const key = b.url;
         if (!brokenUrls.has(key)) brokenUrls.set(key, { status: b.status, count: 0, site: '' });
-        brokenUrls.get(key)!.count++;
+        const entry = brokenUrls.get(key);
+        if (entry) entry.count++;
       }
     }
     return { checked, broken, redirected, brokenUrls };
@@ -438,10 +441,12 @@ function getLanguageSection(pages: PageInfo[]) {
   let missingLang = 0;
 
   for (const page of withLang) {
-    const lang = page.languageDetection!.detectedLanguage!;
+    const detection = page.languageDetection;
+    if (!detection?.detectedLanguage) continue;
+    const lang = detection.detectedLanguage;
     langCounts[lang] = (langCounts[lang] ?? 0) + 1;
-    if (page.languageDetection!.match === false) mismatches++;
-    if (!page.languageDetection!.htmlLang) missingLang++;
+    if (detection.match === false) mismatches++;
+    if (!detection.htmlLang) missingLang++;
   }
 
   const langBars = Object.entries(langCounts)
@@ -600,7 +605,8 @@ function getOutboundLinksSection(pages: PageInfo[]) {
   const brokenUrls = new Map();
 
   for (const page of withData) {
-    const h = page.outboundLinkHealth!;
+    const h = page.outboundLinkHealth;
+    if (!h) continue;
     totalChecked += h.totalChecked ?? 0;
     totalBroken += h.broken?.length ?? 0;
     totalRedirected += h.redirected?.length ?? 0;
@@ -651,7 +657,8 @@ function getResponseHeadersSection(pages: PageInfo[]) {
     withPreloadHints = 0,
     withHttpCanonical = 0;
   for (const page of withData) {
-    const h = page.responseHeaderAnalysis!;
+    const h = page.responseHeaderAnalysis;
+    if (!h) continue;
     if (h.noindexViaHeader) withXRobotsNoindex++;
     if (h.dynamicServing) withDynamicServing++;
     if ((h.preloadHints?.length ?? 0) > 0) withPreloadHints++;
@@ -693,7 +700,7 @@ function getWordCountBreakdown(pages: PageInfo[]) {
 
   const totals = { main: 0, nav: 0, header: 0, footer: 0, sidebar: 0 };
   for (const page of withData) {
-    const s = page.contentQuality!.wordCountBySection as Record<string, number> | undefined;
+    const s = page.contentQuality?.wordCountBySection as Record<string, number> | undefined;
     if (!s || Array.isArray(s)) continue;
     totals.main += s.main ?? 0;
     totals.nav += s.nav ?? 0;

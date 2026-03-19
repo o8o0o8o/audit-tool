@@ -100,7 +100,7 @@ function normalizeUrl(urlString: string, options: NormalizeUrlOptions = {}): str
       const keyLower = key.toLowerCase();
 
       if (mode === 'whitelist') {
-        if (!whitelistSet!.has(keyLower)) {
+        if (!whitelistSet?.has(keyLower)) {
           paramsToRemove.push(key);
         }
       } else {
@@ -162,7 +162,7 @@ function validateUrl(urlString: string): string {
     throw new Error(coreResult.error);
   }
 
-  const url: URL = coreResult.url!;
+  const url: URL = coreResult.url as URL; // Guaranteed non-null after valid check above
   const hostname = url.hostname;
 
   if (hostname.length === 0 || hostname.length > 253) {
@@ -405,6 +405,24 @@ function generateTimestamp(): string {
   return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
 }
 
+/**
+ * Format bytes to human-readable size string
+ */
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+/**
+ * Calculate difference in days between two dates
+ */
+function calculateDaysDiff(from: Date, to: Date): number {
+  return Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -416,6 +434,8 @@ export {
   formatErrorMessage,
   formatWarningMessage,
   generateTimestamp,
+  formatBytes,
+  calculateDaysDiff,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

@@ -3,17 +3,17 @@
  * Detects pages with insufficient content for SEO
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS as GLOBAL_THRESHOLDS } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
 
 class ThinContentAnalyzer {
   // Minimum thresholds
   static THRESHOLDS = {
-    MIN_WORDS: 100, // Bare minimum
-    LOW_WORDS: 300, // Low content
-    RECOMMENDED_WORDS: 600, // Recommended minimum
+    MIN_WORDS: GLOBAL_THRESHOLDS.THIN_CONTENT_BARE_MIN,
+    LOW_WORDS: GLOBAL_THRESHOLDS.THIN_CONTENT_LOW,
+    RECOMMENDED_WORDS: GLOBAL_THRESHOLDS.THIN_CONTENT_RECOMMENDED,
     MIN_PARAGRAPHS: 2,
-    MIN_TEXT_RATIO: 10, // Text to HTML ratio percentage
+    MIN_TEXT_RATIO: GLOBAL_THRESHOLDS.THIN_CONTENT_TEXT_RATIO_MIN,
   };
 
   /**

@@ -92,7 +92,7 @@ async function audit() {
 
           await batchSeo.saveData();
           const batchHtmlPath = batchSeo.fileManager.getHtmlFilePath();
-          generateHTML(batchSeo.file, batchSeo.domainName!, batchHtmlPath);
+          generateHTML(batchSeo.file, batchSeo.domainName ?? 'unknown', batchHtmlPath);
         } catch (e: unknown) {
           const err = e as Error;
           results.push({ url: urls[i], score: 0, issues: 0, status: `error: ${err.message}` });
@@ -361,7 +361,7 @@ async function audit() {
       } else {
         console.log(`\n📂 Running source code analysis on: ${repoValidation.resolvedPath}`);
         try {
-          const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath!, seo.data);
+          const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath ?? args.repo, seo.data);
           seo.data.repoAnalysis = repoAnalysis;
           seo.fileManager.writeRepoAnalysis(repoAnalysis);
 

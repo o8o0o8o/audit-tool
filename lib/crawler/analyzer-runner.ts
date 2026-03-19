@@ -257,7 +257,8 @@ export async function runAnalyzers(
         pageContent,
         pageData.responseHeaders ?? {},
         analyzerRequests,
-      ).catch(() => {
+      ).catch((err) => {
+        if (options.verbose) console.warn(`[tech-detect] CDP detection failed, falling back to HTML: ${err instanceof Error ? err.message : err}`);
         const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
         return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders ?? {}, scriptSrcs);
       }),

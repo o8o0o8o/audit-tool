@@ -50,12 +50,12 @@ function generateHTML(
   let loadError = null;
 
   try {
-    if (isComparison) {
+    if (isComparison && comparisonOpts) {
       reportData = ReportDataProcessor.prepareComparisonReportData(
         file,
-        comparisonOpts!.compareFile,
+        comparisonOpts.compareFile,
         domainName,
-        comparisonOpts!.compareDomainName,
+        comparisonOpts.compareDomainName,
       );
     } else {
       reportData = ReportDataProcessor.prepareReportData(file, domainName);
@@ -102,7 +102,7 @@ function generateHTML(
     comparison: (reportData as Record<string, unknown>).comparison as ReportSectionData['comparison'],
   };
 
-  const safeCompareDomain = isComparison ? sanitizeDomainName(comparisonOpts!.compareDomainName) : '';
+  const safeCompareDomain = isComparison && comparisonOpts ? sanitizeDomainName(comparisonOpts.compareDomainName) : '';
 
   const htmlContent = `
   <!DOCTYPE html>
@@ -286,7 +286,7 @@ function generateHTML(
               <p style="color: #991b1b;">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
               <details style="margin-top: 10px;">
                   <summary style="cursor: pointer; color: #dc2626; font-weight: 600;">Error Details</summary>
-                  <pre style="background: #fee2e2; padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: #991b1b;">${escapeHtml((loadError as Error).message)}${(loadError as Error).stack ? '\n\n' + escapeHtml((loadError as Error).stack!) : ''}</pre>
+                  <pre style="background: #fee2e2; padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: #991b1b;">${escapeHtml((loadError as Error).message)}${(loadError as Error).stack ? '\n\n' + escapeHtml((loadError as Error).stack) : ''}</pre>
               </details>
               <p style="color: #6b7280; margin-top: 15px; font-size: 14px;">
                   <strong>Troubleshooting:</strong> Check that the audit data file exists and is not corrupted.

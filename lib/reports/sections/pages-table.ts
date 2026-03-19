@@ -176,7 +176,7 @@ function getPagesTable(data: ReportSectionData) {
         <table id="pagesTable">
             <thead>
                 ${getTableHeader(hasPerformanceMetrics, hasCrux)}
-                ${hasCrux && hasPerformanceMetrics ? getCrUXBaselineRow(cruxData!) : ''}
+                ${hasCrux && hasPerformanceMetrics && cruxData ? getCrUXBaselineRow(cruxData) : ''}
             </thead>
             <tbody>
                 ${pages.map((page: PageInfo, index: number) => getTableRow(page, index, hasPerformanceMetrics)).join('')}
@@ -422,15 +422,15 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
     ? page.headings
     : page.headings
       ? [
-          { tag: 'h1', count: (page.headings.h1?.length || page.headings.h1Count) ?? 0 },
-          { tag: 'h2', count: (page.headings.h2?.length || page.headings.h2Count) ?? 0 },
-          { tag: 'h3', count: (page.headings.h3?.length || page.headings.h3Count) ?? 0 },
-          { tag: 'h4', count: (page.headings.h4?.length || page.headings.h4Count) ?? 0 },
-          { tag: 'h5', count: (page.headings.h5?.length || page.headings.h5Count) ?? 0 },
-          { tag: 'h6', count: (page.headings.h6?.length || page.headings.h6Count) ?? 0 },
+          { tag: 'h1', count: (page.headings.h1?.length ?? page.headings.h1Count) ?? 0 },
+          { tag: 'h2', count: (page.headings.h2?.length ?? page.headings.h2Count) ?? 0 },
+          { tag: 'h3', count: (page.headings.h3?.length ?? page.headings.h3Count) ?? 0 },
+          { tag: 'h4', count: (page.headings.h4?.length ?? page.headings.h4Count) ?? 0 },
+          { tag: 'h5', count: (page.headings.h5?.length ?? page.headings.h5Count) ?? 0 },
+          { tag: 'h6', count: (page.headings.h6?.length ?? page.headings.h6Count) ?? 0 },
         ]
       : null;
-  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
+  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray);
   const missingMeta = getMissingMetaTags(page);
   const alternatesCount = page.alternates?.length ?? 0;
   const linksWithoutText =
@@ -1009,15 +1009,15 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
     ? p.headings
     : p.headings
       ? [
-          { tag: 'h1', count: (p.headings.h1?.length || p.headings.h1Count) ?? 0 },
-          { tag: 'h2', count: (p.headings.h2?.length || p.headings.h2Count) ?? 0 },
-          { tag: 'h3', count: (p.headings.h3?.length || p.headings.h3Count) ?? 0 },
-          { tag: 'h4', count: (p.headings.h4?.length || p.headings.h4Count) ?? 0 },
-          { tag: 'h5', count: (p.headings.h5?.length || p.headings.h5Count) ?? 0 },
-          { tag: 'h6', count: (p.headings.h6?.length || p.headings.h6Count) ?? 0 },
+          { tag: 'h1', count: (p.headings.h1?.length ?? p.headings.h1Count) ?? 0 },
+          { tag: 'h2', count: (p.headings.h2?.length ?? p.headings.h2Count) ?? 0 },
+          { tag: 'h3', count: (p.headings.h3?.length ?? p.headings.h3Count) ?? 0 },
+          { tag: 'h4', count: (p.headings.h4?.length ?? p.headings.h4Count) ?? 0 },
+          { tag: 'h5', count: (p.headings.h5?.length ?? p.headings.h5Count) ?? 0 },
+          { tag: 'h6', count: (p.headings.h6?.length ?? p.headings.h6Count) ?? 0 },
         ]
       : null;
-  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
+  const hasHStructureIssue = hasHeadingStructureIssue(headingsArray);
   const missingMeta = getMissingMetaTags(p);
   const alternatesCount = p.alternates?.length ?? 0;
   const linksWithoutText =

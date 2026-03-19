@@ -5,6 +5,7 @@
 
 import { METRIC_INFO, SIGNAL_CATEGORIES, getSignalInfo, formatSignalValue, isSignalGood } from './metrics-metadata';
 import type { PageInfo, SeverityColorConfig, HeadingCount } from '../types';
+import { formatBytes } from '../utils';
 
 /**
  * Escape HTML to prevent XSS
@@ -19,19 +20,6 @@ function escapeHtml(unsafe: unknown): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
-}
-
-/**
- * Format bytes to human-readable size
- * @param {number} bytes - Number of bytes
- * @returns {string} Formatted size string
- */
-function formatBytes(bytes: number) {
-  if (!bytes || bytes <= 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
 /**

@@ -3,7 +3,7 @@
  * Analyzes content update signals and freshness indicators
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
 import type { Issue, ParsedPage, PageInfo } from '../../types';
 
 interface FreshnessIssue extends Issue {
@@ -230,17 +230,17 @@ class FreshnessAnalyzer {
     const ageInDays = Math.floor((now.getTime() - mostRecent.getTime()) / (1000 * 60 * 60 * 24));
 
     // Scoring based on age
-    if (ageInDays <= 7) {
+    if (ageInDays <= THRESHOLDS.FRESHNESS_EXCELLENT) {
       score = 100; // Updated within a week
-    } else if (ageInDays <= 30) {
+    } else if (ageInDays <= THRESHOLDS.FRESHNESS_GOOD) {
       score = 90; // Updated within a month
-    } else if (ageInDays <= 90) {
+    } else if (ageInDays <= THRESHOLDS.FRESHNESS_OK) {
       score = 80; // Updated within 3 months
-    } else if (ageInDays <= 180) {
+    } else if (ageInDays <= THRESHOLDS.FRESHNESS_FAIR) {
       score = 70; // Updated within 6 months
-    } else if (ageInDays <= 365) {
+    } else if (ageInDays <= THRESHOLDS.FRESHNESS_POOR) {
       score = 60; // Updated within a year
-    } else if (ageInDays <= 730) {
+    } else if (ageInDays <= THRESHOLDS.FRESHNESS_VERY_POOR) {
       score = 40; // 1-2 years old
     } else {
       score = 20; // Over 2 years old

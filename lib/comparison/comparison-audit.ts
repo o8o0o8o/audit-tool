@@ -120,12 +120,12 @@ class ComparisonAudit {
   #originResults: AuditSiteResult | null;
   #compareResults: AuditSiteResult | null;
   #comparisonResults: ComparisonResultData | null;
-  #startTime!: number;
+  #startTime: number = 0;
 
   originDomain: string | null;
   compareDomain: string | null;
-  comparisonDir!: string;
-  timestamp!: string;
+  comparisonDir: string = '';
+  timestamp: string = '';
 
   /**
    * Create a comparison audit
@@ -332,8 +332,13 @@ class ComparisonAudit {
    * Compare the results from both sites
    */
   #performComparison() {
-    const originPages = this.#loadPagesFromDisk(this.#originResults!);
-    const comparePages = this.#loadPagesFromDisk(this.#compareResults!);
+    if (!this.#originResults || !this.#compareResults) {
+      throw new Error('Cannot perform comparison: both audits must complete first');
+    }
+    const originResults = this.#originResults;
+    const compareResults = this.#compareResults;
+    const originPages = this.#loadPagesFromDisk(originResults);
+    const comparePages = this.#loadPagesFromDisk(compareResults);
 
     // Match pages by URL path
     const matchResult = PageMatcher.matchPages(originPages, comparePages);
@@ -356,8 +361,8 @@ class ComparisonAudit {
     }
 
     // Calculate score comparisons
-    const originData = this.#originResults!.data as { analysis?: { summary?: Partial<AuditSummary> } };
-    const compareData = this.#compareResults!.data as { analysis?: { summary?: Partial<AuditSummary> } };
+    const originData = originResults.data as { analysis?: { summary?: Partial<AuditSummary> } };
+    const compareData = compareResults.data as { analysis?: { summary?: Partial<AuditSummary> } };
     const originSummary = originData.analysis?.summary ?? {};
     const compareSummary = compareData.analysis?.summary ?? {};
 
@@ -433,8 +438,8 @@ class ComparisonAudit {
       pageComparisons,
       originOnly: this.#formatUnmatchedPages(matchResult.originOnly),
       compareOnly: this.#formatUnmatchedPages(matchResult.compareOnly),
-      originAuditPath: this.#originResults!.file,
-      compareAuditPath: this.#compareResults!.file,
+      originAuditPath: originResults.file,
+      compareAuditPath: compareResults.file,
     };
   }
 
@@ -551,6 +556,12 @@ class ComparisonAudit {
    * Save comparison results and generate report
    */
   async #saveResults() {
+    if (!this.#originResults || !this.#compareResults) {
+      throw new Error('Cannot save results: both audits must complete first');
+    }
+    const originRes = this.#originResults;
+    const compareRes = this.#compareResults;
+
     // Save comparison JSON
     const comparisonFile = path.join(this.comparisonDir, 'comparison.json.gz');
     const jsonString = JSON.stringify(this.#comparisonResults);
@@ -562,15 +573,15 @@ class ComparisonAudit {
 
     // Generate individual HTML reports for each site
     try {
-      generateHTML(this.#originResults!.file, this.#originResults!.domain!, this.#originResults!.htmlPath);
-      console.log(`📄 Generated origin report: ${this.#originResults!.htmlPath}`);
+      generateHTML(originRes.file, originRes.domain ?? 'unknown', originRes.htmlPath);
+      console.log(`📄 Generated origin report: ${originRes.htmlPath}`);
     } catch (error) {
       console.warn(`⚠️  Could not generate origin HTML report: ${(error as Error).message}`);
     }
 
     try {
-      generateHTML(this.#compareResults!.file, this.#compareResults!.domain!, this.#compareResults!.htmlPath);
-      console.log(`📄 Generated compare report: ${this.#compareResults!.htmlPath}`);
+      generateHTML(compareRes.file, compareRes.domain ?? 'unknown', compareRes.htmlPath);
+      console.log(`📄 Generated compare report: ${compareRes.htmlPath}`);
     } catch (error) {
       console.warn(`⚠️  Could not generate compare HTML report: ${(error as Error).message}`);
     }
@@ -578,9 +589,9 @@ class ComparisonAudit {
     // Generate rich comparison HTML report using the regular report with dual-origin mode
     const htmlFile = path.join(this.comparisonDir, 'comparison.html');
     try {
-      generateHTML(this.#originResults!.file, this.#originResults!.domain!, htmlFile, {
-        compareFile: this.#compareResults!.file,
-        compareDomainName: this.#compareResults!.domain!,
+      generateHTML(originRes.file, originRes.domain ?? 'unknown', htmlFile, {
+        compareFile: compareRes.file,
+        compareDomainName: compareRes.domain ?? 'unknown',
       });
       console.log(`📄 Generated comparison report: ${htmlFile}`);
     } catch (error) {
@@ -1156,8 +1167,8 @@ class ComparisonAudit {
     console.log('\nREPORTS GENERATED');
     console.log('-'.repeat(40));
     console.log(`  Comparison: ${this.comparisonDir}/comparison.html`);
-    console.log(`  Origin:     ${this.#originResults!.htmlPath}`);
-    console.log(`  Compare:    ${this.#compareResults!.htmlPath}`);
+    console.log(`  Origin:     ${this.#originResults?.htmlPath ?? 'N/A'}`);
+    console.log(`  Compare:    ${this.#compareResults?.htmlPath ?? 'N/A'}`);
     console.log('='.repeat(60) + '\n');
   }
 }

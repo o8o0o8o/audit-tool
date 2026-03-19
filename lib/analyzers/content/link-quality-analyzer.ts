@@ -1,3 +1,4 @@
+import { THRESHOLDS } from '../../constants';
 import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class LinkQualityAnalyzer {
@@ -235,7 +236,7 @@ class LinkQualityAnalyzer {
       linkAnalysis.issues.push({
         message: 'Too many on-page links',
         count: linkAnalysis.totalLinks,
-        severity: linkAnalysis.totalLinks > 300 ? 'high' : 'medium',
+        severity: linkAnalysis.totalLinks > THRESHOLDS.LINKS_PER_PAGE_MAX ? 'high' : 'medium',
       });
     }
 

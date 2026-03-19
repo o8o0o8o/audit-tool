@@ -336,12 +336,13 @@ class HistoryManager {
 
     // Compare category scores
     if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
-      comparison.categoryDeltas = {};
+      const deltas: Record<string, number> = {};
       (['seo', 'performance', 'accessibility', 'security', 'technical'] as const).forEach((cat) => {
         const oldScore = oldAudit.summary.categoryScores[cat] ?? 0;
         const newScore = newAudit.summary.categoryScores[cat] ?? 0;
-        comparison.categoryDeltas![cat] = newScore - oldScore;
+        deltas[cat] = newScore - oldScore;
       });
+      comparison.categoryDeltas = deltas;
     }
 
     // Compare performance metrics

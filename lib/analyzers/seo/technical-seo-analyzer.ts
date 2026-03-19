@@ -490,7 +490,7 @@ class TechnicalSEOAnalyzer {
    * Check HTML document size
    */
   static checkHTMLSize(pageData: PageInfo, url: string, issues: Issue[], warnings: Issue[]) {
-    const htmlSize = pageData.htmlSize ?? pageData.responseSize ?? pageData.totalResponseSize;
+    const htmlSize = pageData.htmlSize ?? pageData.totalResponseSize;
     if (!htmlSize) return;
 
     // Flag very large HTML documents (>3MB)

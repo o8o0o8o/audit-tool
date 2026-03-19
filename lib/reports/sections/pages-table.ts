@@ -821,7 +821,7 @@ function getImageOptimizationCells(page: PageInfo) {
 function getAccessibilityCells(page: PageInfo) {
   const a11y = page.accessibility ?? ({} as AccessibilityAnalysis);
 
-  const a11yScore = a11y.a11yScore ?? 'N/A';
+  const a11yScore: number | string = a11y.a11yScore ?? 'N/A';
   const ariaValid = a11y.aria?.valid ?? 0;
   const ariaInvalid = a11y.aria?.invalid ?? 0;
   const inputsWithLabels = a11y.forms?.inputsWithLabels ?? 0;
@@ -834,7 +834,7 @@ function getAccessibilityCells(page: PageInfo) {
   const positiveTabindex = a11y.keyboard?.positiveTabindex ?? 0;
 
   return `
-    <td style="color: ${a11yScore >= 70 ? '#10b981' : a11yScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Accessibility Score: ${a11yScore}/100">
+    <td style="color: ${typeof a11yScore === 'number' && a11yScore >= 70 ? '#10b981' : typeof a11yScore === 'number' && a11yScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Accessibility Score: ${a11yScore}/100">
         ${a11yScore}
     </td>
     <td style="text-align: center;">

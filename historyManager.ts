@@ -252,7 +252,7 @@ class HistoryManager {
 
     const langMismatches = pages.filter((p) => p.languageDetection?.match === false).length;
     const brokenOutbound = pages.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
-    const similarPages = pages.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length;
+    const similarPages = pages.filter((p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0).length;
     const noCta = pages.filter((p) => p.ctaData?.summary?.total === 0).length;
 
     const coveragePages = pages.filter((p) => p.codeCoverage?.js?.ratio != null);

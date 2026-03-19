@@ -99,12 +99,8 @@ function generatePagesCSV(jsonData: AuditJsonData) {
   Object.entries(pages).forEach(([url, _data]) => {
     // CSV export reads many dynamic analyzer-added properties on PageInfo
     const data = _data as PageInfo;
-    const h1Count = Array.isArray(data.headings)
-      ? ((data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h1')?.count ?? 0)
-      : (data.headings?.h1?.length ?? 0);
-    const h2Count = Array.isArray(data.headings)
-      ? ((data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h2')?.count ?? 0)
-      : (data.headings?.h2?.length ?? 0);
+    const h1Count = data.headings?.h1Count ?? data.headings?.h1?.length ?? 0;
+    const h2Count = data.headings?.h2Count ?? data.headings?.h2?.length ?? 0;
 
     rows.push(
       [
@@ -127,15 +123,15 @@ function generatePagesCSV(jsonData: AuditJsonData) {
         data.INP ?? '',
         data.TBT ?? '',
         data.totalResponseSize ?? data.totalSize ?? '',
-        data.totalNumberOfRequests ?? data.numberOfRequests ?? '',
+        data.totalNumberOfRequests ?? '',
         data.redirectCount ?? 0,
         data.contentQuality?.wordCount ?? '',
         data.contentQuality?.textToHtmlRatio ?? '',
         data.contentQuality?.readabilityScore ?? '',
-        (data.security as unknown as Record<string, unknown> | undefined)?.securityScore ?? '',
-        (data.caching as unknown as Record<string, unknown> | undefined)?.cacheScore ?? '',
-        (data.accessibility as unknown as Record<string, unknown> | undefined)?.a11yScore ?? '',
-        (data.contentQuality as unknown as Record<string, unknown> | undefined)?.contentScore ?? '',
+        data.security?.securityScore ?? '',
+        data.caching?.cacheScore ?? '',
+        data.accessibility?.a11yScore ?? '',
+        data.contentQuality?.contentScore ?? '',
         data.imageOptimization?.totalImages ?? '',
         data.imageOptimization?.withLazyLoading ?? '',
         data.incomingLinksCount ?? 0,
@@ -151,14 +147,16 @@ function generatePagesCSV(jsonData: AuditJsonData) {
         data.codeCoverage?.js?.ratio ?? '',
         data.codeCoverage?.css?.ratio ?? '',
         data.outboundLinkHealth?.broken?.length ?? '',
-        (data.contentQuality as unknown as Record<string, Record<string, unknown>> | undefined)?.wordCountBySection
-          ?.main ?? '',
-        (data.contentQuality as unknown as Record<string, Record<string, unknown>> | undefined)?.wordCountBySection
-          ?.boilerplateRatio ?? '',
+        data.contentQuality?.wordCountBySection
+          ? (data.contentQuality.wordCountBySection as Record<string, unknown>)?.main ?? ''
+          : '',
+        data.contentQuality?.wordCountBySection
+          ? (data.contentQuality.wordCountBySection as Record<string, unknown>)?.boilerplateRatio ?? ''
+          : '',
         data.eeat?.score ?? '',
         data.eeat?.hasAuthor ? 'Yes' : 'No',
         data.eeat?.hasCitations ? 'Yes' : 'No',
-      ].map(escapeCSV),
+      ].map((v) => escapeCSV(v as string | number | boolean | null | undefined)),
     );
   });
 

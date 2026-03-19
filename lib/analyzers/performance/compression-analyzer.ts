@@ -49,7 +49,7 @@ class CompressionAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info = {
-      htmlCompression: null,
+      htmlCompression: null as string | null,
       compressedResources: 0,
       uncompressedResources: 0,
       potentialSavings: 0,

@@ -48,7 +48,7 @@ class ResourceHintsAnalyzer {
     info.modulePreload = hints.modulePreload ?? [];
 
     // Analyze LCP element for preload opportunities
-    const lcpUrl = pageData.lcpUrl ?? pageData.vitals?.lcpUrl;
+    const lcpUrl = (pageData.lcpUrl ?? pageData.vitals?.lcpUrl) as string | undefined;
 
     if (lcpUrl && !this.isPreloaded(lcpUrl, info.preload)) {
       const isImage = /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(lcpUrl);
@@ -110,7 +110,7 @@ class ResourceHintsAnalyzer {
     // Check for unnecessary preloads (not used within 3s)
     const unusedPreloads = info.preload.filter((p) => {
       const href = p.href ?? '';
-      return pageData.unusedPreloads?.includes(href);
+      return pageData.unusedPreloads?.some((up) => up.url === href);
     });
 
     if (unusedPreloads.length > 0) {
@@ -154,7 +154,7 @@ class ResourceHintsAnalyzer {
     // Summary
     const hasAnyHints =
       info.preload.length + info.prefetch.length + info.preconnect.length + info.dnsPrefetch.length > 0;
-    if (!hasAnyHints && pageData.resources?.length > 10) {
+    if (!hasAnyHints && (pageData.resources?.length ?? 0) > 10) {
       warnings.push({
         message: 'No resource hints detected',
         detail:
@@ -185,7 +185,7 @@ class ResourceHintsAnalyzer {
 
     const resources = pageData.resources ?? [];
     for (const resource of resources) {
-      const resourceOrigin = this.getOrigin(resource.url);
+      const resourceOrigin = this.getOrigin(resource.url ?? '');
       if (resourceOrigin && resourceOrigin !== pageOrigin) {
         if (!origins.has(resourceOrigin)) {
           origins.set(resourceOrigin, {
@@ -300,9 +300,9 @@ class ResourceHintsAnalyzer {
       }
 
       // Check LCP preload
-      const lcpUrl = pageData.lcpUrl ?? pageData.vitals?.lcpUrl;
+      const lcpUrl = (pageData.lcpUrl ?? pageData.vitals?.lcpUrl) as string | undefined;
       if (lcpUrl) {
-        const isPreloaded = hints.preload?.some((p: Record<string, unknown>) => {
+        const isPreloaded = hints.preload?.some((p) => {
           const href = (p.href as string) ?? '';
           return href === lcpUrl || lcpUrl.includes(href);
         });

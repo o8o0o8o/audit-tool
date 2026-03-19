@@ -42,7 +42,7 @@ class AdvancedSchemaValidator {
 
     for (const schemaInfo of schemas) {
       const type = schemaInfo.type;
-      const schema = schemaInfo.raw;
+      const schema = schemaInfo.raw as SchemaObject | undefined;
       if (!type || !schema) continue;
 
       schemaData.types.push(type);

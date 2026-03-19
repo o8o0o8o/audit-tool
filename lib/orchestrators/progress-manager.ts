@@ -633,29 +633,21 @@ class ProgressManager {
    */
 
   #optimizePageInMemory(page: PageInfo): PageInfo {
-    // Use a dynamic view for mutation operations on arbitrary fields
-    const dyn = page as unknown as Record<string, unknown>;
     // Strip raw schema data but preserve key fields needed by site-wide validators
     if (page.structuredData?.jsonLdSchemas) {
       for (const schema of page.structuredData.jsonLdSchemas) {
-        const raw = schema.raw as Record<string, unknown> | undefined;
-        if (raw) {
-          // Keep only fields used by StructuredDataValidator for consistency checks
+        if (schema.raw) {
           schema.raw = {
-            name: raw['name'],
-            headline: raw['headline'],
-            ...(raw['@type'] ? { '@type': raw['@type'] } : {}),
-          } as typeof schema.raw;
+            name: schema.raw['name'],
+            headline: schema.raw['headline'],
+            ...(schema.raw['@type'] ? { '@type': schema.raw['@type'] } : {}),
+          };
         }
       }
     }
 
     // Reduce requests to summary
-    if (
-      page.requests &&
-      typeof page.requests === 'object' &&
-      !(page.requests as Record<string, unknown>)['totalRequests']
-    ) {
+    if (page.requests && !(page.requests as Record<string, unknown>)['totalRequests']) {
       const entries = Object.entries(page.requests as Record<string, RequestData>);
       const byType: Record<string, number> = {};
       let totalSize = 0;
@@ -663,36 +655,38 @@ class ProgressManager {
         byType[req.resourceType ?? 'other'] = (byType[req.resourceType ?? 'other'] ?? 0) + 1;
         if (req.size) totalSize += req.size;
       }
-      dyn['requests'] = { totalRequests: entries.length, byType, totalSize };
+      page.requests = { totalRequests: entries.length, byType, totalSize };
     }
 
     // Reduce links to only problematic ones
     if (Array.isArray(page.links) && page.links.length > 0) {
-      dyn['linksCount'] = (page.linksCount ?? 0) || page.links.length;
-      dyn['internalLinksCount'] =
+      page.linksCount = (page.linksCount ?? 0) || page.links.length;
+      page.internalLinksCount =
         (page.internalLinksCount ?? 0) || page.links.filter((l: LinkData) => l.isInternal).length;
-      dyn['externalLinksCount'] =
+      page.externalLinksCount =
         (page.externalLinksCount ?? 0) || page.links.filter((l: LinkData) => !l.isInternal).length;
-      dyn['links'] = page.links.filter((l: LinkData) => !l.text || l.text.trim() === '').slice(0, 20);
+      page.links = page.links.filter((l: LinkData) => !l.text || l.text.trim() === '').slice(0, 20);
     }
 
     // Reduce images to only problematic ones
-    if (Array.isArray(page.images) && page.images.length > 0) {
-      dyn['imagesCount'] = (page.imagesCount ?? 0) || page.images.length;
-      dyn['imagesWithoutAltCount'] =
-        (page.imagesWithoutAltCount ?? 0) || page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').length;
-      dyn['images'] = page.images.filter((i: ImageData) => !i.alt || i.alt.trim() === '').slice(0, 10);
+    if (page.images && 'totalImages' in page.images && Array.isArray((page.images as unknown as Record<string, unknown>)['images'])) {
+      // images is ImageAnalysis but may have raw image array from crawler
+    } else if (Array.isArray(page.images)) {
+      const imgArr = page.images as unknown as ImageData[];
+      page.imagesCount = (page.imagesCount ?? 0) || imgArr.length;
+      page.imagesWithoutAltCount =
+        (page.imagesWithoutAltCount ?? 0) || imgArr.filter((i) => !i.alt || i.alt.trim() === '').length;
+      (page as unknown as Record<string, unknown>).images = imgArr.filter((i) => !i.alt || i.alt.trim() === '').slice(0, 10);
     }
 
     // Strip vitals detail
     if (page.vitals) {
-      const vitals = page.vitals as unknown as Record<string, unknown>;
-      delete vitals['lcpSubParts'];
-      delete vitals['clsEntries'];
-      delete vitals['longTasks'];
-      const lcpAnalysis = vitals['lcpAnalysis'] as Record<string, unknown> | undefined;
+      delete page.vitals['lcpSubParts'];
+      delete page.vitals['clsEntries'];
+      delete page.vitals['longTasks'];
+      const lcpAnalysis = page.vitals['lcpAnalysis'] as Record<string, unknown> | undefined;
       if (lcpAnalysis) {
-        vitals['lcpAnalysis'] = {
+        page.vitals['lcpAnalysis'] = {
           bottleneck: lcpAnalysis['bottleneck'],
           recommendation: lcpAnalysis['recommendation'],
         };
@@ -700,346 +694,269 @@ class ProgressManager {
     }
 
     // Delete heavy objects
-    delete dyn['metrics'];
-    delete dyn['blockers'];
+    delete page.metrics;
+    delete page.blockers;
 
-    // Strip linkAnalysis
+    // Strip linkAnalysis to summary
     if (page.linkAnalysis) {
-      const la = page.linkAnalysis as unknown as Record<string, unknown>;
-      if (la['links']) {
-        dyn['linkAnalysis'] = {
-          internalLinks: (la['internalLinks'] as number) || 0,
-          externalLinks: (la['externalLinks'] as number) || 0,
-          brokenLinks: (la['brokenLinks'] as number) || 0,
-          issues: la['issues'],
-          warnings: la['warnings'],
-        };
-      }
+      page.linkAnalysis = {
+        internalLinks: page.linkAnalysis.internalLinks ?? 0,
+        externalLinks: page.linkAnalysis.externalLinks ?? 0,
+        brokenLinks: typeof page.linkAnalysis.brokenLinks === 'number' ? page.linkAnalysis.brokenLinks : 0,
+        issues: page.linkAnalysis.issues,
+        warnings: page.linkAnalysis.warnings,
+      };
     }
 
-    // Strip contentQuality
+    // Strip contentQuality keywords
     if (page.contentQuality) {
-      const cq = page.contentQuality as unknown as Record<string, unknown>;
-      if (cq['keywords']) {
-        delete cq['keywords'];
-        const topKw = cq['topKeywords'] as unknown[] | undefined;
-        if (topKw) cq['topKeywords'] = topKw.slice(0, 5);
+      delete (page.contentQuality as unknown as Record<string, unknown>)['keywords'];
+      if (page.contentQuality.topKeywords) {
+        page.contentQuality.topKeywords = page.contentQuality.topKeywords.slice(0, 5);
       }
     }
 
-    // Strip third-party data
-    if (page.thirdPartyData) {
-      const tpd = page.thirdPartyData as unknown as Record<string, unknown>;
-      if (tpd['scripts']) {
-        dyn['thirdPartyData'] = {
-          totalScripts: (tpd['scripts'] as unknown[]).length,
-          totalSize: (tpd['totalSize'] as number) || 0,
-          issues: tpd['issues'],
-          warnings: tpd['warnings'],
-        };
-      }
+    // Strip third-party data to summary
+    if (page.thirdPartyData?.scripts) {
+      page.thirdPartyData = {
+        totalScripts: page.thirdPartyData.scripts.length,
+        totalSize: page.thirdPartyData.totalSize ?? 0,
+        issues: page.thirdPartyData.issues,
+        warnings: page.thirdPartyData.warnings,
+      };
     }
 
-    // Strip timing data
-    if (page.timingData) {
-      const td = page.timingData as unknown as Record<string, unknown>;
-      if (td['resourceTimings']) {
-        dyn['timingData'] = {
-          slowResources: ((td['slowResources'] as unknown[]) || []).slice(0, 5),
-          issues: td['issues'],
-          warnings: td['warnings'],
-        };
-      }
+    // Strip timing data to summary
+    if (page.timingData?.resourceTimings) {
+      page.timingData = {
+        slowResources: (page.timingData.slowResources ?? []).slice(0, 5),
+        issues: page.timingData.issues,
+        warnings: page.timingData.warnings,
+      };
     }
 
-    // Strip critical path data
-    if (page.criticalPathData) {
-      const cpd = page.criticalPathData as unknown as Record<string, unknown>;
-      if (cpd['blockingCSS']) {
-        dyn['criticalPathData'] = {
-          blockingCSSCount: (cpd['blockingCSS'] as unknown[])?.length || 0,
-          blockingJSCount: (cpd['blockingJS'] as unknown[])?.length || 0,
-          issues: cpd['issues'],
-          warnings: cpd['warnings'],
-        };
-      }
+    // Strip critical path data to counts
+    if (page.criticalPathData?.blockingCSS) {
+      page.criticalPathData = {
+        blockingCSSCount: page.criticalPathData.blockingCSS.length,
+        blockingJSCount: page.criticalPathData.blockingJS?.length ?? 0,
+        issues: page.criticalPathData.issues,
+        warnings: page.criticalPathData.warnings,
+      };
     }
 
-    // Strip font data
+    // Strip font data to count
     if (page.fontData) {
-      const fd = page.fontData as unknown as Record<string, unknown>;
-      if (fd['fonts']) {
-        dyn['fontData'] = {
-          totalFonts: (fd['fonts'] as unknown[]).length,
-          issues: fd['issues'],
-          warnings: fd['warnings'],
+      const fonts = page.fontData['fonts'] as unknown[] | undefined;
+      if (fonts) {
+        page.fontData = {
+          totalFonts: fonts.length,
+          issues: page.fontData['issues'],
+          warnings: page.fontData['warnings'],
         };
       }
     }
 
-    // Strip compression data
-    if (page.compressionData) {
-      const cd = page.compressionData as unknown as Record<string, unknown>;
-      if (cd['resources']) {
-        dyn['compressionData'] = {
-          issues: cd['issues'],
-          warnings: cd['warnings'],
-        };
-      }
+    // Strip compression data to issues only
+    if (page.compressionData?.resources) {
+      page.compressionData = {
+        issues: page.compressionData.issues,
+        warnings: page.compressionData.warnings,
+      };
     }
 
     // Strip image optimization data (preserve fields for reports)
-    if (page.imageOptimization) {
-      const io = page.imageOptimization as unknown as Record<string, unknown>;
-      if (io['images']) {
-        dyn['imageOptimization'] = {
-          totalImages: (io['images'] as unknown[]).length,
-          withLazyLoading: io['withLazyLoading'],
-          modernFormats: io['modernFormats'],
-          legacyFormats: io['legacyFormats'],
-          totalImageSize: io['totalImageSize'],
-          issues: io['issues'],
-          warnings: io['warnings'],
-        };
-      }
+    if (page.imageOptimization?.images) {
+      page.imageOptimization = {
+        totalImages: page.imageOptimization.images.length,
+        withLazyLoading: page.imageOptimization.withLazyLoading,
+        modernFormats: page.imageOptimization.modernFormats,
+        legacyFormats: page.imageOptimization.legacyFormats,
+        totalImageSize: page.imageOptimization.totalImageSize,
+        issues: page.imageOptimization.issues,
+        warnings: page.imageOptimization.warnings,
+      };
     }
 
-    // Strip console analysis
-    if (page.consoleAnalysis) {
-      const ca = page.consoleAnalysis as unknown as Record<string, unknown>;
-      if (ca['errors']) {
-        dyn['consoleAnalysis'] = {
-          errorCount: (ca['errors'] as unknown[])?.length || 0,
-          warningCount: (ca['warnings'] as unknown[])?.length || 0,
-          issues: ca['issues'],
-        };
-      }
+    // Strip console analysis to counts
+    if (page.consoleAnalysis?.errors) {
+      page.consoleAnalysis = {
+        errorCount: page.consoleAnalysis.errors.length,
+        warningCount: (page.consoleAnalysis.warnings as unknown[] | undefined)?.length ?? 0,
+        issues: page.consoleAnalysis.issues,
+      };
     }
 
     // Strip form data (preserve accessibilityScore for score-calculator)
-    if (page.formData) {
-      const form = page.formData as unknown as Record<string, unknown>;
-      if (form['forms']) {
-        dyn['formData'] = {
-          formCount: (form['forms'] as unknown[]).length,
-          accessibilityScore: form['accessibilityScore'],
-          issues: form['issues'],
-          warnings: form['warnings'],
-        };
-      }
+    if (page.formData?.forms) {
+      page.formData = {
+        formCount: page.formData.forms.length,
+        accessibilityScore: page.formData.accessibilityScore,
+        issues: page.formData.issues,
+        warnings: page.formData.warnings,
+      };
     }
 
     // Strip resource optimization (preserve fields for reports)
-    if (page.resourceOptimization) {
-      const ro = page.resourceOptimization as unknown as Record<string, unknown>;
-      if (ro['renderBlockingResources']) {
-        dyn['resourceOptimization'] = {
-          renderBlockingCount: (ro['renderBlockingResources'] as unknown[])?.length || 0,
-          renderBlocking: ro['renderBlocking'],
-          compression: ro['compression'],
-          minification: ro['minification'],
-          issues: ro['issues'],
-          warnings: ro['warnings'],
-        };
-      }
+    if (page.resourceOptimization?.renderBlockingResources) {
+      page.resourceOptimization = {
+        renderBlockingCount: page.resourceOptimization.renderBlockingResources.length,
+        renderBlocking: page.resourceOptimization.renderBlocking,
+        compression: page.resourceOptimization.compression,
+        minification: page.resourceOptimization.minification,
+        issues: page.resourceOptimization.issues,
+        warnings: page.resourceOptimization.warnings,
+      };
     }
 
-    // Strip headings (preserve h3-h6 counts for pages-table)
-    if (page.headings) {
-      const h = page.headings as unknown as Record<string, unknown>;
-      if (h['h1'] && Array.isArray(h['h1'])) {
-        dyn['headings'] = {
-          h1Count: (h['h1'] as unknown[]).length,
-          h2Count: (h['h2'] as unknown[])?.length || 0,
-          h3Count: (h['h3'] as unknown[])?.length || 0,
-          h4Count: (h['h4'] as unknown[])?.length || 0,
-          h5Count: (h['h5'] as unknown[])?.length || 0,
-          h6Count: (h['h6'] as unknown[])?.length || 0,
-          h1: (h['h1'] as string[]).map((hx) => (typeof hx === 'string' ? hx.substring(0, 100) : hx)),
-          issues: h['issues'],
-          warnings: h['warnings'],
-        };
-      }
+    // Strip headings (preserve counts for pages-table)
+    if (page.headings?.h1) {
+      page.headings = {
+        h1Count: page.headings.h1.length,
+        h2Count: page.headings.h2?.length ?? 0,
+        h3Count: page.headings.h3?.length ?? 0,
+        h4Count: page.headings.h4?.length ?? 0,
+        h5Count: page.headings.h5?.length ?? 0,
+        h6Count: page.headings.h6?.length ?? 0,
+        h1: page.headings.h1.map((h) => (typeof h === 'string' ? h.substring(0, 100) : h)),
+        issues: page.headings.issues,
+        warnings: page.headings.warnings,
+      };
     }
 
     // Strip accessibility data (preserve a11yScore for score-calculator)
-    if (page.accessibility) {
-      const acc = page.accessibility as unknown as Record<string, unknown>;
-      if (acc['violations']) {
-        dyn['accessibility'] = {
-          a11yScore: acc['a11yScore'],
-          violationCount: (acc['violations'] as unknown[])?.length || 0,
-          issues: acc['issues'],
-          warnings: acc['warnings'],
-        };
-      }
+    if (page.accessibility?.violations) {
+      page.accessibility = {
+        a11yScore: page.accessibility.a11yScore,
+        violationCount: page.accessibility.violations.length,
+        issues: page.accessibility.issues,
+        warnings: page.accessibility.warnings,
+      };
     }
 
     // Strip caching data (preserve cacheScore, CDN info for reports)
-    if (page.caching) {
-      const cach = page.caching as unknown as Record<string, unknown>;
-      if (cach['resources']) {
-        dyn['caching'] = {
-          cacheScore: cach['cacheScore'],
-          cachedCount: (cach['cachedCount'] as number) || 0,
-          uncachedCount: (cach['uncachedCount'] as number) || 0,
-          hasCDN: cach['hasCDN'],
-          cdnProvider: cach['cdnProvider'],
-          hasServiceWorker: cach['hasServiceWorker'],
-          staticCached: cach['staticCached'],
-          staticUncached: cach['staticUncached'],
-          issues: cach['issues'],
-          warnings: cach['warnings'],
-        };
-      }
+    if (page.caching?.resources) {
+      page.caching = {
+        cacheScore: page.caching.cacheScore,
+        cachedCount: page.caching.cachedCount ?? 0,
+        uncachedCount: page.caching.uncachedCount ?? 0,
+        hasCDN: page.caching.hasCDN,
+        cdnProvider: page.caching.cdnProvider,
+        hasServiceWorker: page.caching.hasServiceWorker,
+        staticCached: page.caching.staticCached,
+        staticUncached: page.caching.staticUncached,
+        issues: page.caching.issues,
+        warnings: page.caching.warnings,
+      };
     }
 
-    // Strip media data
-    if (page.mediaData) {
-      const med = page.mediaData as unknown as Record<string, unknown>;
-      if (med['videos'] || med['audios']) {
-        dyn['mediaData'] = {
-          videoCount: (med['videos'] as unknown[])?.length || 0,
-          audioCount: (med['audios'] as unknown[])?.length || 0,
-          issues: med['issues'],
-          warnings: med['warnings'],
-        };
-      }
+    // Strip media data to counts
+    if (page.mediaData?.videos || page.mediaData?.audios) {
+      page.mediaData = {
+        videoCount: page.mediaData.videos?.length ?? 0,
+        audioCount: page.mediaData.audios?.length ?? 0,
+        issues: page.mediaData.issues,
+        warnings: page.mediaData.warnings,
+      };
     }
 
-    // Strip web component data
-    if (page.webComponentData) {
-      const wcd = page.webComponentData as unknown as Record<string, unknown>;
-      if (wcd['components']) {
-        dyn['webComponentData'] = {
-          componentCount: (wcd['components'] as unknown[])?.length || 0,
-          issues: wcd['issues'],
-          warnings: wcd['warnings'],
-        };
-      }
+    // Strip web component data to count
+    if (page.webComponentData?.components) {
+      page.webComponentData = {
+        componentCount: page.webComponentData.components.length,
+        issues: page.webComponentData.issues,
+        warnings: page.webComponentData.warnings,
+      };
     }
 
-    // Strip above-fold data
-    if (page.aboveFoldData) {
-      const afd = page.aboveFoldData as unknown as Record<string, unknown>;
-      if (afd['aboveFoldElements']) {
-        dyn['aboveFoldData'] = {
-          lcpInViewport: afd['lcpInViewport'],
-          renderBlockingResources: afd['renderBlockingResources'],
-          aboveFoldImageSize: afd['aboveFoldImageSize'],
-          issues: afd['issues'],
-          warnings: afd['warnings'],
-        };
-      }
+    // Strip above-fold data to key metrics
+    if (page.aboveFoldData?.aboveFoldElements) {
+      page.aboveFoldData = {
+        lcpInViewport: page.aboveFoldData.lcpInViewport,
+        renderBlockingResources: page.aboveFoldData.renderBlockingResources,
+        aboveFoldImageSize: page.aboveFoldData.aboveFoldImageSize,
+        issues: page.aboveFoldData.issues,
+        warnings: page.aboveFoldData.warnings,
+      };
     }
 
-    // Strip anchor text data
-    if (page.anchorTextData) {
-      const atd = page.anchorTextData as unknown as Record<string, unknown>;
-      if (atd['anchors']) {
-        dyn['anchorTextData'] = {
-          anchorCount: (atd['anchors'] as unknown[])?.length || 0,
-          issues: atd['issues'],
-          warnings: atd['warnings'],
-        };
-      }
+    // Strip anchor text data to count
+    if (page.anchorTextData?.anchors) {
+      page.anchorTextData = {
+        anchorCount: page.anchorTextData.anchors.length,
+        issues: page.anchorTextData.issues,
+        warnings: page.anchorTextData.warnings,
+      };
     }
 
-    // Strip external links data
-    if (page.externalLinksData) {
-      const eld = page.externalLinksData as unknown as Record<string, unknown>;
-      if (eld['links']) {
-        dyn['externalLinksData'] = {
-          externalLinkCount: (eld['links'] as unknown[])?.length || 0,
-          issues: eld['issues'],
-          warnings: eld['warnings'],
-        };
-      }
+    // Strip external links data to count
+    if (page.externalLinksData?.links) {
+      page.externalLinksData = {
+        externalLinkCount: page.externalLinksData.links.length,
+        issues: page.externalLinksData.issues,
+        warnings: page.externalLinksData.warnings,
+      };
     }
 
     // Strip meta array (metaMap is sufficient)
     if (Array.isArray(page.meta) && page.metaMap) {
-      delete dyn['meta'];
+      delete page.meta;
     }
 
-    // Strip URL analysis
-    if (page.urlAnalysis) {
-      const ua = page.urlAnalysis as unknown as Record<string, unknown>;
-      if (ua['components']) {
-        dyn['urlAnalysis'] = {
-          depth: ua['depth'],
-          length: ua['length'],
-          hasParameters: ua['hasParameters'],
-          issues: ua['issues'],
-        };
-      }
+    // Strip URL analysis to key fields
+    if (page.urlAnalysis?.components) {
+      page.urlAnalysis = {
+        depth: page.urlAnalysis.depth,
+        length: page.urlAnalysis.length,
+        hasParameters: page.urlAnalysis.hasParameters,
+        issues: page.urlAnalysis.issues,
+      };
     }
 
     // Strip response object (headers are large and rarely used)
     if (page.response?.headers) {
-      delete dyn['response'];
+      delete page.response;
     }
 
     // Strip redirect chain (keep only count and final status)
     if (page.redirectChain && Array.isArray(page.redirectChain)) {
-      // redirectCount should already be set correctly (length - 1) by crawler-engine
-      dyn['redirectCount'] = page.redirectCount ?? Math.max(0, page.redirectChain.length - 1);
-      dyn['hasRedirects'] = page.redirectChain.length > 0;
-      delete dyn['redirectChain'];
+      page.redirectCount = page.redirectCount ?? Math.max(0, page.redirectChain.length - 1);
+      page.hasRedirects = page.redirectChain.length > 0;
+      delete page.redirectChain;
     }
 
     // Strip security details (keep score and issue counts)
     if (page.security) {
-      const sec = page.security as unknown as Record<string, unknown>;
-      dyn['security'] = {
-        securityScore: sec['securityScore'],
-        missingHeaders: (sec['missingHeaders'] as unknown[] | undefined)?.slice(0, 5),
-        mixedContent: sec['mixedContent'],
-        insecureCookies: sec['insecureCookies'],
-        issues: (sec['issues'] as unknown[] | undefined)?.slice(0, 10),
-        warnings: (sec['warnings'] as unknown[] | undefined)?.slice(0, 10),
+      page.security = {
+        isHttps: page.security.isHttps,
+        headers: {},
+        securityScore: page.security.securityScore,
+        missingHeaders: page.security.missingHeaders?.slice(0, 5),
+        mixedContent: page.security.mixedContent,
+        insecureCookies: page.security.insecureCookies,
+        issues: page.security.issues.slice(0, 10),
       };
     }
 
-    // Limit issues/warnings arrays on all analyzers
-    const limitIssuesWarnings = (obj: { issues?: unknown[]; warnings?: unknown[]; [key: string]: unknown }) => {
-      if (obj.issues && Array.isArray(obj.issues)) {
-        obj.issues = obj.issues.slice(0, 20);
-      }
-      if (obj.warnings && Array.isArray(obj.warnings)) {
-        obj.warnings = obj.warnings.slice(0, 20);
-      }
+    // Limit issues/warnings arrays on all analyzer outputs
+    const limitArrays = (obj: { issues?: unknown[]; warnings?: unknown[] }) => {
+      if (obj.issues && obj.issues.length > 20) obj.issues = obj.issues.slice(0, 20);
+      if (obj.warnings && obj.warnings.length > 20) obj.warnings = obj.warnings.slice(0, 20);
     };
 
-    // Apply limits to all analyzer outputs
-    [
-      'linkAnalysis',
-      'accessibility',
-      'caching',
-      'contentQuality',
-      'imageOptimization',
-      'resourceOptimization',
-      'structuredData',
-      'headings',
-      'internationalSEO',
-      'thirdPartyData',
-      'timingData',
-      'criticalPathData',
-      'fontData',
-      'compressionData',
-      'consoleAnalysis',
-      'formData',
-      'mediaData',
-      'webComponentData',
-      'aboveFoldData',
-      'anchorTextData',
-      'externalLinksData',
-    ].forEach((key) => {
-      const val = dyn[key];
-      if (val && typeof val === 'object') {
-        limitIssuesWarnings(val as { issues?: unknown[]; warnings?: unknown[]; [key: string]: unknown });
-      }
-    });
+    const analyzerFields = [
+      page.linkAnalysis, page.accessibility, page.caching,
+      page.contentQuality, page.imageOptimization, page.resourceOptimization,
+      page.structuredData, page.headings, page.internationalSEO,
+      page.thirdPartyData, page.timingData, page.criticalPathData,
+      page.fontData as { issues?: unknown[]; warnings?: unknown[] } | undefined,
+      page.compressionData, page.consoleAnalysis, page.formData,
+      page.mediaData, page.webComponentData, page.aboveFoldData,
+      page.anchorTextData, page.externalLinksData,
+    ];
+    for (const field of analyzerFields) {
+      if (field) limitArrays(field);
+    }
 
     return page;
   }

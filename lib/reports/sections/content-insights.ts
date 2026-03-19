@@ -323,7 +323,9 @@ function getPageRankSection(pages: PageInfo[]) {
         shortUrl = p.url;
       }
       if (shortUrl.length > 50) shortUrl = '...' + shortUrl.slice(-47);
-      const barWidth = Math.round((p.internalPageRank / top10[0].internalPageRank) * 100);
+      const prVal = p.internalPageRank ?? 0;
+      const topVal = top10[0].internalPageRank ?? 0;
+      const barWidth = topVal > 0 ? Math.round((prVal / topVal) * 100) : 0;
       return `
       <tr>
         <td style="padding: 6px 8px; font-size: 12px; color: #9ca3af;">${i + 1}</td>
@@ -333,7 +335,7 @@ function getPageRankSection(pages: PageInfo[]) {
             <div style="flex: 1; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
               <div style="width: ${barWidth}%; height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 4px;"></div>
             </div>
-            <span style="font-size: 11px; color: #6b7280; min-width: 40px;">${(p.internalPageRank * 100).toFixed(1)}</span>
+            <span style="font-size: 11px; color: #6b7280; min-width: 40px;">${(prVal * 100).toFixed(1)}</span>
           </div>
         </td>
       </tr>`;
@@ -349,7 +351,7 @@ function getPageRankSection(pages: PageInfo[]) {
         shortUrl = p.url;
       }
       if (shortUrl.length > 40) shortUrl = '...' + shortUrl.slice(-37);
-      return `<tr><td style="padding: 4px 8px; font-size: 12px; color: #9ca3af;">${ranked.length - i}</td><td style="padding: 4px 8px; font-size: 12px;"><a href="${escapeHtml(p.url)}" target="_blank" style="color: #6b7280;">${escapeHtml(shortUrl)}</a></td><td style="padding: 4px 8px; font-size: 11px; color: #ef4444;">${(p.internalPageRank * 100).toFixed(2)}</td></tr>`;
+      return `<tr><td style="padding: 4px 8px; font-size: 12px; color: #9ca3af;">${ranked.length - i}</td><td style="padding: 4px 8px; font-size: 12px;"><a href="${escapeHtml(p.url)}" target="_blank" style="color: #6b7280;">${escapeHtml(shortUrl)}</a></td><td style="padding: 4px 8px; font-size: 11px; color: #ef4444;">${((p.internalPageRank ?? 0) * 100).toFixed(2)}</td></tr>`;
     })
     .join('');
 
@@ -371,17 +373,19 @@ function getPageRankSection(pages: PageInfo[]) {
 }
 
 function getContentSimilaritySection(pages: PageInfo[]) {
-  const withSimilarity = pages.filter((p) => p.contentSimilarity?.groupSize > 1);
+  const withSimilarity = pages.filter((p) => ((p.contentSimilarity?.groupSize as number) ?? 0) > 1);
   if (withSimilarity.length === 0) return '';
 
   // Group by similarity groups
   const groups: Record<string, { urls: string[]; size: number }> = {};
   for (const page of withSimilarity) {
-    const key = [page.url, ...(page.contentSimilarity.similarPages ?? [])].sort().join('|');
+    const cs = page.contentSimilarity as Record<string, unknown>;
+    const similarPages = (cs.similarPages ?? []) as string[];
+    const key = [page.url, ...similarPages].sort().join('|');
     if (!groups[key]) {
       groups[key] = {
-        urls: [page.url, ...(page.contentSimilarity.similarPages ?? [])],
-        size: page.contentSimilarity.groupSize,
+        urls: [page.url, ...similarPages],
+        size: cs.groupSize as number,
       };
     }
   }

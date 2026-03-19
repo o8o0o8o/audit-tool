@@ -416,7 +416,7 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
       return {
         languageMismatches: pArr.filter((p) => p.languageDetection?.match === false).length,
         brokenOutboundLinks: pArr.reduce((s: number, p) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0),
-        nearDuplicatePages: pArr.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length,
+        nearDuplicatePages: pArr.filter((p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0).length,
       };
     })(),
   };
@@ -451,7 +451,7 @@ function getInsightLines(pagesArray: PageInfo[]) {
   }
 
   // Near-duplicate / similar content
-  const similarPages = pagesArray.filter((p) => p.contentSimilarity?.similarPages?.length > 0).length;
+  const similarPages = pagesArray.filter((p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0).length;
   if (similarPages > 0) {
     lines.push(`${C.YELLOW}📄${C.RESET} ${similarPages} page(s) with near-duplicate content`);
   }
@@ -459,10 +459,10 @@ function getInsightLines(pagesArray: PageInfo[]) {
   // PageRank highlights (top 3 highest)
   const rankedPages = pagesArray
     .filter((p) => p.internalPageRank != null)
-    .sort((a, b) => b.internalPageRank - a.internalPageRank);
+    .sort((a, b) => (b.internalPageRank ?? 0) - (a.internalPageRank ?? 0));
   if (rankedPages.length > 0) {
-    const topRank = rankedPages[0].internalPageRank;
-    const lowRankCount = rankedPages.filter((p) => p.internalPageRank < topRank * 0.1).length;
+    const topRank = rankedPages[0].internalPageRank ?? 0;
+    const lowRankCount = rankedPages.filter((p) => (p.internalPageRank ?? 0) < topRank * 0.1).length;
     if (lowRankCount > 0) {
       lines.push(`${C.DIM}📊${C.RESET} ${lowRankCount} page(s) with very low internal PageRank`);
     }

@@ -82,10 +82,13 @@ class PWAAnalyzer {
     const manifestLink = pageData.manifest ?? pageData.webManifest;
     if (manifestLink) {
       info.hasManifest = true;
-      info.manifestUrl = typeof manifestLink === 'string' ? manifestLink : manifestLink.href;
+      info.manifestUrl = typeof manifestLink === 'string'
+        ? manifestLink
+        : (manifestLink as { url?: string }).url ?? null;
 
       // Analyze manifest content if available
-      const manifestContent = pageData.manifestContent ?? manifestLink.content;
+      const manifestContent = pageData.manifestContent ??
+        (typeof manifestLink === 'object' && manifestLink !== null ? (manifestLink as { content?: Record<string, unknown> }).content : undefined);
       if (manifestContent) {
         this.analyzeManifest(manifestContent, info, issues, warnings);
       } else {
@@ -105,7 +108,7 @@ class PWAAnalyzer {
     }
 
     // Check for service worker
-    if (pageData.serviceWorker || pageData.hasServiceWorker) {
+    if (pageData.serviceWorker) {
       info.hasServiceWorker = true;
       info.serviceWorkerScope = pageData.serviceWorkerScope ?? '/';
 
@@ -135,7 +138,7 @@ class PWAAnalyzer {
     }
 
     // Check for Apple touch icon
-    if (pageData.appleTouchIcon || pageData.icons?.appleTouchIcon) {
+    if (pageData.appleTouchIcon) {
       info.hasAppleTouchIcon = true;
     } else {
       warnings.push({
@@ -337,11 +340,11 @@ class PWAAnalyzer {
       if (pageData.manifest || pageData.webManifest) {
         stats.pagesWithManifest++;
         const manifestUrl =
-          typeof pageData.manifest === 'string' ? pageData.manifest : (pageData.manifest?.href ?? pageData.webManifest);
+          typeof pageData.manifest === 'string' ? pageData.manifest : ((pageData.manifest as { url?: string })?.url ?? pageData.webManifest);
         if (manifestUrl) stats.manifestUrls.add(manifestUrl);
       }
 
-      if (pageData.serviceWorker || pageData.hasServiceWorker) {
+      if (pageData.serviceWorker) {
         stats.pagesWithServiceWorker++;
         if (pageData.serviceWorkerScope) {
           stats.serviceWorkerScopes.add(pageData.serviceWorkerScope);

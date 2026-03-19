@@ -85,7 +85,7 @@ class AboveFoldAnalyzer {
     };
 
     // Analyze LCP element position
-    const lcpRect = pageData.lcpRect ?? pageData.vitals?.lcpRect;
+    const lcpRect = pageData.lcpRect ?? (pageData.vitals?.lcpRect as typeof pageData.lcpRect);
 
     if (lcpRect) {
       info.lcpInViewport = this.isInViewport(lcpRect, info.viewport);
@@ -214,11 +214,11 @@ class AboveFoldAnalyzer {
     // Analyze CTA buttons above fold
     const ctas = pageData.ctas ?? pageData.buttons ?? [];
     for (const cta of ctas) {
-      const rect = cta.rect ?? cta.boundingRect;
-      if (rect && this.isInViewport(rect, info.viewport)) {
+      const rect = cta.rect;
+      if (rect && this.isInViewport(rect as { top: number; bottom: number; left: number; right: number }, info.viewport)) {
         info.aboveFoldElements.cta.push({
-          text: cta.text,
-          type: cta.type,
+          text: cta.text ?? '',
+          type: cta.type ?? '',
         });
       }
     }

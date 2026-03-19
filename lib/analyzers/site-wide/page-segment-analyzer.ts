@@ -128,7 +128,7 @@ class PageSegmentAnalyzer {
       segment.totalWordCount = (segment.totalWordCount ?? 0) + wordCount;
 
       // Aggregate score
-      const score = page.score?.overall ?? 0;
+      const score = page.score ?? 0;
       segment.totalScore = (segment.totalScore ?? 0) + score;
 
       // Count issues
@@ -231,7 +231,7 @@ class PageSegmentAnalyzer {
     if (page.indexability?.issues) count += page.indexability.issues.length;
     if (page.accessibility?.issues) count += page.accessibility.issues.length;
     if (page.security?.issues) count += page.security.issues.length;
-    if (page.seo?.issues) count += page.seo.issues.length;
+    if (Array.isArray(page.seo?.issues)) count += (page.seo!.issues as unknown[]).length;
 
     return count;
   }

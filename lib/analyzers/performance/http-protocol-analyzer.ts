@@ -31,9 +31,9 @@ class HTTPProtocolAnalyzer {
     };
 
     // Get protocol from page data
-    const protocol = pageData.protocol ?? pageData.httpVersion ?? this.detectProtocol(pageData);
-    info.protocol = protocol;
-    info.protocolVersion = this.parseProtocolVersion(protocol);
+    const protocol = String(pageData.protocol ?? pageData.httpVersion ?? this.detectProtocol(pageData) ?? '');
+    info.protocol = protocol || null;
+    info.protocolVersion = this.parseProtocolVersion(protocol || null);
 
     // Check Alt-Svc header for HTTP/3 support
     const altSvc = pageData.headers?.['alt-svc'] ?? pageData.altSvc;
@@ -47,7 +47,7 @@ class HTTPProtocolAnalyzer {
     // Analyze resource protocols
     const resources = pageData.resources ?? [];
     for (const resource of resources) {
-      const resourceProtocol = resource.protocol ?? resource.httpVersion ?? 'unknown';
+      const resourceProtocol = String(resource.protocol ?? 'unknown');
       if (!info.resourceProtocols[resourceProtocol]) {
         info.resourceProtocols[resourceProtocol] = 0;
       }
@@ -119,15 +119,15 @@ class HTTPProtocolAnalyzer {
    * @param {object} pageData
    * @returns {string}
    */
-  static detectProtocol(pageData: PageInfo) {
+  static detectProtocol(pageData: PageInfo): string {
     // Check various sources
     if ((pageData.response as { protocol?: string })?.protocol)
       return (pageData.response as { protocol?: string }).protocol!;
-    if (pageData.timing?.protocol) return pageData.timing.protocol;
+    if (pageData.timing?.protocol) return String(pageData.timing.protocol);
 
     // Check performance entries
     const perfEntry = pageData.performanceEntry ?? pageData.navigationTiming;
-    if (perfEntry?.nextHopProtocol) return perfEntry.nextHopProtocol;
+    if (perfEntry?.nextHopProtocol) return String(perfEntry.nextHopProtocol);
 
     return 'unknown';
   }
@@ -217,8 +217,8 @@ class HTTPProtocolAnalyzer {
     for (const [_url, pageData] of Object.entries(pages)) {
       stats.pagesAnalyzed++;
 
-      const protocol = pageData.protocol ?? pageData.httpVersion ?? this.detectProtocol(pageData);
-      const version = this.parseProtocolVersion(protocol);
+      const protocol = String(pageData.protocol ?? pageData.httpVersion ?? this.detectProtocol(pageData) ?? '');
+      const version = this.parseProtocolVersion(protocol || null);
 
       // Count protocols
       const protocolKey = version ? `HTTP/${version}` : 'Unknown';

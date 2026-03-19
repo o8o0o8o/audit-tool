@@ -346,7 +346,7 @@ function getSignalCategorySection(categoryKey: string, pageData: PageInfo): stri
   html += `<div class="signal-category-grid">`;
 
   for (const signalKey of category.signals) {
-    const value = getNestedValue(pageData, signalKey);
+    const value = getNestedValue(pageData as unknown as Record<string, unknown>, signalKey);
     if (value !== undefined) {
       html += getSignalCard(signalKey, value);
     }

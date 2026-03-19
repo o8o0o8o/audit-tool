@@ -251,9 +251,9 @@ function createPagesExportData(jsonData: Record<string, unknown>) {
 
       pageSize: d.totalResponseSize ? (d.totalResponseSize / (1024 * 1024)).toFixed(2) : '',
 
-      requests: d.totalNumberOfRequests ?? d.numberOfRequests ?? '',
+      requests: d.totalNumberOfRequests ?? '',
 
-      hasErrors: (d.status ?? 0) >= 400 || (d.errors?.length ?? 0) > 0 ? 'Yes' : 'No',
+      hasErrors: (d.status ?? 0) >= 400 || d.error ? 'Yes' : 'No',
 
       loadTime: d.loadEvent ?? '',
     };
@@ -2777,7 +2777,7 @@ function getScripts(data: ReportSectionData) {
                       var seg = '/' + (p[0] || '');
                       if (!groups[seg]) groups[seg] = [];
                       groups[seg].push(row);
-                  } catch(e) {}
+                  } catch(e) { /* invalid URL in href — skip row */ }
               });
 
               // Insert group headers and reorder

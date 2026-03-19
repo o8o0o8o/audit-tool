@@ -640,9 +640,9 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   if (Array.isArray(imagesArr)) {
     pageData.imagesCount = imagesArr.length;
     pageData.imagesWithoutAltCount = imagesArr.filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '').length;
-    (pageData as Record<string, unknown>).images = imagesArr
+    pageData.images = imagesArr
       .filter((i: { alt?: string }) => !i.alt || i.alt.trim() === '')
-      .slice(0, 10);
+      .slice(0, 10) as unknown as typeof pageData.images;
   }
 
   // 5. Strip vitals detail arrays (keep analysis summaries)
@@ -952,34 +952,35 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
   };
 
   // Apply limits to all analyzer outputs
-  [
-    'linkAnalysis',
-    'accessibility',
-    'caching',
-    'contentQuality',
-    'imageOptimization',
-    'resourceOptimization',
-    'structuredData',
-    'headings',
-    'internationalSEO',
-    'thirdPartyData',
-    'timingData',
-    'criticalPathData',
-    'fontData',
-    'compressionData',
-    'consoleAnalysis',
-    'formData',
-    'mediaData',
-    'webComponentData',
-    'aboveFoldData',
-    'anchorTextData',
-    'externalLinksData',
-    'security',
-  ].forEach((key) => {
-    if (pageData[key]) {
-      limitArrays(pageData[key]);
+  const analyzerFields = [
+    pageData.linkAnalysis,
+    pageData.accessibility,
+    pageData.caching,
+    pageData.contentQuality,
+    pageData.imageOptimization,
+    pageData.resourceOptimization,
+    pageData.structuredData,
+    pageData.headings,
+    pageData.internationalSEO,
+    pageData.thirdPartyData,
+    pageData.timingData,
+    pageData.criticalPathData,
+    pageData.fontData,
+    pageData.compressionData,
+    pageData.consoleAnalysis,
+    pageData.formData,
+    pageData.mediaData,
+    pageData.webComponentData,
+    pageData.aboveFoldData,
+    pageData.anchorTextData,
+    pageData.externalLinksData,
+    pageData.security,
+  ];
+  for (const field of analyzerFields) {
+    if (field && typeof field === 'object') {
+      limitArrays(field as Record<string, unknown>);
     }
-  });
+  }
 }
 
 /**

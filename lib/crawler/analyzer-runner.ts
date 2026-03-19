@@ -333,54 +333,52 @@ export async function runAnalyzers(
     spellingResult,
   ] = browserAnalyzers as AnalyzerResult[];
 
-  // Apply analyzer results to pageData via index access
-  // Typed properties on PageInfo provide autocomplete at read sites;
-  // writes go through the index signature to avoid per-analyzer type assertions
-  const pd = pageData as Record<string, unknown>;
-  pd.headings = headingResult;
-  pd.images = images;
-  pd.linkAnalysis = linkQualityResult;
-  pd.structuredData = structuredDataResult;
-  pd.indexability = indexabilityResult;
-  pd.crawlability = crawlabilityResult;
-  pd.internationalSEO = internationalSEOResult;
-  pd.mobileFriendly = mobileFriendlyResult;
-  pd.accessibility = accessibilityResult;
-  pd.contentQuality = contentQualityResult;
-  pd.formData = (formResult as AnalyzerResult & { formData: unknown }).formData;
-  pd.socialMedia = socialMediaResult;
-  pd.analytics = analyticsResult;
-  pd.security = securityResult;
-  pd.consentData = (consentResult as AnalyzerResult & { consentData: unknown }).consentData;
-  pd.caching = cachingResult;
-  pd.imageOptimization = imageOptimizationResult;
-  pd.resourceOptimization = resourceOptimizationResult;
-  pd.fontData = (fontResult as AnalyzerResult & { fontData: unknown }).fontData;
-  pd.thirdPartyData = (thirdPartyResult as AnalyzerResult & { thirdPartyData: unknown }).thirdPartyData;
-  pd.criticalPathData = (criticalPathResult as AnalyzerResult & { criticalPathData: unknown }).criticalPathData;
-  pd.timingData = (connectionResult as AnalyzerResult & { timingData: unknown }).timingData;
-  pd.paginationData = (paginationResult as AnalyzerResult & { paginationData: unknown }).paginationData;
-  pd.mediaData = (mediaResult as AnalyzerResult & { mediaData: unknown }).mediaData;
-  pd.webComponentData = (webComponentResult as AnalyzerResult & { webComponentData: unknown }).webComponentData;
-  pd.aeo = (aeoResult as AnalyzerResult & { info: unknown }).info;
-  pd.technologies = technologies;
-  pd.ctas = (ctaResult as AnalyzerResult & { ctas: unknown }).ctas;
-  pd.ctaData = {
-    ctas: (ctaResult as AnalyzerResult & { ctas: unknown }).ctas,
+  // Apply analyzer results to pageData with typed assignments
+  // Results come from Promise.allSettled extraction (typed as AnalyzerResult), cast through unknown
+  pageData.headings = headingResult as unknown as typeof pageData.headings;
+  pageData.images = images as unknown as typeof pageData.images;
+  pageData.linkAnalysis = linkQualityResult as unknown as typeof pageData.linkAnalysis;
+  pageData.structuredData = structuredDataResult as unknown as typeof pageData.structuredData;
+  pageData.indexability = indexabilityResult as unknown as typeof pageData.indexability;
+  pageData.crawlability = crawlabilityResult as unknown as typeof pageData.crawlability;
+  pageData.internationalSEO = internationalSEOResult as unknown as typeof pageData.internationalSEO;
+  pageData.mobileFriendly = mobileFriendlyResult as unknown as typeof pageData.mobileFriendly;
+  pageData.accessibility = accessibilityResult as unknown as typeof pageData.accessibility;
+  pageData.contentQuality = contentQualityResult as unknown as typeof pageData.contentQuality;
+  pageData.formData = (formResult as AnalyzerResult & { formData: typeof pageData.formData }).formData;
+  pageData.socialMedia = socialMediaResult as unknown as typeof pageData.socialMedia;
+  pageData.analytics = analyticsResult as unknown as typeof pageData.analytics;
+  pageData.security = securityResult as unknown as typeof pageData.security;
+  pageData.consentData = (consentResult as AnalyzerResult & { consentData: typeof pageData.consentData }).consentData;
+  pageData.caching = cachingResult as unknown as typeof pageData.caching;
+  pageData.imageOptimization = imageOptimizationResult as unknown as typeof pageData.imageOptimization;
+  pageData.resourceOptimization = resourceOptimizationResult as unknown as typeof pageData.resourceOptimization;
+  pageData.fontData = (fontResult as AnalyzerResult & { fontData: typeof pageData.fontData }).fontData;
+  pageData.thirdPartyData = (thirdPartyResult as AnalyzerResult & { thirdPartyData: typeof pageData.thirdPartyData }).thirdPartyData;
+  pageData.criticalPathData = (criticalPathResult as AnalyzerResult & { criticalPathData: typeof pageData.criticalPathData }).criticalPathData;
+  pageData.timingData = (connectionResult as AnalyzerResult & { timingData: typeof pageData.timingData }).timingData;
+  pageData.paginationData = (paginationResult as AnalyzerResult & { paginationData: typeof pageData.paginationData }).paginationData;
+  pageData.mediaData = (mediaResult as AnalyzerResult & { mediaData: typeof pageData.mediaData }).mediaData;
+  pageData.webComponentData = (webComponentResult as AnalyzerResult & { webComponentData: typeof pageData.webComponentData }).webComponentData;
+  pageData.aeo = (aeoResult as AnalyzerResult & { info: typeof pageData.aeo }).info;
+  pageData.technologies = technologies as unknown as typeof pageData.technologies;
+  pageData.ctas = (ctaResult as AnalyzerResult & { ctas: typeof pageData.ctas }).ctas;
+  pageData.ctaData = {
+    ctas: (ctaResult as AnalyzerResult & { ctas: typeof pageData.ctas }).ctas,
     summary: (ctaResult as AnalyzerResult & { summary: unknown }).summary,
-  };
-  pd.languageDetection = (langDetectionResult as AnalyzerResult & { info: unknown }).info;
-  pd.colorContrastData = (colorContrastResult as AnalyzerResult & { info: unknown }).info;
-  pd.reducedMotionData = (reducedMotionResult as AnalyzerResult & { info: unknown }).info;
-  pd.ariaLiveData = (ariaLiveResult as AnalyzerResult & { info: unknown }).info;
-  pd.domComplexityData = (domComplexityResult as AnalyzerResult & { info: unknown }).info;
-  pd.deprecatedHtmlData = (deprecatedHtmlResult as AnalyzerResult & { info: unknown }).info;
-  pd.interstitialData = (interstitialResult as AnalyzerResult & { info: unknown }).info;
-  pd.adDensityData = (adDensityResult as AnalyzerResult & { info: unknown }).info;
-  pd.sriData = (sriResult as AnalyzerResult & { info: unknown }).info;
-  pd.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: unknown }).info;
-  pd.openRedirectData = (openRedirectResult as AnalyzerResult & { info: unknown }).info;
-  pd.spellingData = (spellingResult as AnalyzerResult & { info: unknown }).info;
+  } as typeof pageData.ctaData;
+  pageData.languageDetection = (langDetectionResult as AnalyzerResult & { info: typeof pageData.languageDetection }).info;
+  pageData.colorContrastData = (colorContrastResult as AnalyzerResult & { info: typeof pageData.colorContrastData }).info;
+  pageData.reducedMotionData = (reducedMotionResult as AnalyzerResult & { info: typeof pageData.reducedMotionData }).info;
+  pageData.ariaLiveData = (ariaLiveResult as AnalyzerResult & { info: typeof pageData.ariaLiveData }).info;
+  pageData.domComplexityData = (domComplexityResult as AnalyzerResult & { info: typeof pageData.domComplexityData }).info;
+  pageData.deprecatedHtmlData = (deprecatedHtmlResult as AnalyzerResult & { info: typeof pageData.deprecatedHtmlData }).info;
+  pageData.interstitialData = (interstitialResult as AnalyzerResult & { info: typeof pageData.interstitialData }).info;
+  pageData.adDensityData = (adDensityResult as AnalyzerResult & { info: typeof pageData.adDensityData }).info;
+  pageData.sriData = (sriResult as AnalyzerResult & { info: typeof pageData.sriData }).info;
+  pageData.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: typeof pageData.infoDisclosureData }).info;
+  pageData.openRedirectData = (openRedirectResult as AnalyzerResult & { info: typeof pageData.openRedirectData }).info;
+  pageData.spellingData = (spellingResult as AnalyzerResult & { info: typeof pageData.spellingData }).info;
 
   // Report issues from Group 1
   [
@@ -528,9 +526,9 @@ export async function runAnalyzers(
   pageData.anchorTextData = anchorResult.info as typeof pageData.anchorTextData;
   pageData.externalLinksData = externalLinksResult.info as typeof pageData.externalLinksData;
   pageData.responseHeaderAnalysis = responseHeaderResult.info as typeof pageData.responseHeaderAnalysis;
-  pageData.cspQualityData = cspQualityResult.info;
-  pageData.permissionsPolicyData = permissionsPolicyResult.info;
-  pageData.crossOriginPolicyData = crossOriginResult.info;
+  pageData.cspQualityData = cspQualityResult.info as typeof pageData.cspQualityData;
+  pageData.permissionsPolicyData = permissionsPolicyResult.info as typeof pageData.permissionsPolicyData;
+  pageData.crossOriginPolicyData = crossOriginResult.info as typeof pageData.crossOriginPolicyData;
 
   // Report issues from Group 2
   syncResults.forEach((result) => reportIssues(result as AnalyzerResult, reportIssue));

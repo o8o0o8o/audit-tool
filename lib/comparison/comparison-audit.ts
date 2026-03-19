@@ -448,8 +448,8 @@ class ComparisonAudit {
     const compare = match.comparePage;
 
     // Get performance metrics
-    const originPerf = origin.performanceMetrics ?? {};
-    const comparePerf = compare.performanceMetrics ?? {};
+    const originPerf = (origin.performanceMetrics ?? {}) as Record<string, number>;
+    const comparePerf = (compare.performanceMetrics ?? {}) as Record<string, number>;
 
     // Calculate metric deltas (positive = origin is worse)
     const deltas = {

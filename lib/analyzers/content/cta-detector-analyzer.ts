@@ -37,13 +37,13 @@ class CTADetectorAnalyzer {
       forms.forEach((form) => {
         const rect = form.getBoundingClientRect();
         const action = form.getAttribute('action') ?? '';
-        const method = (form.getAttribute('method') || 'get').toLowerCase();
+        const method = (form.getAttribute('method') ?? 'get').toLowerCase();
         const inputs = form.querySelectorAll('input, textarea, select');
         const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
 
         results.push({
           type: 'form',
-          text: submitBtn?.textContent?.trim() || 'Submit',
+          text: submitBtn?.textContent?.trim() ?? 'Submit',
           action,
           method,
           inputCount: inputs.length,

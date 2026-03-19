@@ -79,8 +79,7 @@ class FormAccessibilityAnalyzer {
 
     // Missing autocomplete (UX and accessibility)
     const autocompleteInputCount = formData.forms.reduce(
-      (sum: number, f: FormAnalysis) =>
-        sum + f.inputs.filter((i: FormInput) => i.shouldHaveAutocomplete).length,
+      (sum: number, f: FormAnalysis) => sum + f.inputs.filter((i: FormInput) => i.shouldHaveAutocomplete).length,
       0,
     );
     if (formData.inputsWithoutAutocomplete > 0 && autocompleteInputCount > 0) {
@@ -156,7 +155,7 @@ class FormAccessibilityAnalyzer {
     const analysis: FormAnalysis = {
       index,
       hasAction: !!form.getAttribute('action'),
-      method: form.getAttribute('method') || 'get',
+      method: form.getAttribute('method') ?? 'get',
       hasSubmitButton: false,
       hasFieldset: form.querySelectorAll('fieldset').length > 0,
       hasRadioGroups: false,
@@ -232,7 +231,7 @@ class FormAccessibilityAnalyzer {
    * @private
    */
   static #analyzeInput(input: ParsedPage, labelMap: Map<string, string>): FormInput {
-    const type = input.getAttribute('type') || (input.tagName === 'TEXTAREA' ? 'textarea' : 'text');
+    const type = input.getAttribute('type') ?? (input.tagName === 'TEXTAREA' ? 'textarea' : 'text');
     const id = input.getAttribute('id');
     const name = input.getAttribute('name');
     const ariaLabel = input.getAttribute('aria-label');

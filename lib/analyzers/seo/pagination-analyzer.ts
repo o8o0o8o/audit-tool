@@ -54,7 +54,7 @@ class PaginationAnalyzer {
       paginationData.hasPagination = true;
       paginationData.type = uiPagination.type;
       paginationData.paginationLinks = uiPagination.links;
-      paginationData.currentPage = paginationData.currentPage || uiPagination.currentPage;
+      paginationData.currentPage = paginationData.currentPage ?? uiPagination.currentPage;
       paginationData.totalPages = uiPagination.totalPages;
     }
 
@@ -71,7 +71,7 @@ class PaginationAnalyzer {
     if (loadMore.detected) {
       paginationData.hasPagination = true;
       paginationData.loadMoreDetected = true;
-      paginationData.type = paginationData.type || 'load-more';
+      paginationData.type = paginationData.type ?? 'load-more';
     }
 
     // 6. Check canonical behavior on paginated pages
@@ -417,7 +417,11 @@ class PaginationAnalyzer {
           pagesWithRelPrevNext++;
         }
 
-        if (page.paginationData.currentPage != null && page.paginationData.currentPage > 1 && !page.paginationData.canonicalPointsToSelf) {
+        if (
+          page.paginationData.currentPage != null &&
+          page.paginationData.currentPage > 1 &&
+          !page.paginationData.canonicalPointsToSelf
+        ) {
           pagesWithBadCanonical++;
         }
       }

@@ -66,8 +66,7 @@ class DNSIPv6Analyzer {
     try {
       // Try resolving NS for the main domain (strip subdomain)
       const parts = info.domain.split('.');
-      const baseDomain =
-        parts.length > 2 ? parts.slice(-2).join('.') : info.domain;
+      const baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : info.domain;
       const ns = await resolveNs(baseDomain);
       info.nameservers = ns.slice(0, 10);
       info.nameserverCount = ns.length;

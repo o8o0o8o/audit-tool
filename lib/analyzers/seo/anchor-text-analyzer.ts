@@ -163,8 +163,8 @@ class AnchorTextAnalyzer {
     let anchorCount = 0;
 
     for (const link of links) {
-      const href = String(link.href || link.url || '');
-      const anchor = (link.text || link.anchor || '').trim();
+      const href = String(link.href ?? link.url ?? '');
+      const anchor = (link.text ?? link.anchor ?? '').trim();
       const hasImage = link.hasImage ?? link.containsImage ?? false;
 
       info.totalLinks++;
@@ -363,8 +363,8 @@ class AnchorTextAnalyzer {
       const links: PageLink[] = Array.isArray(pageData.links) ? (pageData.links as PageLink[]) : [];
 
       for (const link of links) {
-        const href = String(link.href || link.url || '');
-        const anchor = (link.text || link.anchor || '').trim().toLowerCase();
+        const href = String(link.href ?? link.url ?? '');
+        const anchor = (link.text ?? link.anchor ?? '').trim().toLowerCase();
 
         if (!href || !this.isInternalLink(href, origin)) continue;
 

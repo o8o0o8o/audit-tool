@@ -41,7 +41,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
 
   // Pre-calculate performance averages
   const pagesArray = Object.values(pages) as PageInfo[];
-  const pagesWithPerf = pagesArray.filter((p: PageInfo) => p.TTFB || p.LCP || p.CLS);
+  const pagesWithPerf = pagesArray.filter((p: PageInfo) => p.TTFB ?? p.LCP ?? p.CLS);
   const avgTTFB =
     pagesWithPerf.length > 0
       ? Math.round(pagesWithPerf.reduce((sum: number, p: PageInfo) => sum + (p.TTFB ?? 0), 0) / pagesWithPerf.length)
@@ -103,7 +103,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
     'Server Errors (5xx)': 0,
   };
   pagesArray.forEach((page: PageInfo) => {
-    const status = page.status || page.statusCode || 200;
+    const status = page.status ?? page.statusCode ?? 200;
     if (status >= 500) {
       indexability['Server Errors (5xx)']++;
     } else if (status >= 400) {
@@ -238,7 +238,7 @@ function createPagesExportData(jsonData: Record<string, unknown>) {
       h1Count:
         d.headings?.h1?.length ??
         (Array.isArray(d.headings)
-          ? d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count ?? 0
+          ? (d.headings.find((h: { tag: string; count?: number }) => h.tag === 'h1')?.count ?? 0)
           : 0),
 
       canonical: d.canonical ?? '',
@@ -277,11 +277,15 @@ function getScripts(data: ReportSectionData) {
   const chartData = calculateChartData(jsonData);
 
   // Calculate comparison chart data if in comparison mode
-  const compareChartData = isComparison ? calculateChartData(data.comparison!.compareJsonData as Record<string, unknown>) : null;
+  const compareChartData = isComparison
+    ? calculateChartData(data.comparison!.compareJsonData as Record<string, unknown>)
+    : null;
 
   // Create minimal data for CSV exports
   const pagesExportData = createPagesExportData(jsonData);
-  const comparePagesExportData = isComparison ? createPagesExportData(data.comparison!.compareJsonData as Record<string, unknown>) : null;
+  const comparePagesExportData = isComparison
+    ? createPagesExportData(data.comparison!.compareJsonData as Record<string, unknown>)
+    : null;
 
   // Domain labels for comparison mode
   const originLabel = isComparison ? data.comparison!.originDomainName : '';

@@ -104,7 +104,7 @@ class SitemapParser {
               console.log(`  Processing ${nestedUrls.length} URLs from nested sitemap`);
               this.processSitemap(nestedUrls, origin, sitemapPage, result);
             } catch (nestedError: unknown) {
-              const nestedSitemapUrl = sitemap.querySelector('loc')?.innerText?.trim() || 'unknown';
+              const nestedSitemapUrl = sitemap.querySelector('loc')?.innerText?.trim() ?? 'unknown';
               const nestedErr = nestedError as Error;
               const errorMessage = `Error processing nested sitemap ${nestedSitemapUrl}: ${nestedErr.name} ${nestedErr.message}`;
               console.log(`  ${errorMessage}`);
@@ -215,9 +215,7 @@ class SitemapParser {
       // Extract alternate language links
       for (const alternate of site.querySelectorAll('xhtml:link')) {
         if (alternate.attributes.rel === 'alternate') {
-          if (!processedData.alternates) {
-            processedData.alternates = {};
-          }
+          processedData.alternates ??= {};
 
           processedData.alternates[alternate.attributes.href] = {
             hreflang: alternate.attributes.hreflang,

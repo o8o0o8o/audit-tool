@@ -32,7 +32,12 @@ interface ComparisonOptions {
   compareDomainName: string;
 }
 
-function generateHTML(file: string, domainName: string, outputPath: string | null = null, comparisonOpts?: ComparisonOptions) {
+function generateHTML(
+  file: string,
+  domainName: string,
+  outputPath: string | null = null,
+  comparisonOpts?: ComparisonOptions,
+) {
   // Sanitize domain name to prevent injection
   const safeDomainName = sanitizeDomainName(domainName);
   const isComparison = !!comparisonOpts;
@@ -46,7 +51,12 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
 
   try {
     if (isComparison) {
-      reportData = ReportDataProcessor.prepareComparisonReportData(file, comparisonOpts!.compareFile, domainName, comparisonOpts!.compareDomainName);
+      reportData = ReportDataProcessor.prepareComparisonReportData(
+        file,
+        comparisonOpts!.compareFile,
+        domainName,
+        comparisonOpts!.compareDomainName,
+      );
     } else {
       reportData = ReportDataProcessor.prepareReportData(file, domainName);
     }
@@ -287,15 +297,19 @@ function generateHTML(file: string, domainName: string, outputPath: string | nul
               : ''
           }
 
-          ${isComparison && sectionData.comparison ? getComparisonHeader(
-              shortDomain(sectionData.comparison.originDomainName),
-              shortDomain(sectionData.comparison.compareDomainName),
-              {
-                matched: sectionData.comparison.matchedPaths.length,
-                originOnly: sectionData.comparison.originOnlyPaths.length,
-                compareOnly: sectionData.comparison.compareOnlyPaths.length,
-              }
-          ) : ''}
+          ${
+            isComparison && sectionData.comparison
+              ? getComparisonHeader(
+                  shortDomain(sectionData.comparison.originDomainName),
+                  shortDomain(sectionData.comparison.compareDomainName),
+                  {
+                    matched: sectionData.comparison.matchedPaths.length,
+                    originOnly: sectionData.comparison.originOnlyPaths.length,
+                    compareOnly: sectionData.comparison.compareOnlyPaths.length,
+                  },
+                )
+              : ''
+          }
 
           <!-- Section tabs for quick navigation -->
           <div class="section-tabs" id="sectionTabs">
@@ -405,9 +419,9 @@ if (isMainModule || isDirectRun) {
   }
 
   // Parse --compare argument
-  const compareArg = args.find(a => a.startsWith('--compare='));
+  const compareArg = args.find((a) => a.startsWith('--compare='));
   const compareFile = compareArg ? compareArg.substring('--compare='.length) : null;
-  const positionalArgs = args.filter(a => !a.startsWith('--'));
+  const positionalArgs = args.filter((a) => !a.startsWith('--'));
 
   const jsonFile = positionalArgs[0];
   if (!fs.existsSync(jsonFile)) {

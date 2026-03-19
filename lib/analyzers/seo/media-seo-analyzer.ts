@@ -162,7 +162,7 @@ class MediaSEOAnalyzer {
     for (const video of videoElements) {
       const poster = video.getAttribute('poster');
       const src = video.getAttribute('src');
-      const title = video.getAttribute('title') || video.getAttribute('aria-label');
+      const title = video.getAttribute('title') ?? video.getAttribute('aria-label');
       const autoplay = video.hasAttribute('autoplay');
       const muted = video.hasAttribute('muted');
 
@@ -248,7 +248,7 @@ class MediaSEOAnalyzer {
 
     for (const audio of audioElements) {
       const src = audio.getAttribute('src');
-      const title = audio.getAttribute('title') || audio.getAttribute('aria-label');
+      const title = audio.getAttribute('title') ?? audio.getAttribute('aria-label');
 
       // Check for track elements (transcripts)
       const tracks = audio.querySelectorAll('track');

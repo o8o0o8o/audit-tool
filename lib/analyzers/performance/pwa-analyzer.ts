@@ -107,7 +107,7 @@ class PWAAnalyzer {
     // Check for service worker
     if (pageData.serviceWorker || pageData.hasServiceWorker) {
       info.hasServiceWorker = true;
-      info.serviceWorkerScope = pageData.serviceWorkerScope || '/';
+      info.serviceWorkerScope = pageData.serviceWorkerScope ?? '/';
 
       // Check if service worker provides offline support
       if (pageData.serviceWorkerFeatures?.offline) {
@@ -337,7 +337,7 @@ class PWAAnalyzer {
       if (pageData.manifest || pageData.webManifest) {
         stats.pagesWithManifest++;
         const manifestUrl =
-          typeof pageData.manifest === 'string' ? pageData.manifest : pageData.manifest?.href ?? pageData.webManifest;
+          typeof pageData.manifest === 'string' ? pageData.manifest : (pageData.manifest?.href ?? pageData.webManifest);
         if (manifestUrl) stats.manifestUrls.add(manifestUrl);
       }
 

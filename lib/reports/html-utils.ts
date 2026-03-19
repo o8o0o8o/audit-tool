@@ -256,7 +256,7 @@ function getSignalTooltipHtml(signalKey: string, value: unknown): string {
   if (!info) return '';
 
   let html = `<div class="signal-tooltip">`;
-  html += `<div class="signal-name">${info.fullName || info.name}</div>`;
+  html += `<div class="signal-name">${info.fullName ?? info.name}</div>`;
   html += `<div class="signal-description">${info.description}</div>`;
 
   if (info.note) {

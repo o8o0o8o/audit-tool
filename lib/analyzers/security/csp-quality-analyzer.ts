@@ -33,14 +33,9 @@ class CSPQualityAnalyzer {
 
     const headers = pageData.responseHeaders ?? {};
 
-    const cspHeader =
-      headers['content-security-policy'] ||
-      headers['Content-Security-Policy'] ||
-      '';
+    const cspHeader = headers['content-security-policy'] || headers['Content-Security-Policy'] || '';
     const cspReportOnly =
-      headers['content-security-policy-report-only'] ||
-      headers['Content-Security-Policy-Report-Only'] ||
-      '';
+      headers['content-security-policy-report-only'] || headers['Content-Security-Policy-Report-Only'] || '';
 
     info.hasCSP = cspHeader.length > 0;
     info.hasReportOnly = cspReportOnly.length > 0;
@@ -164,7 +159,10 @@ class CSPQualityAnalyzer {
 
   private static parseCSP(header: string): Record<string, string[]> {
     const directives: Record<string, string[]> = {};
-    const parts = header.split(';').map((p) => p.trim()).filter(Boolean);
+    const parts = header
+      .split(';')
+      .map((p) => p.trim())
+      .filter(Boolean);
 
     for (const part of parts) {
       const tokens = part.split(/\s+/);

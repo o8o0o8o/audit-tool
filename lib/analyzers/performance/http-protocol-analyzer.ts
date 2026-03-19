@@ -31,7 +31,7 @@ class HTTPProtocolAnalyzer {
     };
 
     // Get protocol from page data
-    const protocol = pageData.protocol || pageData.httpVersion || this.detectProtocol(pageData);
+    const protocol = pageData.protocol ?? pageData.httpVersion ?? this.detectProtocol(pageData);
     info.protocol = protocol;
     info.protocolVersion = this.parseProtocolVersion(protocol);
 
@@ -47,7 +47,7 @@ class HTTPProtocolAnalyzer {
     // Analyze resource protocols
     const resources = pageData.resources ?? [];
     for (const resource of resources) {
-      const resourceProtocol = resource.protocol || resource.httpVersion || 'unknown';
+      const resourceProtocol = resource.protocol ?? resource.httpVersion ?? 'unknown';
       if (!info.resourceProtocols[resourceProtocol]) {
         info.resourceProtocols[resourceProtocol] = 0;
       }
@@ -217,7 +217,7 @@ class HTTPProtocolAnalyzer {
     for (const [_url, pageData] of Object.entries(pages)) {
       stats.pagesAnalyzed++;
 
-      const protocol = pageData.protocol || pageData.httpVersion || this.detectProtocol(pageData);
+      const protocol = pageData.protocol ?? pageData.httpVersion ?? this.detectProtocol(pageData);
       const version = this.parseProtocolVersion(protocol);
 
       // Count protocols

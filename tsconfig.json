@@ -20,13 +20,6 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": [
-    "**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "audit-results",
-    "coverage"
-  ]
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist", "audit-results", "coverage"]
 }

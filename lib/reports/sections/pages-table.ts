@@ -411,11 +411,11 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
 
   // Handle both old array format and new object format
   const h1Count = Array.isArray(page.headings)
-    ? page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count ?? 0
-    : page.headings?.h1?.length ?? 0;
+    ? (page.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count ?? 0)
+    : (page.headings?.h1?.length ?? 0);
   const h2Count = Array.isArray(page.headings)
-    ? page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count ?? 0
-    : page.headings?.h2?.length ?? 0;
+    ? (page.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count ?? 0)
+    : (page.headings?.h2?.length ?? 0);
 
   // Convert object format to array format for structure check
   const headingsArray: HeadingCount[] | null = Array.isArray(page.headings)
@@ -479,7 +479,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
   const titleWords = (page.title ?? '').toLowerCase();
 
   return `
-    <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment || 'other'}" data-has-errors="${(page.status ?? 0) >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB ?? 0}" data-status="${page.status ?? ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
+    <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment ?? 'other'}" data-has-errors="${(page.status ?? 0) >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB ?? 0}" data-status="${page.status ?? ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
         <td style="text-align: center; color: #9ca3af; font-weight: 500; font-size: 12px;">
             ${index + 1}
         </td>
@@ -487,10 +487,10 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             <a href="${escapeHtml(page.url)}" class="url-link" target="_blank">${escapeHtml(page.url)}</a>
         </td>
         <td style="text-align: center;">
-            <span class="source-badge source-${page.foundIn || 'sitemap'}" title="${page.foundIn === 'discovered' ? (page.discoveredOn ? 'Found on page: ' + escapeHtml(page.discoveredOn) : 'Found through internal links during crawl') : 'Listed in sitemap'}">${page.foundIn === 'discovered' ? 'Link' : 'Sitemap'}</span>
+            <span class="source-badge source-${page.foundIn ?? 'sitemap'}" title="${page.foundIn === 'discovered' ? (page.discoveredOn ? 'Found on page: ' + escapeHtml(page.discoveredOn) : 'Found through internal links during crawl') : 'Listed in sitemap'}">${page.foundIn === 'discovered' ? 'Link' : 'Sitemap'}</span>
         </td>
         <td style="text-align: center;">
-            <span class="segment-badge segment-${page.segment || 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment || 'other')}; color: white;" title="Page segment: ${page.segment || 'other'}">${getSegmentLabel(page.segment || 'other')}</span>
+            <span class="segment-badge segment-${page.segment ?? 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment ?? 'other')}; color: white;" title="Page segment: ${page.segment ?? 'other'}">${getSegmentLabel(page.segment ?? 'other')}</span>
         </td>
         <td class="incoming-links-cell"
             style="color: ${(page.incomingLinksCount ?? 0) > 0 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center; cursor: ${(page.incomingLinksCount ?? 0) > 0 ? 'pointer' : 'default'}; position: relative;"
@@ -511,16 +511,16 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
         <td style="color: ${(page.httpLinksCount ?? 0) > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.httpLinksCount ?? 0) > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
             ${page.httpLinksCount ?? 0}
         </td>
-        <td><span class="status-badge" style="background: ${getStatusColor(page.status ?? 0)};">${page.status || 'N/A'}</span></td>
-        <td class="text-cell" title="${titleTooltip || escapeHtml(page.title || 'No title')}">
+        <td><span class="status-badge" style="background: ${getStatusColor(page.status ?? 0)};">${page.status ?? 'N/A'}</span></td>
+        <td class="text-cell" title="${titleTooltip ?? escapeHtml(page.title ?? 'No title')}">
             <span style="color: ${titleColor}; font-weight: 600;">${titleLength}</span>
             <span style="color: #9ca3af;"> | </span>
-            <span>${escapeHtml(page.title?.substring(0, 40) || 'No title')}${(page.title?.length ?? 0) > 40 ? '...' : ''}</span>
+            <span>${escapeHtml(page.title?.substring(0, 40) ?? 'No title')}${(page.title?.length ?? 0) > 40 ? '...' : ''}</span>
         </td>
-        <td class="text-cell" title="${descTooltip || escapeHtml(page.description || 'No description')}">
+        <td class="text-cell" title="${descTooltip ?? escapeHtml(page.description ?? 'No description')}">
             <span style="color: ${descColor}; font-weight: 600;">${descLength}</span>
             <span style="color: #9ca3af;"> | </span>
-            <span>${escapeHtml(page.description?.substring(0, 40) || 'No description')}${(page.description?.length ?? 0) > 40 ? '...' : ''}</span>
+            <span>${escapeHtml(page.description?.substring(0, 40) ?? 'No description')}${(page.description?.length ?? 0) > 40 ? '...' : ''}</span>
         </td>
         ${
           hasPerformanceMetrics
@@ -573,7 +573,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             ${linksWithoutText}
         </td>
         <td style="color: ${securityScore === null ? '#9ca3af' : securityScore >= 70 ? '#10b981' : securityScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${securityTooltip}">
-            ${securityScore !== null ? securityScore : 'N/A'}
+            ${securityScore ?? 'N/A'}
         </td>
         <td style="color: ${missingSecHeaders === 0 ? '#10b981' : missingSecHeaders <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') ?? '')}">
             ${missingSecHeaders}
@@ -591,7 +591,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             ${inlineScripts}
         </td>
         <td style="color: ${cacheScore === null ? '#9ca3af' : cacheScore >= 70 ? '#10b981' : cacheScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${cachingTooltip}">
-            ${cacheScore !== null ? cacheScore : 'N/A'}
+            ${cacheScore ?? 'N/A'}
         </td>
         <td style="text-align: center;">
             ${
@@ -947,11 +947,11 @@ function getContentQualityCells(page: PageInfo) {
 function getNewInsightCells(page: PageInfo) {
   // Language
   const lang = page.languageDetection;
-  const langDisplay = lang?.detectedLanguage?.toUpperCase() || '—';
+  const langDisplay = lang?.detectedLanguage?.toUpperCase() ?? '—';
   const langMatch = lang?.match;
   const langColor = langMatch === false ? '#ef4444' : langMatch === true ? '#10b981' : '#6b7280';
   const langTitle = lang
-    ? `Detected: ${lang.detectedLanguage || 'unknown'} (${Math.round((lang.detectedConfidence ?? 0) * 100)}% confidence), Declared: ${lang.declaredLanguage || 'none'}`
+    ? `Detected: ${lang.detectedLanguage ?? 'unknown'} (${Math.round((lang.detectedConfidence ?? 0) * 100)}% confidence), Declared: ${lang.declaredLanguage ?? 'none'}`
     : '';
 
   // PageRank
@@ -960,7 +960,7 @@ function getNewInsightCells(page: PageInfo) {
 
   // CTAs
   const ctaCount = page.ctaData?.summary?.total ?? null;
-  const ctaDisplay = ctaCount != null ? ctaCount : '—';
+  const ctaDisplay = ctaCount ?? '—';
 
   // Code coverage
   const jsUnused = page.codeCoverage?.js?.ratio;
@@ -969,13 +969,13 @@ function getNewInsightCells(page: PageInfo) {
 
   // Broken outbound links
   const brokenCount = page.outboundLinkHealth?.broken?.length ?? null;
-  const brokenDisplay = brokenCount != null ? brokenCount : '—';
+  const brokenDisplay = brokenCount ?? '—';
   const brokenColor = (brokenCount ?? 0) > 0 ? '#ef4444' : '#10b981';
 
   // Main content words
   const wcs = page.contentQuality?.wordCountBySection;
-  const mainWords = (wcs && !Array.isArray(wcs)) ? (wcs as Record<string, number>).main ?? null : null;
-  const mainDisplay = mainWords != null ? mainWords : '—';
+  const mainWords = wcs && !Array.isArray(wcs) ? ((wcs as Record<string, number>).main ?? null) : null;
+  const mainDisplay = mainWords ?? '—';
   const mainColor =
     mainWords != null ? (mainWords >= 300 ? '#10b981' : mainWords >= 100 ? '#f59e0b' : '#ef4444') : '#6b7280';
 
@@ -999,11 +999,11 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   if (!p) return null;
 
   const h1Count = Array.isArray(p.headings)
-    ? p.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count ?? 0
-    : p.headings?.h1?.length ?? 0;
+    ? (p.headings.filter((h: HeadingCount) => h.tag === 'h1')[0]?.count ?? 0)
+    : (p.headings?.h1?.length ?? 0);
   const h2Count = Array.isArray(p.headings)
-    ? p.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count ?? 0
-    : p.headings?.h2?.length ?? 0;
+    ? (p.headings.filter((h: HeadingCount) => h.tag === 'h2')[0]?.count ?? 0)
+    : (p.headings?.h2?.length ?? 0);
 
   const headingsArray: HeadingCount[] | null = Array.isArray(p.headings)
     ? p.headings
@@ -1020,9 +1020,9 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray!);
   const missingMeta = getMissingMetaTags(p);
   const alternatesCount = p.alternates?.length ?? 0;
-  const linksWithoutText = (Array.isArray(p.links) ? p.links : []).filter(
-    (link: { text?: string }) => !link.text || link.text.trim() === '',
-  ).length || 0;
+  const linksWithoutText =
+    (Array.isArray(p.links) ? p.links : []).filter((link: { text?: string }) => !link.text || link.text.trim() === '')
+      .length || 0;
 
   // Security
   const securityScore = p.security?.securityScore ?? null;
@@ -1076,14 +1076,14 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
 
   // New insights
   const lang = p.languageDetection;
-  const langDisplay = lang?.detectedLanguage?.toUpperCase() || '—';
+  const langDisplay = lang?.detectedLanguage?.toUpperCase() ?? '—';
   const pr = p.internalPageRank;
   const prDisplay = pr != null ? (pr * 100).toFixed(1) : '—';
   const ctaCount = p.ctaData?.summary?.total ?? null;
   const jsUnused = p.codeCoverage?.js?.ratio;
   const brokenCount = p.outboundLinkHealth?.broken?.length ?? null;
   const pWcs = p.contentQuality?.wordCountBySection;
-  const mainWords = (pWcs && !Array.isArray(pWcs)) ? (pWcs as Record<string, number>).main ?? null : null;
+  const mainWords = pWcs && !Array.isArray(pWcs) ? ((pWcs as Record<string, number>).main ?? null) : null;
 
   const status = (p.status as number) || (p.statusCode as number) || 0;
   const incomingCount = (incomingLinks[p.url]?.length || p.incomingLinksCount) ?? 0;
@@ -1092,26 +1092,61 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const canonicalSymbol = p.canonical ? (p.canonical === p.url ? '=' : '~') : 'x';
 
   return {
-    status, source: p.foundIn === 'discovered' ? 'Link' : 'Sitemap',
-    segment: p.segment || 'other', incomingCount,
-    urlLength: p.urlAnalysis?.length ?? 0, urlDepth: p.urlAnalysis?.depth ?? 0,
-    redirects: p.redirectCount ?? 0, httpLinks: p.httpLinksCount ?? 0,
-    titleLength: p.title?.length ?? 0, descLength: p.description?.length ?? 0,
-    TTFB: p.TTFB, FCP: p.FCP, LCP: p.LCP, CLS: p.CLS, INP: p.INP,
-    pageSize: p.totalResponseSize ?? 0, requests: p.totalNumberOfRequests ?? 0,
-    canonicalSymbol, h1Count, h2Count, hStructure: hasHStructureIssue ? 'x' : '=',
-    missingMeta: missingMeta.length, alternatesCount, linksWithoutText,
-    securityScore, missingSecHeaders, insecureCookies, mixedContent, formsWithoutCSRF, inlineScripts,
-    cacheScore, cdn: hasCDN ? '=' : 'x', cachedStatic, uncachedStatic,
+    status,
+    source: p.foundIn === 'discovered' ? 'Link' : 'Sitemap',
+    segment: p.segment ?? 'other',
+    incomingCount,
+    urlLength: p.urlAnalysis?.length ?? 0,
+    urlDepth: p.urlAnalysis?.depth ?? 0,
+    redirects: p.redirectCount ?? 0,
+    httpLinks: p.httpLinksCount ?? 0,
+    titleLength: p.title?.length ?? 0,
+    descLength: p.description?.length ?? 0,
+    TTFB: p.TTFB,
+    FCP: p.FCP,
+    LCP: p.LCP,
+    CLS: p.CLS,
+    INP: p.INP,
+    pageSize: p.totalResponseSize ?? 0,
+    requests: p.totalNumberOfRequests ?? 0,
+    canonicalSymbol,
+    h1Count,
+    h2Count,
+    hStructure: hasHStructureIssue ? 'x' : '=',
+    missingMeta: missingMeta.length,
+    alternatesCount,
+    linksWithoutText,
+    securityScore,
+    missingSecHeaders,
+    insecureCookies,
+    mixedContent,
+    formsWithoutCSRF,
+    inlineScripts,
+    cacheScore,
+    cdn: hasCDN ? '=' : 'x',
+    cachedStatic,
+    uncachedStatic,
     serviceWorker: hasServiceWorker ? '=' : 'x',
-    totalImages, lazyImages, totalImageSizeKB: Math.round(totalImageSize / 1000),
-    modernFormats, renderBlocking, uncompressed, unminified,
-    a11yScore, aria: ariaInvalid > 0 ? 'x' : ariaValid > 0 ? '=' : '—',
+    totalImages,
+    lazyImages,
+    totalImageSizeKB: Math.round(totalImageSize / 1000),
+    modernFormats,
+    renderBlocking,
+    uncompressed,
+    unminified,
+    a11yScore,
+    aria: ariaInvalid > 0 ? 'x' : ariaValid > 0 ? '=' : '—',
     formLabels: `${inputsWithLabels}/${totalInputs}`,
     landmarks: `${hasMain ? 'M' : ''}${hasNav ? 'N' : ''}${hasHeader ? 'H' : ''}` || '—',
     focusIssues,
-    contentScore, wordCount, textToHtmlRatio, readability, topKeywords: topKeywords || '—',
-    langDisplay, prDisplay, ctaCount: ctaCount != null ? String(ctaCount) : '—',
+    contentScore,
+    wordCount,
+    textToHtmlRatio,
+    readability,
+    topKeywords: topKeywords || '—',
+    langDisplay,
+    prDisplay,
+    ctaCount: ctaCount != null ? String(ctaCount) : '—',
     jsUnused: jsUnused != null ? `${jsUnused}%` : '—',
     brokenLinks: brokenCount != null ? String(brokenCount) : '—',
     mainWords: mainWords != null ? String(mainWords) : '—',
@@ -1156,9 +1191,9 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
       : `<span style="color:#d1d5db;">—</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${s}</span>`;
   };
 
-  const fmtMs = (v: number | undefined) => v ? String(Math.round(v)) : '';
-  const fmtCls = (v: number | undefined) => v !== undefined ? v.toFixed(3) : '';
-  const fmtSize = (v: number | undefined) => v && v > 0 ? formatBytes(v) : '';
+  const fmtMs = (v: number | undefined) => (v ? String(Math.round(v)) : '');
+  const fmtCls = (v: number | undefined) => (v !== undefined ? v.toFixed(3) : '');
+  const fmtSize = (v: number | undefined) => (v && v > 0 ? formatBytes(v) : '');
 
   const td = 'padding:4px 5px;font-size:11px;text-align:center;white-space:nowrap;';
 
@@ -1216,13 +1251,17 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
       <td style="${td}font-weight:600;">${d(ov?.status, cv?.status)}</td>
       <td style="${td}">${d(ov?.titleLength, cv?.titleLength)}</td>
       <td style="${td}">${d(ov?.descLength, cv?.descLength)}</td>
-      ${hasPerf ? `
+      ${
+        hasPerf
+          ? `
       <td style="${td}">${d(fmtMs(ov?.TTFB), fmtMs(cv?.TTFB))}</td>
       <td style="${td}">${d(fmtMs(ov?.FCP), fmtMs(cv?.FCP))}</td>
       <td style="${td}">${d(fmtMs(ov?.LCP), fmtMs(cv?.LCP))}</td>
       <td style="${td}">${d(fmtCls(ov?.CLS), fmtCls(cv?.CLS))}</td>
       <td style="${td}">${d(fmtMs(ov?.INP), fmtMs(cv?.INP))}</td>
-      ` : ''}
+      `
+          : ''
+      }
       <td style="${td}">${d(fmtSize(ov?.pageSize), fmtSize(cv?.pageSize))}</td>
       <td style="${td}">${d(ov?.requests, cv?.requests)}</td>
       <td style="${td}">${dSym(ov?.canonicalSymbol, cv?.canonicalSymbol)}</td>
@@ -1270,42 +1309,61 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
   };
 
   // Build matched rows
-  const matchedRows = comparison.matchedPaths.map((match, idx) => {
-    const o = originByUrl[match.originUrl];
-    const c = compareByUrl[match.compareUrl];
-    if (!o && !c) return '';
-    const ov = extractPageValues(o, originIncoming);
-    const cv = extractPageValues(c, compareIncoming);
-    return buildRow(idx, match.path, o?.url || c?.url || '', 'matched', ov, cv, false, false);
-  }).join('');
+  const matchedRows = comparison.matchedPaths
+    .map((match, idx) => {
+      const o = originByUrl[match.originUrl];
+      const c = compareByUrl[match.compareUrl];
+      if (!o && !c) return '';
+      const ov = extractPageValues(o, originIncoming);
+      const cv = extractPageValues(c, compareIncoming);
+      return buildRow(idx, match.path, o?.url || c?.url || '', 'matched', ov, cv, false, false);
+    })
+    .join('');
 
   // Unmatched rows
   const findPageByPath = (pages: Record<string, PageInfo>, path: string) => {
-    return Object.values(pages).find(p => {
+    return Object.values(pages).find((p) => {
       try {
         const pathname = new URL(p.url).pathname.toLowerCase();
         return pathname.replace(/\/$/, '') === path || pathname === path;
-      } catch { return false; }
+      } catch {
+        return false;
+      }
     });
   };
 
-  const originOnlyRows = comparison.originOnlyPaths.map((path, idx) => {
-    const page = findPageByPath(originByUrl, path);
-    if (!page) return '';
-    const ov = extractPageValues(page, originIncoming);
-    return buildRow(comparison.matchedPaths.length + idx, path, page.url, 'origin-only', ov, null, true, true);
-  }).join('');
+  const originOnlyRows = comparison.originOnlyPaths
+    .map((path, idx) => {
+      const page = findPageByPath(originByUrl, path);
+      if (!page) return '';
+      const ov = extractPageValues(page, originIncoming);
+      return buildRow(comparison.matchedPaths.length + idx, path, page.url, 'origin-only', ov, null, true, true);
+    })
+    .join('');
 
-  const compareOnlyRows = comparison.compareOnlyPaths.map((path, idx) => {
-    const page = findPageByPath(compareByUrl, path);
-    if (!page) return '';
-    const cv = extractPageValues(page, compareIncoming);
-    return buildRow(comparison.matchedPaths.length + comparison.originOnlyPaths.length + idx, path, page.url, 'compare-only', null, cv, true, false);
-  }).join('');
+  const compareOnlyRows = comparison.compareOnlyPaths
+    .map((path, idx) => {
+      const page = findPageByPath(compareByUrl, path);
+      if (!page) return '';
+      const cv = extractPageValues(page, compareIncoming);
+      return buildRow(
+        comparison.matchedPaths.length + comparison.originOnlyPaths.length + idx,
+        path,
+        page.url,
+        'compare-only',
+        null,
+        cv,
+        true,
+        false,
+      );
+    })
+    .join('');
 
-  const totalRows = comparison.matchedPaths.length + comparison.originOnlyPaths.length + comparison.compareOnlyPaths.length;
+  const totalRows =
+    comparison.matchedPaths.length + comparison.originOnlyPaths.length + comparison.compareOnlyPaths.length;
 
-  const thStyle = 'padding:5px 6px;text-align:center;font-size:10px;color:#6b7280;font-weight:600;white-space:nowrap;border-bottom:2px solid #e5e7eb;';
+  const thStyle =
+    'padding:5px 6px;text-align:center;font-size:10px;color:#6b7280;font-weight:600;white-space:nowrap;border-bottom:2px solid #e5e7eb;';
 
   return `
     <div style="margin-bottom: 10px; font-size: 11px; color: #6b7280;">
@@ -1335,13 +1393,17 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
             <th style="${thStyle}">Status</th>
             <th style="${thStyle}">Title</th>
             <th style="${thStyle}">Desc</th>
-            ${hasPerf ? `
+            ${
+              hasPerf
+                ? `
             <th style="${thStyle}">TTFB</th>
             <th style="${thStyle}">FCP</th>
             <th style="${thStyle}">LCP</th>
             <th style="${thStyle}">CLS</th>
             <th style="${thStyle}">INP</th>
-            ` : ''}
+            `
+                : ''
+            }
             <th style="${thStyle}">Size</th>
             <th style="${thStyle}">Requests</th>
             <th style="${thStyle}">Canonical</th>

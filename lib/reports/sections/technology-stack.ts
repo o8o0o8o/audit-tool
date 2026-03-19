@@ -404,17 +404,21 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
     return `<div class="section" id="technology-stack"><h2>🔧 Technology Stack</h2><p style="color: #6b7280; text-align: center; padding: 20px;">No technologies detected.</p></div>`;
   }
 
-  const originNames = new Set(originAgg.technologies.map(t => t.name));
-  const compareNames = new Set(compareAgg.technologies.map(t => t.name));
+  const originNames = new Set(originAgg.technologies.map((t) => t.name));
+  const compareNames = new Set(compareAgg.technologies.map((t) => t.name));
   const allNames = new Set([...originNames, ...compareNames]);
 
-  const onlyOrigin = [...allNames].filter(n => originNames.has(n) && !compareNames.has(n));
-  const onlyCompare = [...allNames].filter(n => !originNames.has(n) && compareNames.has(n));
-  const shared = [...allNames].filter(n => originNames.has(n) && compareNames.has(n));
+  const onlyOrigin = [...allNames].filter((n) => originNames.has(n) && !compareNames.has(n));
+  const onlyCompare = [...allNames].filter((n) => !originNames.has(n) && compareNames.has(n));
+  const shared = [...allNames].filter((n) => originNames.has(n) && compareNames.has(n));
 
-  const renderBadges = (names: string[], style: string) => names.map(name =>
-    `<span style="${style};display:inline-block;padding:4px 10px;border-radius:6px;margin:3px;font-size:12px;font-weight:500;">${escapeHtml(name)}</span>`
-  ).join('');
+  const renderBadges = (names: string[], style: string) =>
+    names
+      .map(
+        (name) =>
+          `<span style="${style};display:inline-block;padding:4px 10px;border-radius:6px;margin:3px;font-size:12px;font-weight:500;">${escapeHtml(name)}</span>`,
+      )
+      .join('');
 
   return `
     <div class="section" id="technology-stack">
@@ -436,23 +440,35 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
       </div>
 
       <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        ${shared.length > 0 ? `
+        ${
+          shared.length > 0
+            ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #374151; margin-bottom: 10px;">Shared Technologies (${shared.length})</h4>
           <div style="display: flex; flex-wrap: wrap;">${renderBadges(shared, 'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb')}</div>
-        </div>` : ''}
+        </div>`
+            : ''
+        }
 
-        ${onlyOrigin.length > 0 ? `
+        ${
+          onlyOrigin.length > 0
+            ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #1d4ed8; margin-bottom: 10px;">Only in ${escapeHtml(originLabel)} (${onlyOrigin.length})</h4>
           <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyOrigin, 'background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd')}</div>
-        </div>` : ''}
+        </div>`
+            : ''
+        }
 
-        ${onlyCompare.length > 0 ? `
+        ${
+          onlyCompare.length > 0
+            ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #7c3aed; margin-bottom: 10px;">Only in ${escapeHtml(compareLabel)} (${onlyCompare.length})</h4>
           <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyCompare, 'background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd')}</div>
-        </div>` : ''}
+        </div>`
+            : ''
+        }
       </div>
     </div>
   `;

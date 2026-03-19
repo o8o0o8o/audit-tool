@@ -390,7 +390,8 @@ class ContentGapAnalyzer {
    * @returns {Object} Serializable clusters object
    */
   static clustersToObject(clusters: Map<string, ClusterData>) {
-    const obj: Record<string, { keywords: string[]; pageCount: number; avgDensity: number | string; pages: string[] }> = {};
+    const obj: Record<string, { keywords: string[]; pageCount: number; avgDensity: number | string; pages: string[] }> =
+      {};
     clusters.forEach((data, topic) => {
       obj[topic] = {
         keywords: data.keywords.slice(0, 10), // Limit for storage

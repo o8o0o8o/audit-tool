@@ -709,17 +709,13 @@ class ScoreCalculator {
         fix: "Review and tighten CSP directives. Remove 'unsafe-inline' and 'unsafe-eval' where possible. Use nonces or hashes instead.",
         example:
           "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-abc123'; style-src 'self' 'unsafe-inline'",
-        resources: [
-          { text: 'CSP Guide', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP' },
-        ],
+        resources: [{ text: 'CSP Guide', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP' }],
       },
       'Color contrast fails WCAG AA': {
         effort: '20 minutes',
         fix: 'Increase contrast between text and background colors. Use a contrast checker tool to verify ratios meet WCAG AA (4.5:1 for normal text, 3:1 for large text).',
         example: 'Change light gray text (#999) on white to darker gray (#595959) for 7:1 ratio.',
-        resources: [
-          { text: 'Contrast Checker', url: 'https://webaim.org/resources/contrastchecker/' },
-        ],
+        resources: [{ text: 'Contrast Checker', url: 'https://webaim.org/resources/contrastchecker/' }],
       },
       'Excessive DOM size': {
         effort: '30 minutes',
@@ -733,9 +729,7 @@ class ScoreCalculator {
         fix: 'Add @media (prefers-reduced-motion: reduce) CSS rules to disable or simplify animations for users who prefer reduced motion.',
         example:
           '@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n  }\n}',
-        resources: [
-          { text: 'prefers-reduced-motion', url: 'https://web.dev/articles/prefers-reduced-motion' },
-        ],
+        resources: [{ text: 'prefers-reduced-motion', url: 'https://web.dev/articles/prefers-reduced-motion' }],
       },
       'Intrusive interstitial/popup detected': {
         effort: '20 minutes',

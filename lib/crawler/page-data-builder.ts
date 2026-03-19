@@ -6,13 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type {
-  PageInfo,
-  SitemapUrl,
-  Issue,
-  HeadingAnalysis,
-  UrlAnalysis,
-} from '../types';
+import type { PageInfo, SitemapUrl, Issue, HeadingAnalysis, UrlAnalysis } from '../types';
 import type {
   CrawlResults,
   RedirectEntry,
@@ -237,9 +231,7 @@ function validateCanonicalMatchesSitemap(
 ): void {
   const escapedUrl = escapeHtml(url);
   const canonical = pageData.canonical ?? '';
-  const normalizedCanonical = canonical.startsWith('http')
-    ? canonical
-    : new URL(canonical, origin).href;
+  const normalizedCanonical = canonical.startsWith('http') ? canonical : new URL(canonical, origin).href;
   const escapedCanonical = escapeHtml(normalizedCanonical);
   const matchingCanonical = sitemapUrls[canonical] ?? sitemapUrls[normalizedCanonical];
 
@@ -308,9 +300,7 @@ export function processLinkTags(
         isMultiLang = true;
       }
 
-      if (!pageData.alternates) {
-        pageData.alternates = [];
-      }
+      pageData.alternates ??= [];
 
       pageData.alternates.push({
         hreflang: link.hrefLang,
@@ -594,7 +584,7 @@ export function checkVitalsThresholds(
         resourceLoad: 'Resource Load Time',
         renderDelay: 'Render Delay',
       };
-      const rec = (recommendation || ((recommendations as string[] | undefined)?.[0] ?? '')) as string;
+      const rec = (recommendation ?? (recommendations as string[] | undefined)?.[0] ?? '') as string;
       // percentages may be undefined if memory optimization already ran
       const pct = percentages as Record<string, number> | undefined;
       const breakdown = pct
@@ -631,7 +621,7 @@ export function optimizePageDataMemory(pageData: PageInfo): void {
     const byType: Record<string, number> = {};
     let totalSize = 0;
     for (const [, req] of entries) {
-      byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] ?? 0) + 1;
+      byType[req.resourceType ?? 'other'] = (byType[req.resourceType ?? 'other'] ?? 0) + 1;
       if (req.size) totalSize += req.size;
     }
     pageData.requests = { totalRequests: entries.length, byType, totalSize };
@@ -1023,7 +1013,11 @@ export function saveHtmlSnapshot(pageContent: string, url: string, options: Craw
 /**
  * Save viewport screenshot
  */
-export async function saveScreenshot(chromePage: ChromePage, url: string, options: CrawlerInternalOptions): Promise<void> {
+export async function saveScreenshot(
+  chromePage: ChromePage,
+  url: string,
+  options: CrawlerInternalOptions,
+): Promise<void> {
   if (!options.screenshots) {
     return;
   }

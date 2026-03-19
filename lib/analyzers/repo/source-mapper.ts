@@ -46,7 +46,11 @@ class SourceMapper {
    * @returns {Object<string, Array<{ file: string, line: number, context: string, suggestion: string }>>}
    *   Keyed by issue message, each value is an array of source locations
    */
-  static map(analysisDetails: Record<string, unknown>, repoPath: string, frameworkInfo: FrameworkInfo): Record<string, SourceLocation[]> {
+  static map(
+    analysisDetails: Record<string, unknown>,
+    repoPath: string,
+    frameworkInfo: FrameworkInfo,
+  ): Record<string, SourceLocation[]> {
     if (!analysisDetails || !repoPath || !frameworkInfo) return {};
 
     const mapping: Record<string, SourceLocation[]> = {};
@@ -438,7 +442,7 @@ class SourceMapper {
         }
 
         // If negative pattern specified, file must NOT match it
-        if (criteria.negative && criteria.negative.test(content)) return;
+        if (criteria.negative?.test(content)) return;
 
         // File matches criteria - find relevant line number
         const line = criteria.positive ? this.#findLineNumber(content, criteria.positive) : 1;

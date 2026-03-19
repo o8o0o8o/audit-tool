@@ -87,10 +87,19 @@ function getComparisonContentInsights(jsonData: Record<string, unknown>, compari
   `;
 }
 
-function getComparisonCTASection(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+function getComparisonCTASection(
+  originPages: PageInfo[],
+  comparePages: PageInfo[],
+  originLabel: string,
+  compareLabel: string,
+) {
   const getCTAStats = (pages: PageInfo[]) => {
-    const withCTA = pages.filter(p => p.ctaData?.summary);
-    let forms = 0, buttons = 0, phone = 0, email = 0, noCTAs = 0;
+    const withCTA = pages.filter((p) => p.ctaData?.summary);
+    let forms = 0,
+      buttons = 0,
+      phone = 0,
+      email = 0,
+      noCTAs = 0;
     for (const page of withCTA) {
       const s = page.ctaData!.summary;
       forms += s.forms ?? 0;
@@ -129,10 +138,18 @@ function getComparisonCTASection(originPages: PageInfo[], comparePages: PageInfo
     </div>`;
 }
 
-function getComparisonCodeCoverageSection(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+function getComparisonCodeCoverageSection(
+  originPages: PageInfo[],
+  comparePages: PageInfo[],
+  originLabel: string,
+  compareLabel: string,
+) {
   const getCoverage = (pages: PageInfo[]) => {
-    const withCoverage = pages.filter(p => (p.codeCoverage?.totalBytes ?? 0) > 0);
-    let totalJS = 0, unusedJS = 0, totalCSS = 0, unusedCSS = 0;
+    const withCoverage = pages.filter((p) => (p.codeCoverage?.totalBytes ?? 0) > 0);
+    let totalJS = 0,
+      unusedJS = 0,
+      totalCSS = 0,
+      unusedCSS = 0;
     for (const page of withCoverage) {
       totalJS += page.codeCoverage?.js?.total ?? 0;
       unusedJS += page.codeCoverage?.js?.unused ?? 0;
@@ -150,7 +167,7 @@ function getComparisonCodeCoverageSection(originPages: PageInfo[], comparePages:
   const c = getCoverage(comparePages);
   if (o.count === 0 && c.count === 0) return '';
 
-  const barColor = (ratio: number) => ratio > 60 ? '#ef4444' : ratio > 40 ? '#f59e0b' : '#10b981';
+  const barColor = (ratio: number) => (ratio > 60 ? '#ef4444' : ratio > 40 ? '#f59e0b' : '#10b981');
 
   return `
     <div style="margin-bottom: 30px;">
@@ -176,10 +193,17 @@ function getComparisonCodeCoverageSection(originPages: PageInfo[], comparePages:
     </div>`;
 }
 
-function getComparisonOutboundLinksSection(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
+function getComparisonOutboundLinksSection(
+  originPages: PageInfo[],
+  comparePages: PageInfo[],
+  originLabel: string,
+  compareLabel: string,
+) {
   const getStats = (pages: PageInfo[]) => {
-    const withData = pages.filter(p => (p.outboundLinkHealth?.totalChecked ?? 0) > 0);
-    let checked = 0, broken = 0, redirected = 0;
+    const withData = pages.filter((p) => (p.outboundLinkHealth?.totalChecked ?? 0) > 0);
+    let checked = 0,
+      broken = 0,
+      redirected = 0;
     const brokenUrls = new Map<string, { status: number; count: number; site: string }>();
     for (const page of withData) {
       const h = page.outboundLinkHealth!;
@@ -213,22 +237,31 @@ function getComparisonOutboundLinksSection(originPages: PageInfo[], comparePages
   });
 
   const brokenList = Array.from(allBroken.entries())
-    .sort((a, b) => (b[1].originCount + b[1].compareCount) - (a[1].originCount + a[1].compareCount))
+    .sort((a, b) => b[1].originCount + b[1].compareCount - (a[1].originCount + a[1].compareCount))
     .slice(0, 15)
     .map(([url, data]) => {
       const statusColor = data.status >= 500 ? '#dc2626' : data.status >= 400 ? '#ea580c' : '#6b7280';
-      const oLabel = data.originCount > 0 ? `<span style="color: #3b82f6;">${data.originCount}</span>` : '<span style="color: #d1d5db;">0</span>';
-      const cLabel = data.compareCount > 0 ? `<span style="color: #a855f7;">${data.compareCount}</span>` : '<span style="color: #d1d5db;">0</span>';
-      const badge = data.originCount > 0 && data.compareCount === 0
-        ? '<span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:9999px;font-size:10px;margin-left:4px;">Fixed</span>'
-        : data.originCount === 0 && data.compareCount > 0
-          ? '<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:9999px;font-size:10px;margin-left:4px;">New</span>'
-          : '';
-      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a>${badge}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${oLabel}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${cLabel}</td></tr>`;
+      const oLabel =
+        data.originCount > 0
+          ? `<span style="color: #3b82f6;">${data.originCount}</span>`
+          : '<span style="color: #d1d5db;">0</span>';
+      const cLabel =
+        data.compareCount > 0
+          ? `<span style="color: #a855f7;">${data.compareCount}</span>`
+          : '<span style="color: #d1d5db;">0</span>';
+      const badge =
+        data.originCount > 0 && data.compareCount === 0
+          ? '<span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:9999px;font-size:10px;margin-left:4px;">Fixed</span>'
+          : data.originCount === 0 && data.compareCount > 0
+            ? '<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:9999px;font-size:10px;margin-left:4px;">New</span>'
+            : '';
+      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a>${badge}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status ?? '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${oLabel}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${cLabel}</td></tr>`;
     })
     .join('');
 
-  const brokenTable = allBroken.size > 0 ? `
+  const brokenTable =
+    allBroken.size > 0
+      ? `
       <table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-top: 12px;">
         <colgroup><col><col style="width: 70px;"><col style="width: 80px;"><col style="width: 80px;"></colgroup>
         <thead><tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
@@ -238,7 +271,8 @@ function getComparisonOutboundLinksSection(originPages: PageInfo[], comparePages
           <th style="padding: 8px; font-size: 11px; color: #a855f7; font-weight: 600; text-align: center;">${escapeHtml(compareLabel)}</th>
         </tr></thead>
         <tbody>${brokenList}</tbody>
-      </table>` : '';
+      </table>`
+      : '';
 
   return `
     <div style="margin-bottom: 30px;">
@@ -579,7 +613,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
     .slice(0, 10)
     .map(([url, data]) => {
       const statusColor = data.status >= 500 ? '#dc2626' : data.status >= 400 ? '#ea580c' : '#6b7280';
-      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status || '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
+      return `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: 12px; text-align: center; color: ${statusColor}; font-weight: 600; white-space: nowrap;">${data.status ?? '?'}</td><td style="padding: 6px 8px; font-size: 12px; text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
     })
     .join('');
 

@@ -107,8 +107,7 @@ class ColorContrastAnalyzer {
         info.totalChecked++;
 
         const ratio = this.getContrastRatio(fgColor, bgColor);
-        const isLargeText =
-          result.fontSize >= 24 || (result.fontSize >= 18.66 && result.fontWeight >= 700);
+        const isLargeText = result.fontSize >= 24 || (result.fontSize >= 18.66 && result.fontWeight >= 700);
         const requiredAA = isLargeText ? 3 : 4.5;
         const requiredAAA = isLargeText ? 4.5 : 7;
         const passesAA = ratio >= requiredAA;
@@ -143,9 +142,7 @@ class ColorContrastAnalyzer {
     }
 
     // Keep only top 20 failures
-    info.failures = info.failures
-      .sort((a, b) => a.ratio - b.ratio)
-      .slice(0, 20);
+    info.failures = info.failures.sort((a, b) => a.ratio - b.ratio).slice(0, 20);
 
     if (info.aaFailures > 0) {
       const worst = info.worstContrast;
@@ -173,9 +170,7 @@ class ColorContrastAnalyzer {
 
   private static parseColor(color: string): [number, number, number] | null {
     // Parse rgb(r, g, b) or rgba(r, g, b, a)
-    const rgbMatch = color.match(
-      /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)/,
-    );
+    const rgbMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)/);
     if (rgbMatch) {
       return [parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3])];
     }
@@ -190,10 +185,7 @@ class ColorContrastAnalyzer {
     return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
   }
 
-  private static getContrastRatio(
-    fg: [number, number, number],
-    bg: [number, number, number],
-  ): number {
+  private static getContrastRatio(fg: [number, number, number], bg: [number, number, number]): number {
     const l1 = this.getLuminance(fg[0], fg[1], fg[2]);
     const l2 = this.getLuminance(bg[0], bg[1], bg[2]);
     const lighter = Math.max(l1, l2);

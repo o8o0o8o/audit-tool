@@ -59,10 +59,7 @@ class InformationDisclosureAnalyzer {
     // 1. Check for server information disclosure in headers
     for (const headerName of DISCLOSURE_HEADERS) {
       const value =
-        headers[headerName] ||
-        headers[headerName.toLowerCase()] ||
-        headers[this.capitalizeHeader(headerName)] ||
-        '';
+        headers[headerName] || headers[headerName.toLowerCase()] || headers[this.capitalizeHeader(headerName)] || '';
 
       if (value) {
         info.disclosedHeaders.push({ name: headerName, value });
@@ -80,9 +77,7 @@ class InformationDisclosureAnalyzer {
         severity: SEVERITY.MEDIUM,
       });
     } else if (info.disclosedHeaders.length > 0) {
-      const disclosed = info.disclosedHeaders
-        .map((h) => `${h.name}: ${h.value}`)
-        .join(', ');
+      const disclosed = info.disclosedHeaders.map((h) => `${h.name}: ${h.value}`).join(', ');
       warnings.push({
         message: 'Server technology disclosed in response headers',
         detail: `Headers reveal server technology: ${disclosed}. Consider removing these headers to reduce the attack surface.`,
@@ -125,8 +120,7 @@ class InformationDisclosureAnalyzer {
     }
 
     // Also check SourceMap response header
-    const sourceMapHeader =
-      headers['sourcemap'] || headers['SourceMap'] || headers['x-sourcemap'] || '';
+    const sourceMapHeader = headers['sourcemap'] || headers['SourceMap'] || headers['x-sourcemap'] || '';
     if (sourceMapHeader) {
       info.sourceMapUrls.push(sourceMapHeader);
     }
@@ -154,9 +148,7 @@ class InformationDisclosureAnalyzer {
 
       for (const pattern of SENSITIVE_COMMENT_PATTERNS) {
         if (pattern.test(comment)) {
-          sensitiveFindings.push(
-            comment.trim().substring(0, 50) + (comment.length > 50 ? '...' : ''),
-          );
+          sensitiveFindings.push(comment.trim().substring(0, 50) + (comment.length > 50 ? '...' : ''));
           break;
         }
       }

@@ -31,12 +31,7 @@ import type {
   CrawlPageResult,
 } from './crawler-types';
 
-import {
-  SEVERITY,
-  THRESHOLDS,
-  VIEWPORT,
-  CRAWL_SETTINGS,
-} from '../constants';
+import { SEVERITY, THRESHOLDS, VIEWPORT, CRAWL_SETTINGS } from '../constants';
 import { analyzeUrlStructure } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
@@ -281,7 +276,8 @@ class CrawlerEngine {
         // Start code coverage collection before navigation
         // Reuse the same CDP session to avoid conflicts from multiple sessions on one page
         await CodeCoverageAnalyzer.startCoverage(page, session).catch((e) => {
-          if (this.#options.verbose) console.warn(`[coverage] Failed to start coverage for ${url}: ${e instanceof Error ? e.message : e}`);
+          if (this.#options.verbose)
+            console.warn(`[coverage] Failed to start coverage for ${url}: ${e instanceof Error ? e.message : e}`);
         });
       }
 
@@ -433,7 +429,7 @@ class CrawlerEngine {
 
       // Fetch CrUX data for the origin (only once at start)
       if (this.#options.perf && !results.cruxData) {
-        const cruxApiKey = (process.env.CRUX_API_KEY || this.#options.cruxApiKey) ?? null;
+        const cruxApiKey = process.env.CRUX_API_KEY ?? this.#options.cruxApiKey ?? null;
         console.log(`\n📊 Fetching Chrome UX Report (CrUX) field data...${cruxApiKey ? ' (API key found)' : ''}`);
         try {
           results.cruxData = await CrUXAPI.fetchCrUXData(this.#options.origin, cruxApiKey);
@@ -560,10 +556,10 @@ class CrawlerEngine {
               if (pageResult.failed) {
                 failedPages.push(url);
                 progress.fail(url, 'crawl error');
-                recordFailure(this.#failureTracker, pageResult.errorType || 'unknown');
+                recordFailure(this.#failureTracker, pageResult.errorType ?? 'unknown');
 
                 // Apply exponential backoff after failure
-                const backoffDelay = getBackoffDelay(pageResult.errorType || 'unknown', this.#backoffState);
+                const backoffDelay = getBackoffDelay(pageResult.errorType ?? 'unknown', this.#backoffState);
                 if (backoffDelay > 1000) {
                   await new Promise((resolve) => setTimeout(resolve, backoffDelay));
                 }
@@ -679,7 +675,7 @@ class CrawlerEngine {
 
       // Fetch per-URL CrUX field data (only in perf mode with API key)
       if (this.#options.perf && !abortRequested) {
-        const cruxApiKey = (process.env.CRUX_API_KEY || this.#options.cruxApiKey) ?? null;
+        const cruxApiKey = process.env.CRUX_API_KEY ?? this.#options.cruxApiKey ?? null;
         if (cruxApiKey) {
           const processedUrls = Array.from(results.pageData.processedPages);
           const successUrls = processedUrls.filter(
@@ -1081,7 +1077,17 @@ class CrawlerEngine {
     // Run all analyzers with error isolation
     // Wrap in try-catch to prevent analyzer failures from losing all page data
     try {
-      await runAnalyzers(chromePage, parsedPage, url, pageData, pageContent, requests, consoleData, this.#options, this.#reportIssue);
+      await runAnalyzers(
+        chromePage,
+        parsedPage,
+        url,
+        pageData,
+        pageContent,
+        requests,
+        consoleData,
+        this.#options,
+        this.#reportIssue,
+      );
     } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page
       const err = analyzerError as Error;

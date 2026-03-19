@@ -44,10 +44,8 @@ class PermissionsPolicyAnalyzer {
     const headers = pageData.responseHeaders ?? {};
 
     // Check both Permissions-Policy and legacy Feature-Policy
-    const ppHeader =
-      headers['permissions-policy'] || headers['Permissions-Policy'] || '';
-    const fpHeader =
-      headers['feature-policy'] || headers['Feature-Policy'] || '';
+    const ppHeader = headers['permissions-policy'] || headers['Permissions-Policy'] || '';
+    const fpHeader = headers['feature-policy'] || headers['Feature-Policy'] || '';
 
     info.hasPermissionsPolicy = ppHeader.length > 0;
     info.hasFeaturePolicy = fpHeader.length > 0;
@@ -91,10 +89,7 @@ class PermissionsPolicyAnalyzer {
     return { issues, warnings, info };
   }
 
-  private static parsePolicy(
-    header: string,
-    isPermissionsPolicy: boolean,
-  ): Record<string, string> {
+  private static parsePolicy(header: string, isPermissionsPolicy: boolean): Record<string, string> {
     const directives: Record<string, string> = {};
 
     if (isPermissionsPolicy) {

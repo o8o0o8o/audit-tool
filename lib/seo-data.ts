@@ -371,7 +371,12 @@ class SEOData {
     this.#initializeManagers();
 
     // Use SitemapParser.processSitemap to parse URLs with full validation
-    const result: { sitemaps: Record<string, unknown>; urls: Record<string, unknown>; total: number; errors: { message: string; detail: string; severity: string }[] } = {
+    const result: {
+      sitemaps: Record<string, unknown>;
+      urls: Record<string, unknown>;
+      total: number;
+      errors: { message: string; detail: string; severity: string }[];
+    } = {
       sitemaps: {},
       urls: {},
       total: 0,

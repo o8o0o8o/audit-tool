@@ -16,7 +16,6 @@ import { HistoryManager } from '../historyManager';
 import { getContentInsights } from '../lib/reports/sections/content-insights';
 import type { PageInfo } from '../lib/types';
 
-
 // ============================================================
 // Response Header Analyzer
 // ============================================================
@@ -176,7 +175,11 @@ void describe('InternalPageRankAnalyzer', () => {
       'https://example.com/': ['https://example.com/about'],
       'https://example.com/about': ['https://example.com/'],
     };
-    const result = InternalPageRankAnalyzer.analyze(allPages as unknown as Record<string, PageInfo>, incomingLinks, 'https://example.com');
+    const result = InternalPageRankAnalyzer.analyze(
+      allPages as unknown as Record<string, PageInfo>,
+      incomingLinks,
+      'https://example.com',
+    );
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
     // Both pages should have PageRank assigned
@@ -230,7 +233,10 @@ void describe('ScoreCalculator - new patterns', () => {
       },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages as unknown as Record<string, PageInfo>);
+    const scores = ScoreCalculator.calculateCategoryScores(
+      analysisData,
+      dummyPages as unknown as Record<string, PageInfo>,
+    );
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
 
@@ -244,7 +250,10 @@ void describe('ScoreCalculator - new patterns', () => {
       },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages as unknown as Record<string, PageInfo>);
+    const scores = ScoreCalculator.calculateCategoryScores(
+      analysisData,
+      dummyPages as unknown as Record<string, PageInfo>,
+    );
     assert.ok(scores.performance < 100, `Expected performance < 100, got ${scores.performance}`);
   });
 
@@ -258,7 +267,10 @@ void describe('ScoreCalculator - new patterns', () => {
       },
       details: {},
     };
-    const scores = ScoreCalculator.calculateCategoryScores(analysisData, dummyPages as unknown as Record<string, PageInfo>);
+    const scores = ScoreCalculator.calculateCategoryScores(
+      analysisData,
+      dummyPages as unknown as Record<string, PageInfo>,
+    );
     // "x-robots-tag" matches "robots" pattern → categorized as SEO
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
@@ -281,8 +293,14 @@ void describe('ScoreCalculator - new patterns', () => {
       },
     };
 
-    const scoresFew = ScoreCalculator.calculateCategoryScores(fewAffected, pages100 as unknown as Record<string, PageInfo>);
-    const scoresMany = ScoreCalculator.calculateCategoryScores(manyAffected, pages100 as unknown as Record<string, PageInfo>);
+    const scoresFew = ScoreCalculator.calculateCategoryScores(
+      fewAffected,
+      pages100 as unknown as Record<string, PageInfo>,
+    );
+    const scoresMany = ScoreCalculator.calculateCategoryScores(
+      manyAffected,
+      pages100 as unknown as Record<string, PageInfo>,
+    );
     assert.ok(
       scoresMany.seo < scoresFew.seo,
       `Expected many-affected penalty (${scoresMany.seo}) < few-affected penalty (${scoresFew.seo})`,
@@ -410,7 +428,11 @@ void describe('CLI Summary', () => {
         totalWithError: 0,
       },
     };
-    const json = getJsonSummary(results as unknown as Parameters<typeof getJsonSummary>[0], 'example.com', '/tmp/report.html');
+    const json = getJsonSummary(
+      results as unknown as Parameters<typeof getJsonSummary>[0],
+      'example.com',
+      '/tmp/report.html',
+    );
     assert.ok(json.insights);
     assert.strictEqual(json.insights.languageMismatches, 1);
     assert.strictEqual(json.insights.brokenOutboundLinks, 1);
@@ -440,7 +462,9 @@ void describe('HistoryManager - insights', () => {
         },
       },
     };
-    const insights = mgr.extractInsightsSummary(auditData as unknown as Parameters<typeof mgr.extractInsightsSummary>[0]);
+    const insights = mgr.extractInsightsSummary(
+      auditData as unknown as Parameters<typeof mgr.extractInsightsSummary>[0],
+    );
     assert.ok(insights);
     assert.strictEqual(insights!.languageMismatches, 1);
     assert.strictEqual(insights!.brokenOutboundLinks, 1);
@@ -456,7 +480,9 @@ void describe('HistoryManager - insights', () => {
 // ============================================================
 void describe('Content Insights Report', () => {
   void it('generates HTML string', () => {
-    const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } } as unknown as Parameters<typeof getContentInsights>[0]);
+    const html = getContentInsights({ jsonData: { pageData: { pages: {} }, analysis: {} } } as unknown as Parameters<
+      typeof getContentInsights
+    >[0]);
     assert.strictEqual(typeof html, 'string');
     assert.ok(html.includes('content-insights') || html.length === 0 || html.includes('section'));
   });

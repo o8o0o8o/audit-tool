@@ -660,7 +660,7 @@ class ProgressManager {
       const byType: Record<string, number> = {};
       let totalSize = 0;
       for (const [, req] of entries) {
-        byType[req.resourceType || 'other'] = (byType[req.resourceType || 'other'] ?? 0) + 1;
+        byType[req.resourceType ?? 'other'] = (byType[req.resourceType ?? 'other'] ?? 0) + 1;
         if (req.size) totalSize += req.size;
       }
       dyn['requests'] = { totalRequests: entries.length, byType, totalSize };

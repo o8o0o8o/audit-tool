@@ -70,10 +70,7 @@ class InterstitialAnalyzer {
           // Check if it's a cookie banner (acceptable exception)
           const text = (el.textContent || '').toLowerCase();
           const isCookieBanner =
-            text.includes('cookie') ||
-            text.includes('consent') ||
-            text.includes('gdpr') ||
-            text.includes('privacy');
+            text.includes('cookie') || text.includes('consent') || text.includes('gdpr') || text.includes('privacy');
 
           if (isCookieBanner) {
             cookieBanner = true;
@@ -97,18 +94,12 @@ class InterstitialAnalyzer {
 
         // Check for known popup/modal libraries
         const libraries: string[] = [];
-        if (document.querySelector('.optinmonster, [data-optinmonster]'))
-          libraries.push('OptinMonster');
-        if (document.querySelector('.sumo-overlay, .sumome'))
-          libraries.push('Sumo');
-        if (document.querySelector('.hustle-modal, .hustle-popup'))
-          libraries.push('Hustle');
-        if (document.querySelector('.pum-overlay, .pum-container'))
-          libraries.push('Popup Maker');
-        if (document.querySelector('.mailchimp-popup, .mc-modal'))
-          libraries.push('Mailchimp');
-        if (document.querySelector('.intercom-lightweight-app'))
-          libraries.push('Intercom');
+        if (document.querySelector('.optinmonster, [data-optinmonster]')) libraries.push('OptinMonster');
+        if (document.querySelector('.sumo-overlay, .sumome')) libraries.push('Sumo');
+        if (document.querySelector('.hustle-modal, .hustle-popup')) libraries.push('Hustle');
+        if (document.querySelector('.pum-overlay, .pum-container')) libraries.push('Popup Maker');
+        if (document.querySelector('.mailchimp-popup, .mc-modal')) libraries.push('Mailchimp');
+        if (document.querySelector('.intercom-lightweight-app')) libraries.push('Intercom');
 
         return { overlays, cookieBanner, libraries };
       });

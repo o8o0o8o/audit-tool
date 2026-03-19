@@ -165,8 +165,7 @@ class AboveFoldAnalyzer {
     const resources = (pageData.resources ?? []) as PageResource[];
     const renderBlocking = resources.filter(
       (r) =>
-        r.renderBlocking ||
-        (r.type === 'stylesheet' && !r.media) ||
+        (r.renderBlocking ?? (r.type === 'stylesheet' && !r.media)) ||
         (r.type === 'script' && !r.async && !r.defer && r.inHead),
     );
 

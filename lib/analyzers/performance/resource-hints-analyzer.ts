@@ -68,7 +68,7 @@ class ResourceHintsAnalyzer {
 
     // Check for critical fonts
     const fonts = (pageData.fonts ?? []) as { url: string; critical?: boolean; usedAboveFold?: boolean }[];
-    const criticalFonts = fonts.filter((f) => f.critical || f.usedAboveFold);
+    const criticalFonts = fonts.filter((f) => f.critical ?? f.usedAboveFold);
     for (const font of criticalFonts) {
       if (!this.isPreloaded(font.url, info.preload)) {
         info.missingHints.push({
@@ -198,7 +198,7 @@ class ResourceHintsAnalyzer {
         }
         const entry = origins.get(resourceOrigin);
         entry.count++;
-        entry.types.add(resource.type || 'unknown');
+        entry.types.add(resource.type ?? 'unknown');
 
         // Mark as critical if it's a render-blocking resource or font
         if (
@@ -253,9 +253,9 @@ class ResourceHintsAnalyzer {
   static getFileName(url: string) {
     try {
       const pathname = new URL(url).pathname;
-      return pathname.split('/').pop() || pathname;
+      return pathname.split('/').pop() ?? pathname;
     } catch {
-      return url?.substring(0, 50) || 'unknown';
+      return url?.substring(0, 50) ?? 'unknown';
     }
   }
 

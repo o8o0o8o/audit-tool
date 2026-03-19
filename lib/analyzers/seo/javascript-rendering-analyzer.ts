@@ -34,7 +34,7 @@ class JavaScriptRenderingAnalyzer {
 
     // Get raw and rendered content
     const rawHtml = pageData.rawHtml ?? '';
-    const renderedHtml = pageData.renderedHtml || pageData.html || '';
+    const renderedHtml = pageData.renderedHtml ?? pageData.html ?? '';
 
     info.rawContentLength = rawHtml.length;
     info.renderedContentLength = renderedHtml.length;
@@ -124,9 +124,7 @@ class JavaScriptRenderingAnalyzer {
 
     // Check for common SPA patterns in raw HTML
     if (this.hasSpaPatterns(rawHtml)) {
-      if (!info.jsFramework) {
-        info.jsFramework = 'SPA (unknown)';
-      }
+      info.jsFramework ??= 'SPA (unknown)';
 
       // Check for SSR/hydration markers
       if (!this.hasSSRMarkers(rawHtml)) {

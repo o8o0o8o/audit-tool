@@ -100,7 +100,7 @@ class LinkStructureAnalyzer {
       // Track pages with excessive total links
       const totalPageLinks = (linkData.internalLinks ?? 0) + (linkData.externalLinks ?? 0);
       if (totalPageLinks > 150) {
-        if (!linkStats.excessiveLinkPages) linkStats.excessiveLinkPages = [];
+        linkStats.excessiveLinkPages ??= [];
         linkStats.excessiveLinkPages.push({
           url,
           totalLinks: totalPageLinks,
@@ -111,9 +111,9 @@ class LinkStructureAnalyzer {
 
       // Track internal nofollow links
       if ((linkData.internalNofollowLinks?.length ?? 0) > 0) {
-        if (!linkStats.totalInternalNofollow) linkStats.totalInternalNofollow = 0;
+        linkStats.totalInternalNofollow ??= 0;
         linkStats.totalInternalNofollow += linkData.internalNofollowLinks!.length;
-        if (!linkStats.pagesWithInternalNofollow) linkStats.pagesWithInternalNofollow = 0;
+        linkStats.pagesWithInternalNofollow ??= 0;
         linkStats.pagesWithInternalNofollow++;
       }
 
@@ -227,8 +227,8 @@ class LinkStructureAnalyzer {
 
     // Report 5: Pages with excessive total links (>150)
     if ((linkStats.excessiveLinkPages?.length ?? 0) > 0) {
-      const topExcessive = linkStats.excessiveLinkPages!
-        .sort((a: ExcessiveLinkPage, b: ExcessiveLinkPage) => b.totalLinks - a.totalLinks)
+      const topExcessive = linkStats
+        .excessiveLinkPages!.sort((a: ExcessiveLinkPage, b: ExcessiveLinkPage) => b.totalLinks - a.totalLinks)
         .slice(0, 5)
         .map((p: ExcessiveLinkPage) => `<li><a href="${p.url}">${p.url}</a> (${p.totalLinks} total links)</li>`)
         .join('');

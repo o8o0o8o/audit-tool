@@ -15,7 +15,7 @@ if (fs.existsSync(envFile)) {
       .slice(eqIndex + 1)
       .trim()
       .replace(/^["']|["']$/g, '');
-    if (!process.env[key]) process.env[key] = value;
+    process.env[key] ??= value;
   }
 }
 

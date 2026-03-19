@@ -51,9 +51,7 @@ class CachingAnalyzer {
       for (const domain of cdnIndicators.domains) {
         if (reqUrl.includes(domain)) {
           cachingAnalysis.hasCDN = true;
-          if (!cachingAnalysis.cdnProvider) {
-            cachingAnalysis.cdnProvider = domain.charAt(0).toUpperCase() + domain.slice(1);
-          }
+          cachingAnalysis.cdnProvider ??= domain.charAt(0).toUpperCase() + domain.slice(1);
         }
       }
     }

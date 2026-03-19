@@ -54,7 +54,7 @@ class OutboundLinkChecker {
     // Filter to external links only
     const externalLinks = [];
     for (const link of links) {
-      const href = link.href || link.url;
+      const href = link.href ?? link.url;
       if (!href) continue;
       try {
         const linkUrl = new URL(href, url);

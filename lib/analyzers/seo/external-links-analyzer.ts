@@ -49,11 +49,21 @@ class ExternalLinksAnalyzer {
       socialLinks: [] as string[],
     };
 
-    const links = Array.isArray(pageData.links) ? (pageData.links as { href?: string; url?: string; rel?: string; target?: string; text?: string; anchor?: string; status?: number }[]) : [];
+    const links = Array.isArray(pageData.links)
+      ? (pageData.links as {
+          href?: string;
+          url?: string;
+          rel?: string;
+          target?: string;
+          text?: string;
+          anchor?: string;
+          status?: number;
+        }[])
+      : [];
     const pageOrigin = this.getOrigin(url);
 
     for (const link of links) {
-      const href = String(link.href || link.url || '');
+      const href = String(link.href ?? link.url ?? '');
       const rel = (link.rel ?? '').toLowerCase();
       const target = link.target ?? '';
 
@@ -114,7 +124,7 @@ class ExternalLinksAnalyzer {
       // Check for suspicious links
       const isSuspicious = SUSPICIOUS_PATTERNS.some((pattern) => pattern.test(href));
       if (isSuspicious) {
-        info.suspiciousLinks.push({ href, anchor: link.text || link.anchor || '' });
+        info.suspiciousLinks.push({ href, anchor: link.text ?? link.anchor ?? '' });
 
         if (!hasNofollow) {
           issues.push({
@@ -166,9 +176,7 @@ class ExternalLinksAnalyzer {
 
     const topDomainFollowed = topDomains.reduce((sum, [_, data]) => sum + data.followed, 0);
     if (topDomainFollowed > info.followedLinks * 0.5 && info.followedLinks > 10) {
-      const domainList = topDomains
-        .map(([domain, data]) => `${domain} (${data.followed})`)
-        .join(', ');
+      const domainList = topDomains.map(([domain, data]) => `${domain} (${data.followed})`).join(', ');
       warnings.push({
         message: 'Link equity concentrated to few domains',
         detail: `Most followed links go to: ${domainList}. Diversify external linking.`,
@@ -258,7 +266,11 @@ class ExternalLinksAnalyzer {
    * @param {object} options - { concurrency, timeout, maxUrls }
    * @returns {Promise<object>} Verification results
    */
-  static async verifyExternalLinks(pages: Record<string, PageInfo>, origin: string, options: { concurrency?: number; timeout?: number; maxUrls?: number } = {}) {
+  static async verifyExternalLinks(
+    pages: Record<string, PageInfo>,
+    origin: string,
+    options: { concurrency?: number; timeout?: number; maxUrls?: number } = {},
+  ) {
     const { concurrency = 5, timeout = 10000, maxUrls = 500 } = options;
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
@@ -446,7 +458,9 @@ class ExternalLinksAnalyzer {
     };
 
     for (const [url, pageData] of Object.entries(pages)) {
-      const analysis = (pageData as PageInfo & { externalLinksAnalysis?: ReturnType<typeof ExternalLinksAnalyzer.analyze> }).externalLinksAnalysis ?? this.analyze(pageData, url);
+      const analysis =
+        (pageData as PageInfo & { externalLinksAnalysis?: ReturnType<typeof ExternalLinksAnalyzer.analyze> })
+          .externalLinksAnalysis ?? this.analyze(pageData, url);
 
       stats.totalExternalLinks += analysis.info.totalExternalLinks;
       stats.totalFollowed += analysis.info.followedLinks;

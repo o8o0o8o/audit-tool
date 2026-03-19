@@ -25,7 +25,7 @@ function getPerformanceStats(data: ReportSectionData) {
   const pagesArray: PageInfo[] = Object.values(pages);
   const cruxData = (jsonData.cruxData ?? null) as Record<string, unknown> | null;
   // Check for pages with Core Web Vitals (stored at top level as TTFB, LCP, CLS, INP)
-  const pagesWithPerf = pagesArray.filter((p) => p.TTFB || p.LCP || p.CLS || p.INP);
+  const pagesWithPerf = pagesArray.filter((p) => p.TTFB ?? p.LCP ?? p.CLS ?? p.INP);
 
   if (pagesWithPerf.length === 0 && !cruxData) return '';
 
@@ -205,7 +205,7 @@ function getCrUXSection(
           </p>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: 11px; color: #047857;">Origin: ${cruxData.target || 'N/A'}</div>
+          <div style="font-size: 11px; color: #047857;">Origin: ${cruxData.target ?? 'N/A'}</div>
           <div style="font-size: 11px; color: #047857;">Type: ${cruxData.targetType === 'origin' ? 'Origin-level' : 'URL-level'}</div>
         </div>
       </div>
@@ -235,8 +235,8 @@ function getStatCard(
   p95: (arr: number[]) => number,
   p99: (arr: number[]) => number,
 ) {
-  const info = METRIC_INFO[metricKey] || {};
-  const fullName = info.fullName || metricKey.toUpperCase();
+  const info = METRIC_INFO[metricKey] ?? {};
+  const fullName = info.fullName ?? metricKey.toUpperCase();
   const description = info.description || '';
   const threshold = info.threshold ?? '';
   const learnMore = info.learnMore ?? '';
@@ -348,7 +348,7 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
         </td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: ${ttfbColor}; text-align: right;">${p.TTFB}ms</td>
         <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: ${lcpColor}; text-align: right;">${p.LCP ? p.LCP + 'ms' : '—'}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${p.CLS !== undefined ? p.CLS : '—'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${p.CLS ?? '—'}</td>
       </tr>
     `;
     })
@@ -379,7 +379,9 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
  * Generate vitals attribution section (LCP bottleneck + CLS sources)
  */
 function getVitalsAttributionSection(pagesArray: PageInfo[]) {
-  const pagesWithAttribution = pagesArray.filter((p) => (p.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.bottleneck);
+  const pagesWithAttribution = pagesArray.filter(
+    (p) => (p.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.bottleneck,
+  );
   if (pagesWithAttribution.length === 0) return '';
 
   // Count bottleneck types
@@ -418,7 +420,9 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
   // Sample recommendations
   const topBottleneck = sorted[0][0];
-  const samplePage = pagesWithAttribution.find((p) => (p.vitals!.lcpAnalysis as Record<string, unknown>).bottleneck === topBottleneck);
+  const samplePage = pagesWithAttribution.find(
+    (p) => (p.vitals!.lcpAnalysis as Record<string, unknown>).bottleneck === topBottleneck,
+  );
   const recommendation = (samplePage?.vitals?.lcpAnalysis as Record<string, unknown> | undefined)?.recommendation ?? '';
 
   return `
@@ -450,21 +454,21 @@ function extractPerfValues(jsonData: Record<string, unknown>) {
   const pageData = jsonData.pageData as Record<string, unknown> | undefined;
   const pages = (pageData?.pages ?? {}) as Record<string, PageInfo>;
   const pagesArray: PageInfo[] = Object.values(pages);
-  const pagesWithPerf = pagesArray.filter((p) => p.TTFB || p.LCP || p.CLS || p.INP);
+  const pagesWithPerf = pagesArray.filter((p) => p.TTFB ?? p.LCP ?? p.CLS ?? p.INP);
 
   const extract = (arr: PageInfo[], fn: (p: PageInfo) => number | undefined, filterZero = true) => {
     const vals = arr.map(fn).filter((v): v is number => v !== undefined && v !== null);
-    return filterZero ? vals.filter(v => v > 0).sort((a, b) => a - b) : vals.sort((a, b) => a - b);
+    return filterZero ? vals.filter((v) => v > 0).sort((a, b) => a - b) : vals.sort((a, b) => a - b);
   };
 
   return {
     pagesWithPerf,
-    ttfb: extract(pagesWithPerf, p => p.TTFB),
-    lcp: extract(pagesWithPerf, p => p.LCP),
-    cls: extract(pagesWithPerf, p => p.CLS, false).filter(v => v >= 0),
-    fcp: extract(pagesWithPerf, p => p.FCP),
-    inp: extract(pagesWithPerf, p => p.INP),
-    pageSize: extract(pagesArray, p => p.totalResponseSize as number | undefined),
+    ttfb: extract(pagesWithPerf, (p) => p.TTFB),
+    lcp: extract(pagesWithPerf, (p) => p.LCP),
+    cls: extract(pagesWithPerf, (p) => p.CLS, false).filter((v) => v >= 0),
+    fcp: extract(pagesWithPerf, (p) => p.FCP),
+    inp: extract(pagesWithPerf, (p) => p.INP),
+    pageSize: extract(pagesArray, (p) => p.totalResponseSize as number | undefined),
   };
 }
 
@@ -474,23 +478,46 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
 
   if (origin.pagesWithPerf.length === 0 && compare.pagesWithPerf.length === 0) return '';
 
-  const avg = (arr: number[]): number => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
-  const p75 = (arr: number[]) => arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0;
+  const avg = (arr: number[]): number => (arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0);
+  const p75 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0);
 
   const originLabel = shortDomain(comparison.originDomainName);
   const compareLabel = shortDomain(comparison.compareDomainName);
 
   const metrics = [
-    { key: 'ttfb', label: '⚡ TTFB', unit: 'ms', colors: ['#8b5cf6', '#7c3aed'], oVals: origin.ttfb, cVals: compare.ttfb },
+    {
+      key: 'ttfb',
+      label: '⚡ TTFB',
+      unit: 'ms',
+      colors: ['#8b5cf6', '#7c3aed'],
+      oVals: origin.ttfb,
+      cVals: compare.ttfb,
+    },
     { key: 'lcp', label: '🎨 LCP', unit: 'ms', colors: ['#ec4899', '#db2777'], oVals: origin.lcp, cVals: compare.lcp },
-    { key: 'cls', label: '📐 CLS', unit: '', colors: ['#14b8a6', '#0d9488'], oVals: origin.cls, cVals: compare.cls, isCls: true },
+    {
+      key: 'cls',
+      label: '📐 CLS',
+      unit: '',
+      colors: ['#14b8a6', '#0d9488'],
+      oVals: origin.cls,
+      cVals: compare.cls,
+      isCls: true,
+    },
     { key: 'inp', label: '👆 INP', unit: 'ms', colors: ['#f97316', '#ea580c'], oVals: origin.inp, cVals: compare.inp },
-    { key: 'pageSize', label: '📦 Page Size', unit: 'MB', colors: ['#f59e0b', '#d97706'], oVals: origin.pageSize, cVals: compare.pageSize, isSize: true },
+    {
+      key: 'pageSize',
+      label: '📦 Page Size',
+      unit: 'MB',
+      colors: ['#f59e0b', '#d97706'],
+      oVals: origin.pageSize,
+      cVals: compare.pageSize,
+      isSize: true,
+    },
   ];
 
   const cards = metrics
-    .filter(m => m.oVals.length > 0 || m.cVals.length > 0)
-    .map(m => {
+    .filter((m) => m.oVals.length > 0 || m.cVals.length > 0)
+    .map((m) => {
       const oAvg = avg(m.oVals);
       const cAvg = avg(m.cVals);
       const oP75 = p75(m.oVals);
@@ -504,8 +531,8 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
 
       const delta = formatPercentDelta(oAvg, cAvg, true);
 
-      const info = METRIC_INFO[m.key] || {} as MetricInfoEntry;
-      const fullName = info.fullName || m.label;
+      const info = METRIC_INFO[m.key] ?? ({} as MetricInfoEntry);
+      const fullName = info.fullName ?? m.label;
 
       return `
         <div style="background: linear-gradient(135deg, ${m.colors[0]} 0%, ${m.colors[1]} 100%); color: white; padding: 20px; border-radius: 8px;">
@@ -545,24 +572,36 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
   `;
 }
 
-function getComparisonSlowestPages(originPages: PageInfo[], comparePages: PageInfo[], originLabel: string, compareLabel: string) {
-  const getTop5 = (pages: PageInfo[]) => pages
-    .filter(p => p.TTFB && p.TTFB > 0)
-    .sort((a, b) => (b.TTFB ?? 0) - (a.TTFB ?? 0))
-    .slice(0, 5);
+function getComparisonSlowestPages(
+  originPages: PageInfo[],
+  comparePages: PageInfo[],
+  originLabel: string,
+  compareLabel: string,
+) {
+  const getTop5 = (pages: PageInfo[]) =>
+    pages
+      .filter((p) => p.TTFB && p.TTFB > 0)
+      .sort((a, b) => (b.TTFB ?? 0) - (a.TTFB ?? 0))
+      .slice(0, 5);
 
   const originSlowest = getTop5(originPages);
   const compareSlowest = getTop5(comparePages);
 
   if (originSlowest.length === 0 && compareSlowest.length === 0) return '';
 
-  const renderRows = (pages: PageInfo[], label: string, badgeClass: string) => pages.map((p, i) => {
-    const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
-    let shortUrl;
-    try { shortUrl = new URL(p.url).pathname; } catch { shortUrl = p.url; }
-    if (shortUrl.length > 40) shortUrl = '...' + shortUrl.slice(-37);
+  const renderRows = (pages: PageInfo[], label: string, badgeClass: string) =>
+    pages
+      .map((p, i) => {
+        const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
+        let shortUrl;
+        try {
+          shortUrl = new URL(p.url).pathname;
+        } catch {
+          shortUrl = p.url;
+        }
+        if (shortUrl.length > 40) shortUrl = '...' + shortUrl.slice(-37);
 
-    return `
+        return `
       <tr>
         <td style="padding: 6px 8px; font-size: 12px; color: #9ca3af;">${i + 1}</td>
         <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
@@ -573,7 +612,8 @@ function getComparisonSlowestPages(originPages: PageInfo[], comparePages: PageIn
         <td style="padding: 6px 8px; text-align: right;">${p.LCP ? p.LCP + 'ms' : '—'}</td>
       </tr>
     `;
-  }).join('');
+      })
+      .join('');
 
   return `
     <div style="margin-top: 20px;">

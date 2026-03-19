@@ -127,7 +127,7 @@ async function audit() {
         console.log('Config is valid.');
         console.log(`  Thresholds: ${Object.keys(config.thresholds ?? {}).length} defined`);
         console.log(`  Crawl concurrency: ${config.crawl?.concurrency ?? 5}`);
-        console.log(`  Query param mode: ${config.queryParams?.mode || 'strip_tracking'}`);
+        console.log(`  Query param mode: ${config.queryParams?.mode ?? 'strip_tracking'}`);
         process.exit(0);
       } catch (e: unknown) {
         console.error(`Config validation failed: ${(e as Error).message}`);
@@ -226,7 +226,7 @@ async function audit() {
     // Apply presets
     if (args.preset === 'quick') {
       if (!args.concurrencyExplicit) args.concurrency = 10;
-      if (!args.limit) args.limit = 50;
+      args.limit ??= 50;
       args.perf = false;
       console.log('Quick preset: 50 pages max, no perf metrics, concurrency 10');
     } else if (args.preset === 'deep') {

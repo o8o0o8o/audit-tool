@@ -125,7 +125,10 @@ class MobileFriendlyAnalyzer {
       if (overflowingElements.length > 0 && bodyWidth <= viewportWidth + 10) {
         // Elements overflow but body doesn't scroll (overflow hidden)
         warnings.push(
-          `${overflowingElements.length} element(s) extend beyond viewport (may be clipped): ${overflowingElements.slice(0, 3).map((e) => `<${e.tag}> +${e.overflow}px`).join(', ')}`,
+          `${overflowingElements.length} element(s) extend beyond viewport (may be clipped): ${overflowingElements
+            .slice(0, 3)
+            .map((e) => `<${e.tag}> +${e.overflow}px`)
+            .join(', ')}`,
         );
       } else if (overflowingElements.length > 0) {
         metrics.overflowingElements = overflowingElements.slice(0, 5);

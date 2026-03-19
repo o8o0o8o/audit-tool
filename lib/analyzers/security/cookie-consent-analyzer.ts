@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage, ParsedPage, PageInfo, ConsentData } from '../../types';
+import type { Issue, ChromePage, ParsedPage, PageInfo, ConsentData, NetworkRequest } from '../../types';
 
 interface CookieInfo {
   name: string;
@@ -75,8 +75,7 @@ class CookieConsentAnalyzer {
    * @param {string} url - Page URL
    * @returns {Object} Analysis results
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- requests may be NetworkRequest[] or Record<string, unknown> depending on caller
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>, url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, requests: NetworkRequest[], url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -172,8 +171,11 @@ class CookieConsentAnalyzer {
    * Detect consent banner
    * @private
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- requests may be NetworkRequest[] or Record<string, unknown>
-  static async #detectConsentBanner(chromePage: ChromePage, parsedPage: ParsedPage, requests: Record<string, any>): Promise<ConsentBannerDetection> {
+  static async #detectConsentBanner(
+    chromePage: ChromePage,
+    parsedPage: ParsedPage,
+    requests: NetworkRequest[],
+  ): Promise<ConsentBannerDetection> {
     const result: ConsentBannerDetection = {
       detected: false,
       platform: null,
@@ -181,9 +183,9 @@ class CookieConsentAnalyzer {
     };
 
     // Method 1: Check for known consent platform scripts/styles
-    for (const [reqUrl] of Object.entries(requests)) {
+    for (const req of requests) {
       for (const platform of this.#consentPlatforms) {
-        if (platform.patterns.some((p) => reqUrl.toLowerCase().includes(p))) {
+        if (platform.patterns.some((p) => req.url.toLowerCase().includes(p))) {
           result.detected = true;
           result.platform = platform.name;
           result.method = 'script-detection';

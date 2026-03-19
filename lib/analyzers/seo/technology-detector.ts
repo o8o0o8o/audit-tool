@@ -615,13 +615,13 @@ class TechnologyDetector {
     if (requests) {
       if (Array.isArray(requests)) {
         for (const req of requests) {
-          if (req.url.endsWith('.js') || (req.resourceType?.includes('script'))) {
+          if (req.url.endsWith('.js') || req.resourceType?.includes('script')) {
             sources.add(req.url.toLowerCase());
           }
         }
       } else {
         for (const [url, data] of Object.entries(requests)) {
-          if (url.endsWith('.js') || (data.type?.includes('script'))) {
+          if (url.endsWith('.js') || data.type?.includes('script')) {
             sources.add(url.toLowerCase());
           }
         }
@@ -641,7 +641,7 @@ class TechnologyDetector {
 
     const metas = parsedPage.querySelectorAll('meta');
     metas.forEach((meta) => {
-      const name = meta.getAttribute('name') || meta.getAttribute('property');
+      const name = meta.getAttribute('name') ?? meta.getAttribute('property');
       const content = meta.getAttribute('content');
       if (name && content) {
         tags[name.toLowerCase()] = content.toLowerCase();

@@ -301,7 +301,11 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
     const analysisObj = (data.analysis ?? {}) as Record<string, unknown>;
     const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, string[]>;
     return [
-      ...(bySeverity.critical ?? []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
+      ...(bySeverity.critical ?? []).map((issue: string) => ({
+        issue,
+        severity: 'critical',
+        severityLabel: 'Critical',
+      })),
       ...(bySeverity.high ?? []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
       ...(bySeverity.medium ?? []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
       ...(bySeverity.low ?? []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
@@ -311,16 +315,16 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
   const originIssues = extractIssues(jsonData);
   const compareIssues = extractIssues(comparison.compareJsonData);
 
-  const originSet = new Set(originIssues.map(i => i.issue.replace(/ \[(critical|high|medium|low)\]$/i, '')));
-  const compareSet = new Set(compareIssues.map(i => i.issue.replace(/ \[(critical|high|medium|low)\]$/i, '')));
+  const originSet = new Set(originIssues.map((i) => i.issue.replace(/ \[(critical|high|medium|low)\]$/i, '')));
+  const compareSet = new Set(compareIssues.map((i) => i.issue.replace(/ \[(critical|high|medium|low)\]$/i, '')));
 
   // Merge all unique issues
-  const allIssueKeys = new Set([...originIssues.map(i => i.issue), ...compareIssues.map(i => i.issue)]);
+  const allIssueKeys = new Set([...originIssues.map((i) => i.issue), ...compareIssues.map((i) => i.issue)]);
   const mergedIssues: Array<{ issue: string; severity: string; severityLabel: string; status: string }> = [];
 
   for (const issue of allIssueKeys) {
-    const originItem = originIssues.find(i => i.issue === issue);
-    const compareItem = compareIssues.find(i => i.issue === issue);
+    const originItem = originIssues.find((i) => i.issue === issue);
+    const compareItem = compareIssues.find((i) => i.issue === issue);
     const item = originItem ?? compareItem!;
     const key = issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
 
@@ -348,19 +352,27 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
         Prioritized by severity — showing issues across both <strong>${escapeHtml(originLabel)}</strong> and <strong>${escapeHtml(compareLabel)}</strong>
       </p>
 
-      ${topIssues.map((item, index) => {
-        const statusBadge = item.status === 'fixed'
-          ? `<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">FIXED in ${escapeHtml(compareLabel)}</span>`
-          : item.status === 'new'
-          ? `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">NEW in ${escapeHtml(compareLabel)}</span>`
-          : '';
-        return getIssueCardWithBadge(item, index, jsonData, statusBadge);
-      }).join('')}
+      ${topIssues
+        .map((item, index) => {
+          const statusBadge =
+            item.status === 'fixed'
+              ? `<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">FIXED in ${escapeHtml(compareLabel)}</span>`
+              : item.status === 'new'
+                ? `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">NEW in ${escapeHtml(compareLabel)}</span>`
+                : '';
+          return getIssueCardWithBadge(item, index, jsonData, statusBadge);
+        })
+        .join('')}
     </div>
   `;
 }
 
-function getIssueCardWithBadge(item: { issue: string; severity: string; severityLabel: string }, index: number, jsonData: Record<string, unknown>, extraBadge: string) {
+function getIssueCardWithBadge(
+  item: { issue: string; severity: string; severityLabel: string },
+  index: number,
+  jsonData: Record<string, unknown>,
+  extraBadge: string,
+) {
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
   const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
   const detailsMap = (analysisObj.details ?? {}) as Record<string, Record<string, unknown>>;

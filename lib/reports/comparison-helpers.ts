@@ -99,9 +99,14 @@ function formatDualScore(origin: number, compare: number, originLabel: string, c
 /**
  * Render a comparison header bar with origin vs compare domain names
  */
-function getComparisonHeader(originDomain: string, compareDomain: string, matchStats: { matched: number; originOnly: number; compareOnly: number }): string {
+function getComparisonHeader(
+  originDomain: string,
+  compareDomain: string,
+  matchStats: { matched: number; originOnly: number; compareOnly: number },
+): string {
   const total = matchStats.matched + matchStats.originOnly + matchStats.compareOnly;
-  const matchPct = total > 0 ? Math.round((matchStats.matched / (matchStats.matched + matchStats.originOnly)) * 100) : 0;
+  const matchPct =
+    total > 0 ? Math.round((matchStats.matched / (matchStats.matched + matchStats.originOnly)) * 100) : 0;
 
   return `<div class="comparison-header">
   <div class="comparison-header-sites">

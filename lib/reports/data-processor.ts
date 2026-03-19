@@ -180,12 +180,8 @@ class ReportDataProcessor {
           console.log(`  - Loading archive part ${i}...`);
           const archiveData = FileManager.readJsonFile(archiveFile);
 
-          if (!jsonData.pageData) {
-            jsonData.pageData = { pages: {} };
-          }
-          if (!jsonData.pageData.pages) {
-            jsonData.pageData.pages = {};
-          }
+          jsonData.pageData ??= { pages: {} };
+          jsonData.pageData.pages ??= {};
 
           jsonData.pageData.pages = {
             ...jsonData.pageData.pages,
@@ -408,13 +404,22 @@ class ReportDataProcessor {
    * @param compareDomain - Compare domain name
    * @returns Prepared report data with comparison field populated
    */
-  static prepareComparisonReportData(originFile: string, compareFile: string, originDomain: string, compareDomain: string) {
+  static prepareComparisonReportData(
+    originFile: string,
+    compareFile: string,
+    originDomain: string,
+    compareDomain: string,
+  ) {
     // Load origin data as the primary report data
     const baseData = this.prepareReportData(originFile, originDomain);
 
     // Load compare data
     const compareJsonData = this.loadAuditData(compareFile, compareDomain);
-    const comparePageData = (compareJsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
+    const comparePageData = (compareJsonData.pageData ?? {
+      pages: {},
+      totalWithoutError: 0,
+      totalWithError: 0,
+    }) as PageData & {
       incomingLinks?: Record<string, string[]>;
     };
     const comparePages: PageInfo[] = Object.values(comparePageData.pages ?? {});
@@ -433,9 +438,13 @@ class ReportDataProcessor {
       comparePageData,
       compareDomainName: compareDomain,
       originDomainName: originDomain,
-      matchedPaths: matchResult.matched.map(m => ({ path: m.path, originUrl: m.originUrl, compareUrl: m.compareUrl })),
-      originOnlyPaths: matchResult.originOnly.map(m => m.path),
-      compareOnlyPaths: matchResult.compareOnly.map(m => m.path),
+      matchedPaths: matchResult.matched.map((m) => ({
+        path: m.path,
+        originUrl: m.originUrl,
+        compareUrl: m.compareUrl,
+      })),
+      originOnlyPaths: matchResult.originOnly.map((m) => m.path),
+      compareOnlyPaths: matchResult.compareOnly.map((m) => m.path),
     };
 
     return {
@@ -450,9 +459,7 @@ class ReportDataProcessor {
    */
   static #assignSegments(pages: Record<string, PageInfo>) {
     for (const url in pages) {
-      if (!pages[url].segment) {
-        pages[url].segment = PageSegmentAnalyzer.classifyUrl(url);
-      }
+      pages[url].segment ??= PageSegmentAnalyzer.classifyUrl(url);
     }
   }
 }

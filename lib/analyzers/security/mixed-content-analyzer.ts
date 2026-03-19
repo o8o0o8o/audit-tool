@@ -147,7 +147,7 @@ class MixedContentAnalyzer {
         continue;
       }
 
-      const type = (resource.type || resource.resourceType || 'other').toLowerCase();
+      const type = (resource.type ?? resource.resourceType ?? 'other').toLowerCase();
       const config =
         (RESOURCE_SEVERITY as Record<string, { severity: string; type: string; blocked: boolean }>)[type] ||
         RESOURCE_SEVERITY.other;
@@ -225,9 +225,9 @@ class MixedContentAnalyzer {
   static getFileName(url: string) {
     try {
       const pathname = new URL(url).pathname;
-      return pathname.split('/').pop() || pathname.substring(0, 30);
+      return pathname.split('/').pop() ?? pathname.substring(0, 30);
     } catch {
-      return url?.substring(0, 30) || 'unknown';
+      return url?.substring(0, 30) ?? 'unknown';
     }
   }
 

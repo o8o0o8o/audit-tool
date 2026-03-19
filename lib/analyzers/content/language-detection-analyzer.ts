@@ -537,7 +537,7 @@ class LanguageDetectionAnalyzer {
 
     // Get declared language
     const htmlLang = parsedPage?.querySelector('html')?.getAttribute('lang') ?? null;
-    const contentLanguage = (pageData.response?.headers ?? pageData.responseHeaders ?? {})['content-language'] || null;
+    const contentLanguage = (pageData.response?.headers ?? pageData.responseHeaders)?.['content-language'] ?? null;
     const declaredLang = htmlLang ?? contentLanguage ?? null;
 
     // Detect language from content
@@ -573,7 +573,7 @@ class LanguageDetectionAnalyzer {
     if (!htmlLang && textContent.length > 100) {
       warnings.push({
         message: 'Missing html lang attribute',
-        detail: `<a href="${url}">${url}</a> has no lang attribute on the html element. Detected language: "${detection.language || 'unknown'}".`,
+        detail: `<a href="${url}">${url}</a> has no lang attribute on the html element. Detected language: "${detection.language ?? 'unknown'}".`,
         severity: SEVERITY.MEDIUM,
       });
     }

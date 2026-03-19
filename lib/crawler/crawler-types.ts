@@ -3,15 +3,7 @@
  * Shared across crawler-engine.ts, resilience.ts, page-data-builder.ts, analyzer-runner.ts
  */
 
-import type {
-  PageInfo,
-  ParsedPage,
-  NetworkCondition,
-  CpuCondition,
-  SitemapUrl,
-  Issue,
-  ChromePage,
-} from '../types';
+import type { PageInfo, ParsedPage, NetworkCondition, CpuCondition, SitemapUrl, Issue, ChromePage } from '../types';
 import type { CrUXFieldData } from './crux-api';
 import type { BrowserContext } from 'playwright';
 

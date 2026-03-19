@@ -329,8 +329,8 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
     if (sev in counts) counts[sev]++;
   }
 
-  const fixedCount = issues.filter(i => i.status === 'fixed').length;
-  const newCount = issues.filter(i => i.status === 'new').length;
+  const fixedCount = issues.filter((i) => i.status === 'fixed').length;
+  const newCount = issues.filter((i) => i.status === 'new').length;
   const originLabel = shortDomain(comparison.originDomainName);
   const compareLabel = shortDomain(comparison.compareDomainName);
 
@@ -347,12 +347,16 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
         </div>
       </div>
 
-      ${fixedCount > 0 || newCount > 0 ? `
+      ${
+        fixedCount > 0 || newCount > 0
+          ? `
       <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
         ${fixedCount > 0 ? `<div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #166534;"><strong>${fixedCount} issue${fixedCount > 1 ? 's' : ''}</strong> fixed in ${escapeHtml(compareLabel)}</div>` : ''}
         ${newCount > 0 ? `<div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #991b1b;"><strong>${newCount} new issue${newCount > 1 ? 's' : ''}</strong> in ${escapeHtml(compareLabel)}</div>` : ''}
       </div>
-      ` : ''}
+      `
+          : ''
+      }
 
       <table class="issues-table" style="table-layout:fixed;width:100%;">
         <colgroup>
@@ -414,16 +418,17 @@ function renderComparisonIssueRow(issue: ComparisonIssueEntry, idx: number) {
   const originCount = detail.count ?? detail.examples?.length ?? 0;
   const examples = detail.examples ?? [];
 
-  const statusBadge = status === 'fixed'
-    ? '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">FIXED</span>'
-    : status === 'new'
-    ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">NEW</span>'
-    : (() => {
-        const delta = compareCount - originCount;
-        if (delta === 0) return '<span style="color:#6b7280;font-size:11px;">same</span>';
-        const color = delta < 0 ? '#059669' : '#dc2626';
-        return `<span style="color:${color};font-size:11px;font-weight:600;">${delta > 0 ? '+' : ''}${delta}</span>`;
-      })();
+  const statusBadge =
+    status === 'fixed'
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">FIXED</span>'
+      : status === 'new'
+        ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">NEW</span>'
+        : (() => {
+            const delta = compareCount - originCount;
+            if (delta === 0) return '<span style="color:#6b7280;font-size:11px;">same</span>';
+            const color = delta < 0 ? '#059669' : '#dc2626';
+            return `<span style="color:${color};font-size:11px;font-weight:600;">${delta > 0 ? '+' : ''}${delta}</span>`;
+          })();
 
   return `
     <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">

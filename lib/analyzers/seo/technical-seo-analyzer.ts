@@ -490,7 +490,7 @@ class TechnicalSEOAnalyzer {
    * Check HTML document size
    */
   static checkHTMLSize(pageData: PageInfo, url: string, issues: Issue[], warnings: Issue[]) {
-    const htmlSize = pageData.htmlSize || pageData.responseSize || pageData.totalResponseSize;
+    const htmlSize = pageData.htmlSize ?? pageData.responseSize ?? pageData.totalResponseSize;
     if (!htmlSize) return;
 
     // Flag very large HTML documents (>3MB)
@@ -513,7 +513,9 @@ class TechnicalSEOAnalyzer {
    * Check for robots tag conflicts
    */
   static checkRobotsTagConflicts(pageData: PageInfo, issues: Issue[]) {
-    const metaRobots = (pageData.meta?.find((m: unknown) => (m as Record<string, unknown>).robots) as Record<string, string> | undefined)?.robots ?? '';
+    const metaRobots =
+      (pageData.meta?.find((m: unknown) => (m as Record<string, unknown>).robots) as Record<string, string> | undefined)
+        ?.robots ?? '';
     const xRobotsTag = pageData.response?.headers?.['x-robots-tag'] ?? '';
 
     if (metaRobots && xRobotsTag) {

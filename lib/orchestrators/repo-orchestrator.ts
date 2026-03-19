@@ -124,7 +124,11 @@ class RepoOrchestrator {
     // 5. Map audit issues to source files
     if (auditData?.analysis?.details) {
       try {
-        result.sourceMapping = SourceMapper.map(auditData.analysis.details as Record<string, unknown>, repoPath, frameworkInfo);
+        result.sourceMapping = SourceMapper.map(
+          auditData.analysis.details as Record<string, unknown>,
+          repoPath,
+          frameworkInfo,
+        );
         const mappedCount = Object.keys(result.sourceMapping).length;
         if (mappedCount > 0) {
           console.log(`Mapped ${mappedCount} issue type(s) to source locations`);

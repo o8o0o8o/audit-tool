@@ -125,8 +125,8 @@ class ErrorAggregator {
       // Only store up to MAX_EXAMPLES to save memory
       if (details.examples.length < MAX_EXAMPLES) {
         details.examples.push(detailedError);
-      } else if (!details.truncated) {
-        details.truncated = true; // Mark that we've hit the limit
+      } else {
+        details.truncated ??= true; // Mark that we've hit the limit
       }
 
       // Always increment count to track total occurrences accurately
@@ -134,8 +134,8 @@ class ErrorAggregator {
       // Safety limit on count to prevent unbounded growth (but much higher than examples)
       if (details.count < MAX_COUNT) {
         details.count++;
-      } else if (!details.countTruncated) {
-        details.countTruncated = true; // Mark that count also hit limit
+      } else {
+        details.countTruncated ??= true; // Mark that count also hit limit
       }
     }
 

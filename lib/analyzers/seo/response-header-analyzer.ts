@@ -191,7 +191,7 @@ class ResponseHeaderAnalyzer {
       if (headerData.noindexViaHeader) pagesWithXRobotsNoindex++;
       if (headerData.dynamicServing) pagesWithDynamicServing++;
 
-      const varyKey = headerData.vary || 'none';
+      const varyKey = headerData.vary ?? 'none';
       varyPatterns[varyKey] = (varyPatterns[varyKey] || 0) + 1;
     }
 

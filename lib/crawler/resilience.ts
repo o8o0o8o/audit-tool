@@ -82,7 +82,11 @@ export function recordSuccess(tracker: FailureTracker, backoffState: Map<string,
  * Wrap a promise with a timeout
  * Uses AbortController pattern for cleaner cancellation handling
  */
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string = 'Observer timeout'): Promise<T> {
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string = 'Observer timeout',
+): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let settled = false;
   let timedOut = false;

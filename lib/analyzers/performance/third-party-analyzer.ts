@@ -349,7 +349,10 @@ class ThirdPartyAnalyzer {
           allHosts.add(script.host);
         }
 
-        for (const [cat, data] of Object.entries(page.thirdPartyData.byCategory ?? {}) as [string, { size: number; count: number }][]) {
+        for (const [cat, data] of Object.entries(page.thirdPartyData.byCategory ?? {}) as [
+          string,
+          { size: number; count: number },
+        ][]) {
           if (!categoryTotals[cat]) {
             categoryTotals[cat] = { size: 0, count: 0 };
           }

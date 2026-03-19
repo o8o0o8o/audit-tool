@@ -61,7 +61,7 @@ class PageMatcher {
     } catch {
       // If URL parsing fails, try to extract path manually
       const match = url.match(/^https?:\/\/[^\/]+(\/[^?#]*)?/i);
-      if (match && match[1]) {
+      if (match?.[1]) {
         let path = match[1].toLowerCase();
         if (path.length > 1 && path.endsWith('/')) {
           path = path.slice(0, -1);

@@ -166,16 +166,20 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
         ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, '#fdba74', true)}
         ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, '#fde047', true)}
         ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, '#a5f3fc', true)}
-        ${getDualSummaryCard('Pass Rate', originSummary.passRate as number || 0, compareSummary.passRate as number || 0, originLabel, compareLabel, '', false, '%')}
+        ${getDualSummaryCard('Pass Rate', (originSummary.passRate as number) || 0, (compareSummary.passRate as number) || 0, originLabel, compareLabel, '', false, '%')}
       </div>
 
       <!-- Dual category health -->
-      ${Object.keys(originCategoryScores).length > 0 || Object.keys(compareCategoryScores).length > 0 ? `
+      ${
+        Object.keys(originCategoryScores).length > 0 || Object.keys(compareCategoryScores).length > 0
+          ? `
       <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2);">
         <div style="text-align: center; margin-bottom: 16px; font-size: 14px; opacity: 0.9;">Category Health</div>
         ${getDualCategoryBars(originCategoryScores, compareCategoryScores, originLabel, compareLabel)}
       </div>
-      ` : ''}
+      `
+          : ''
+      }
 
       ${getInsightHighlights(jsonData)}
     </div>
@@ -183,7 +187,16 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
 }
 
 /** Render a summary card with two values and a delta */
-function getDualSummaryCard(label: string, originVal: number, compareVal: number, originLabel: string, compareLabel: string, color: string, lowerIsBetter: boolean, unit = ''): string {
+function getDualSummaryCard(
+  label: string,
+  originVal: number,
+  compareVal: number,
+  originLabel: string,
+  compareLabel: string,
+  color: string,
+  lowerIsBetter: boolean,
+  unit = '',
+): string {
   const delta = compareVal - originVal;
   const deltaBadge = formatDeltaBadge(delta, unit, lowerIsBetter);
 
@@ -210,7 +223,13 @@ function getEstimatedScoreAfterFixes(summary: Record<string, unknown>, overallSc
   if (((summary.criticalCount as number) ?? 0) + ((summary.highCount as number) ?? 0) === 0) return '';
 
   const cats = (summary.categoryScores ?? {}) as Record<string, number>;
-  const weights: Record<string, number> = { seo: 0.3, performance: 0.25, technical: 0.2, accessibility: 0.15, security: 0.1 };
+  const weights: Record<string, number> = {
+    seo: 0.3,
+    performance: 0.25,
+    technical: 0.2,
+    accessibility: 0.15,
+    security: 0.1,
+  };
   let potentialGain = 0;
   for (const [cat, w] of Object.entries(weights)) {
     const headroom = 100 - (cats[cat] || 100);
@@ -335,7 +354,12 @@ function getCategoryBars(categoryScores: Partial<CategoryScores>) {
 /**
  * Generate dual-origin category bars (two bars per category with delta)
  */
-function getDualCategoryBars(originScores: Record<string, number>, compareScores: Record<string, number>, _originLabel: string, _compareLabel: string) {
+function getDualCategoryBars(
+  originScores: Record<string, number>,
+  compareScores: Record<string, number>,
+  _originLabel: string,
+  _compareLabel: string,
+) {
   const categories = [
     { key: 'seo', name: 'SEO' },
     { key: 'performance', name: 'Performance' },
@@ -353,7 +377,7 @@ function getDualCategoryBars(originScores: Record<string, number>, compareScores
       const icon = config.icon || '';
       const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
 
-      const getBarClass = (s: number) => s >= 80 ? 'progress-good' : s >= 60 ? 'progress-warning' : 'progress-bad';
+      const getBarClass = (s: number) => (s >= 80 ? 'progress-good' : s >= 60 ? 'progress-warning' : 'progress-bad');
       const deltaColor = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
       const deltaText = delta !== 0 ? `${delta > 0 ? '+' : ''}${delta}` : '—';
 

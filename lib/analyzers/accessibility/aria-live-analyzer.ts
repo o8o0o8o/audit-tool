@@ -79,8 +79,7 @@ class AriaLiveAnalyzer {
         };
       });
 
-      info.totalLiveRegions =
-        result.ariaLive + result.alerts + result.status + result.logs + result.timers;
+      info.totalLiveRegions = result.ariaLive + result.alerts + result.status + result.logs + result.timers;
       info.assertiveRegions = result.assertive + result.alerts;
       info.politeRegions = result.polite + result.status;
       info.alertRoles = result.alerts;

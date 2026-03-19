@@ -93,9 +93,7 @@ class OpenRedirectAnalyzer {
 
   private static isRedirectParam(param: string): boolean {
     const lower = param.toLowerCase();
-    return REDIRECT_PARAMS.some(
-      (rp) => lower === rp || lower.endsWith('_' + rp) || lower.endsWith(rp),
-    );
+    return REDIRECT_PARAMS.some((rp) => lower === rp || lower.endsWith('_' + rp) || lower.endsWith(rp));
   }
 
   private static isUrlLikeValue(value: string): boolean {

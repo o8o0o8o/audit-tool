@@ -136,7 +136,7 @@ class PageSegmentAnalyzer {
       segment.issueCount += pageIssues;
 
       // Status breakdown
-      const status = page.status || page.statusCode || 200;
+      const status = page.status ?? page.statusCode ?? 200;
       const statusGroup = Math.floor(status / 100) + 'xx';
       if (segment.statusBreakdown[statusGroup] !== undefined) {
         segment.statusBreakdown[statusGroup]++;

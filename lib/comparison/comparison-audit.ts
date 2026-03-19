@@ -187,8 +187,8 @@ class ComparisonAudit {
     console.log('\n' + '='.repeat(60));
     console.log('         SITE COMPARISON AUDIT');
     console.log('='.repeat(60));
-    console.log(`\nOrigin:  ${this.#originUrl || this.#options.sitemap}`);
-    console.log(`Compare: ${this.#compareUrl || this.#options.compareSitemap}`);
+    console.log(`\nOrigin:  ${this.#originUrl ?? this.#options.sitemap}`);
+    console.log(`Compare: ${this.#compareUrl ?? this.#options.compareSitemap}`);
     console.log('='.repeat(60) + '\n');
 
     // Phase 1: Audit origin site
@@ -245,9 +245,7 @@ class ComparisonAudit {
     };
 
     // Update domain if it was derived from sitemap
-    if (!this.originDomain) {
-      this.originDomain = seo.domainName;
-    }
+    this.originDomain ??= seo.domainName;
 
     console.log(`\n✅ Origin audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
   }
@@ -275,9 +273,7 @@ class ComparisonAudit {
     };
 
     // Update domain if it was derived from sitemap
-    if (!this.compareDomain) {
-      this.compareDomain = seo.domainName;
-    }
+    this.compareDomain ??= seo.domainName;
 
     console.log(`\n✅ Compare audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
   }
@@ -483,8 +479,8 @@ class ComparisonAudit {
         changed: (origin.canonical ?? '') !== (compare.canonical ?? ''),
       },
       h1: {
-        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : origin.h1 ?? '',
-        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : compare.h1 ?? '',
+        origin: Array.isArray(origin.h1) ? origin.h1.join(', ') : (origin.h1 ?? ''),
+        compare: Array.isArray(compare.h1) ? compare.h1.join(', ') : (compare.h1 ?? ''),
         changed: String(origin.h1 ?? '') !== String(compare.h1 ?? ''),
       },
     };
@@ -582,15 +578,10 @@ class ComparisonAudit {
     // Generate rich comparison HTML report using the regular report with dual-origin mode
     const htmlFile = path.join(this.comparisonDir, 'comparison.html');
     try {
-      generateHTML(
-        this.#originResults!.file,
-        this.#originResults!.domain!,
-        htmlFile,
-        {
-          compareFile: this.#compareResults!.file,
-          compareDomainName: this.#compareResults!.domain!,
-        },
-      );
+      generateHTML(this.#originResults!.file, this.#originResults!.domain!, htmlFile, {
+        compareFile: this.#compareResults!.file,
+        compareDomainName: this.#compareResults!.domain!,
+      });
       console.log(`📄 Generated comparison report: ${htmlFile}`);
     } catch (error) {
       console.warn(`⚠️  Rich comparison report failed, falling back to simple report: ${(error as Error).message}`);
@@ -600,8 +591,7 @@ class ComparisonAudit {
 
     // Auto-open comparison report in browser if --open flag is set
     if (this.#options.open) {
-      const openCmd =
-        process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
       const absolutePath = path.resolve(htmlFile);
       exec(`${openCmd} "${absolutePath}"`, (err) => {
         if (err) console.log('Could not auto-open comparison report:', err.message);

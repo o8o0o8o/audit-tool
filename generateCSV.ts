@@ -100,18 +100,18 @@ function generatePagesCSV(jsonData: AuditJsonData) {
     // CSV export reads many dynamic analyzer-added properties on PageInfo
     const data = _data as PageInfo;
     const h1Count = Array.isArray(data.headings)
-      ? (data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h1')?.count ?? 0
-      : data.headings?.h1?.length ?? 0;
+      ? ((data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h1')?.count ?? 0)
+      : (data.headings?.h1?.length ?? 0);
     const h2Count = Array.isArray(data.headings)
-      ? (data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h2')?.count ?? 0
-      : data.headings?.h2?.length ?? 0;
+      ? ((data.headings as unknown as Array<{ tag: string; count: number }>).find((h) => h.tag === 'h2')?.count ?? 0)
+      : (data.headings?.h2?.length ?? 0);
 
     rows.push(
       [
         url,
         data.status ?? data.statusCode ?? '',
-        data.foundIn || 'sitemap',
-        data.segment || 'other',
+        data.foundIn ?? 'sitemap',
+        data.segment ?? 'other',
         data.title ?? '',
         data.title?.length ?? 0,
         data.description ?? '',
@@ -123,7 +123,7 @@ function generatePagesCSV(jsonData: AuditJsonData) {
         data.TTFB ?? data.vitals?.ttfb ?? '',
         data.FCP ?? '',
         data.LCP ?? data.vitals?.lcp ?? '',
-        data.CLS !== undefined ? data.CLS : data.vitals?.cls ?? '',
+        data.CLS ?? data.vitals?.cls ?? '',
         data.INP ?? '',
         data.TBT ?? '',
         data.totalResponseSize ?? data.totalSize ?? '',
@@ -208,7 +208,7 @@ function generatePerformanceCSV(jsonData: AuditJsonData) {
           data.TTFB ?? '',
           data.FCP ?? '',
           data.LCP ?? '',
-          data.CLS !== undefined ? data.CLS : '',
+          data.CLS ?? '',
           data.INP ?? '',
           data.TBT ?? '',
           data.TTI ?? '',

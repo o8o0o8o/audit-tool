@@ -36,7 +36,7 @@ class LinkQualityAnalyzer {
         const links = Array.from(document.querySelectorAll('a[href]'));
         return links.map((link) => {
           const href = (link as HTMLAnchorElement).href;
-          const anchorText = link.textContent?.trim() || link.getAttribute('aria-label') || '';
+          const anchorText = link.textContent?.trim() ?? link.getAttribute('aria-label') ?? '';
           const rel = (link as HTMLAnchorElement).rel || '';
           const isNofollow = rel.includes('nofollow');
           const isExternal = href && !href.startsWith(origin) && !href.startsWith('/') && !href.startsWith('#');

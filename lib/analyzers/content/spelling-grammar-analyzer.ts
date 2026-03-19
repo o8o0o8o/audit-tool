@@ -239,10 +239,7 @@ class SpellingGrammarAnalyzer {
         .sort((a, b) => b.count - a.count)
         .slice(0, 20);
 
-      info.totalMisspellings = Object.values(misspellingCounts).reduce(
-        (sum, v) => sum + v.count,
-        0,
-      );
+      info.totalMisspellings = Object.values(misspellingCounts).reduce((sum, v) => sum + v.count, 0);
     } catch {
       return { issues, warnings, info };
     }
@@ -253,8 +250,7 @@ class SpellingGrammarAnalyzer {
         .map((m) => `"${m.word}" → "${m.correction}"${m.count > 1 ? ` (${m.count}x)` : ''}`)
         .join(', ');
 
-      const severity =
-        info.totalMisspellings > 10 ? SEVERITY.MEDIUM : SEVERITY.LOW;
+      const severity = info.totalMisspellings > 10 ? SEVERITY.MEDIUM : SEVERITY.LOW;
 
       issues.push({
         message: `Spelling errors detected (${info.totalMisspellings} instances)`,

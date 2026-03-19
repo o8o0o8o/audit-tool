@@ -261,7 +261,8 @@ class LinkingOpportunityAnalyzer {
 
         // Points for high density keywords
         const avgDensity =
-          data.sharedKeywords.reduce((sum: number, k: SharedKeywordInfo) => sum + k.targetDensity, 0) / data.sharedKeywords.length;
+          data.sharedKeywords.reduce((sum: number, k: SharedKeywordInfo) => sum + k.targetDensity, 0) /
+          data.sharedKeywords.length;
         score += Math.min(avgDensity * 5, 20);
 
         // Store if score is significant
@@ -282,7 +283,7 @@ class LinkingOpportunityAnalyzer {
 
         opportunities.push({
           sourcePage: sourceUrl,
-          sourceTitle: sourcePage.title || 'Untitled',
+          sourceTitle: sourcePage.title ?? 'Untitled',
           suggestedLinks: suggestedLinks.slice(0, 5), // Top 5 per source page
           relevanceScore: suggestedLinks[0].relevanceScore, // Use top link score
           totalMissedLinks: suggestedLinks.length,
@@ -348,7 +349,7 @@ class LinkingOpportunityAnalyzer {
     if (excellentOpps.length > 5) {
       const topPages = excellentOpps
         .slice(0, 3)
-        .map((o) => o.sourcePage.split('/').pop() || 'homepage')
+        .map((o) => o.sourcePage.split('/').pop() ?? 'homepage')
         .join(', ');
       issues.push({
         message: 'High-impact linking opportunities available',

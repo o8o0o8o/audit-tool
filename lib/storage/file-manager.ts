@@ -66,7 +66,7 @@ class FileManager {
     this.archivePartNumber = 0;
 
     // Generate timestamp for this run if not provided
-    this.timestamp = timestamp || this.generateTimestamp();
+    this.timestamp = timestamp ?? this.generateTimestamp();
 
     // Create directory structure: audit-results/domain.com/YYYY-MM-DD_HH-MM-SS/
     this.domainDir = path.join(this.baseResultsDir, this.domainName);

@@ -58,8 +58,8 @@ class CompressionAnalyzer {
     };
 
     // Check HTML compression
-    const htmlEncoding = pageData.contentEncoding || pageData.headers?.['content-encoding'];
-    info.htmlCompression = htmlEncoding || 'none';
+    const htmlEncoding = pageData.contentEncoding ?? pageData.headers?.['content-encoding'];
+    info.htmlCompression = htmlEncoding ?? 'none';
 
     if (htmlEncoding) {
       if (htmlEncoding.includes('br')) {
@@ -217,7 +217,7 @@ class CompressionAnalyzer {
     const uncompressedPages: { url: string; size: number }[] = [];
 
     for (const [url, pageData] of Object.entries(pages)) {
-      const htmlEncoding = pageData.contentEncoding || pageData.headers?.['content-encoding'];
+      const htmlEncoding = pageData.contentEncoding ?? pageData.headers?.['content-encoding'];
 
       if (htmlEncoding) {
         stats.pagesWithCompression++;
@@ -291,7 +291,7 @@ class CompressionAnalyzer {
   static getFileName(url: string) {
     try {
       const pathname = new URL(url).pathname;
-      return pathname.split('/').pop() || pathname;
+      return pathname.split('/').pop() ?? pathname;
     } catch {
       return url;
     }

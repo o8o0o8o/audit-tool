@@ -187,7 +187,7 @@ class HistoryManager {
       quickWins: ((auditData.analysis?.summary?.quickWins ?? []) as QuickWinFull[]).map((qw) => ({
         issue: qw.issue,
         affectedPages: qw.affectedPages,
-        severity: (qw.severity || 'medium') as SeverityLevel,
+        severity: (qw.severity ?? 'medium') as SeverityLevel,
       })),
     };
 
@@ -216,7 +216,7 @@ class HistoryManager {
 
   extractPerformanceSummary(auditData: Partial<AuditResults>): PerformanceSummary | null {
     const pages = auditData.pageData?.pages ?? {};
-    const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter((p) => p.vitals || p.TTFB);
+    const pagesWithPerf = (Object.values(pages) as PageInfo[]).filter((p) => p.vitals ?? p.TTFB);
 
     if (pagesWithPerf.length === 0) return null;
 

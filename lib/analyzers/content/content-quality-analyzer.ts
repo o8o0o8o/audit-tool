@@ -239,7 +239,8 @@ class ContentQualityAnalyzer {
           }));
 
         // Check for keyword stuffing
-        const maxKeywordDensity = analysis.topKeywords.length > 0 ? parseFloat(analysis.topKeywords[0].density as string) : 0;
+        const maxKeywordDensity =
+          analysis.topKeywords.length > 0 ? parseFloat(analysis.topKeywords[0].density as string) : 0;
 
         // Content scoring
         if (analysis.wordCount < thresholds.CONTENT_MIN) {
@@ -327,8 +328,7 @@ class ContentQualityAnalyzer {
         const totalSectionWords = Object.values(sections).reduce((a, b) => a + b, 0);
         const boilerplate = sections.nav + sections.header + sections.footer;
         sections.boilerplate = boilerplate;
-        sections.boilerplateRatio =
-          totalSectionWords > 0 ? Math.round((boilerplate / totalSectionWords) * 100) : 0;
+        sections.boilerplateRatio = totalSectionWords > 0 ? Math.round((boilerplate / totalSectionWords) * 100) : 0;
 
         analysis.wordCountBySection = sections;
 

@@ -36,10 +36,7 @@ class ReducedMotionAnalyzer {
             try {
               const rules = sheet.cssRules || sheet.rules;
               for (const rule of rules) {
-                if (
-                  rule instanceof CSSMediaRule &&
-                  rule.conditionText?.includes('prefers-reduced-motion')
-                ) {
+                if (rule instanceof CSSMediaRule && rule.conditionText?.includes('prefers-reduced-motion')) {
                   hasReducedMotion = true;
                   break;
                 }
@@ -157,8 +154,7 @@ class ReducedMotionAnalyzer {
       });
     }
 
-    const hasAnimations =
-      info.animatedElements > 0 || info.carousels > 0 || info.autoplayVideos > 0;
+    const hasAnimations = info.animatedElements > 0 || info.carousels > 0 || info.autoplayVideos > 0;
 
     if (hasAnimations && !info.hasReducedMotionQuery) {
       issues.push({

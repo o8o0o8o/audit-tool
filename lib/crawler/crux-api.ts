@@ -207,7 +207,7 @@ class CrUXAPI {
               let errorMsg = `HTTP ${res.statusCode}`;
               try {
                 const errBody = JSON.parse(data) as { error?: { message?: string }; message?: string };
-                errorMsg += `: ${errBody.error?.message || errBody.message || data.slice(0, 200)}`;
+                errorMsg += `: ${errBody.error?.message ?? errBody.message ?? data.slice(0, 200)}`;
               } catch {
                 errorMsg += `: ${data.slice(0, 200)}`;
               }

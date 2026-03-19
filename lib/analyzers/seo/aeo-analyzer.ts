@@ -121,13 +121,7 @@ class AEOAnalyzer {
    * Analyze semantic HTML usage
    * @private
    */
-  static #analyzeSemanticHTML(
-    parsedPage: ParsedPage,
-    info: AeoInfo,
-    issues: Issue[],
-    warnings: Issue[],
-    url: string,
-  ) {
+  static #analyzeSemanticHTML(parsedPage: ParsedPage, info: AeoInfo, issues: Issue[], warnings: Issue[], url: string) {
     let semanticCount = 0;
     let genericCount = 0;
 
@@ -249,7 +243,7 @@ class AEOAnalyzer {
     const authorMeta = parsedPage.querySelector('meta[name="author"]');
     const authorSchema = parsedPage.toString().includes('"author"');
     const authorByline = parsedPage.querySelector('[rel="author"], .author, [itemprop="author"]');
-    info.hasAuthorInfo = !!(authorMeta || authorSchema || authorByline);
+    info.hasAuthorInfo = !!((authorMeta ?? authorSchema) || authorByline);
 
     // Check for clear, concise introductory content (first paragraph)
     const firstParagraph = parsedPage.querySelector('article p, main p, .content p');
@@ -385,7 +379,7 @@ class AEOAnalyzer {
       const crawlerList = info.blockedCrawlers
         .map((name: string) => {
           const c = AI_CRAWLERS.find((c) => c.name === name);
-          return `${name} (${c?.owner || 'unknown'})`;
+          return `${name} (${c?.owner ?? 'unknown'})`;
         })
         .join(', ');
 

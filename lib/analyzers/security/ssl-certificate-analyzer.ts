@@ -99,7 +99,7 @@ class SSLCertificateAnalyzer {
       if (!certDetails.isValid) {
         issues.push({
           message: 'SSL certificate is invalid',
-          detail: certDetails.validationError || 'Certificate validation failed',
+          detail: certDetails.validationError ?? 'Certificate validation failed',
           severity: SEVERITY.CRITICAL,
         });
       }

@@ -108,9 +108,10 @@ class DOMComplexityAnalyzer {
         function getSelector(el: Element): string {
           const tag = el.tagName.toLowerCase();
           const id = el.id ? `#${el.id}` : '';
-          const cls = el.className && typeof el.className === 'string'
-            ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
-            : '';
+          const cls =
+            el.className && typeof el.className === 'string'
+              ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.')
+              : '';
           return `${tag}${id}${cls}`.substring(0, 80);
         }
       });
@@ -130,7 +131,12 @@ class DOMComplexityAnalyzer {
     if (info.totalNodes > THRESHOLDS.TOTAL_NODES_FAILURE) {
       issues.push({
         message: `Excessive DOM size (${info.totalNodes} elements)`,
-        detail: `Page has ${info.totalNodes} DOM elements (Lighthouse threshold: ${THRESHOLDS.TOTAL_NODES_FAILURE}). Large DOMs increase memory usage, slow style calculations, and cause layout thrashing. Most common elements: ${Object.entries(info.elementCounts).slice(0, 5).map(([tag, count]) => `<${tag}>: ${count}`).join(', ')}.`,
+        detail: `Page has ${info.totalNodes} DOM elements (Lighthouse threshold: ${THRESHOLDS.TOTAL_NODES_FAILURE}). Large DOMs increase memory usage, slow style calculations, and cause layout thrashing. Most common elements: ${Object.entries(
+          info.elementCounts,
+        )
+          .slice(0, 5)
+          .map(([tag, count]) => `<${tag}>: ${count}`)
+          .join(', ')}.`,
         severity: SEVERITY.HIGH,
       });
     } else if (info.totalNodes > THRESHOLDS.TOTAL_NODES_WARNING) {

@@ -1018,7 +1018,7 @@ export function formatSignalValue(key: string, value: unknown): string {
   if (!info) return String(value);
 
   if (info.type === 'boolean') {
-    return value ? info.goodLabel || 'Yes' : info.badLabel || 'No';
+    return value ? (info.goodLabel ?? 'Yes') : (info.badLabel ?? 'No');
   }
 
   const numValue = typeof value === 'number' ? value : Number(value);

@@ -97,7 +97,7 @@ class CriticalPathAnalyzer {
     // 4. Calculate document size
     const docRequest = Object.entries(requests).find(([reqUrl]) => reqUrl === url || reqUrl === url + '/');
     if (docRequest) {
-      criticalPathData.documentSize = ((docRequest[1] as unknown) as { size?: number }).size ?? 0;
+      criticalPathData.documentSize = (docRequest[1] as unknown as { size?: number }).size ?? 0;
     }
 
     // 5. Analyze inline styles/scripts
@@ -138,7 +138,7 @@ class CriticalPathAnalyzer {
         message: 'Render-blocking JavaScript in <head>',
         detail: `<a href="${url}">${url}</a> has ${headBlockingJS.length} blocking script(s) in <head>: ${headBlockingJS
           .slice(0, 3)
-          .map((s) => s.src?.split('/').pop() || 'inline')
+          .map((s) => s.src?.split('/').pop() ?? 'inline')
           .join(', ')}. Move to end of body or add async/defer.`,
         severity: SEVERITY.HIGH,
       });
@@ -205,11 +205,13 @@ class CriticalPathAnalyzer {
         continue;
       }
 
-      const size = href ? (requests as unknown as Record<string, Record<string, unknown>>)[href]?.size as number || 0 : 0;
+      const size = href
+        ? ((requests as unknown as Record<string, Record<string, unknown>>)[href]?.size as number) || 0
+        : 0;
 
       blocking.push({
         href,
-        media: media || 'all',
+        media: media ?? 'all',
         size,
         isBlocking: true,
       });
@@ -248,11 +250,11 @@ class CriticalPathAnalyzer {
 
       const inHead = (head as unknown as Element | null)?.contains(script as unknown as Node) ?? false;
       const size = src
-        ? (requests as unknown as Record<string, Record<string, unknown>>)[src]?.size as number || 0
+        ? ((requests as unknown as Record<string, Record<string, unknown>>)[src]?.size as number) || 0
         : script.textContent?.length || 0;
 
       blocking.push({
-        src: src || '(inline)',
+        src: src ?? '(inline)',
         size,
         inHead,
         isBlocking: true,

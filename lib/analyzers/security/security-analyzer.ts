@@ -97,7 +97,7 @@ class SecurityAnalyzer {
     if (isHttps) {
       const allResources = parsedPage.querySelectorAll('script[src], link[href], img[src], iframe[src]');
       for (const resource of allResources) {
-        const src = resource.getAttribute('src') || resource.getAttribute('href');
+        const src = resource.getAttribute('src') ?? resource.getAttribute('href');
         if (src?.startsWith('http://')) {
           securityIssues.mixedContent++;
         }

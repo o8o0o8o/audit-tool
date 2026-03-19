@@ -109,9 +109,12 @@ class CodeCoverageAnalyzer {
           const scriptUrl = entry.url;
           if (!scriptUrl || scriptUrl.startsWith('data:')) continue;
 
-          const totalLength = entry.functions.reduce((sum: number, fn: { ranges: { startOffset: number; endOffset: number; count: number }[] }) => {
-            return Math.max(sum, ...fn.ranges.map((r) => r.endOffset));
-          }, 0);
+          const totalLength = entry.functions.reduce(
+            (sum: number, fn: { ranges: { startOffset: number; endOffset: number; count: number }[] }) => {
+              return Math.max(sum, ...fn.ranges.map((r) => r.endOffset));
+            },
+            0,
+          );
 
           // V8's detailed coverage uses nested ranges: each function's first range
           // covers the entire body (count > 0 if called). Inner ranges with count === 0
@@ -146,7 +149,7 @@ class CodeCoverageAnalyzer {
       // Collect CSS coverage using CDP rule usage tracking directly.
       // CDP CSS.stopRuleUsageTracking returns per-rule byte offsets with used boolean.
       // We group by stylesheet, get the text, and compute used vs unused byte ranges.
-      const ruleUsageResult = await client.send('CSS.stopRuleUsageTracking') as {
+      const ruleUsageResult = (await client.send('CSS.stopRuleUsageTracking')) as {
         ruleUsage?: { styleSheetId: string; startOffset: number; endOffset: number; used: boolean }[];
       };
       if (ruleUsageResult?.ruleUsage && styleSheets) {
@@ -175,7 +178,9 @@ class CodeCoverageAnalyzer {
           let textLength = 0;
           let sheetUrl = sheetInfo?.sourceURL ?? '';
           try {
-            const textResult = await client.send('CSS.getStyleSheetText', { styleSheetId: sheetId }) as { text?: string };
+            const textResult = (await client.send('CSS.getStyleSheetText', { styleSheetId: sheetId })) as {
+              text?: string;
+            };
             textLength = textResult?.text?.length ?? 0;
           } catch {
             // Stylesheet may have been removed; use length from header
@@ -404,9 +409,7 @@ class CodeCoverageAnalyzer {
   static #mergeAndSum(ranges: { startOffset: number; endOffset: number }[]) {
     if (ranges.length === 0) return 0;
 
-    const sorted = ranges
-      .map((r) => ({ start: r.startOffset, end: r.endOffset }))
-      .sort((a, b) => a.start - b.start);
+    const sorted = ranges.map((r) => ({ start: r.startOffset, end: r.endOffset })).sort((a, b) => a.start - b.start);
 
     let total = 0;
     let current = sorted[0];

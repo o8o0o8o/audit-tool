@@ -36,18 +36,9 @@ class CrossOriginPolicyAnalyzer {
     const headers = pageData.responseHeaders ?? {};
 
     // Extract headers (case-insensitive)
-    info.coop =
-      headers['cross-origin-opener-policy'] ||
-      headers['Cross-Origin-Opener-Policy'] ||
-      null;
-    info.coep =
-      headers['cross-origin-embedder-policy'] ||
-      headers['Cross-Origin-Embedder-Policy'] ||
-      null;
-    info.corp =
-      headers['cross-origin-resource-policy'] ||
-      headers['Cross-Origin-Resource-Policy'] ||
-      null;
+    info.coop = headers['cross-origin-opener-policy'] || headers['Cross-Origin-Opener-Policy'] || null;
+    info.coep = headers['cross-origin-embedder-policy'] || headers['Cross-Origin-Embedder-Policy'] || null;
+    info.corp = headers['cross-origin-resource-policy'] || headers['Cross-Origin-Resource-Policy'] || null;
 
     // Clean values (remove reporting directives)
     if (info.coop) info.coop = info.coop.split(';')[0].trim();
@@ -84,8 +75,7 @@ class CrossOriginPolicyAnalyzer {
 
     // Check cross-origin isolation (requires both COOP: same-origin and COEP: require-corp/credentialless)
     info.isCrossOriginIsolated =
-      info.coop === 'same-origin' &&
-      (info.coep === 'require-corp' || info.coep === 'credentialless');
+      info.coop === 'same-origin' && (info.coep === 'require-corp' || info.coep === 'credentialless');
 
     // Report missing headers
     const missing: string[] = [];

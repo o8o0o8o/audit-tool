@@ -82,13 +82,15 @@ class PWAAnalyzer {
     const manifestLink = pageData.manifest ?? pageData.webManifest;
     if (manifestLink) {
       info.hasManifest = true;
-      info.manifestUrl = typeof manifestLink === 'string'
-        ? manifestLink
-        : (manifestLink as { url?: string }).url ?? null;
+      info.manifestUrl =
+        typeof manifestLink === 'string' ? manifestLink : ((manifestLink as { url?: string }).url ?? null);
 
       // Analyze manifest content if available
-      const manifestContent = pageData.manifestContent ??
-        (typeof manifestLink === 'object' && manifestLink !== null ? (manifestLink as { content?: Record<string, unknown> }).content : undefined);
+      const manifestContent =
+        pageData.manifestContent ??
+        (typeof manifestLink === 'object' && manifestLink !== null
+          ? (manifestLink as { content?: Record<string, unknown> }).content
+          : undefined);
       if (manifestContent) {
         this.analyzeManifest(manifestContent, info, issues, warnings);
       } else {
@@ -340,7 +342,9 @@ class PWAAnalyzer {
       if (pageData.manifest || pageData.webManifest) {
         stats.pagesWithManifest++;
         const manifestUrl =
-          typeof pageData.manifest === 'string' ? pageData.manifest : ((pageData.manifest as { url?: string })?.url ?? pageData.webManifest);
+          typeof pageData.manifest === 'string'
+            ? pageData.manifest
+            : ((pageData.manifest as { url?: string })?.url ?? pageData.webManifest);
         if (manifestUrl) stats.manifestUrls.add(manifestUrl);
       }
 

@@ -134,7 +134,7 @@ export interface PageInfo {
   imagesWithoutAltCount?: number;
 
   // Meta tags
-  meta?: unknown[];
+  meta?: Record<string, unknown>[];
   metaMap?: Record<string, string>;
   metaTags?: Record<string, string>;
   missingMetaTags?: string[];
@@ -1294,7 +1294,7 @@ export interface AuditSummary {
   categoryScores: CategoryScores;
   overallScore: number;
   passRate: number;
-  quickWins: QuickWin[];
+  quickWins: QuickWinFull[];
 }
 
 // ─── Configuration ───────────────────────────────────────────────────────────
@@ -1505,14 +1505,18 @@ export interface TrendDataCompat {
   insights?: Record<string, (number | null)[]>;
 }
 
-export interface QuickWinFull extends QuickWin {
-  severity?: string;
-  effortMinutes?: number;
-  impactScore?: number;
-  fix?: string;
+export interface QuickWinFull {
+  issue: string;
+  severity: string;
+  affectedPages: number;
+  impact: string;
+  effort: string;
+  effortMinutes: number;
+  fix: string;
   example?: string;
-  examples?: string[];
-  resources?: Array<{ text: string; url: string }>;
+  resources: Array<{ text: string; url: string }>;
+  impactScore: number;
+  examples: string[];
 }
 
 export interface HeadingCount {

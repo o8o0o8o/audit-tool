@@ -215,7 +215,10 @@ class AboveFoldAnalyzer {
     const ctas = pageData.ctas ?? pageData.buttons ?? [];
     for (const cta of ctas) {
       const rect = cta.rect;
-      if (rect && this.isInViewport(rect as { top: number; bottom: number; left: number; right: number }, info.viewport)) {
+      if (
+        rect &&
+        this.isInViewport(rect as { top: number; bottom: number; left: number; right: number }, info.viewport)
+      ) {
         info.aboveFoldElements.cta.push({
           text: cta.text ?? '',
           type: cta.type ?? '',
@@ -241,7 +244,6 @@ class AboveFoldAnalyzer {
     // Element is in viewport if any part of it is visible
     return rect.top < viewport.height && rect.bottom > 0 && rect.left < viewport.width && rect.right > 0;
   }
-
 
   /**
    * Analyze above-fold content across the site

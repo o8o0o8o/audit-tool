@@ -4,7 +4,7 @@ import { ReportDataProcessor } from './lib/reports/data-processor';
 import type {
   PageInfo,
   AnalysisDetail,
-  QuickWin,
+  QuickWinFull,
   AuditSummary,
   PageData,
   SitemapData,
@@ -148,10 +148,10 @@ function generatePagesCSV(jsonData: AuditJsonData) {
         data.codeCoverage?.css?.ratio ?? '',
         data.outboundLinkHealth?.broken?.length ?? '',
         data.contentQuality?.wordCountBySection
-          ? (data.contentQuality.wordCountBySection as Record<string, unknown>)?.main ?? ''
+          ? ((data.contentQuality.wordCountBySection as Record<string, unknown>)?.main ?? '')
           : '',
         data.contentQuality?.wordCountBySection
-          ? (data.contentQuality.wordCountBySection as Record<string, unknown>)?.boilerplateRatio ?? ''
+          ? ((data.contentQuality.wordCountBySection as Record<string, unknown>)?.boilerplateRatio ?? '')
           : '',
         data.eeat?.score ?? '',
         data.eeat?.hasAuthor ? 'Yes' : 'No',
@@ -228,7 +228,7 @@ function generateQuickWinsCSV(jsonData: AuditJsonData) {
   const quickWins = jsonData.analysis?.summary?.quickWins ?? [];
   const rows = [['Priority', 'Issue', 'Severity', 'Impact', 'Effort', 'Affected Pages', 'How to Fix', 'Example URLs']];
 
-  quickWins.forEach((win: QuickWin & { examples?: string[]; severity?: string; fix?: string }, index: number) => {
+  quickWins.forEach((win: QuickWinFull, index: number) => {
     const examples = (win.examples ?? []).slice(0, 3).join('; ');
     rows.push(
       [

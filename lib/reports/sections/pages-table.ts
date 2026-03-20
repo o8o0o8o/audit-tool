@@ -422,12 +422,12 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
     ? page.headings
     : page.headings
       ? [
-          { tag: 'h1', count: (page.headings.h1?.length ?? page.headings.h1Count) ?? 0 },
-          { tag: 'h2', count: (page.headings.h2?.length ?? page.headings.h2Count) ?? 0 },
-          { tag: 'h3', count: (page.headings.h3?.length ?? page.headings.h3Count) ?? 0 },
-          { tag: 'h4', count: (page.headings.h4?.length ?? page.headings.h4Count) ?? 0 },
-          { tag: 'h5', count: (page.headings.h5?.length ?? page.headings.h5Count) ?? 0 },
-          { tag: 'h6', count: (page.headings.h6?.length ?? page.headings.h6Count) ?? 0 },
+          { tag: 'h1', count: page.headings.h1?.length ?? page.headings.h1Count ?? 0 },
+          { tag: 'h2', count: page.headings.h2?.length ?? page.headings.h2Count ?? 0 },
+          { tag: 'h3', count: page.headings.h3?.length ?? page.headings.h3Count ?? 0 },
+          { tag: 'h4', count: page.headings.h4?.length ?? page.headings.h4Count ?? 0 },
+          { tag: 'h5', count: page.headings.h5?.length ?? page.headings.h5Count ?? 0 },
+          { tag: 'h6', count: page.headings.h6?.length ?? page.headings.h6Count ?? 0 },
         ]
       : null;
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray);
@@ -819,7 +819,7 @@ function getImageOptimizationCells(page: PageInfo) {
  * Generate accessibility cells
  */
 function getAccessibilityCells(page: PageInfo) {
-  const a11y = page.accessibility ?? ({} as AccessibilityAnalysis);
+  const a11y: Partial<AccessibilityAnalysis> = page.accessibility ?? {};
 
   const a11yScore: number | string = a11y.a11yScore ?? 'N/A';
   const ariaValid = a11y.aria?.valid ?? 0;
@@ -864,7 +864,7 @@ function getAccessibilityCells(page: PageInfo) {
  * Get segment color based on segment type
  */
 function getSegmentColor(segment: string) {
-  const colors = {
+  const colors: Record<string, string> = {
     blog: '#3b82f6', // blue
     product: '#10b981', // green
     category: '#8b5cf6', // purple
@@ -879,7 +879,7 @@ function getSegmentColor(segment: string) {
     api: '#ef4444', // red
     other: '#9ca3af', // gray
   };
-  return (colors as Record<string, string>)[segment] || colors.other;
+  return colors[segment] || colors.other;
 }
 
 /**
@@ -908,11 +908,11 @@ function getSegmentLabel(segment: string) {
  * Generate content quality cells
  */
 function getContentQualityCells(page: PageInfo) {
-  const content = page.contentQuality ?? ({} as ContentQualityAnalysis);
+  const content: Partial<ContentQualityAnalysis> = page.contentQuality ?? {};
 
   const contentScore: number | string = content.contentScore ?? 'N/A';
   const contentScoreNum = typeof contentScore === 'number' ? contentScore : 0;
-  const wordCount = content.wordCount || 0;
+  const wordCount = content.wordCount ?? 0;
   const textToHtmlRatio = content.textToHtmlRatio ?? 0;
   const readability = content.readabilityScore ?? 0;
   const topKeywords = content.topKeywords ?? [];
@@ -974,7 +974,10 @@ function getNewInsightCells(page: PageInfo) {
 
   // Main content words
   const wcs = page.contentQuality?.wordCountBySection;
-  const mainWords = wcs && !Array.isArray(wcs) ? ((wcs as Record<string, number>).main ?? null) : null;
+  const mainWords =
+    wcs && typeof wcs === 'object' && !Array.isArray(wcs) && 'main' in wcs
+      ? ((wcs as { main?: number }).main ?? null)
+      : null;
   const mainDisplay = mainWords ?? '—';
   const mainColor =
     mainWords != null ? (mainWords >= 300 ? '#10b981' : mainWords >= 100 ? '#f59e0b' : '#ef4444') : '#6b7280';
@@ -1009,12 +1012,12 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
     ? p.headings
     : p.headings
       ? [
-          { tag: 'h1', count: (p.headings.h1?.length ?? p.headings.h1Count) ?? 0 },
-          { tag: 'h2', count: (p.headings.h2?.length ?? p.headings.h2Count) ?? 0 },
-          { tag: 'h3', count: (p.headings.h3?.length ?? p.headings.h3Count) ?? 0 },
-          { tag: 'h4', count: (p.headings.h4?.length ?? p.headings.h4Count) ?? 0 },
-          { tag: 'h5', count: (p.headings.h5?.length ?? p.headings.h5Count) ?? 0 },
-          { tag: 'h6', count: (p.headings.h6?.length ?? p.headings.h6Count) ?? 0 },
+          { tag: 'h1', count: p.headings.h1?.length ?? p.headings.h1Count ?? 0 },
+          { tag: 'h2', count: p.headings.h2?.length ?? p.headings.h2Count ?? 0 },
+          { tag: 'h3', count: p.headings.h3?.length ?? p.headings.h3Count ?? 0 },
+          { tag: 'h4', count: p.headings.h4?.length ?? p.headings.h4Count ?? 0 },
+          { tag: 'h5', count: p.headings.h5?.length ?? p.headings.h5Count ?? 0 },
+          { tag: 'h6', count: p.headings.h6?.length ?? p.headings.h6Count ?? 0 },
         ]
       : null;
   const hasHStructureIssue = hasHeadingStructureIssue(headingsArray);
@@ -1051,7 +1054,7 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const unminified = (resOpt.minification?.unminifiedJS ?? 0) + (resOpt.minification?.unminifiedCSS ?? 0);
 
   // Accessibility
-  const a11y = p.accessibility ?? ({} as AccessibilityAnalysis);
+  const a11y: Partial<AccessibilityAnalysis> = p.accessibility ?? {};
   const a11yScore = a11y.a11yScore ?? null;
   const ariaValid = a11y.aria?.valid ?? 0;
   const ariaInvalid = a11y.aria?.invalid ?? 0;
@@ -1064,9 +1067,9 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const focusIssues = (a11y.keyboard?.elementsWithoutFocus ?? 0) + (a11y.keyboard?.positiveTabindex ?? 0);
 
   // Content quality
-  const content = p.contentQuality ?? ({} as ContentQualityAnalysis);
+  const content: Partial<ContentQualityAnalysis> = p.contentQuality ?? {};
   const contentScore = content.contentScore ?? null;
-  const wordCount = content.wordCount || 0;
+  const wordCount = content.wordCount ?? 0;
   const textToHtmlRatio = content.textToHtmlRatio ?? 0;
   const readability = content.readabilityScore ?? 0;
   const topKeywords = (content.topKeywords ?? [])
@@ -1083,9 +1086,12 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
   const jsUnused = p.codeCoverage?.js?.ratio;
   const brokenCount = p.outboundLinkHealth?.broken?.length ?? null;
   const pWcs = p.contentQuality?.wordCountBySection;
-  const mainWords = pWcs && !Array.isArray(pWcs) ? ((pWcs as Record<string, number>).main ?? null) : null;
+  const mainWords =
+    pWcs && typeof pWcs === 'object' && !Array.isArray(pWcs) && 'main' in pWcs
+      ? ((pWcs as { main?: number }).main ?? null)
+      : null;
 
-  const status = (p.status as number) || (p.statusCode as number) || 0;
+  const status = (p.status ?? p.statusCode ?? 0) as number;
   const incomingCount = (incomingLinks[p.url]?.length || p.incomingLinksCount) ?? 0;
 
   // Canonical symbol

@@ -133,8 +133,8 @@ class ReportDataProcessor {
         repoAnalysis = FileManager.readJsonFile(repoPath);
         console.log(`  - Loaded repo analysis`);
       }
-    } catch {
-      // No repo analysis available
+    } catch (e: unknown) {
+      console.debug('Could not load repo analysis:', (e as Error).message);
     }
 
     // Reconstruct the data structure expected by report generators

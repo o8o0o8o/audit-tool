@@ -81,24 +81,30 @@ class FreshnessAnalyzer {
       const metaModified = parsedPage.querySelector('meta[property="article:modified_time"]');
 
       if (metaPublished && !freshnessData.datePublished) {
-        try {
-          const pubDate = new Date(metaPublished.getAttribute('content')!);
-          if (!isNaN(pubDate.getTime())) {
-            freshnessData.datePublished = pubDate.toISOString();
+        const pubContent = metaPublished.getAttribute('content') ?? '';
+        if (pubContent) {
+          try {
+            const pubDate = new Date(pubContent);
+            if (!isNaN(pubDate.getTime())) {
+              freshnessData.datePublished = pubDate.toISOString();
+            }
+          } catch {
+            // Invalid date format in meta tag
           }
-        } catch {
-          // Invalid date format in meta tag - skip silently
         }
       }
 
       if (metaModified && !freshnessData.dateModified) {
-        try {
-          const modDate = new Date(metaModified.getAttribute('content')!);
-          if (!isNaN(modDate.getTime())) {
-            freshnessData.dateModified = modDate.toISOString();
+        const modContent = metaModified.getAttribute('content') ?? '';
+        if (modContent) {
+          try {
+            const modDate = new Date(modContent);
+            if (!isNaN(modDate.getTime())) {
+              freshnessData.dateModified = modDate.toISOString();
+            }
+          } catch {
+            // Invalid date format in meta tag
           }
-        } catch {
-          // Invalid date format in meta tag - skip silently
         }
       }
 

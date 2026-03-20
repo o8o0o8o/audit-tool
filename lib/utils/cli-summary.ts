@@ -416,7 +416,9 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
       return {
         languageMismatches: pArr.filter((p) => p.languageDetection?.match === false).length,
         brokenOutboundLinks: pArr.reduce((s: number, p) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0),
-        nearDuplicatePages: pArr.filter((p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0).length,
+        nearDuplicatePages: pArr.filter(
+          (p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
+        ).length,
       };
     })(),
   };
@@ -451,7 +453,9 @@ function getInsightLines(pagesArray: PageInfo[]) {
   }
 
   // Near-duplicate / similar content
-  const similarPages = pagesArray.filter((p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0).length;
+  const similarPages = pagesArray.filter(
+    (p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
+  ).length;
   if (similarPages > 0) {
     lines.push(`${C.YELLOW}📄${C.RESET} ${similarPages} page(s) with near-duplicate content`);
   }

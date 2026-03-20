@@ -38,7 +38,18 @@ class ContentQualityAnalyzer {
           return Math.max(1, Math.round(syllableCount));
         };
 
-        // Helper: Calculate Flesch Reading Ease
+        // Flesch Reading Ease formula (Flesch, 1948)
+        // https://en.wikipedia.org/wiki/Flesch%E2%80%93Kincaid_readability_tests
+        // Score 0-100: higher = easier to read. 60-70 = standard, <30 = very difficult
+        const FLESCH_INTERCEPT = 206.835;
+        const FLESCH_SENTENCE_COEFF = 1.015;
+        const FLESCH_SYLLABLE_COEFF = 84.6;
+
+        // Readability scoring thresholds
+        const READABILITY_VERY_DIFFICULT = 30;
+        const READABILITY_DIFFICULT = 50;
+        const MAX_AVG_WORDS_PER_SENTENCE = 25;
+
         const calculateReadability = (text: string, wordCount: number, sentenceCount: number) => {
           if (wordCount === 0 || sentenceCount === 0) return 0;
 
@@ -49,8 +60,10 @@ class ContentQualityAnalyzer {
           const avgWordsPerSentence = wordCount / sentenceCount;
           const avgSyllablesPerWord = syllables / wordCount;
 
-          // Flesch Reading Ease formula
-          const score = 206.835 - 1.015 * avgWordsPerSentence - 84.6 * avgSyllablesPerWord;
+          const score =
+            FLESCH_INTERCEPT -
+            FLESCH_SENTENCE_COEFF * avgWordsPerSentence -
+            FLESCH_SYLLABLE_COEFF * avgSyllablesPerWord;
           return Math.max(0, Math.min(100, Math.round(score)));
         };
 
@@ -267,15 +280,15 @@ class ContentQualityAnalyzer {
           analysis.contentScore -= 10;
         }
 
-        if (analysis.readabilityScore < 30) {
+        if (analysis.readabilityScore < READABILITY_VERY_DIFFICULT) {
           analysis.issues.push(`Content is very difficult to read (score: ${analysis.readabilityScore}/100)`);
           analysis.contentScore -= 15;
-        } else if (analysis.readabilityScore < 50) {
+        } else if (analysis.readabilityScore < READABILITY_DIFFICULT) {
           analysis.issues.push(`Content is difficult to read (score: ${analysis.readabilityScore}/100)`);
           analysis.contentScore -= 10;
         }
 
-        if (analysis.avgWordsPerSentence > 25) {
+        if (analysis.avgWordsPerSentence > MAX_AVG_WORDS_PER_SENTENCE) {
           analysis.issues.push(
             `Sentences are too long (avg: ${analysis.avgWordsPerSentence} words, target: ~${thresholds.SENTENCE_AVG_WORDS})`,
           );

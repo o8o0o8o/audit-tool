@@ -258,7 +258,10 @@ export async function runAnalyzers(
         pageData.responseHeaders ?? {},
         analyzerRequests,
       ).catch((err) => {
-        if (options.verbose) console.warn(`[tech-detect] CDP detection failed, falling back to HTML: ${err instanceof Error ? err.message : err}`);
+        if (options.verbose)
+          console.warn(
+            `[tech-detect] CDP detection failed, falling back to HTML: ${err instanceof Error ? err.message : err}`,
+          );
         const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
         return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders ?? {}, scriptSrcs);
       }),
@@ -355,12 +358,20 @@ export async function runAnalyzers(
   pageData.imageOptimization = imageOptimizationResult as unknown as typeof pageData.imageOptimization;
   pageData.resourceOptimization = resourceOptimizationResult as unknown as typeof pageData.resourceOptimization;
   pageData.fontData = (fontResult as AnalyzerResult & { fontData: typeof pageData.fontData }).fontData;
-  pageData.thirdPartyData = (thirdPartyResult as AnalyzerResult & { thirdPartyData: typeof pageData.thirdPartyData }).thirdPartyData;
-  pageData.criticalPathData = (criticalPathResult as AnalyzerResult & { criticalPathData: typeof pageData.criticalPathData }).criticalPathData;
+  pageData.thirdPartyData = (
+    thirdPartyResult as AnalyzerResult & { thirdPartyData: typeof pageData.thirdPartyData }
+  ).thirdPartyData;
+  pageData.criticalPathData = (
+    criticalPathResult as AnalyzerResult & { criticalPathData: typeof pageData.criticalPathData }
+  ).criticalPathData;
   pageData.timingData = (connectionResult as AnalyzerResult & { timingData: typeof pageData.timingData }).timingData;
-  pageData.paginationData = (paginationResult as AnalyzerResult & { paginationData: typeof pageData.paginationData }).paginationData;
+  pageData.paginationData = (
+    paginationResult as AnalyzerResult & { paginationData: typeof pageData.paginationData }
+  ).paginationData;
   pageData.mediaData = (mediaResult as AnalyzerResult & { mediaData: typeof pageData.mediaData }).mediaData;
-  pageData.webComponentData = (webComponentResult as AnalyzerResult & { webComponentData: typeof pageData.webComponentData }).webComponentData;
+  pageData.webComponentData = (
+    webComponentResult as AnalyzerResult & { webComponentData: typeof pageData.webComponentData }
+  ).webComponentData;
   pageData.aeo = (aeoResult as AnalyzerResult & { info: typeof pageData.aeo }).info;
   pageData.technologies = technologies as unknown as typeof pageData.technologies;
   pageData.ctas = (ctaResult as AnalyzerResult & { ctas: typeof pageData.ctas }).ctas;
@@ -368,16 +379,28 @@ export async function runAnalyzers(
     ctas: (ctaResult as AnalyzerResult & { ctas: typeof pageData.ctas }).ctas,
     summary: (ctaResult as AnalyzerResult & { summary: unknown }).summary,
   } as typeof pageData.ctaData;
-  pageData.languageDetection = (langDetectionResult as AnalyzerResult & { info: typeof pageData.languageDetection }).info;
-  pageData.colorContrastData = (colorContrastResult as AnalyzerResult & { info: typeof pageData.colorContrastData }).info;
-  pageData.reducedMotionData = (reducedMotionResult as AnalyzerResult & { info: typeof pageData.reducedMotionData }).info;
+  pageData.languageDetection = (
+    langDetectionResult as AnalyzerResult & { info: typeof pageData.languageDetection }
+  ).info;
+  pageData.colorContrastData = (
+    colorContrastResult as AnalyzerResult & { info: typeof pageData.colorContrastData }
+  ).info;
+  pageData.reducedMotionData = (
+    reducedMotionResult as AnalyzerResult & { info: typeof pageData.reducedMotionData }
+  ).info;
   pageData.ariaLiveData = (ariaLiveResult as AnalyzerResult & { info: typeof pageData.ariaLiveData }).info;
-  pageData.domComplexityData = (domComplexityResult as AnalyzerResult & { info: typeof pageData.domComplexityData }).info;
-  pageData.deprecatedHtmlData = (deprecatedHtmlResult as AnalyzerResult & { info: typeof pageData.deprecatedHtmlData }).info;
+  pageData.domComplexityData = (
+    domComplexityResult as AnalyzerResult & { info: typeof pageData.domComplexityData }
+  ).info;
+  pageData.deprecatedHtmlData = (
+    deprecatedHtmlResult as AnalyzerResult & { info: typeof pageData.deprecatedHtmlData }
+  ).info;
   pageData.interstitialData = (interstitialResult as AnalyzerResult & { info: typeof pageData.interstitialData }).info;
   pageData.adDensityData = (adDensityResult as AnalyzerResult & { info: typeof pageData.adDensityData }).info;
   pageData.sriData = (sriResult as AnalyzerResult & { info: typeof pageData.sriData }).info;
-  pageData.infoDisclosureData = (infoDisclosureResult as AnalyzerResult & { info: typeof pageData.infoDisclosureData }).info;
+  pageData.infoDisclosureData = (
+    infoDisclosureResult as AnalyzerResult & { info: typeof pageData.infoDisclosureData }
+  ).info;
   pageData.openRedirectData = (openRedirectResult as AnalyzerResult & { info: typeof pageData.openRedirectData }).info;
   pageData.spellingData = (spellingResult as AnalyzerResult & { info: typeof pageData.spellingData }).info;
 

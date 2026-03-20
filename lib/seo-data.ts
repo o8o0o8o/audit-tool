@@ -32,8 +32,8 @@ class SEOData {
   #sitemapFile: string | null; // Path to local sitemap XML file
   #incomingLinksTracking: Map<string, Set<string>>; // Map to track unique source->target links during processing
   #errorAggregator: ErrorAggregator;
-  #progressManager!: ProgressManager;
-  #crawlerEngine!: CrawlerEngine;
+  #progressManager: ProgressManager | undefined;
+  #crawlerEngine: CrawlerEngine | undefined;
   #verbose: boolean;
   #open: boolean;
   #exclude: string[];
@@ -200,6 +200,18 @@ class SEOData {
     return this.#open;
   }
 
+  /** Require initialized ProgressManager or throw */
+  get #pm(): ProgressManager {
+    if (!this.#progressManager) throw new Error('ProgressManager not initialized — call #initializeManagers() first');
+    return this.#progressManager;
+  }
+
+  /** Require initialized CrawlerEngine or throw */
+  get #crawler(): CrawlerEngine {
+    if (!this.#crawlerEngine) throw new Error('CrawlerEngine not initialized — call #initializeManagers() first');
+    return this.#crawlerEngine;
+  }
+
   saveError(generalError: string, detailedError: string, severity: string = SEVERITY.MEDIUM) {
     this.#errorAggregator.addError(generalError, detailedError, severity);
   }
@@ -277,7 +289,7 @@ class SEOData {
 
   async #restoreProgress() {
     try {
-      const restored = await this.#progressManager.loadProgress(this.domainName ?? '', this.resultsDir);
+      const restored = await this.#pm.loadProgress(this.domainName ?? '', this.resultsDir);
 
       // Update instance state from restored data
       this.#results = restored.results;
@@ -309,8 +321,8 @@ class SEOData {
   }
 
   async saveData() {
-    await this.#progressManager.waitForPendingFlush();
-    this.#progressManager.saveProgress(this.#results as Parameters<ProgressManager['saveProgress']>[0]);
+    await this.#pm.waitForPendingFlush();
+    this.#pm.saveProgress(this.#results as Parameters<ProgressManager['saveProgress']>[0]);
   }
 
   async #analyzeRobotsTxt() {
@@ -445,7 +457,7 @@ class SEOData {
     // Bridge internal results to the orchestrator's expected shape
     await AuditOrchestrator.analyzePages({
       results: this.#results as Parameters<typeof AuditOrchestrator.analyzePages>[0]['results'],
-      crawlerEngine: this.#crawlerEngine as unknown as Parameters<typeof AuditOrchestrator.analyzePages>[0]['crawlerEngine'],
+      crawlerEngine: this.#crawler as unknown as Parameters<typeof AuditOrchestrator.analyzePages>[0]['crawlerEngine'],
       incomingLinksTracking: this.#incomingLinksTracking,
       saveError: this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.analyzePages>[0]['saveError'],
       resultsDir: this.resultsDir,
@@ -574,7 +586,7 @@ class SEOData {
     // (saveProgress() evicts pages from memory to prevent OOM during crawling,
     // but site-wide validators need the complete dataset)
     console.log('\nReloading pages for site-wide analysis...');
-    this.#progressManager.reloadEvictedPages(this.#results.pageData.pages);
+    this.#pm.reloadEvictedPages(this.#results.pageData.pages);
 
     // Run all site-wide validations
     // Bridge internal pageData to the orchestrator's expected shape

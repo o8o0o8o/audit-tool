@@ -29,7 +29,11 @@ export const CRAWL_SETTINGS = {
   ANALYZER_TIMEOUT: 10000,
   BATCH_TIMEOUT: 300000,
   CHECKPOINT_SAVE_INTERVAL: 5,
+  CIRCUIT_BREAKER_THRESHOLD: 10,
   CIRCUIT_BREAKER_COOLDOWN_MS: 60000,
+  BACKOFF_RESET_TIMEOUT_MS: 300000,
+  BACKOFF_BASE_DELAY_MS: 1000,
+  BACKOFF_MAX_DELAY_MS: 30000,
   RETRY_DELAY_BASE_MS: 2000,
   CRUX_BATCH_SIZE: 5,
   CRUX_BATCH_DELAY_MS: 200,
@@ -143,6 +147,61 @@ export const THRESHOLDS = {
   CLS_COLLECTION_TIME: 2000,
   FETCH_TIMEOUT: 10000,
   SITEMAP_LIMIT: 50000,
+} as const;
+
+// Scoring weights and thresholds for ScoreCalculator
+export const SCORING = {
+  // Overall score: weighted average of category scores
+  CATEGORY_WEIGHTS: {
+    seo: 0.3,
+    performance: 0.25,
+    technical: 0.2,
+    accessibility: 0.15,
+    security: 0.1,
+  } as Record<string, number>,
+
+  // Penalty weight per issue severity
+  SEVERITY_WEIGHTS: {
+    critical: 5,
+    high: 3,
+    medium: 1,
+    low: 0.3,
+  } as Record<string, number>,
+
+  // Impact score base values per severity (for quick wins)
+  IMPACT_BASE_SCORES: {
+    critical: 100,
+    high: 70,
+    medium: 40,
+    low: 20,
+  } as Record<string, number>,
+
+  // Default scores for categories lacking page-level data
+  DEFAULT_CATEGORY_SCORES: {
+    accessibility: 70,
+    security: 70,
+  },
+
+  // Log penalty scales per category (higher = steeper penalty curve)
+  LOG_PENALTY_SCALE: {
+    seo: 8,
+    performance: 9,
+    technical: 9,
+  },
+
+  // Breadth multiplier: scales penalty by proportion of affected pages
+  BREADTH_MULTIPLIER_FACTOR: 4,
+  BREADTH_MULTIPLIER_MAX: 5,
+
+  // Page multiplier for impact score: max 3x based on affected count / 10
+  IMPACT_PAGE_DIVISOR: 10,
+  IMPACT_PAGE_MULTIPLIER_MAX: 3,
+  IMPACT_PAGE_BOOST_FACTOR: 0.3,
+
+  // Quick win thresholds
+  QUICK_WIN_MIN_IMPACT: 40,
+  QUICK_WIN_MAX_EFFORT_MINUTES: 30,
+  QUICK_WIN_MAX_RESULTS: 10,
 } as const;
 
 /**

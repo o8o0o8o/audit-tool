@@ -4,10 +4,10 @@
  */
 
 import type { FailureTracker, BackoffState, CrawlResults, ReportIssueFn } from './crawler-types';
+import { CRAWL_SETTINGS } from '../constants';
 
-// Circuit breaker constants
-export const CIRCUIT_THRESHOLD = 10; // Open after 10 consecutive failures
-export const CIRCUIT_COOLDOWN = 60000; // 60 second cooldown
+const CIRCUIT_THRESHOLD = CRAWL_SETTINGS.CIRCUIT_BREAKER_THRESHOLD;
+const CIRCUIT_COOLDOWN = CRAWL_SETTINGS.CIRCUIT_BREAKER_COOLDOWN_MS;
 
 /**
  * Get backoff delay for an error type using exponential backoff
@@ -17,14 +17,15 @@ export function getBackoffDelay(errorType: string, backoffState: Map<string, Bac
   const now = Date.now();
 
   // Reset if last attempt was more than 5 minutes ago
-  if (now - state.lastAttempt > 300000) {
+  if (now - state.lastAttempt > CRAWL_SETTINGS.BACKOFF_RESET_TIMEOUT_MS) {
     state.attempts = 0;
   }
 
   // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
-  const baseDelay = 1000;
-  const maxDelay = 30000;
-  const delay = Math.min(baseDelay * Math.pow(2, state.attempts), maxDelay);
+  const delay = Math.min(
+    CRAWL_SETTINGS.BACKOFF_BASE_DELAY_MS * Math.pow(2, state.attempts),
+    CRAWL_SETTINGS.BACKOFF_MAX_DELAY_MS,
+  );
 
   // Update state
   state.attempts++;
@@ -194,6 +195,23 @@ export function getFriendlyErrorMessage(errorType: string): string {
 }
 
 /**
+ * Track a URL in a byError category (initializes array + counter if needed)
+ */
+function trackByErrorCategory(
+  byError: Record<string, string[] | number>,
+  category: string,
+  countKey: string,
+  url: string,
+): void {
+  if (!Array.isArray(byError[category])) {
+    byError[category] = [];
+    byError[countKey] = 0;
+  }
+  (byError[category] as string[]).push(url);
+  byError[countKey] = ((byError[countKey] as number) || 0) + 1;
+}
+
+/**
  * Handle page load error with categorization
  */
 export function handlePageError(
@@ -218,23 +236,14 @@ export function handlePageError(
 
   results.pageData.totalWithError += 1;
 
-  // Track by specific error type for better reporting
-  if (!results.pageData.byError[errorType]) {
-    results.pageData.byError[errorType] = [];
-    results.pageData.byError[`total_${errorType}`] = 0;
-  }
+  const byError = results.pageData.byError;
 
-  (results.pageData.byError[errorType] as string[]).push(url);
-  results.pageData.byError[`total_${errorType}`] = (results.pageData.byError[`total_${errorType}`] as number) + 1;
+  // Track by specific error type
+  trackByErrorCategory(byError, errorType, `total_${errorType}`, url);
 
   // Also track in legacy "crashed" category for backwards compatibility
   if (errorType !== 'crashed') {
-    if (!results.pageData.byError.crashed) {
-      results.pageData.byError.crashed = [];
-      results.pageData.byError.totalCrashed = 0;
-    }
-    (results.pageData.byError.crashed as string[]).push(url);
-    results.pageData.byError.totalCrashed = (results.pageData.byError.totalCrashed as number) + 1;
+    trackByErrorCategory(byError, 'crashed', 'totalCrashed', url);
   }
 
   saveAttempt(url);

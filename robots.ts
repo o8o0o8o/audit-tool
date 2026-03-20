@@ -393,8 +393,8 @@ async function audit() {
             const lastAudit = history.audits[history.audits.length - 1];
             seo.data.previousScore = lastAudit.summary?.overallScore || null;
           }
-        } catch {
-          /* no previous history */
+        } catch (e: unknown) {
+          console.debug('Could not load previous history:', (e as Error).message);
         }
 
         manager.addAuditSnapshot(seo.data, seo.fileManager.timestamp);
@@ -419,8 +419,8 @@ async function audit() {
       const badgePath = path.join(seo.fileManager.resultsDir, 'badge.svg');
       const score = seo.data.analysis?.summary?.overallScore ?? 0;
       fs.writeFileSync(badgePath, generateBadgeSVG(score, seo.domainName!));
-    } catch {
-      /* badge generation is optional */
+    } catch (e: unknown) {
+      console.debug('Badge generation failed:', (e as Error).message);
     }
 
     // Print CLI summary (use file:// URL for clickable path in terminal)
@@ -498,16 +498,16 @@ async function audit() {
           `display notification "Score: ${score}/100 | ${totalPages} pages crawled" with title "SEO Audit Complete" subtitle "${seo.domainName}"`,
         ]);
       }
-    } catch {
-      /* notification is optional */
+    } catch (e: unknown) {
+      console.debug('Desktop notification failed:', (e as Error).message);
     }
 
     // Append to audit log
     try {
       const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${seo.data.analysis?.summary?.overallScore ?? 0} | Issues: ${seo.data.analysis?.summary?.totalIssues ?? 0} | Pages: ${Object.keys(seo.data.pageData?.pages ?? {}).length}\n`;
       fs.appendFileSync('audit-results/audit.log', logEntry);
-    } catch {
-      /* log is optional */
+    } catch (e: unknown) {
+      console.debug('Audit log append failed:', (e as Error).message);
     }
 
     // Auto-open HTML report in browser if --open flag is set

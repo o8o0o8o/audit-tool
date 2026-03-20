@@ -3,8 +3,16 @@
  * Calculates SEO scores, identifies quick wins, and provides fix recommendations
  */
 
-import { SEVERITY } from '../constants';
-import type { PageInfo, PageData, AnalysisDetail, FixRecommendation } from '../types';
+import { SCORING } from '../constants';
+import type {
+  PageInfo,
+  PageData,
+  AnalysisDetail,
+  FixRecommendation,
+  AuditSummary,
+  CategoryScores,
+  QuickWinFull,
+} from '../types';
 
 class ScoreCalculator {
   /**
@@ -19,41 +27,29 @@ class ScoreCalculator {
     pageData: PageData,
     pages: Record<string, PageInfo>,
   ) {
-    const summary: Record<string, unknown> = {
-      totalIssues: 0,
-      criticalCount: 0,
-      highCount: 0,
-      mediumCount: 0,
-      lowCount: 0,
-    };
-
     // Count from bySeverity arrays (source of truth)
-    summary.criticalCount = analysisData.bySeverity.critical.length;
-    summary.highCount = analysisData.bySeverity.high.length;
-    summary.mediumCount = analysisData.bySeverity.medium.length;
-    summary.lowCount = analysisData.bySeverity.low.length;
-    summary.totalIssues =
-      (summary.criticalCount as number) +
-      (summary.highCount as number) +
-      (summary.mediumCount as number) +
-      (summary.lowCount as number);
+    const criticalCount = analysisData.bySeverity.critical.length;
+    const highCount = analysisData.bySeverity.high.length;
+    const mediumCount = analysisData.bySeverity.medium.length;
+    const lowCount = analysisData.bySeverity.low.length;
 
     // Calculate category scores first (overall depends on them)
-    summary.categoryScores = this.calculateCategoryScores(analysisData, pages);
-
-    // Calculate overall SEO score as weighted average of categories
-    summary.overallScore = this.calculateOverallScore(
-      analysisData,
-      pages,
-      summary.categoryScores as Record<string, number>,
-    );
+    const categoryScores = this.calculateCategoryScores(analysisData, pages);
 
     // Calculate pass rate
     const totalPages = pageData.totalWithoutError + pageData.totalWithError;
-    summary.passRate = totalPages > 0 ? Math.round((pageData.totalWithoutError / totalPages) * 100) : 0;
 
-    // Identify quick wins
-    summary.quickWins = this.identifyQuickWins(analysisData.details);
+    const summary: AuditSummary = {
+      totalIssues: criticalCount + highCount + mediumCount + lowCount,
+      criticalCount,
+      highCount,
+      mediumCount,
+      lowCount,
+      categoryScores,
+      overallScore: this.calculateOverallScore(analysisData, pages, categoryScores),
+      passRate: totalPages > 0 ? Math.round((pageData.totalWithoutError / totalPages) * 100) : 0,
+      quickWins: this.identifyQuickWins(analysisData.details),
+    };
 
     return summary;
   }
@@ -69,19 +65,11 @@ class ScoreCalculator {
   static calculateOverallScore(
     _analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> },
     _pages: Record<string, PageInfo>,
-    categoryScores: Record<string, number>,
+    categoryScores: CategoryScores,
   ) {
-    const weights = {
-      seo: 0.3,
-      performance: 0.25,
-      technical: 0.2,
-      accessibility: 0.15,
-      security: 0.1,
-    };
-
     let score = 0;
-    for (const [category, weight] of Object.entries(weights)) {
-      score += (categoryScores[category] || 0) * weight;
+    for (const [category, weight] of Object.entries(SCORING.CATEGORY_WEIGHTS)) {
+      score += (categoryScores[category as keyof CategoryScores] || 0) * weight;
     }
 
     return Math.max(0, Math.min(100, Math.round(score)));
@@ -96,26 +84,20 @@ class ScoreCalculator {
   static calculateCategoryScores(
     analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> },
     pages: Record<string, PageInfo>,
-  ) {
+  ): CategoryScores {
     const pagesArray = Object.values(pages || {}) as PageInfo[];
 
-    const scores: Record<string, number> = {
+    const scores: CategoryScores = {
       seo: 100,
       performance: 100,
-      accessibility: 70,
-      security: 70,
+      accessibility: SCORING.DEFAULT_CATEGORY_SCORES.accessibility,
+      security: SCORING.DEFAULT_CATEGORY_SCORES.security,
       technical: 100,
     };
 
     if (pagesArray.length === 0) return scores;
 
-    // Severity weights for issue-type counting
-    const severityWeight: Record<string, number> = {
-      critical: 5,
-      high: 3,
-      medium: 1,
-      low: 0.3,
-    };
+    const severityWeight = SCORING.SEVERITY_WEIGHTS;
 
     // Category patterns - comprehensive to ensure all issues are categorized
     const categoryPatterns: Record<string, string[]> = {
@@ -266,8 +248,11 @@ class ScoreCalculator {
       const weight = severityWeight[severity] || 1;
       const affectedCount = data.count || data.examples?.length || 1;
 
-      // Scale penalty by proportion of affected pages (min 1x, max 5x)
-      const breadthMultiplier = Math.min(1 + (affectedCount / totalPages) * 4, 5);
+      // Scale penalty by proportion of affected pages
+      const breadthMultiplier = Math.min(
+        1 + (affectedCount / totalPages) * SCORING.BREADTH_MULTIPLIER_FACTOR,
+        SCORING.BREADTH_MULTIPLIER_MAX,
+      );
       const weightedPenalty = weight * breadthMultiplier;
 
       for (const [category, patterns] of Object.entries(categoryPatterns)) {
@@ -318,9 +303,15 @@ class ScoreCalculator {
       return Math.min(Math.log2(1 + weightedCount) * scale, 90);
     };
 
-    scores.seo = Math.max(0, Math.round(100 - logPenalty(categoryWeightedCounts.seo, 8)));
-    scores.performance = Math.max(0, Math.round(100 - logPenalty(categoryWeightedCounts.performance, 9)));
-    scores.technical = Math.max(0, Math.round(100 - logPenalty(categoryWeightedCounts.technical, 9)));
+    scores.seo = Math.max(0, Math.round(100 - logPenalty(categoryWeightedCounts.seo, SCORING.LOG_PENALTY_SCALE.seo)));
+    scores.performance = Math.max(
+      0,
+      Math.round(100 - logPenalty(categoryWeightedCounts.performance, SCORING.LOG_PENALTY_SCALE.performance)),
+    );
+    scores.technical = Math.max(
+      0,
+      Math.round(100 - logPenalty(categoryWeightedCounts.technical, SCORING.LOG_PENALTY_SCALE.technical)),
+    );
 
     // Calculate accessibility from page-level data
     let accessibilitySum = 0,
@@ -363,20 +354,8 @@ class ScoreCalculator {
    * @param {object} issueDetails - Issue details from analysis
    * @returns {Array} Quick wins sorted by impact
    */
-  static identifyQuickWins(issueDetails: Record<string, AnalysisDetail>) {
-    const quickWins: Array<{
-      issue: string;
-      severity: string;
-      affectedPages: number;
-      impact: string;
-      effort: string;
-      effortMinutes: number;
-      fix: string;
-      example?: string;
-      resources: Array<{ text: string; url: string }>;
-      impactScore: number;
-      examples: string[];
-    }> = [];
+  static identifyQuickWins(issueDetails: Record<string, AnalysisDetail>): QuickWinFull[] {
+    const quickWins: QuickWinFull[] = [];
     const fixRecommendations = this.getFixRecommendations();
 
     // Analyze each issue for quick win potential
@@ -390,8 +369,8 @@ class ScoreCalculator {
         const impactScore = this.calculateImpactScore(data.severity, affectedCount);
         const effortMinutes = this.parseEffort(recommendation.effort);
 
-        // Quick win if: high impact and low effort (< 30 min)
-        if (impactScore >= 40 && effortMinutes <= 30) {
+        // Quick win if: high impact and low effort
+        if (impactScore >= SCORING.QUICK_WIN_MIN_IMPACT && effortMinutes <= SCORING.QUICK_WIN_MAX_EFFORT_MINUTES) {
           quickWins.push({
             issue,
             severity: data.severity,
@@ -417,7 +396,7 @@ class ScoreCalculator {
       return a.effortMinutes - b.effortMinutes;
     });
 
-    return quickWins.slice(0, 10); // Top 10 quick wins
+    return quickWins.slice(0, SCORING.QUICK_WIN_MAX_RESULTS);
   }
 
   /**
@@ -427,16 +406,9 @@ class ScoreCalculator {
    * @returns {number} Impact score
    */
   static calculateImpactScore(severity: string, affectedCount: number) {
-    const severityWeights: Record<string, number> = {
-      [SEVERITY.CRITICAL]: 100,
-      [SEVERITY.HIGH]: 70,
-      [SEVERITY.MEDIUM]: 40,
-      [SEVERITY.LOW]: 20,
-    };
-
-    const baseScore = severityWeights[severity] || 20;
-    const pageMultiplier = Math.min(affectedCount / 10, 3); // Max 3x multiplier
-    return Math.round(baseScore * (1 + pageMultiplier * 0.3));
+    const baseScore = SCORING.IMPACT_BASE_SCORES[severity] || SCORING.IMPACT_BASE_SCORES.low;
+    const pageMultiplier = Math.min(affectedCount / SCORING.IMPACT_PAGE_DIVISOR, SCORING.IMPACT_PAGE_MULTIPLIER_MAX);
+    return Math.round(baseScore * (1 + pageMultiplier * SCORING.IMPACT_PAGE_BOOST_FACTOR));
   }
 
   /**

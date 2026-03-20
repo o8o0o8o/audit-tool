@@ -271,7 +271,6 @@ class CompressionAnalyzer {
     return { issues, warnings, stats };
   }
 
-
   /**
    * Get filename from URL
    * @param {string} url

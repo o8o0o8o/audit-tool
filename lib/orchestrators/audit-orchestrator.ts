@@ -216,52 +216,45 @@ class AuditOrchestrator {
    * Detect if site is multilanguage from sitemap, existing pages, or URL patterns
    * @private
    */
-  static #detectMultilanguage(results: AnalyzeContext['results']) {
-    const isMultiLang = results.isMultiLang ?? false;
+  static #detectMultilanguage(results: AnalyzeContext['results']): boolean {
+    if (results.isMultiLang) return true;
 
-    if (!isMultiLang) {
-      // Check sitemap for alternates (xhtml:link rel="alternate")
-      for (const url in results.sitemaps.urls) {
-        const sitemapEntry = results.sitemaps.urls[url];
-        if (sitemapEntry.alternates && Object.keys(sitemapEntry.alternates).length > 0) {
-          const hasValidAlternate = Object.values(sitemapEntry.alternates).some(
-            (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default',
-          );
-          if (hasValidAlternate) {
-            console.log(`Detected multilanguage site from sitemap entry: ${url}`);
-            return true;
-          }
+    // Check sitemap for alternates (xhtml:link rel="alternate")
+    for (const url in results.sitemaps.urls) {
+      const sitemapEntry = results.sitemaps.urls[url];
+      if (sitemapEntry.alternates && Object.keys(sitemapEntry.alternates).length > 0) {
+        const hasValidAlternate = Object.values(sitemapEntry.alternates).some(
+          (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default',
+        );
+        if (hasValidAlternate) {
+          console.log(`Detected multilanguage site from sitemap entry: ${url}`);
+          return true;
         }
       }
     }
 
-    if (!isMultiLang) {
-      // Check existing pages for alternates
-      for (const url in results.pageData.pages) {
-        const page = results.pageData.pages[url];
-        if (page.alternates && page.alternates.length > 0) {
-          const hasValidAlternate = page.alternates.some(
-            (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default',
-          );
-          if (hasValidAlternate) {
-            console.log(`Detected multilanguage site from previously crawled page: ${url}`);
-            return true;
-          }
+    // Check existing pages for alternates
+    for (const url in results.pageData.pages) {
+      const page = results.pageData.pages[url];
+      if (page.alternates && page.alternates.length > 0) {
+        const hasValidAlternate = page.alternates.some(
+          (alt: AlternateLink) => alt.hreflang && alt.hreflang !== 'x-default',
+        );
+        if (hasValidAlternate) {
+          console.log(`Detected multilanguage site from previously crawled page: ${url}`);
+          return true;
         }
       }
     }
 
-    if (!isMultiLang) {
-      // Check URL patterns for language indicators
-      // Common patterns: /en/, /de/, /fr/, /en-us/, etc.
-      const langPatterns = AuditOrchestrator.#detectLanguagePatternsInUrls(results.sitemaps.urls);
-      if (langPatterns.isMultiLang) {
-        console.log(`Detected multilanguage site from URL patterns: ${langPatterns.languages.join(', ')}`);
-        return true;
-      }
+    // Check URL patterns for language indicators (/en/, /de/, /fr/, /en-us/, etc.)
+    const langPatterns = AuditOrchestrator.#detectLanguagePatternsInUrls(results.sitemaps.urls);
+    if (langPatterns.isMultiLang) {
+      console.log(`Detected multilanguage site from URL patterns: ${langPatterns.languages.join(', ')}`);
+      return true;
     }
 
-    return isMultiLang;
+    return false;
   }
 
   /**

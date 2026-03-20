@@ -82,7 +82,7 @@ function getTextLengthColor(length: number, min: number, max: number) {
  */
 function hasMetaTag(page: PageInfo, tagName: string): boolean {
   if (!page.meta || !Array.isArray(page.meta)) return false;
-  return (page.meta as Record<string, unknown>[]).some((metaObj) => metaObj[tagName] !== undefined);
+  return page.meta.some((metaObj) => metaObj[tagName] !== undefined);
 }
 
 /**
@@ -189,14 +189,14 @@ function getTextLengthTooltip(length: number, min: number, max: number, fieldNam
  * @returns {string} HTML for severity badge
  */
 function getSeverityBadge(severity: string) {
-  const colors = {
+  const colors: Record<string, SeverityColorConfig> = {
     CRITICAL: { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
     HIGH: { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
     MEDIUM: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
     LOW: { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
   };
 
-  const color = (colors as Record<string, SeverityColorConfig>)[severity] || colors.MEDIUM;
+  const color = colors[severity] || colors.MEDIUM;
   return `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${color.bg}; color: ${color.text}; border: 1px solid ${color.border};">${severity}</span>`;
 }
 

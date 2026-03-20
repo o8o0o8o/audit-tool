@@ -669,14 +669,20 @@ class ProgressManager {
     }
 
     // Reduce images to only problematic ones
-    if (page.images && 'totalImages' in page.images && Array.isArray((page.images as unknown as Record<string, unknown>)['images'])) {
+    if (
+      page.images &&
+      'totalImages' in page.images &&
+      Array.isArray((page.images as unknown as Record<string, unknown>)['images'])
+    ) {
       // images is ImageAnalysis but may have raw image array from crawler
     } else if (Array.isArray(page.images)) {
       const imgArr = page.images as unknown as ImageData[];
       page.imagesCount = (page.imagesCount ?? 0) || imgArr.length;
       page.imagesWithoutAltCount =
         (page.imagesWithoutAltCount ?? 0) || imgArr.filter((i) => !i.alt || i.alt.trim() === '').length;
-      (page as unknown as Record<string, unknown>).images = imgArr.filter((i) => !i.alt || i.alt.trim() === '').slice(0, 10);
+      (page as unknown as Record<string, unknown>).images = imgArr
+        .filter((i) => !i.alt || i.alt.trim() === '')
+        .slice(0, 10);
     }
 
     // Strip vitals detail
@@ -945,14 +951,27 @@ class ProgressManager {
     };
 
     const analyzerFields = [
-      page.linkAnalysis, page.accessibility, page.caching,
-      page.contentQuality, page.imageOptimization, page.resourceOptimization,
-      page.structuredData, page.headings, page.internationalSEO,
-      page.thirdPartyData, page.timingData, page.criticalPathData,
+      page.linkAnalysis,
+      page.accessibility,
+      page.caching,
+      page.contentQuality,
+      page.imageOptimization,
+      page.resourceOptimization,
+      page.structuredData,
+      page.headings,
+      page.internationalSEO,
+      page.thirdPartyData,
+      page.timingData,
+      page.criticalPathData,
       page.fontData as { issues?: unknown[]; warnings?: unknown[] } | undefined,
-      page.compressionData, page.consoleAnalysis, page.formData,
-      page.mediaData, page.webComponentData, page.aboveFoldData,
-      page.anchorTextData, page.externalLinksData,
+      page.compressionData,
+      page.consoleAnalysis,
+      page.formData,
+      page.mediaData,
+      page.webComponentData,
+      page.aboveFoldData,
+      page.anchorTextData,
+      page.externalLinksData,
     ];
     for (const field of analyzerFields) {
       if (field) limitArrays(field);

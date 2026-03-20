@@ -16,6 +16,13 @@ class ThinContentAnalyzer {
     MIN_TEXT_RATIO: GLOBAL_THRESHOLDS.THIN_CONTENT_TEXT_RATIO_MIN,
   };
 
+  // Content score point allocations per tier
+  static SCORING = {
+    WORD_COUNT: { RECOMMENDED: 50, LOW: 35, MIN: 20, ANY: 5 },
+    TEXT_RATIO: { GOOD: 25, MODERATE: 20, MIN: 10, GOOD_THRESHOLD: 25, MODERATE_THRESHOLD: 15 },
+    STRUCTURE: { GOOD: 25, MODERATE: 15, MIN: 10, GOOD_THRESHOLD: 5, MODERATE_THRESHOLD: 3 },
+  };
+
   /**
    * Analyze page for thin content
    * @param {Object} pageData - Page data
@@ -122,35 +129,36 @@ class ThinContentAnalyzer {
    * Calculate content quality score (0-100)
    */
   static calculateContentScore(metrics: { wordCount: number; paragraphCount: number; textToHtmlRatio: number }) {
+    const { WORD_COUNT, TEXT_RATIO, STRUCTURE } = this.SCORING;
     let score = 0;
 
     // Word count scoring (0-50 points)
     if (metrics.wordCount >= this.THRESHOLDS.RECOMMENDED_WORDS) {
-      score += 50;
+      score += WORD_COUNT.RECOMMENDED;
     } else if (metrics.wordCount >= this.THRESHOLDS.LOW_WORDS) {
-      score += 35;
+      score += WORD_COUNT.LOW;
     } else if (metrics.wordCount >= this.THRESHOLDS.MIN_WORDS) {
-      score += 20;
+      score += WORD_COUNT.MIN;
     } else if (metrics.wordCount > 0) {
-      score += 5;
+      score += WORD_COUNT.ANY;
     }
 
     // Text ratio scoring (0-25 points)
-    if (metrics.textToHtmlRatio >= 25) {
-      score += 25;
-    } else if (metrics.textToHtmlRatio >= 15) {
-      score += 20;
+    if (metrics.textToHtmlRatio >= TEXT_RATIO.GOOD_THRESHOLD) {
+      score += TEXT_RATIO.GOOD;
+    } else if (metrics.textToHtmlRatio >= TEXT_RATIO.MODERATE_THRESHOLD) {
+      score += TEXT_RATIO.MODERATE;
     } else if (metrics.textToHtmlRatio >= this.THRESHOLDS.MIN_TEXT_RATIO) {
-      score += 10;
+      score += TEXT_RATIO.MIN;
     }
 
     // Structure scoring (0-25 points)
-    if (metrics.paragraphCount >= 5) {
-      score += 25;
-    } else if (metrics.paragraphCount >= 3) {
-      score += 15;
+    if (metrics.paragraphCount >= STRUCTURE.GOOD_THRESHOLD) {
+      score += STRUCTURE.GOOD;
+    } else if (metrics.paragraphCount >= STRUCTURE.MODERATE_THRESHOLD) {
+      score += STRUCTURE.MODERATE;
     } else if (metrics.paragraphCount >= this.THRESHOLDS.MIN_PARAGRAPHS) {
-      score += 10;
+      score += STRUCTURE.MIN;
     }
 
     return Math.min(score, 100);

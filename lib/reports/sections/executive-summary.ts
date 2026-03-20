@@ -270,7 +270,9 @@ function getInsightHighlights(jsonData: Record<string, unknown>) {
     );
   }
 
-  const similarPages = pages.filter((p: PageInfo) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0).length;
+  const similarPages = pages.filter(
+    (p: PageInfo) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
+  ).length;
   if (similarPages > 0) {
     badges.push(
       `<span class="insight-badge info">📄 ${similarPages} near-duplicate page${similarPages > 1 ? 's' : ''}</span>`,

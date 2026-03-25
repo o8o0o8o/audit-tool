@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { isInternalLink, getOrigin } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Known spam/low-quality domains (simplified list)
@@ -60,7 +61,7 @@ class ExternalLinksAnalyzer {
           status?: number;
         }[])
       : [];
-    const pageOrigin = this.getOrigin(url);
+    const pageOrigin = getOrigin(url);
 
     for (const link of links) {
       const href = String(link.href ?? link.url ?? '');
@@ -68,7 +69,7 @@ class ExternalLinksAnalyzer {
       const target = link.target ?? '';
 
       // Skip internal links
-      if (this.isInternalLink(href, pageOrigin)) {
+      if (isInternalLink(href, pageOrigin)) {
         continue;
       }
 
@@ -200,34 +201,6 @@ class ExternalLinksAnalyzer {
   }
 
   /**
-   * Check if link is internal
-   */
-  static isInternalLink(href: string, origin: string) {
-    if (!href) return true;
-    if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) {
-      return true;
-    }
-
-    try {
-      const linkOrigin = new URL(href, origin).origin;
-      return linkOrigin === origin;
-    } catch {
-      return href.startsWith('/');
-    }
-  }
-
-  /**
-   * Get origin from URL
-   */
-  static getOrigin(url: string) {
-    try {
-      return new URL(url).origin;
-    } catch {
-      return '';
-    }
-  }
-
-  /**
    * Check if link is an affiliate link
    */
   static isAffiliateLink(href: string) {
@@ -277,7 +250,7 @@ class ExternalLinksAnalyzer {
 
     // Collect unique external URLs with their source pages
     const externalUrlMap = new Map<string, Set<string>>(); // url -> Set of source pages
-    const pageOrigin = this.getOrigin(origin);
+    const pageOrigin = getOrigin(origin);
 
     for (const [pageUrl, pageData] of Object.entries(pages)) {
       const links = (Array.isArray(pageData.links) ? pageData.links : []) as { href?: string; url?: string }[];
@@ -285,7 +258,7 @@ class ExternalLinksAnalyzer {
         const href = link.href ?? link.url ?? link;
         if (!href || typeof href !== 'string') continue;
         if (!href.startsWith('http://') && !href.startsWith('https://')) continue;
-        if (this.isInternalLink(href, pageOrigin)) continue;
+        if (isInternalLink(href, pageOrigin)) continue;
 
         // Normalize URL (remove fragment)
         let normalizedUrl;

@@ -129,6 +129,23 @@ function shortDomain(domain: string): string {
   return domain.replace(/^www\./, '');
 }
 
+/**
+ * Get CSS class name for a delta value (positive/negative/neutral)
+ * @param value - Delta value (positive = increase)
+ */
+function deltaClass(value: number): 'positive' | 'negative' | 'neutral' {
+  if (value > 0) return 'positive';
+  if (value < 0) return 'negative';
+  return 'neutral';
+}
+
+/**
+ * Get sign prefix for a delta value
+ */
+function deltaSymbol(value: number): string {
+  return value > 0 ? '+' : '';
+}
+
 export {
   getDeltaColor,
   formatDeltaBadge,
@@ -137,4 +154,6 @@ export {
   formatDualScore,
   getComparisonHeader,
   shortDomain,
+  deltaClass,
+  deltaSymbol,
 };

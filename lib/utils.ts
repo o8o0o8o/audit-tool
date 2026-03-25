@@ -423,6 +423,36 @@ function calculateDaysDiff(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+/**
+ * Check if a link is internal (same origin)
+ * Returns true for same-origin URLs, relative paths, and hash-only links.
+ * Note: Returns true for empty/non-navigational hrefs (hash, javascript:, mailto:, tel:).
+ */
+function isInternalLink(href: string, origin: string): boolean {
+  if (!href) return true;
+  if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+    return true;
+  }
+
+  try {
+    const linkOrigin = new URL(href, origin).origin;
+    return linkOrigin === origin;
+  } catch {
+    return href.startsWith('/');
+  }
+}
+
+/**
+ * Get origin from a URL string
+ */
+function getOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return '';
+  }
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -436,6 +466,8 @@ export {
   generateTimestamp,
   formatBytes,
   calculateDaysDiff,
+  isInternalLink,
+  getOrigin,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

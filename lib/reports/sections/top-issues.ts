@@ -3,6 +3,7 @@
  * Displays top issues prioritized by severity
  */
 
+import { isCrawlerError } from '../../constants';
 import { escapeHtml } from '../html-utils';
 import { shortDomain } from '../comparison-helpers';
 import type { ReportSectionData, ComparisonData } from '../../types';
@@ -145,31 +146,6 @@ function findEducation(issueText: string) {
     if (lower.includes(pattern)) return data;
   }
   return null;
-}
-
-// Patterns that indicate crawler/infrastructure errors, not website issues
-const CRAWLER_ERROR_PATTERNS = [
-  'TimeoutError',
-  'Target page, context or browser has been closed',
-  'page.goto:',
-  'net::ERR_',
-  'NS_ERROR_',
-  'Navigation failed',
-  'Protocol error',
-  'Session closed',
-  'Connection refused',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ETIMEDOUT',
-];
-
-/**
- * Check if an issue is a crawler error (not a website issue)
- * @param {string} issue - Issue text
- * @returns {boolean}
- */
-function isCrawlerError(issue: string) {
-  return CRAWLER_ERROR_PATTERNS.some((pattern) => issue.includes(pattern));
 }
 
 /**

@@ -291,6 +291,62 @@ export function getMetaTagSeverity(tagName: string): SeverityLevel | null {
   return null;
 }
 
+// Patterns that indicate crawler/infrastructure errors, not website issues
+export const CRAWLER_ERROR_PATTERNS = [
+  'TimeoutError',
+  'Target page, context or browser has been closed',
+  'page.goto:',
+  'net::ERR_',
+  'NS_ERROR_',
+  'Navigation failed',
+  'Protocol error',
+  'Session closed',
+  'Connection refused',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+] as const;
+
+/**
+ * Check if an issue is a crawler error (not a website issue)
+ */
+export function isCrawlerError(issue: string): boolean {
+  return CRAWLER_ERROR_PATTERNS.some((pattern) => issue.includes(pattern));
+}
+
+// Severity sort order for issue prioritization
+export const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+// Generic anchor texts that provide no SEO value
+export const GENERIC_ANCHORS = [
+  'click here',
+  'here',
+  'read more',
+  'more',
+  'learn more',
+  'continue',
+  'continue reading',
+  'link',
+  'this link',
+  'click',
+  'go',
+  'visit',
+  'see more',
+  'view more',
+  'details',
+  'more details',
+  'more info',
+  'more information',
+  'info',
+  'information',
+  'website',
+  'page',
+  'this page',
+  'this',
+  'find out more',
+  'download',
+] as const;
+
 /**
  * Normalize text for comparison (handles whitespace variations, HTML entities, Unicode)
  * Used for duplicate detection to reduce false positives

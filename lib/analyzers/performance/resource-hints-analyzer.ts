@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getOrigin } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ResourceHint {
@@ -88,8 +89,8 @@ class ResourceHintsAnalyzer {
     const thirdPartyOrigins = this.extractThirdPartyOrigins(pageData, url);
     const criticalOrigins = thirdPartyOrigins.filter((o) => o.critical);
     const connectedOrigins = new Set([
-      ...info.preconnect.map((p) => this.getOrigin(p.href ?? '')),
-      ...info.dnsPrefetch.map((p) => this.getOrigin(p.href ?? '')),
+      ...info.preconnect.map((p) => getOrigin(p.href ?? '')),
+      ...info.dnsPrefetch.map((p) => getOrigin(p.href ?? '')),
     ]);
 
     for (const origin of criticalOrigins) {
@@ -181,11 +182,11 @@ class ResourceHintsAnalyzer {
    */
   static extractThirdPartyOrigins(pageData: PageInfo, pageUrl: string) {
     const origins = new Map();
-    const pageOrigin = this.getOrigin(pageUrl);
+    const pageOrigin = getOrigin(pageUrl);
 
     const resources = pageData.resources ?? [];
     for (const resource of resources) {
-      const resourceOrigin = this.getOrigin(resource.url ?? '');
+      const resourceOrigin = getOrigin(resource.url ?? '');
       if (resourceOrigin && resourceOrigin !== pageOrigin) {
         if (!origins.has(resourceOrigin)) {
           origins.set(resourceOrigin, {
@@ -234,17 +235,6 @@ class ResourceHintsAnalyzer {
     }
 
     return Array.from(origins.values());
-  }
-
-  /**
-   * Get origin from URL
-   */
-  static getOrigin(url: string) {
-    try {
-      return new URL(url).origin;
-    } catch {
-      return null;
-    }
   }
 
   /**

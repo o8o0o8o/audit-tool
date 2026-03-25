@@ -4,35 +4,11 @@
  * Expandable rows show fix suggestions and affected pages.
  */
 
+import { isCrawlerError, SEVERITY_ORDER } from '../../constants';
 import { escapeHtml } from '../html-utils';
 import { ScoreCalculator } from '../../scoring/score-calculator';
 import { shortDomain } from '../comparison-helpers';
 import type { ReportSectionData, AnalysisDetail, FixRecommendation, ComparisonData } from '../../types';
-
-// ── Crawler error filtering ──────────────────────────────────────────────────
-
-const CRAWLER_ERROR_PATTERNS = [
-  'TimeoutError',
-  'Target page, context or browser has been closed',
-  'page.goto:',
-  'net::ERR_',
-  'NS_ERROR_',
-  'Navigation failed',
-  'Protocol error',
-  'Session closed',
-  'Connection refused',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ETIMEDOUT',
-];
-
-function isCrawlerError(issue: string) {
-  return CRAWLER_ERROR_PATTERNS.some((p) => issue.includes(p));
-}
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
   critical: {

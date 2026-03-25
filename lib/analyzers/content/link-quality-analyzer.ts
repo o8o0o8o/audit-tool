@@ -1,4 +1,4 @@
-import { THRESHOLDS } from '../../constants';
+import { THRESHOLDS, GENERIC_ANCHORS } from '../../constants';
 import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class LinkQualityAnalyzer {
@@ -96,27 +96,7 @@ class LinkQualityAnalyzer {
         linkAnalysis.anchorTextMap[anchorKey] = (linkAnalysis.anchorTextMap[anchorKey] || 0) + 1;
 
         // Check for generic anchor text
-        const genericPhrases = [
-          'click here',
-          'read more',
-          'learn more',
-          'more info',
-          'more information',
-          'here',
-          'this',
-          'link',
-          'website',
-          'page',
-          'more',
-          'continue reading',
-          'find out more',
-          'see more',
-          'view more',
-          'download',
-          'click',
-        ];
-
-        if (genericPhrases.includes(link.anchorText.toLowerCase())) {
+        if ((GENERIC_ANCHORS as readonly string[]).includes(link.anchorText.toLowerCase())) {
           linkAnalysis.genericAnchorLinks.push({
             href: link.href,
             anchorText: link.anchorText,

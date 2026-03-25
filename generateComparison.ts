@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { HistoryManager } from './historyManager';
 import { escapeHtml } from './lib/reports/html-utils';
+import { deltaClass, deltaSymbol } from './lib/reports/comparison-helpers';
 import { getDesignTokens } from './lib/reports/sections/design-tokens';
 import { getUIComponents } from './lib/reports/sections/ui-components';
 import type { InsightsSummary } from './lib/types';
@@ -20,14 +21,6 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
   }
 
   const comparison = manager.compareAudits(oldAudit, newAudit);
-
-  const deltaClass = (value: number) => {
-    if (value > 0) return 'positive';
-    if (value < 0) return 'negative';
-    return 'neutral';
-  };
-
-  const deltaSymbol = (value: number) => (value > 0 ? '+' : '');
 
   const htmlContent = `
 <!DOCTYPE html>

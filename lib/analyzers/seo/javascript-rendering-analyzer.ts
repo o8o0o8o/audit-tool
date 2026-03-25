@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { isInternalLink } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class JavaScriptRenderingAnalyzer {
@@ -109,8 +110,8 @@ class JavaScriptRenderingAnalyzer {
     }
 
     // Internal links
-    const rawLinks = rawContent.links?.filter((l) => this.isInternalLink(l, url)) || [];
-    const renderedLinks = renderedContent.links?.filter((l) => this.isInternalLink(l, url)) || [];
+    const rawLinks = rawContent.links?.filter((l) => isInternalLink(l, url)) || [];
+    const renderedLinks = renderedContent.links?.filter((l) => isInternalLink(l, url)) || [];
     const newLinks = renderedLinks.length - rawLinks.length;
 
     if (newLinks > 10) {
@@ -308,26 +309,6 @@ class JavaScriptRenderingAnalyzer {
   static countWords(text: string) {
     if (!text) return 0;
     return text.split(/\s+/).filter((w) => w.length > 0).length;
-  }
-
-  /**
-   * Check if link is internal
-   * @param {string} href
-   * @param {string} pageUrl
-   * @returns {boolean}
-   */
-  static isInternalLink(href: string, pageUrl: string) {
-    if (!href || href.startsWith('#') || href.startsWith('javascript:')) {
-      return false;
-    }
-
-    try {
-      const linkUrl = new URL(href, pageUrl);
-      const pageOrigin = new URL(pageUrl).origin;
-      return linkUrl.origin === pageOrigin;
-    } catch {
-      return href.startsWith('/');
-    }
   }
 
   /**

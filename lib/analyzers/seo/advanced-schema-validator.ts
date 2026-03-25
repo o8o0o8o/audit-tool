@@ -20,6 +20,43 @@ interface SchemaObject {
 type SchemaValue = string | number | boolean | null | undefined | SchemaObject | SchemaValue[];
 type SchemaValidator = (schema: SchemaObject, url: string) => SchemaValidationResult;
 
+/**
+ * Validate required and recommended fields on a schema object.
+ * Pushes issues for missing required fields, warnings for missing recommended fields.
+ */
+function validateSchemaFields(
+  schema: SchemaObject,
+  schemaType: string,
+  url: string,
+  required: string[],
+  recommended: string[],
+): { issues: Issue[]; warnings: Issue[] } {
+  const issues: Issue[] = [];
+  const warnings: Issue[] = [];
+
+  for (const field of required) {
+    if (!schema[field]) {
+      issues.push({
+        message: `${schemaType} missing required field: ${field}`,
+        detail: `<a href="${url}">${url}</a> - Add ${field} to ${schemaType} schema for rich results`,
+        severity: SEVERITY.MEDIUM,
+      });
+    }
+  }
+
+  for (const field of recommended) {
+    if (!schema[field]) {
+      warnings.push({
+        message: `${schemaType} missing recommended field: ${field}`,
+        detail: `<a href="${url}">${url}</a> - Consider adding ${field} for better rich results`,
+        severity: SEVERITY.LOW,
+      });
+    }
+  }
+
+  return { issues, warnings };
+}
+
 class AdvancedSchemaValidator {
   /**
    * Validate schema markup on a page
@@ -97,30 +134,11 @@ class AdvancedSchemaValidator {
    * Validate Article schema
    */
   static validateArticle(schema: SchemaObject, url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-    const required = ['headline', 'author', 'datePublished'];
-    const recommended = ['dateModified', 'image', 'publisher', 'description'];
-
-    for (const field of required) {
-      if (!schema[field]) {
-        issues.push({
-          message: `Article schema missing required field: ${field}`,
-          detail: `<a href="${url}">${url}</a> - Add ${field} to Article schema for rich results`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
-
-    for (const field of recommended) {
-      if (!schema[field]) {
-        warnings.push({
-          message: `Article schema missing recommended field: ${field}`,
-          detail: `<a href="${url}">${url}</a> - Consider adding ${field} for better rich results`,
-          severity: SEVERITY.LOW,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(
+      schema, 'Article', url,
+      ['headline', 'author', 'datePublished'],
+      ['dateModified', 'image', 'publisher', 'description'],
+    );
 
     // Validate headline length
     const headline = schema.headline as string | undefined;
@@ -155,18 +173,7 @@ class AdvancedSchemaValidator {
    * Validate Product schema
    */
   static validateProduct(schema: SchemaObject, url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-    const required = ['name'];
-    for (const field of required) {
-      if (!schema[field]) {
-        issues.push({
-          message: `Product schema missing required field: ${field}`,
-          detail: `<a href="${url}">${url}</a>`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(schema, 'Product', url, ['name'], []);
 
     // Check offers (critical for e-commerce)
     if (!schema.offers && !schema.offer) {
@@ -437,30 +444,11 @@ class AdvancedSchemaValidator {
    * Validate LocalBusiness schema
    */
   static validateLocalBusiness(schema: SchemaObject, _url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-    const required = ['name', 'address'];
-    const recommended = ['telephone', 'openingHours', 'geo', 'image', 'priceRange'];
-
-    for (const field of required) {
-      if (!schema[field]) {
-        issues.push({
-          message: `LocalBusiness missing ${field}`,
-          detail: `${field} is required for local business rich results`,
-          severity: SEVERITY.HIGH,
-        });
-      }
-    }
-
-    for (const field of recommended) {
-      if (!schema[field]) {
-        warnings.push({
-          message: `LocalBusiness missing recommended: ${field}`,
-          detail: `Adding ${field} improves local SEO visibility`,
-          severity: SEVERITY.LOW,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(
+      schema, 'LocalBusiness', _url,
+      ['name', 'address'],
+      ['telephone', 'openingHours', 'geo', 'image', 'priceRange'],
+    );
 
     // Validate address
     if (schema.address) {
@@ -535,27 +523,11 @@ class AdvancedSchemaValidator {
    * Validate Person schema
    */
   static validatePerson(schema: SchemaObject, _url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-
-    if (!schema.name) {
-      issues.push({
-        message: 'Person schema missing name',
-        detail: 'Person schema requires name',
-        severity: SEVERITY.MEDIUM,
-      });
-    }
-
-    const recommended = ['image', 'jobTitle', 'worksFor', 'sameAs'];
-    for (const field of recommended) {
-      if (!schema[field]) {
-        warnings.push({
-          message: `Person missing recommended: ${field}`,
-          detail: `Adding ${field} improves knowledge panel chances`,
-          severity: SEVERITY.LOW,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(
+      schema, 'Person', _url,
+      ['name'],
+      ['image', 'jobTitle', 'worksFor', 'sameAs'],
+    );
 
     return { issues, warnings, valid: issues.length === 0 };
   }
@@ -598,19 +570,11 @@ class AdvancedSchemaValidator {
    * Validate Event schema
    */
   static validateEvent(schema: SchemaObject, _url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-    const required = ['name', 'startDate', 'location'];
-
-    for (const field of required) {
-      if (!schema[field]) {
-        issues.push({
-          message: `Event missing required: ${field}`,
-          detail: `Events require ${field} for rich results`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(
+      schema, 'Event', _url,
+      ['name', 'startDate', 'location'],
+      [],
+    );
 
     // Validate date
     if (schema.startDate) {
@@ -645,30 +609,11 @@ class AdvancedSchemaValidator {
    * Validate Recipe schema
    */
   static validateRecipe(schema: SchemaObject, _url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-    const required = ['name', 'image'];
-    const recommended = ['recipeIngredient', 'recipeInstructions', 'prepTime', 'cookTime', 'nutrition'];
-
-    for (const field of required) {
-      if (!schema[field]) {
-        issues.push({
-          message: `Recipe missing required: ${field}`,
-          detail: `Recipes require ${field}`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
-
-    for (const field of recommended) {
-      if (!schema[field]) {
-        warnings.push({
-          message: `Recipe missing recommended: ${field}`,
-          detail: `Adding ${field} improves recipe rich results`,
-          severity: SEVERITY.LOW,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(
+      schema, 'Recipe', _url,
+      ['name', 'image'],
+      ['recipeIngredient', 'recipeInstructions', 'prepTime', 'cookTime', 'nutrition'],
+    );
 
     return { issues, warnings, valid: issues.length === 0 };
   }
@@ -677,19 +622,11 @@ class AdvancedSchemaValidator {
    * Validate VideoObject schema
    */
   static validateVideo(schema: SchemaObject, _url: string) {
-    const issues: Issue[] = [];
-    const warnings: Issue[] = [];
-    const required = ['name', 'description', 'thumbnailUrl', 'uploadDate'];
-
-    for (const field of required) {
-      if (!schema[field]) {
-        issues.push({
-          message: `VideoObject missing required: ${field}`,
-          detail: `Videos require ${field} for rich results`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
+    const { issues, warnings } = validateSchemaFields(
+      schema, 'VideoObject', _url,
+      ['name', 'description', 'thumbnailUrl', 'uploadDate'],
+      [],
+    );
 
     if (!schema.contentUrl && !schema.embedUrl) {
       issues.push({

@@ -3,7 +3,8 @@
  * Analyzes internal link anchor text distribution and over-optimization
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, GENERIC_ANCHORS } from '../../constants';
+import { isInternalLink, getOrigin } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface PageLink {
@@ -107,33 +108,6 @@ const STOP_WORDS = new Set([
   'there',
 ]);
 
-// Generic anchor texts that provide no SEO value
-const GENERIC_ANCHORS = [
-  'click here',
-  'here',
-  'read more',
-  'more',
-  'learn more',
-  'continue',
-  'continue reading',
-  'link',
-  'this link',
-  'click',
-  'go',
-  'visit',
-  'see more',
-  'view more',
-  'details',
-  'more details',
-  'more info',
-  'info',
-  'information',
-  'website',
-  'page',
-  'this page',
-  'this',
-];
-
 class AnchorTextAnalyzer {
   /**
    * Analyze anchor text for a page
@@ -157,7 +131,7 @@ class AnchorTextAnalyzer {
     };
 
     const links: PageLink[] = Array.isArray(pageData.links) ? (pageData.links as PageLink[]) : [];
-    const pageOrigin = this.getOrigin(url);
+    const pageOrigin = getOrigin(url);
 
     let totalAnchorLength = 0;
     let anchorCount = 0;
@@ -170,7 +144,7 @@ class AnchorTextAnalyzer {
       info.totalLinks++;
 
       // Classify link
-      const isInternal = this.isInternalLink(href, pageOrigin);
+      const isInternal = isInternalLink(href, pageOrigin);
       if (isInternal) {
         info.internalLinks++;
       } else {
@@ -194,7 +168,7 @@ class AnchorTextAnalyzer {
 
       // Check for generic anchors
       const normalizedAnchor = anchor.toLowerCase().trim();
-      if (GENERIC_ANCHORS.includes(normalizedAnchor)) {
+      if ((GENERIC_ANCHORS as readonly string[]).includes(normalizedAnchor)) {
         info.genericAnchors.push({ href, anchor });
       }
 
@@ -247,7 +221,7 @@ class AnchorTextAnalyzer {
 
     // Over-optimized anchors (same exact anchor used many times)
     const overused = (Object.entries(info.anchorDistribution) as [string, number][])
-      .filter(([anchor, count]) => count > 5 && !GENERIC_ANCHORS.includes(anchor))
+      .filter(([anchor, count]) => count > 5 && !(GENERIC_ANCHORS as readonly string[]).includes(anchor))
       .sort((a, b) => b[1] - a[1]);
 
     if (overused.length > 0) {
@@ -264,7 +238,7 @@ class AnchorTextAnalyzer {
 
     // Same anchor pointing to different pages
     const confusingAnchors = Object.entries(info.duplicateAnchors).filter(
-      ([anchor, urls]) => urls.length > 1 && !GENERIC_ANCHORS.includes(anchor),
+      ([anchor, urls]) => urls.length > 1 && !(GENERIC_ANCHORS as readonly string[]).includes(anchor),
     );
 
     if (confusingAnchors.length > 0) {
@@ -281,7 +255,7 @@ class AnchorTextAnalyzer {
 
     // Very short anchors (1-2 words excluding stop words)
     const shortAnchors = Object.keys(info.anchorDistribution).filter(
-      (anchor) => this.getSignificantWordCount(anchor) < 2 && !GENERIC_ANCHORS.includes(anchor),
+      (anchor) => this.getSignificantWordCount(anchor) < 2 && !(GENERIC_ANCHORS as readonly string[]).includes(anchor),
     );
 
     if (shortAnchors.length > info.internalLinks * 0.3 && info.internalLinks > 5) {
@@ -303,39 +277,6 @@ class AnchorTextAnalyzer {
   static getSignificantWordCount(text: string) {
     const words = text.toLowerCase().split(/\s+/);
     return words.filter((w) => w.length > 2 && !STOP_WORDS.has(w)).length;
-  }
-
-  /**
-   * Check if link is internal
-   * @param {string} href
-   * @param {string} origin
-   * @returns {boolean}
-   */
-  static isInternalLink(href: string, origin: string) {
-    if (!href) return false;
-    if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) {
-      return false;
-    }
-
-    try {
-      const linkOrigin = new URL(href, origin).origin;
-      return linkOrigin === origin;
-    } catch {
-      return href.startsWith('/');
-    }
-  }
-
-  /**
-   * Get origin from URL
-   * @param {string} url
-   * @returns {string}
-   */
-  static getOrigin(url: string) {
-    try {
-      return new URL(url).origin;
-    } catch {
-      return '';
-    }
   }
 
   /**
@@ -366,7 +307,7 @@ class AnchorTextAnalyzer {
         const href = String(link.href ?? link.url ?? '');
         const anchor = (link.text ?? link.anchor ?? '').trim().toLowerCase();
 
-        if (!href || !this.isInternalLink(href, origin)) continue;
+        if (!href || !isInternalLink(href, origin)) continue;
 
         stats.totalInternalLinks++;
 
@@ -386,7 +327,7 @@ class AnchorTextAnalyzer {
         anchors.set(anchor, (anchors.get(anchor) ?? 0) + 1);
 
         // Track site-wide distribution
-        if (anchor && !GENERIC_ANCHORS.includes(anchor)) {
+        if (anchor && !(GENERIC_ANCHORS as readonly string[]).includes(anchor)) {
           (stats.siteWideAnchorDistribution as Record<string, number>)[anchor] =
             ((stats.siteWideAnchorDistribution as Record<string, number>)[anchor] || 0) + 1;
         }
@@ -394,7 +335,7 @@ class AnchorTextAnalyzer {
         // Count generics and empties
         if (!anchor) {
           stats.totalEmptyAnchors++;
-        } else if (GENERIC_ANCHORS.includes(anchor)) {
+        } else if ((GENERIC_ANCHORS as readonly string[]).includes(anchor)) {
           stats.totalGenericAnchors++;
         }
 
@@ -443,7 +384,7 @@ class AnchorTextAnalyzer {
 
       for (const [anchor, count] of anchors.entries() as IterableIterator<[string, number]>) {
         const percentage = (count / totalLinks) * 100;
-        if (percentage > 80 && count > 5 && !GENERIC_ANCHORS.includes(anchor)) {
+        if (percentage > 80 && count > 5 && !(GENERIC_ANCHORS as readonly string[]).includes(anchor)) {
           overOptimizedTargets.push({ target, anchor, percentage: percentage.toFixed(0), count });
         }
       }

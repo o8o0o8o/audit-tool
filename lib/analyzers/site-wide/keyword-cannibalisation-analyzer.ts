@@ -3,7 +3,8 @@
  * Detects pages competing for the same keywords
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, STOP_WORDS } from '../../constants';
+import { shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface TitleConflictPage {
@@ -18,121 +19,9 @@ interface H1ConflictPage {
 
 type ConflictPage = TitleConflictPage | H1ConflictPage;
 
-const STOPWORDS = new Set([
-  'a',
-  'an',
-  'the',
-  'and',
-  'or',
-  'but',
-  'in',
-  'on',
-  'at',
-  'to',
-  'for',
-  'of',
-  'with',
-  'by',
-  'from',
-  'as',
-  'is',
-  'was',
-  'are',
-  'were',
-  'been',
-  'be',
-  'have',
-  'has',
-  'had',
-  'do',
-  'does',
-  'did',
-  'will',
-  'would',
-  'could',
-  'should',
-  'may',
-  'might',
-  'must',
-  'shall',
-  'can',
-  'need',
-  'it',
-  'its',
-  'this',
-  'that',
-  'these',
-  'those',
-  'i',
-  'you',
-  'he',
-  'she',
-  'we',
-  'they',
-  'what',
-  'which',
-  'who',
-  'whom',
-  'how',
-  'when',
-  'where',
-  'why',
-  'all',
-  'each',
-  'every',
-  'both',
-  'few',
-  'more',
-  'most',
-  'other',
-  'some',
-  'such',
-  'no',
-  'nor',
-  'not',
-  'only',
-  'own',
-  'same',
-  'so',
-  'than',
-  'too',
-  'very',
-  'just',
-  'also',
-  'now',
-  'here',
-  'there',
-  'then',
-  'once',
-  'about',
-  'after',
-  'before',
-  'above',
-  'below',
-  'between',
-  'into',
-  'through',
-  'during',
-  'under',
-  'again',
-  'further',
-  'any',
-  'our',
-  'your',
-  'their',
-  'his',
-  'her',
-  'my',
-  'get',
-  'best',
-  'top',
-  'new',
-  'free',
-  'guide',
-  'tips',
-  'ways',
-  'things',
-]);
+// Extends shared STOP_WORDS with keyword-cannibalisation-specific low-value words
+const KEYWORD_EXTRA_STOPWORDS = ['once', 'before', 'above', 'below', 'between', 'through', 'during', 'under', 'again', 'further', 'get', 'best', 'top', 'free', 'guide', 'tips', 'ways', 'things'];
+const STOPWORDS = new Set([...STOP_WORDS, ...KEYWORD_EXTRA_STOPWORDS]);
 
 class KeywordCannibalisationAnalyzer {
   /**
@@ -490,21 +379,8 @@ class KeywordCannibalisationAnalyzer {
     return STOPWORDS.has(word.toLowerCase());
   }
 
-  /**
-   * Shorten URL for display
-   */
-  static shortenUrl(url: string) {
-    try {
-      const parsed = new URL(url);
-      const path = parsed.pathname;
-      if (path.length > 40) {
-        return '...' + path.slice(-37);
-      }
-      return path || '/';
-    } catch {
-      return url.slice(-40);
-    }
-  }
+  /** @deprecated Use shortenUrl from lib/utils.ts */
+  static shortenUrl = (url: string) => shortenUrl(url, 40);
 
   /**
    * Truncate text

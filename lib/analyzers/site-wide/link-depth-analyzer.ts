@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class LinkDepthAnalyzer {
@@ -236,23 +237,8 @@ class LinkDepthAnalyzer {
     return depths;
   }
 
-  /**
-   * Shorten URL for display
-   * @param {string} url - Full URL
-   * @returns {string} Shortened URL
-   */
-  static shortenUrl(url: string) {
-    try {
-      const parsed = new URL(url);
-      const path = parsed.pathname;
-      if (path.length > 40) {
-        return '...' + path.slice(-37);
-      }
-      return path || '/';
-    } catch {
-      return url.slice(-40);
-    }
-  }
+  /** @deprecated Use shortenUrl from lib/utils.ts */
+  static shortenUrl = (url: string) => shortenUrl(url, 40);
 }
 
 export { LinkDepthAnalyzer };

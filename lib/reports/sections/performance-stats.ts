@@ -4,9 +4,9 @@
  */
 
 import { METRIC_INFO, THRESHOLDS } from '../metrics-metadata';
-import { escapeHtml } from '../html-utils';
+import { escapeHtml, getMetricColor } from '../html-utils';
 import { extractComparisonLabels, formatPercentDelta } from '../comparison-helpers';
-import { statAvg, statPercentile } from '../../utils';
+import { statAvg, statPercentile, shortenUrl } from '../../utils';
 import type { PageInfo, ReportSectionData, MetricInfoEntry, ComparisonData } from '../../types';
 
 /**
@@ -331,25 +331,9 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
 
   const rows = slowest
     .map((p, i) => {
-      const ttfbColor =
-        (p.TTFB ?? 0) > 1500
-          ? 'var(--color-error)'
-          : (p.TTFB ?? 0) > 800
-            ? 'var(--color-warning)'
-            : 'var(--color-success)';
-      const lcpColor =
-        (p.LCP ?? 0) > 4000
-          ? 'var(--color-error)'
-          : (p.LCP ?? 0) > 2500
-            ? 'var(--color-warning)'
-            : 'var(--color-success)';
-      let shortUrl;
-      try {
-        shortUrl = new URL(p.url).pathname;
-      } catch {
-        shortUrl = p.url;
-      }
-      if (shortUrl.length > 50) shortUrl = '...' + shortUrl.slice(-47);
+      const ttfbColor = getMetricColor(p.TTFB, THRESHOLDS.TTFB, true);
+      const lcpColor = getMetricColor(p.LCP, THRESHOLDS.LCP, true);
+      const shortUrl = shortenUrl(p.url);
 
       return `
       <tr>

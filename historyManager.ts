@@ -16,6 +16,7 @@ import type {
   SeverityLevel,
 } from './lib/types';
 import { FileManager } from './lib/storage/file-manager';
+import { extractPageInsights } from './lib/reports/data-processor';
 import { sanitizeDomainName } from './validators';
 import { statAvg, statPercentile } from './lib/utils';
 
@@ -250,37 +251,7 @@ class HistoryManager {
   extractInsightsSummary(auditData: Partial<AuditResults>): InsightsSummary | null {
     const pages = Object.values(auditData.pageData?.pages ?? {}) as PageInfo[];
     if (pages.length === 0) return null;
-
-    const langMismatches = pages.filter((p) => p.languageDetection?.match === false).length;
-    const brokenOutbound = pages.reduce((sum, p) => sum + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
-    const similarPages = pages.filter(
-      (p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
-    ).length;
-    const noCta = pages.filter((p) => p.ctaData?.summary?.total === 0).length;
-
-    const coveragePages = pages.filter((p) => p.codeCoverage?.js?.ratio != null);
-    const avgJsUnused =
-      coveragePages.length > 0
-        ? +(coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length).toFixed(1)
-        : null;
-    const avgCssUnused =
-      coveragePages.length > 0 && coveragePages.some((p) => p.codeCoverage?.css?.ratio != null)
-        ? +(
-            coveragePages
-              .filter((p) => p.codeCoverage?.css?.ratio != null)
-              .reduce((s, p) => s + (p.codeCoverage?.css?.ratio ?? 0), 0) /
-            coveragePages.filter((p) => p.codeCoverage?.css?.ratio != null).length
-          ).toFixed(1)
-        : null;
-
-    return {
-      languageMismatches: langMismatches,
-      brokenOutboundLinks: brokenOutbound,
-      nearDuplicatePages: similarPages,
-      pagesWithoutCTAs: noCta,
-      avgJsUnused,
-      avgCssUnused,
-    };
+    return extractPageInsights(pages);
   }
 
   extractTechnologiesSummary(auditData: Partial<AuditResults>): string[] {

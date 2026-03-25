@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY, THRESHOLDS as GLOBAL_THRESHOLDS } from '../../constants';
+import { shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class ThinContentAnalyzer {
@@ -164,21 +165,8 @@ class ThinContentAnalyzer {
     return Math.min(score, 100);
   }
 
-  /**
-   * Shorten URL for display
-   */
-  static shortenUrl(url: string) {
-    try {
-      const parsed = new URL(url);
-      const path = parsed.pathname;
-      if (path.length > 50) {
-        return '...' + path.slice(-47);
-      }
-      return path || '/';
-    } catch {
-      return url.slice(-50);
-    }
-  }
+  /** @deprecated Use shortenUrl from lib/utils.ts */
+  static shortenUrl = shortenUrl;
 
   /**
    * Site-wide thin content analysis

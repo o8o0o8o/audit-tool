@@ -7,7 +7,7 @@
 import { CATEGORY_CONFIG } from '../metrics-metadata';
 import { formatDeltaBadge, extractComparisonLabels, getDeltaCssColor } from '../comparison-helpers';
 import { getScoreColor } from '../html-utils';
-import { extractSummary } from '../data-processor';
+import { extractSummary, extractPageInsights } from '../data-processor';
 import { getLetterGrade, estimateScoreAfterFixes } from '../../utils';
 import { SCORING } from '../../constants';
 import type { PageInfo, ReportSectionData, CategoryScores, ComparisonData } from '../../types';
@@ -226,43 +226,33 @@ function getInsightHighlights(jsonData: Record<string, unknown>) {
   const pages = Object.values((pageData?.pages as Record<string, PageInfo>) || {});
   if (pages.length === 0) return '';
 
+  const insights = extractPageInsights(pages);
   const badges: string[] = [];
 
-  const langMismatches = pages.filter((p: PageInfo) => p.languageDetection?.match === false).length;
-  if (langMismatches > 0) {
+  if (insights.languageMismatches > 0) {
     badges.push(
-      `<span class="insight-badge warn">🌐 ${langMismatches} language mismatch${langMismatches > 1 ? 'es' : ''}</span>`,
+      `<span class="insight-badge warn">🌐 ${insights.languageMismatches} language mismatch${insights.languageMismatches > 1 ? 'es' : ''}</span>`,
     );
   }
 
-  const brokenOutbound = pages.reduce((s: number, p: PageInfo) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
-  if (brokenOutbound > 0) {
+  if (insights.brokenOutboundLinks > 0) {
     badges.push(
-      `<span class="insight-badge warn">🔗 ${brokenOutbound} broken outbound link${brokenOutbound > 1 ? 's' : ''}</span>`,
+      `<span class="insight-badge warn">🔗 ${insights.brokenOutboundLinks} broken outbound link${insights.brokenOutboundLinks > 1 ? 's' : ''}</span>`,
     );
   }
 
-  const similarPages = pages.filter(
-    (p: PageInfo) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
-  ).length;
-  if (similarPages > 0) {
+  if (insights.nearDuplicatePages > 0) {
     badges.push(
-      `<span class="insight-badge info">📄 ${similarPages} near-duplicate page${similarPages > 1 ? 's' : ''}</span>`,
+      `<span class="insight-badge info">📄 ${insights.nearDuplicatePages} near-duplicate page${insights.nearDuplicatePages > 1 ? 's' : ''}</span>`,
     );
   }
 
-  const coveragePages = pages.filter((p: PageInfo) => p.codeCoverage?.js?.ratio != null);
-  if (coveragePages.length > 0) {
-    const avgUnused =
-      coveragePages.reduce((s: number, p: PageInfo) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length;
-    if (avgUnused > 50) {
-      badges.push(`<span class="insight-badge warn">📦 ${avgUnused.toFixed(0)}% avg unused JS</span>`);
-    }
+  if (insights.avgJsUnused != null && insights.avgJsUnused > 50) {
+    badges.push(`<span class="insight-badge warn">📦 ${insights.avgJsUnused.toFixed(0)}% avg unused JS</span>`);
   }
 
-  const noCta = pages.filter((p: PageInfo) => p.ctaData?.summary?.total === 0).length;
-  if (noCta > pages.length * 0.3) {
-    badges.push(`<span class="insight-badge info">🎯 ${noCta} page${noCta > 1 ? 's' : ''} without CTAs</span>`);
+  if (insights.pagesWithoutCTAs > pages.length * 0.3) {
+    badges.push(`<span class="insight-badge info">🎯 ${insights.pagesWithoutCTAs} page${insights.pagesWithoutCTAs > 1 ? 's' : ''} without CTAs</span>`);
   }
 
   if (badges.length === 0) return '';
@@ -288,24 +278,37 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   technical: 'Technical implementation: redirects, URL structure, caching, CDN, and Service Worker.',
 };
 
+/** Ordered list of scoring category keys */
+const CATEGORY_KEYS = ['seo', 'performance', 'accessibility', 'security', 'technical'] as const;
+
+/** Human-readable names for each category */
+const CATEGORY_NAMES: Record<string, string> = {
+  seo: 'SEO',
+  performance: 'Performance',
+  accessibility: 'Accessibility',
+  security: 'Security',
+  technical: 'Technical',
+};
+
+/** Get CSS class for a progress bar based on score */
+function getProgressBarClass(score: number): string {
+  if (score >= 80) return 'progress-good';
+  if (score >= 60) return 'progress-warning';
+  return 'progress-bad';
+}
+
 /**
  * Generate single-origin category progress bars
  */
 function getCategoryBars(categoryScores: Partial<CategoryScores>) {
-  const categories = [
-    { key: 'seo', name: 'SEO', score: categoryScores.seo ?? 0 },
-    { key: 'performance', name: 'Performance', score: categoryScores.performance ?? 0 },
-    { key: 'accessibility', name: 'Accessibility', score: categoryScores.accessibility ?? 0 },
-    { key: 'security', name: 'Security', score: categoryScores.security ?? 0 },
-    { key: 'technical', name: 'Technical', score: categoryScores.technical ?? 0 },
-  ];
+  const categories = CATEGORY_KEYS.map((key) => ({
+    key,
+    name: CATEGORY_NAMES[key],
+    score: categoryScores[key] ?? 0,
+  }));
 
   return categories
     .map((cat) => {
-      let progressClass = 'progress-bad';
-      if (cat.score >= 80) progressClass = 'progress-good';
-      else if (cat.score >= 60) progressClass = 'progress-warning';
-
       const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[cat.key] || {};
       const icon = config.icon || '';
       const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
@@ -317,7 +320,7 @@ function getCategoryBars(categoryScores: Partial<CategoryScores>) {
           <span class="font-bold">${cat.score}/100</span>
         </div>
         <div class="progress-bar-container">
-          <div class="progress-bar ${progressClass}" style="width: ${cat.score}%;"></div>
+          <div class="progress-bar ${getProgressBarClass(cat.score)}" style="width: ${cat.score}%;"></div>
         </div>
       </div>
     `;
@@ -334,31 +337,23 @@ function getDualCategoryBars(
   _originLabel: string,
   _compareLabel: string,
 ) {
-  const categories = [
-    { key: 'seo', name: 'SEO' },
-    { key: 'performance', name: 'Performance' },
-    { key: 'accessibility', name: 'Accessibility' },
-    { key: 'security', name: 'Security' },
-    { key: 'technical', name: 'Technical' },
-  ];
-
-  return categories
-    .map((cat) => {
-      const originScore = originScores[cat.key] || 0;
-      const compareScore = compareScores[cat.key] || 0;
+  return CATEGORY_KEYS
+    .map((key) => {
+      const name = CATEGORY_NAMES[key];
+      const originScore = originScores[key] || 0;
+      const compareScore = compareScores[key] || 0;
       const delta = compareScore - originScore;
-      const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[cat.key] || {};
+      const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[key] || {};
       const icon = config.icon || '';
-      const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
+      const description = CATEGORY_DESCRIPTIONS[key] || '';
 
-      const getBarClass = (s: number) => (s >= 80 ? 'progress-good' : s >= 60 ? 'progress-warning' : 'progress-bad');
       const deltaColor = getDeltaCssColor(delta);
       const deltaText = delta !== 0 ? `${delta > 0 ? '+' : ''}${delta}` : '—';
 
       return `
       <div class="mb-5" title="${description}">
         <div class="flex justify-between mb-2 text-sm">
-          <span>${icon} ${cat.name}</span>
+          <span>${icon} ${name}</span>
           <span>
             <span class="font-semibold text-xs" style="color: #93c5fd;">${originScore}</span>
             <span class="font-bold text-xs" style="color: ${deltaColor}; margin: 0 var(--space-2);">${deltaText}</span>
@@ -368,13 +363,13 @@ function getDualCategoryBars(
         <div class="flex gap-1 items-center">
           <span class="text-2xs text-center" style="color: #93c5fd; min-width: 14px;">O</span>
           <div class="progress-bar-container flex-1">
-            <div class="progress-bar ${getBarClass(originScore)}" style="width: ${originScore}%;"></div>
+            <div class="progress-bar ${getProgressBarClass(originScore)}" style="width: ${originScore}%;"></div>
           </div>
         </div>
         <div class="flex gap-1 items-center mt-1">
           <span class="text-2xs text-center" style="color: #c4b5fd; min-width: 14px;">C</span>
           <div class="progress-bar-container flex-1">
-            <div class="progress-bar ${getBarClass(compareScore)}" style="width: ${compareScore}%;"></div>
+            <div class="progress-bar ${getProgressBarClass(compareScore)}" style="width: ${compareScore}%;"></div>
           </div>
         </div>
       </div>

@@ -555,6 +555,22 @@ function formatUrlList(urls: string[], maxItems?: number): string {
     .join('');
 }
 
+/**
+ * Shorten a URL to its pathname for display, truncating if too long.
+ */
+function shortenUrl(url: string, maxLength = 50): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    if (path.length > maxLength) {
+      return '...' + path.slice(-(maxLength - 3));
+    }
+    return path || '/';
+  } catch {
+    return url.slice(-maxLength);
+  }
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -578,6 +594,7 @@ export {
   parseJsonLdSchemas,
   estimateScoreAfterFixes,
   formatUrlList,
+  shortenUrl,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

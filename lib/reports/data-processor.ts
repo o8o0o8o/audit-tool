@@ -480,4 +480,41 @@ function extractSummary(jsonData: Record<string, unknown>): Record<string, unkno
   return (analysis.summary ?? {}) as Record<string, unknown>;
 }
 
-export { ReportDataProcessor, extractAnalysis, extractSummary };
+/**
+ * Extract insight metrics from an array of pages.
+ * Shared between executive-summary (report) and historyManager (snapshots).
+ */
+function extractPageInsights(pages: PageInfo[]) {
+  const langMismatches = pages.filter((p) => p.languageDetection?.match === false).length;
+  const brokenOutbound = pages.reduce((s, p) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
+  const similarPages = pages.filter(
+    (p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
+  ).length;
+  const noCta = pages.filter((p) => p.ctaData?.summary?.total === 0).length;
+
+  const coveragePages = pages.filter((p) => p.codeCoverage?.js?.ratio != null);
+  const avgJsUnused =
+    coveragePages.length > 0
+      ? +(coveragePages.reduce((s, p) => s + (p.codeCoverage?.js?.ratio ?? 0), 0) / coveragePages.length).toFixed(1)
+      : null;
+  const avgCssUnused =
+    coveragePages.length > 0 && coveragePages.some((p) => p.codeCoverage?.css?.ratio != null)
+      ? +(
+          coveragePages
+            .filter((p) => p.codeCoverage?.css?.ratio != null)
+            .reduce((s, p) => s + (p.codeCoverage?.css?.ratio ?? 0), 0) /
+          coveragePages.filter((p) => p.codeCoverage?.css?.ratio != null).length
+        ).toFixed(1)
+      : null;
+
+  return {
+    languageMismatches: langMismatches,
+    brokenOutboundLinks: brokenOutbound,
+    nearDuplicatePages: similarPages,
+    pagesWithoutCTAs: noCta,
+    avgJsUnused,
+    avgCssUnused,
+  };
+}
+
+export { ReportDataProcessor, extractAnalysis, extractSummary, extractPageInsights };

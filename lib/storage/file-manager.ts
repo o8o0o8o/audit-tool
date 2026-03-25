@@ -66,7 +66,7 @@ class FileManager {
     this.archivePartNumber = 0;
 
     // Generate timestamp for this run if not provided
-    this.timestamp = timestamp ?? this.generateTimestamp();
+    this.timestamp = timestamp ?? generateTimestamp();
 
     // Create directory structure: audit-results/domain.com/YYYY-MM-DD_HH-MM-SS/
     this.domainDir = path.join(this.baseResultsDir, this.domainName);
@@ -95,15 +95,6 @@ class FileManager {
   }
 
   /**
-   * Generate timestamp string for folder name
-   * Delegates to shared utility for consistency across the codebase
-   * @returns {string} Timestamp in format YYYY-MM-DD_HH-MM-SS
-   */
-  generateTimestamp() {
-    return generateTimestamp();
-  }
-
-  /**
    * Static method for generating timestamps (for use without instance)
    * @returns {string} Timestamp in format YYYY-MM-DD_HH-MM-SS
    */
@@ -114,8 +105,6 @@ class FileManager {
   /**
    * Read JSON file (handles both compressed and uncompressed)
    * Instance method that delegates to static method
-   * @param {string} filePath - Path to JSON file
-   * @returns {object} Parsed JSON data
    */
   readJsonFile(filePath: string) {
     return FileManager.readJsonFile(filePath);
@@ -123,7 +112,6 @@ class FileManager {
 
   /**
    * Read JSON file (handles both compressed and uncompressed)
-   * Static method for use without instantiation
    * @param {string} filePath - Path to JSON file
    * @returns {object} Parsed JSON data
    */

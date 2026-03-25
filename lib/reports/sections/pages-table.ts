@@ -67,7 +67,7 @@ function getPerfColumnHeader(signalKey: string, displayName: string, thresholdTe
 
   return `
     <th class="sortable" data-type="number" title="${escapeHtml(description)}">
-      ${escapeHtml(displayName)} ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:400;color:#6b7280;">🔬 Lab</span>' : ''}
+      ${escapeHtml(displayName)} ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:var(--font-weight-normal);color:var(--color-text-muted);">🔬 Lab</span>' : ''}
       ${info?.learnMore ? `<a href="${info.learnMore}" target="_blank" class="learn-more-link" title="Learn more">ⓘ</a>` : ''}
       <span class="threshold">${escapeHtml(thresholdText)}</span>
     </th>
@@ -85,14 +85,14 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
   function formatCrUXValue(metric: string): string {
     const data = metrics[metric];
     const p75 = data?.percentiles?.p75;
-    if (p75 == null || isNaN(Number(p75))) return '<span style="color:#9ca3af;">N/A</span>';
+    if (p75 == null || isNaN(Number(p75))) return '<span style="color:var(--color-text-disabled);">N/A</span>';
     const threshold: Record<string, number> = { TTFB: 800, FCP: 1800, LCP: 2500, CLS: 0.1, INP: 200 };
     const val = Number(p75);
     const limit = threshold[metric] || 0;
     const passing = metric === 'CLS' ? val <= limit : val <= limit;
-    const color = passing ? '#10b981' : '#ef4444';
+    const color = passing ? 'var(--color-success)' : 'var(--color-error)';
     const display = metric === 'CLS' ? val.toFixed(2) : `${Math.round(val)}ms`;
-    return `<span style="color:${color};font-weight:600;">${display}</span>`;
+    return `<span style="color:${color};font-weight:var(--font-weight-semibold);">${display}</span>`;
   }
 
   // Count columns after perf columns by reading the rest of the header (Page Size onwards)
@@ -106,19 +106,19 @@ function getCrUXBaselineRow(cruxData: CrUXData) {
   const postColumns = 43; // Page Size through Main Words
 
   return `
-    <tr style="background: linear-gradient(90deg, #eff6ff 0%, #f0fdf4 100%); border-bottom: 2px solid #3b82f6;">
-        <td style="text-align:center;font-size:11px;color:#3b82f6;font-weight:700;">🌐</td>
-        <td colspan="11" style="font-size:12px;font-weight:600;color:#1d4ed8;padding:8px;">
+    <tr style="background: linear-gradient(90deg, var(--blue-50) 0%, var(--color-success-bg) 100%); border-bottom: 2px solid var(--color-info);">
+        <td style="text-align:center;font-size:var(--font-size-xs);color:var(--color-info);font-weight:var(--font-weight-bold);">🌐</td>
+        <td colspan="11" style="font-size:var(--font-size-xs);font-weight:var(--font-weight-semibold);color:var(--color-link-hover);padding:8px;">
             CrUX Field Data (${escapeHtml(targetLabel)}) — Real user p75 values
-            <span style="font-weight:400;color:#6b7280;font-size:11px;margin-left:8px;">${escapeHtml(cruxData.target ?? '')}</span>
+            <span style="font-weight:var(--font-weight-normal);color:var(--color-text-muted);font-size:var(--font-size-xs);margin-left:8px;">${escapeHtml(cruxData.target ?? '')}</span>
         </td>
-        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX TTFB p75 from real users">${formatCrUXValue('TTFB')}</td>
-        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX FCP p75 from real users">${formatCrUXValue('FCP')}</td>
-        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX LCP p75 from real users">${formatCrUXValue('LCP')}</td>
-        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX CLS p75 from real users">${formatCrUXValue('CLS')}</td>
-        <td class="metric-cell" style="text-align:center;font-size:12px;" title="CrUX INP p75 from real users">${formatCrUXValue('INP')}</td>
-        <td colspan="${postColumns}" style="font-size:11px;color:#6b7280;text-align:left;padding-left:10px;">
-            <span style="background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:3px;font-size:10px;">FIELD DATA</span>
+        <td class="metric-cell" style="text-align:center;font-size:var(--font-size-xs);" title="CrUX TTFB p75 from real users">${formatCrUXValue('TTFB')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:var(--font-size-xs);" title="CrUX FCP p75 from real users">${formatCrUXValue('FCP')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:var(--font-size-xs);" title="CrUX LCP p75 from real users">${formatCrUXValue('LCP')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:var(--font-size-xs);" title="CrUX CLS p75 from real users">${formatCrUXValue('CLS')}</td>
+        <td class="metric-cell" style="text-align:center;font-size:var(--font-size-xs);" title="CrUX INP p75 from real users">${formatCrUXValue('INP')}</td>
+        <td colspan="${postColumns}" style="font-size:var(--font-size-xs);color:var(--color-text-muted);text-align:left;padding-left:10px;">
+            <span style="background:var(--blue-100);color:var(--color-link-hover);padding:2px 6px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);">FIELD DATA</span>
         </td>
     </tr>`;
 }
@@ -142,15 +142,15 @@ function getPagesTable(data: ReportSectionData) {
   return `
     <div class="table-filters" style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 8px;">
-            <label for="pageSearch" style="font-weight: 600; color: #374151;">Search:</label>
+            <label for="pageSearch" style="font-weight: var(--font-weight-semibold); color: var(--color-text-secondary);">Search:</label>
             <input type="text" id="pageSearch" placeholder="Filter by URL, title, or keyword..."
-                   style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; width: 350px; font-size: 14px;"
+                   style="padding: 8px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); width: 350px; font-size: var(--font-size-base);"
                    onkeyup="filterTableBySearch(this.value)">
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
-            <label for="segmentFilter" style="font-weight: 600; color: #374151;">Segment:</label>
+            <label for="segmentFilter" style="font-weight: var(--font-weight-semibold); color: var(--color-text-secondary);">Segment:</label>
             <select id="segmentFilter" onchange="filterTableBySegment(this.value)"
-                    style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; background: white;">
+                    style="padding: 8px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); font-size: var(--font-size-base); background: var(--color-bg-surface);">
                 <option value="">All Segments</option>
                 <option value="blog">Blog/News</option>
                 <option value="product">Products</option>
@@ -167,10 +167,10 @@ function getPagesTable(data: ReportSectionData) {
                 <option value="other">Other</option>
             </select>
         </div>
-        <button onclick="clearTableFilters()" style="padding: 8px 12px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px;">
+        <button onclick="clearTableFilters()" style="padding: 8px 12px; background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-base);">
             Clear Filters
         </button>
-        <span id="filterCount" style="color: #6b7280; font-size: 14px;"></span>
+        <span id="filterCount" style="color: var(--color-text-muted); font-size: var(--font-size-base);"></span>
     </div>
     <div class="table-container">
         <table id="pagesTable">
@@ -227,7 +227,7 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
         ${getPerfColumnHeader('lcp', 'LCP', `≤ ${THRESHOLDS.LCP}ms`, hasCrux)}
         ${getPerfColumnHeader('cls', 'CLS', `≤ ${THRESHOLDS.CLS}`, hasCrux)}
         <th class="sortable" data-type="number" title="Interaction to Next Paint - measures responsiveness to user input. Core Web Vital since March 2024.">
-            INP ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:400;color:#6b7280;">🔬 Lab</span>' : ''}
+            INP ${hasCrux ? '<span style="display:block;font-size:9px;font-weight:var(--font-weight-normal);color:var(--color-text-muted);">🔬 Lab</span>' : ''}
             <span class="threshold">≤ ${THRESHOLDS.INP || 200}ms</span>
         </th>
         `
@@ -368,20 +368,20 @@ function getPerfCell(page: PageInfo, metric: string, labValue: number | undefine
   // Lab display
   const hasLab = isCls ? labValue !== undefined : !!labValue;
   const labDisplay = hasLab ? (isCls ? String(labValue) : `${labValue}${unit}`) : 'N/A';
-  const labColor = hasLab ? getMetricColor(labValue!, threshold, true) : '#9ca3af';
+  const labColor = hasLab ? getMetricColor(labValue!, threshold, true) : 'var(--color-text-disabled)';
 
   // CrUX field display
   if (crux) {
     const fieldP75 = crux.p75;
     const fieldDisplay = isCls ? fieldP75.toFixed(2) : `${Math.round(fieldP75)}${unit}`;
     const fieldPassing = isCls ? fieldP75 <= threshold : fieldP75 <= threshold;
-    const fieldColor = fieldPassing ? '#10b981' : '#ef4444';
+    const fieldColor = fieldPassing ? 'var(--color-success)' : 'var(--color-error)';
     const goodPct = crux.distribution?.good ?? 0;
 
     return `
       <td class="metric-cell" style="text-align:center;line-height:1.3;" title="Lab: ${labDisplay} | Field p75: ${fieldDisplay} (${goodPct}% good)">
-          <span style="color:${labColor};font-weight:600;font-size:12px;">🔬 ${labDisplay}</span><br>
-          <span style="color:${fieldColor};font-weight:600;font-size:11px;">🌐 ${fieldDisplay}</span>
+          <span style="color:${labColor};font-weight:var(--font-weight-semibold);font-size:var(--font-size-xs);">🔬 ${labDisplay}</span><br>
+          <span style="color:${fieldColor};font-weight:var(--font-weight-semibold);font-size:var(--font-size-xs);">🌐 ${fieldDisplay}</span>
       </td>`;
   }
 
@@ -480,7 +480,7 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
 
   return `
     <tr data-keywords="${escapeHtml(keywords)}" data-title="${escapeHtml(titleWords)}" data-segment="${page.segment ?? 'other'}" data-has-errors="${(page.status ?? 0) >= 400 || missingMeta.length > 3 ? 'true' : 'false'}" data-ttfb="${page.TTFB ?? 0}" data-status="${page.status ?? ''}" data-missing-meta="${missingMeta.length > 0 ? 'true' : 'false'}" data-h1-count="${h1Count}">
-        <td style="text-align: center; color: #9ca3af; font-weight: 500; font-size: 12px;">
+        <td style="text-align: center; color: var(--color-text-disabled); font-weight: var(--font-weight-medium); font-size: var(--font-size-xs);">
             ${index + 1}
         </td>
         <td>
@@ -490,36 +490,36 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             <span class="source-badge source-${page.foundIn ?? 'sitemap'}" title="${page.foundIn === 'discovered' ? (page.discoveredOn ? 'Found on page: ' + escapeHtml(page.discoveredOn) : 'Found through internal links during crawl') : 'Listed in sitemap'}">${page.foundIn === 'discovered' ? 'Link' : 'Sitemap'}</span>
         </td>
         <td style="text-align: center;">
-            <span class="segment-badge segment-${page.segment ?? 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: ${getSegmentColor(page.segment ?? 'other')}; color: white;" title="Page segment: ${page.segment ?? 'other'}">${getSegmentLabel(page.segment ?? 'other')}</span>
+            <span class="segment-badge segment-${page.segment ?? 'other'}" style="display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); background: ${getSegmentColor(page.segment ?? 'other')}; color: white;" title="Page segment: ${page.segment ?? 'other'}">${getSegmentLabel(page.segment ?? 'other')}</span>
         </td>
         <td class="incoming-links-cell"
-            style="color: ${(page.incomingLinksCount ?? 0) > 0 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center; cursor: ${(page.incomingLinksCount ?? 0) > 0 ? 'pointer' : 'default'}; position: relative;"
+            style="color: ${(page.incomingLinksCount ?? 0) > 0 ? 'var(--color-success)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; cursor: ${(page.incomingLinksCount ?? 0) > 0 ? 'pointer' : 'default'}; position: relative;"
             data-url="${escapeHtml(page.url)}"
             data-count="${page.incomingLinksCount ?? 0}"
             title="${(page.incomingLinksCount ?? 0) > 0 ? 'Click to see ' + page.incomingLinksCount + ' incoming link(s)' : 'No incoming links - page is orphaned (only accessible via sitemap)'}">
-            ${page.incomingLinksCount ?? 0}${(page.incomingLinksCount ?? 0) > 0 ? ' <span style="font-size: 10px; opacity: 0.7;">ℹ</span>' : ''}
+            ${page.incomingLinksCount ?? 0}${(page.incomingLinksCount ?? 0) > 0 ? ' <span style="font-size: var(--font-size-2xs); opacity: 0.7;">ℹ</span>' : ''}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.length ?? 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal'}">
+        <td style="color: ${getMetricColor(page.urlAnalysis?.length ?? 0, THRESHOLDS.URL_LENGTH_RECOMMENDED, true)}; font-weight: var(--font-weight-semibold); text-align: center;" title="${page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_MAX ? 'Error: URL too long (' + page.urlAnalysis.length + ' chars)' : page.urlAnalysis?.length && page.urlAnalysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED ? 'Warning: URL longer than recommended (' + page.urlAnalysis.length + ' chars)' : 'Good: URL length is optimal'}">
             ${page.urlAnalysis?.length ?? 0}
         </td>
-        <td style="color: ${getMetricColor(page.urlAnalysis?.depth ?? 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: 600; text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
+        <td style="color: ${getMetricColor(page.urlAnalysis?.depth ?? 0, THRESHOLDS.URL_DEPTH_MAX, true)}; font-weight: var(--font-weight-semibold); text-align: center;" title="${page.urlAnalysis?.depth && page.urlAnalysis.depth > THRESHOLDS.URL_DEPTH_MAX ? 'Warning: URL is too deep (' + page.urlAnalysis.depth + ' levels)' : 'Good: URL depth is optimal'}">
             ${page.urlAnalysis?.depth ?? 0}
         </td>
-        <td style="color: ${(page.redirectCount ?? 0) > 2 ? '#ef4444' : (page.redirectCount ?? 0) > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.redirectCount ?? 0) > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
+        <td style="color: ${(page.redirectCount ?? 0) > 2 ? 'var(--color-error)' : (page.redirectCount ?? 0) > 0 ? 'var(--color-warning)' : 'var(--color-success)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${(page.redirectCount ?? 0) > 0 ? 'Warning: ' + page.redirectCount + ' redirect(s) detected' + (page.redirectChain ? ': ' + (page.redirectChain as unknown as Array<{ url: string }>).map((r) => r.url).join(' → ') : '') : 'Good: No redirects'}">
             ${page.redirectCount ?? 0}
         </td>
-        <td style="color: ${(page.httpLinksCount ?? 0) > 0 ? '#ef4444' : '#10b981'}; font-weight: 600; text-align: center;" title="${(page.httpLinksCount ?? 0) > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
+        <td style="color: ${(page.httpLinksCount ?? 0) > 0 ? 'var(--color-error)' : 'var(--color-success)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${(page.httpLinksCount ?? 0) > 0 ? 'Error: ' + page.httpLinksCount + ' HTTP link(s) on HTTPS site' : 'Good: No HTTP links'}">
             ${page.httpLinksCount ?? 0}
         </td>
         <td><span class="status-badge" style="background: ${getStatusColor(page.status ?? 0)};">${page.status ?? 'N/A'}</span></td>
         <td class="text-cell" title="${titleTooltip ?? escapeHtml(page.title ?? 'No title')}">
-            <span style="color: ${titleColor}; font-weight: 600;">${titleLength}</span>
-            <span style="color: #9ca3af;"> | </span>
+            <span style="color: ${titleColor}; font-weight: var(--font-weight-semibold);">${titleLength}</span>
+            <span style="color: var(--color-text-disabled);"> | </span>
             <span>${escapeHtml(page.title?.substring(0, 40) ?? 'No title')}${(page.title?.length ?? 0) > 40 ? '...' : ''}</span>
         </td>
         <td class="text-cell" title="${descTooltip ?? escapeHtml(page.description ?? 'No description')}">
-            <span style="color: ${descColor}; font-weight: 600;">${descLength}</span>
-            <span style="color: #9ca3af;"> | </span>
+            <span style="color: ${descColor}; font-weight: var(--font-weight-semibold);">${descLength}</span>
+            <span style="color: var(--color-text-disabled);"> | </span>
             <span>${escapeHtml(page.description?.substring(0, 40) ?? 'No description')}${(page.description?.length ?? 0) > 40 ? '...' : ''}</span>
         </td>
         ${
@@ -543,76 +543,76 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             ${
               page.canonical
                 ? page.canonical === page.url
-                  ? '<span style="color: #10b981;" title="Canonical URL matches page URL">✓</span>'
-                  : '<span style="color: #f59e0b;" title="Canonical URL differs: ' +
+                  ? '<span style="color: var(--color-success);" title="Canonical URL matches page URL">✓</span>'
+                  : '<span style="color: var(--color-warning);" title="Canonical URL differs: ' +
                     escapeHtml(page.canonical) +
                     '">⚠</span>'
-                : '<span style="color: #ef4444;" title="Canonical URL is missing">✗</span>'
+                : '<span style="color: var(--color-error);" title="Canonical URL is missing">✗</span>'
             }
         </td>
-        <td style="color: ${h1Count === 1 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="${h1Count === 1 ? 'Perfect: Page has exactly 1 H1 tag' : h1Count === 0 ? 'Error: Page is missing H1 tag' : 'Error: Page has ' + h1Count + ' H1 tags (should be exactly 1)'}">
+        <td style="color: ${h1Count === 1 ? 'var(--color-success)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${h1Count === 1 ? 'Perfect: Page has exactly 1 H1 tag' : h1Count === 0 ? 'Error: Page is missing H1 tag' : 'Error: Page has ' + h1Count + ' H1 tags (should be exactly 1)'}">
             ${h1Count}
         </td>
-        <td style="color: ${h2Count <= THRESHOLDS.H2_COUNT ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="${h2Count <= THRESHOLDS.H2_COUNT ? 'Good: H2 count is within threshold' : 'Warning: Too many H2 tags (' + h2Count + ', recommended: ≤' + THRESHOLDS.H2_COUNT + ')'}">
+        <td style="color: ${h2Count <= THRESHOLDS.H2_COUNT ? 'var(--color-success)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${h2Count <= THRESHOLDS.H2_COUNT ? 'Good: H2 count is within threshold' : 'Warning: Too many H2 tags (' + h2Count + ', recommended: ≤' + THRESHOLDS.H2_COUNT + ')'}">
             ${h2Count}
         </td>
         <td style="text-align: center;">
             ${
               hasHStructureIssue
-                ? '<span style="color: #ef4444;" title="Error: Heading hierarchy has gaps (e.g., h1 to h3 without h2)">✗</span>'
-                : '<span style="color: #10b981;" title="Good: Heading hierarchy is correct">✓</span>'
+                ? '<span style="color: var(--color-error);" title="Error: Heading hierarchy has gaps (e.g., h1 to h3 without h2)">✗</span>'
+                : '<span style="color: var(--color-success);" title="Good: Heading hierarchy is correct">✓</span>'
             }
         </td>
-        <td style="color: ${missingMeta.length === 0 ? '#10b981' : missingMeta.length <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingMeta.length === 0 ? 'Good: All important meta tags are present' : 'Missing meta tags: ' + missingMeta.join(', ')}">
+        <td style="color: ${missingMeta.length === 0 ? 'var(--color-success)' : missingMeta.length <= 2 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${missingMeta.length === 0 ? 'Good: All important meta tags are present' : 'Missing meta tags: ' + missingMeta.join(', ')}">
             ${missingMeta.length}
         </td>
-        <td style="color: ${alternatesCount > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${alternatesCount > 0 ? alternatesCount + ' alternate language link(s)' : 'No alternate language links'}">
+        <td style="color: ${alternatesCount > 0 ? 'var(--color-success)' : 'var(--color-text-disabled)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${alternatesCount > 0 ? alternatesCount + ' alternate language link(s)' : 'No alternate language links'}">
             ${alternatesCount}
         </td>
-        <td style="color: ${linksWithoutText === 0 ? '#10b981' : linksWithoutText <= 3 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${linksWithoutText === 0 ? 'Good: All links have text' : 'Warning: ' + linksWithoutText + ' link(s) without text'}">
+        <td style="color: ${linksWithoutText === 0 ? 'var(--color-success)' : linksWithoutText <= 3 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${linksWithoutText === 0 ? 'Good: All links have text' : 'Warning: ' + linksWithoutText + ' link(s) without text'}">
             ${linksWithoutText}
         </td>
-        <td style="color: ${securityScore === null ? '#9ca3af' : securityScore >= 70 ? '#10b981' : securityScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${securityTooltip}">
+        <td style="color: ${securityScore === null ? 'var(--color-text-disabled)' : securityScore >= 70 ? 'var(--color-success)' : securityScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; white-space: pre-line;" title="${securityTooltip}">
             ${securityScore ?? 'N/A'}
         </td>
-        <td style="color: ${missingSecHeaders === 0 ? '#10b981' : missingSecHeaders <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') ?? '')}">
+        <td style="color: ${missingSecHeaders === 0 ? 'var(--color-success)' : missingSecHeaders <= 2 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') ?? '')}">
             ${missingSecHeaders}
         </td>
-        <td style="color: ${insecureCookies === 0 ? '#10b981' : insecureCookies <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${insecureCookies === 0 ? 'Good: All cookies are secure' : 'Warning: ' + insecureCookies + ' cookie(s) without Secure/HttpOnly flags'}">
+        <td style="color: ${insecureCookies === 0 ? 'var(--color-success)' : insecureCookies <= 2 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${insecureCookies === 0 ? 'Good: All cookies are secure' : 'Warning: ' + insecureCookies + ' cookie(s) without Secure/HttpOnly flags'}">
             ${insecureCookies}
         </td>
-        <td style="color: ${mixedContent === 0 ? '#10b981' : mixedContent <= 3 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${mixedContent === 0 ? 'Good: No mixed content' : 'Warning: ' + mixedContent + ' HTTP resources on HTTPS page'}">
+        <td style="color: ${mixedContent === 0 ? 'var(--color-success)' : mixedContent <= 3 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${mixedContent === 0 ? 'Good: No mixed content' : 'Warning: ' + mixedContent + ' HTTP resources on HTTPS page'}">
             ${mixedContent}
         </td>
-        <td style="color: ${formsWithoutCSRF === 0 ? '#10b981' : formsWithoutCSRF <= 2 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${formsWithoutCSRF === 0 ? 'Good: All forms have CSRF protection' : 'Warning: ' + formsWithoutCSRF + ' form(s) without CSRF tokens'}">
+        <td style="color: ${formsWithoutCSRF === 0 ? 'var(--color-success)' : formsWithoutCSRF <= 2 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${formsWithoutCSRF === 0 ? 'Good: All forms have CSRF protection' : 'Warning: ' + formsWithoutCSRF + ' form(s) without CSRF tokens'}">
             ${formsWithoutCSRF}
         </td>
-        <td style="color: ${inlineScripts <= 5 ? '#10b981' : inlineScripts <= 10 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${inlineScripts <= 5 ? 'Good: Minimal inline scripts' : 'Warning: ' + inlineScripts + ' inline scripts (potential XSS risk)'}">
+        <td style="color: ${inlineScripts <= 5 ? 'var(--color-success)' : inlineScripts <= 10 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${inlineScripts <= 5 ? 'Good: Minimal inline scripts' : 'Warning: ' + inlineScripts + ' inline scripts (potential XSS risk)'}">
             ${inlineScripts}
         </td>
-        <td style="color: ${cacheScore === null ? '#9ca3af' : cacheScore >= 70 ? '#10b981' : cacheScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center; white-space: pre-line;" title="${cachingTooltip}">
+        <td style="color: ${cacheScore === null ? 'var(--color-text-disabled)' : cacheScore >= 70 ? 'var(--color-success)' : cacheScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; white-space: pre-line;" title="${cachingTooltip}">
             ${cacheScore ?? 'N/A'}
         </td>
         <td style="text-align: center;">
             ${
               hasCDN
-                ? '<span style="color: #10b981;" title="CDN detected' +
+                ? '<span style="color: var(--color-success);" title="CDN detected' +
                   (cdnProvider ? ': ' + cdnProvider : '') +
                   '">✓</span>'
-                : '<span style="color: #f59e0b;" title="No CDN detected">✗</span>'
+                : '<span style="color: var(--color-warning);" title="No CDN detected">✗</span>'
             }
         </td>
-        <td style="color: ${cachedStatic > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${cachedStatic > 0 ? cachedStatic + ' static resources cached' : 'No cached static resources'}">
+        <td style="color: ${cachedStatic > 0 ? 'var(--color-success)' : 'var(--color-text-disabled)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${cachedStatic > 0 ? cachedStatic + ' static resources cached' : 'No cached static resources'}">
             ${cachedStatic}
         </td>
-        <td style="color: ${uncachedStatic === 0 ? '#10b981' : uncachedStatic <= 5 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${uncachedStatic === 0 ? 'Good: All static resources are cached' : 'Warning: ' + uncachedStatic + ' static resources without caching'}">
+        <td style="color: ${uncachedStatic === 0 ? 'var(--color-success)' : uncachedStatic <= 5 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${uncachedStatic === 0 ? 'Good: All static resources are cached' : 'Warning: ' + uncachedStatic + ' static resources without caching'}">
             ${uncachedStatic}
         </td>
         <td style="text-align: center;">
             ${
               hasServiceWorker
-                ? '<span style="color: #10b981;" title="Service Worker is active">✓</span>'
-                : '<span style="color: #f59e0b;" title="No Service Worker detected">✗</span>'
+                ? '<span style="color: var(--color-success);" title="Service Worker is active">✓</span>'
+                : '<span style="color: var(--color-warning);" title="No Service Worker detected">✗</span>'
             }
         </td>
         ${getImageOptimizationCells(page)}
@@ -791,25 +791,25 @@ function getImageOptimizationCells(page: PageInfo) {
   const unminified = (resOpt.minification?.unminifiedJS ?? 0) + (resOpt.minification?.unminifiedCSS ?? 0);
 
   return `
-    <td style="color: ${totalImages > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${totalImages} total images">
+    <td style="color: ${totalImages > 0 ? 'var(--color-success)' : 'var(--color-text-disabled)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${totalImages} total images">
         ${totalImages}
     </td>
-    <td style="color: ${totalImages > 0 && lazyImages === 0 ? '#ef4444' : lazyImages > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${lazyImages} images with lazy loading (${totalImages} total)">
+    <td style="color: ${totalImages > 0 && lazyImages === 0 ? 'var(--color-error)' : lazyImages > 0 ? 'var(--color-success)' : 'var(--color-text-disabled)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${lazyImages} images with lazy loading (${totalImages} total)">
         ${lazyImages}/${totalImages}
     </td>
-    <td style="color: ${totalImageSize > 1000000 ? '#ef4444' : totalImageSize > 500000 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="Total image size: ${Math.round(totalImageSize / 1000)}KB">
+    <td style="color: ${totalImageSize > 1000000 ? 'var(--color-error)' : totalImageSize > 500000 ? 'var(--color-warning)' : 'var(--color-success)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Total image size: ${Math.round(totalImageSize / 1000)}KB">
         ${Math.round(totalImageSize / 1000)}
     </td>
-    <td style="color: ${legacyFormats > 0 && modernFormats === 0 ? '#f59e0b' : modernFormats > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${modernFormats} modern format images (WebP/AVIF), ${legacyFormats} legacy format images (JPG/PNG)">
+    <td style="color: ${legacyFormats > 0 && modernFormats === 0 ? 'var(--color-warning)' : modernFormats > 0 ? 'var(--color-success)' : 'var(--color-text-disabled)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${modernFormats} modern format images (WebP/AVIF), ${legacyFormats} legacy format images (JPG/PNG)">
         ${modernFormats}/${totalImages}
     </td>
-    <td style="color: ${renderBlocking > 5 ? '#ef4444' : renderBlocking > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${renderBlocking} render-blocking resources">
+    <td style="color: ${renderBlocking > 5 ? 'var(--color-error)' : renderBlocking > 0 ? 'var(--color-warning)' : 'var(--color-success)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${renderBlocking} render-blocking resources">
         ${renderBlocking}
     </td>
-    <td style="color: ${uncompressed > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${uncompressed} uncompressed text resources">
+    <td style="color: ${uncompressed > 0 ? 'var(--color-warning)' : 'var(--color-success)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${uncompressed} uncompressed text resources">
         ${uncompressed}
     </td>
-    <td style="color: ${unminified > 0 ? '#f59e0b' : '#10b981'}; font-weight: 600; text-align: center;" title="${unminified} unminified resources">
+    <td style="color: ${unminified > 0 ? 'var(--color-warning)' : 'var(--color-success)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${unminified} unminified resources">
         ${unminified}
     </td>
   `;
@@ -834,27 +834,27 @@ function getAccessibilityCells(page: PageInfo) {
   const positiveTabindex = a11y.keyboard?.positiveTabindex ?? 0;
 
   return `
-    <td style="color: ${typeof a11yScore === 'number' && a11yScore >= 70 ? '#10b981' : typeof a11yScore === 'number' && a11yScore >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Accessibility Score: ${a11yScore}/100">
+    <td style="color: ${typeof a11yScore === 'number' && a11yScore >= 70 ? 'var(--color-success)' : typeof a11yScore === 'number' && a11yScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Accessibility Score: ${a11yScore}/100">
         ${a11yScore}
     </td>
     <td style="text-align: center;">
         ${
           ariaInvalid > 0
-            ? '<span style="color: #ef4444;" title="' + ariaInvalid + ' invalid ARIA roles">✗</span>'
+            ? '<span style="color: var(--color-error);" title="' + ariaInvalid + ' invalid ARIA roles">✗</span>'
             : ariaValid > 0
-              ? '<span style="color: #10b981;" title="' + ariaValid + ' valid ARIA roles">✓</span>'
-              : '<span style="color: #9ca3af;">—</span>'
+              ? '<span style="color: var(--color-success);" title="' + ariaValid + ' valid ARIA roles">✓</span>'
+              : '<span style="color: var(--color-text-disabled);">—</span>'
         }
     </td>
-    <td style="color: ${totalInputs > 0 && inputsWithoutLabels === 0 ? '#10b981' : inputsWithoutLabels > 0 ? '#ef4444' : '#9ca3af'}; font-weight: 600; text-align: center;" title="${inputsWithLabels} inputs with labels, ${inputsWithoutLabels} without">
+    <td style="color: ${totalInputs > 0 && inputsWithoutLabels === 0 ? 'var(--color-success)' : inputsWithoutLabels > 0 ? 'var(--color-error)' : 'var(--color-text-disabled)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${inputsWithLabels} inputs with labels, ${inputsWithoutLabels} without">
         ${inputsWithLabels}/${totalInputs}
     </td>
     <td style="text-align: center;" title="Main: ${hasMain ? 'Yes' : 'No'}, Nav: ${hasNav ? 'Yes' : 'No'}, Header: ${hasHeader ? 'Yes' : 'No'}">
-        ${hasMain ? '<span style="color: #10b981;">✓</span>' : '<span style="color: #ef4444;">✗</span>'}
-        ${hasNav ? '<span style="color: #10b981;">✓</span>' : '<span style="color: #f59e0b;">✗</span>'}
-        ${hasHeader ? '<span style="color: #10b981;">✓</span>' : '<span style="color: #f59e0b;">✗</span>'}
+        ${hasMain ? '<span style="color: var(--color-success);">✓</span>' : '<span style="color: var(--color-error);">✗</span>'}
+        ${hasNav ? '<span style="color: var(--color-success);">✓</span>' : '<span style="color: var(--color-warning);">✗</span>'}
+        ${hasHeader ? '<span style="color: var(--color-success);">✓</span>' : '<span style="color: var(--color-warning);">✗</span>'}
     </td>
-    <td style="color: ${focusIssues === 0 && positiveTabindex === 0 ? '#10b981' : '#f59e0b'}; font-weight: 600; text-align: center;" title="${focusIssues} elements without focus indicators, ${positiveTabindex} with positive tabindex">
+    <td style="color: ${focusIssues === 0 && positiveTabindex === 0 ? 'var(--color-success)' : 'var(--color-warning)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${focusIssues} elements without focus indicators, ${positiveTabindex} with positive tabindex">
         ${focusIssues + positiveTabindex}
     </td>
   `;
@@ -865,19 +865,19 @@ function getAccessibilityCells(page: PageInfo) {
  */
 function getSegmentColor(segment: string) {
   const colors: Record<string, string> = {
-    blog: '#3b82f6', // blue
-    product: '#10b981', // green
+    blog: 'var(--color-info)', // blue
+    product: 'var(--color-success)', // green
     category: '#8b5cf6', // purple
     tag: '#6366f1', // indigo
-    search: '#f59e0b', // amber
+    search: 'var(--color-warning)', // amber
     account: '#64748b', // slate
     checkout: '#ec4899', // pink
-    legal: '#6b7280', // gray
+    legal: 'var(--color-text-muted)', // gray
     contact: '#06b6d4', // cyan
-    media: '#f97316', // orange
+    media: 'var(--color-score-orange)', // orange
     landing: '#14b8a6', // teal
-    api: '#ef4444', // red
-    other: '#9ca3af', // gray
+    api: 'var(--color-error)', // red
+    other: 'var(--color-text-disabled)', // gray
   };
   return colors[segment] || colors.other;
 }
@@ -922,19 +922,19 @@ function getContentQualityCells(page: PageInfo) {
     .join(', ');
 
   return `
-    <td style="color: ${contentScoreNum >= 70 ? '#10b981' : contentScoreNum >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Content Quality Score: ${contentScore}/100">
+    <td style="color: ${contentScoreNum >= 70 ? 'var(--color-success)' : contentScoreNum >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Content Quality Score: ${contentScore}/100">
         ${contentScore}
     </td>
-    <td style="color: ${wordCount >= 600 ? '#10b981' : wordCount >= 300 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="${wordCount} words (min: 300, recommended: 600)">
+    <td style="color: ${wordCount >= 600 ? 'var(--color-success)' : wordCount >= 300 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${wordCount} words (min: 300, recommended: 600)">
         ${wordCount}
     </td>
-    <td style="color: ${textToHtmlRatio >= 25 ? '#10b981' : '#ef4444'}; font-weight: 600; text-align: center;" title="Text-to-HTML ratio: ${textToHtmlRatio}% (min: 25%)">
+    <td style="color: ${textToHtmlRatio >= 25 ? 'var(--color-success)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Text-to-HTML ratio: ${textToHtmlRatio}% (min: 25%)">
         ${textToHtmlRatio}%
     </td>
-    <td style="color: ${readability >= 60 ? '#10b981' : readability >= 50 ? '#f59e0b' : '#ef4444'}; font-weight: 600; text-align: center;" title="Flesch Reading Ease: ${readability}/100 (60-70 is standard)">
+    <td style="color: ${readability >= 60 ? 'var(--color-success)' : readability >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Flesch Reading Ease: ${readability}/100 (60-70 is standard)">
         ${readability}
     </td>
-    <td style="font-size: 11px; text-align: left;" title="Top keywords: ${topKeywords.map((k: { word: string; count: number; density: number }) => `${k.word}: ${k.count} times (${k.density}%)`).join(', ')}">
+    <td style="font-size: var(--font-size-xs); text-align: left;" title="Top keywords: ${topKeywords.map((k: { word: string; count: number; density: number }) => `${k.word}: ${k.count} times (${k.density}%)`).join(', ')}">
         ${topKeywordsStr || '—'}
     </td>
     ${getNewInsightCells(page)}
@@ -949,7 +949,12 @@ function getNewInsightCells(page: PageInfo) {
   const lang = page.languageDetection;
   const langDisplay = lang?.detectedLanguage?.toUpperCase() ?? '—';
   const langMatch = lang?.match;
-  const langColor = langMatch === false ? '#ef4444' : langMatch === true ? '#10b981' : '#6b7280';
+  const langColor =
+    langMatch === false
+      ? 'var(--color-error)'
+      : langMatch === true
+        ? 'var(--color-success)'
+        : 'var(--color-text-muted)';
   const langTitle = lang
     ? `Detected: ${lang.detectedLanguage ?? 'unknown'} (${Math.round((lang.detectedConfidence ?? 0) * 100)}% confidence), Declared: ${lang.declaredLanguage ?? 'none'}`
     : '';
@@ -965,12 +970,17 @@ function getNewInsightCells(page: PageInfo) {
   // Code coverage
   const jsUnused = page.codeCoverage?.js?.ratio;
   const jsDisplay = jsUnused != null ? `${jsUnused}%` : '—';
-  const jsColor = (jsUnused ?? 0) > 70 ? '#ef4444' : (jsUnused ?? 0) > 50 ? '#f59e0b' : '#10b981';
+  const jsColor =
+    (jsUnused ?? 0) > 70
+      ? 'var(--color-error)'
+      : (jsUnused ?? 0) > 50
+        ? 'var(--color-warning)'
+        : 'var(--color-success)';
 
   // Broken outbound links
   const brokenCount = page.outboundLinkHealth?.broken?.length ?? null;
   const brokenDisplay = brokenCount ?? '—';
-  const brokenColor = (brokenCount ?? 0) > 0 ? '#ef4444' : '#10b981';
+  const brokenColor = (brokenCount ?? 0) > 0 ? 'var(--color-error)' : 'var(--color-success)';
 
   // Main content words
   const wcs = page.contentQuality?.wordCountBySection;
@@ -980,15 +990,21 @@ function getNewInsightCells(page: PageInfo) {
       : null;
   const mainDisplay = mainWords ?? '—';
   const mainColor =
-    mainWords != null ? (mainWords >= 300 ? '#10b981' : mainWords >= 100 ? '#f59e0b' : '#ef4444') : '#6b7280';
+    mainWords != null
+      ? mainWords >= 300
+        ? 'var(--color-success)'
+        : mainWords >= 100
+          ? 'var(--color-warning)'
+          : 'var(--color-error)'
+      : 'var(--color-text-muted)';
 
   return `
-    <td style="text-align: center; font-size: 12px; color: ${langColor};" title="${escapeHtml(langTitle)}">${langDisplay}</td>
-    <td style="text-align: center; font-size: 12px;">${prDisplay}</td>
-    <td style="text-align: center; font-size: 12px;">${ctaDisplay}</td>
-    <td style="text-align: center; font-size: 12px; color: ${jsUnused != null ? jsColor : '#6b7280'};">${jsDisplay}</td>
-    <td style="text-align: center; font-size: 12px; color: ${brokenCount != null ? brokenColor : '#6b7280'}; font-weight: ${(brokenCount ?? 0) > 0 ? '600' : 'normal'};">${brokenDisplay}</td>
-    <td style="text-align: center; font-size: 12px; color: ${mainColor};">${mainDisplay}</td>
+    <td style="text-align: center; font-size: var(--font-size-xs); color: ${langColor};" title="${escapeHtml(langTitle)}">${langDisplay}</td>
+    <td style="text-align: center; font-size: var(--font-size-xs);">${prDisplay}</td>
+    <td style="text-align: center; font-size: var(--font-size-xs);">${ctaDisplay}</td>
+    <td style="text-align: center; font-size: var(--font-size-xs); color: ${jsUnused != null ? jsColor : 'var(--color-text-muted)'};">${jsDisplay}</td>
+    <td style="text-align: center; font-size: var(--font-size-xs); color: ${brokenCount != null ? brokenColor : 'var(--color-text-muted)'}; font-weight: ${(brokenCount ?? 0) > 0 ? '600' : 'normal'};">${brokenDisplay}</td>
+    <td style="text-align: center; font-size: var(--font-size-xs); color: ${mainColor};">${mainDisplay}</td>
   `;
 }
 
@@ -1185,23 +1201,23 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     const o = oVal === '' || oVal === undefined || oVal === null ? '—' : String(oVal);
     const c = cVal === '' || cVal === undefined || cVal === null ? '—' : String(cVal);
     const changed = o !== c && o !== '—' && c !== '—';
-    const style = changed ? 'border-bottom:2px solid #f97316;padding-bottom:1px;' : '';
-    return `<span style="${style}"><span style="color:#3b82f6;">${o}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${c}</span></span>`;
+    const style = changed ? 'border-bottom:2px solid var(--color-score-orange);padding-bottom:1px;' : '';
+    return `<span style="${style}"><span style="color:var(--color-info);">${o}</span><span style="color:var(--color-text-disabled);margin:0 2px;">/</span><span style="color:var(--purple-400);">${c}</span></span>`;
   };
 
   // Helper: single-side value (for unmatched rows)
   const singleVal = (v: string | number, isOrigin: boolean) => {
     const s = v === '' || v === undefined || v === null ? '—' : String(v);
     return isOrigin
-      ? `<span style="color:#3b82f6;">${s}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#d1d5db;">—</span>`
-      : `<span style="color:#d1d5db;">—</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${s}</span>`;
+      ? `<span style="color:var(--color-info);">${s}</span><span style="color:var(--color-text-disabled);margin:0 2px;">/</span><span style="color:var(--color-border-strong);">—</span>`
+      : `<span style="color:var(--color-border-strong);">—</span><span style="color:var(--color-text-disabled);margin:0 2px;">/</span><span style="color:var(--purple-400);">${s}</span>`;
   };
 
   const fmtMs = (v: number | undefined) => (v ? String(Math.round(v)) : '');
   const fmtCls = (v: number | undefined) => (v !== undefined ? v.toFixed(3) : '');
   const fmtSize = (v: number | undefined) => (v && v > 0 ? formatBytes(v) : '');
 
-  const td = 'padding:4px 5px;font-size:11px;text-align:center;white-space:nowrap;';
+  const td = 'padding:4px 5px;font-size:var(--font-size-xs);text-align:center;white-space:nowrap;';
 
   // Build a comparison row from two extracted value sets
   const buildRow = (
@@ -1229,24 +1245,24 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     // Check symbol render
     const sym = (v: string | undefined) => {
       if (!v || v === '—') return '—';
-      if (v === '=') return '<span style="color:#10b981;">&#10003;</span>';
-      if (v === '~') return '<span style="color:#f59e0b;">&#9888;</span>';
-      if (v === 'x') return '<span style="color:#ef4444;">&#10007;</span>';
+      if (v === '=') return '<span style="color:var(--color-success);">&#10003;</span>';
+      if (v === '~') return '<span style="color:var(--color-warning);">&#9888;</span>';
+      if (v === 'x') return '<span style="color:var(--color-error);">&#10007;</span>';
       return v;
     };
     const dSym = (oSym: string | undefined, cSym: string | undefined) => {
       if (isUnmatched) {
         const s = isOrigin ? sym(oSym) : sym(cSym);
         return isOrigin
-          ? `<span style="color:#3b82f6;">${s}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#d1d5db;">—</span>`
-          : `<span style="color:#d1d5db;">—</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${s}</span>`;
+          ? `<span style="color:var(--color-info);">${s}</span><span style="color:var(--color-text-disabled);margin:0 2px;">/</span><span style="color:var(--color-border-strong);">—</span>`
+          : `<span style="color:var(--color-border-strong);">—</span><span style="color:var(--color-text-disabled);margin:0 2px;">/</span><span style="color:var(--purple-400);">${s}</span>`;
       }
-      return `<span style="color:#3b82f6;">${sym(oSym)}</span><span style="color:#9ca3af;margin:0 2px;">/</span><span style="color:#a855f7;">${sym(cSym)}</span>`;
+      return `<span style="color:var(--color-info);">${sym(oSym)}</span><span style="color:var(--color-text-disabled);margin:0 2px;">/</span><span style="color:var(--purple-400);">${sym(cSym)}</span>`;
     };
 
-    return `<tr data-match-type="${matchType}" data-path="${escapeHtml(path)}" style="border-bottom:1px solid #f3f4f6;${bg}">
-      <td style="${td}color:#9ca3af;">${idx + 1}</td>
-      <td style="padding:4px 5px;font-size:11px;"><a href="${escapeHtml(url)}" target="_blank" style="color:#2563eb;text-decoration:none;" title="${escapeHtml(path)}">${escapeHtml(shortPath)}</a>${badge}</td>
+    return `<tr data-match-type="${matchType}" data-path="${escapeHtml(path)}" style="border-bottom:1px solid var(--color-bg-surface-alt);${bg}">
+      <td style="${td}color:var(--color-text-disabled);">${idx + 1}</td>
+      <td style="padding:4px 5px;font-size:var(--font-size-xs);"><a href="${escapeHtml(url)}" target="_blank" style="color:var(--color-link);text-decoration:none;" title="${escapeHtml(path)}">${escapeHtml(shortPath)}</a>${badge}</td>
       <td style="${td}">${d(ov?.source, cv?.source)}</td>
       <td style="${td}">${d(ov?.segment, cv?.segment)}</td>
       <td style="${td}">${d(ov?.incomingCount, cv?.incomingCount)}</td>
@@ -1254,7 +1270,7 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
       <td style="${td}">${d(ov?.urlDepth, cv?.urlDepth)}</td>
       <td style="${td}">${d(ov?.redirects, cv?.redirects)}</td>
       <td style="${td}">${d(ov?.httpLinks, cv?.httpLinks)}</td>
-      <td style="${td}font-weight:600;">${d(ov?.status, cv?.status)}</td>
+      <td style="${td}font-weight:var(--font-weight-semibold);">${d(ov?.status, cv?.status)}</td>
       <td style="${td}">${d(ov?.titleLength, cv?.titleLength)}</td>
       <td style="${td}">${d(ov?.descLength, cv?.descLength)}</td>
       ${
@@ -1304,7 +1320,7 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
       <td style="${td}">${d(ov?.wordCount, cv?.wordCount)}</td>
       <td style="${td}">${d(ov?.textToHtmlRatio != null ? ov.textToHtmlRatio + '%' : '', cv?.textToHtmlRatio != null ? cv.textToHtmlRatio + '%' : '')}</td>
       <td style="${td}">${d(ov?.readability, cv?.readability)}</td>
-      <td style="${td}text-align:left;font-size:10px;white-space:normal;max-width:120px;overflow:hidden;">${d(ov?.topKeywords, cv?.topKeywords)}</td>
+      <td style="${td}text-align:left;font-size:var(--font-size-2xs);white-space:normal;max-width:120px;overflow:hidden;">${d(ov?.topKeywords, cv?.topKeywords)}</td>
       <td style="${td}">${d(ov?.langDisplay, cv?.langDisplay)}</td>
       <td style="${td}">${d(ov?.prDisplay, cv?.prDisplay)}</td>
       <td style="${td}">${d(ov?.ctaCount, cv?.ctaCount)}</td>
@@ -1369,24 +1385,24 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     comparison.matchedPaths.length + comparison.originOnlyPaths.length + comparison.compareOnlyPaths.length;
 
   const thStyle =
-    'padding:5px 6px;text-align:center;font-size:10px;color:#6b7280;font-weight:600;white-space:nowrap;border-bottom:2px solid #e5e7eb;';
+    'padding:5px 6px;text-align:center;font-size:var(--font-size-2xs);color:var(--color-text-muted);font-weight:var(--font-weight-semibold);white-space:nowrap;border-bottom:2px solid var(--color-border-default);';
 
   return `
-    <div style="margin-bottom: 10px; font-size: 11px; color: #6b7280;">
-      Values shown as <span style="color:#3b82f6;font-weight:600;">${escapeHtml(originLabel)}</span><span style="color:#9ca3af;"> / </span><span style="color:#a855f7;font-weight:600;">${escapeHtml(compareLabel)}</span>
+    <div style="margin-bottom: 10px; font-size: var(--font-size-xs); color: var(--color-text-muted);">
+      Values shown as <span style="color:var(--color-info);font-weight:var(--font-weight-semibold);">${escapeHtml(originLabel)}</span><span style="color:var(--color-text-disabled);"> / </span><span style="color:var(--purple-400);font-weight:var(--font-weight-semibold);">${escapeHtml(compareLabel)}</span>
     </div>
     <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
       <button class="sev-pill active" onclick="filterCompareTable('all', this)">All (${totalRows})</button>
       <button class="sev-pill" onclick="filterCompareTable('matched', this)">Matched (${comparison.matchedPaths.length})</button>
       ${comparison.originOnlyPaths.length > 0 ? `<button class="sev-pill" onclick="filterCompareTable('origin-only', this)">Only ${escapeHtml(originLabel)} (${comparison.originOnlyPaths.length})</button>` : ''}
       ${comparison.compareOnlyPaths.length > 0 ? `<button class="sev-pill" onclick="filterCompareTable('compare-only', this)">Only ${escapeHtml(compareLabel)} (${comparison.compareOnlyPaths.length})</button>` : ''}
-      <input type="text" id="compareSearch" placeholder="Filter by path..." style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; width: 250px;" onkeyup="filterCompareSearch(this.value)">
+      <input type="text" id="compareSearch" placeholder="Filter by path..." style="padding: 6px 10px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); font-size: var(--font-size-sm); width: 250px;" onkeyup="filterCompareSearch(this.value)">
     </div>
 
     <div class="table-container">
-      <table id="pagesTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+      <table id="pagesTable" style="width: 100%; border-collapse: collapse; font-size: var(--font-size-xs);">
         <thead>
-          <tr style="background: #f9fafb;">
+          <tr style="background: var(--color-bg-page);">
             <th style="${thStyle}">#</th>
             <th style="${thStyle}text-align:left;">Path</th>
             <th style="${thStyle}">Source</th>

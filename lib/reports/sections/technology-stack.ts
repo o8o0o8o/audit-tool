@@ -143,19 +143,19 @@ function getCategoryIcon(category: string) {
 function getCategoryColor(category: string) {
   const colors: Record<string, string> = {
     CMS: '#8b5cf6',
-    'JavaScript Frameworks': '#3b82f6',
+    'JavaScript Frameworks': 'var(--color-info)',
     'CSS Frameworks': '#06b6d4',
-    'Analytics & Tracking': '#f59e0b',
+    'Analytics & Tracking': 'var(--color-warning)',
     'Marketing & CRM': '#ec4899',
-    'CDN & Hosting': '#10b981',
+    'CDN & Hosting': 'var(--color-success)',
     'E-commerce & Payments': '#f43f5e',
     Security: '#6366f1',
     'Media & Video': '#f97316',
     Fonts: '#84cc16',
     'SEO Tools': '#14b8a6',
-    Other: '#6b7280',
+    Other: 'var(--color-text-muted)',
   };
-  return colors[category] ?? '#6b7280';
+  return colors[category] ?? 'var(--color-text-muted)';
 }
 
 /**
@@ -205,7 +205,7 @@ function getTechnologyStack(data: ReportSectionData) {
     return `
       <div class="section" id="technology-stack">
         <h2>🔧 Technology Stack</h2>
-        <p style="color: #6b7280; text-align: center; padding: 20px;">
+        <p style="color: var(--color-text-muted); text-align: center; padding: 20px;">
           No technologies detected. Technology detection requires crawling with performance metrics enabled.
         </p>
       </div>
@@ -276,14 +276,14 @@ function getTechnologyStack(data: ReportSectionData) {
           // Check if this is a new technology compared to previous audit
           const isNew = (comparison.newTechs as string[]).includes(name);
           const newBadge = isNew
-            ? `<span style="font-size: 9px; color: white; background: #10b981; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: 600;">NEW</span>`
+            ? `<span style="font-size: 9px; color: white; background: #10b981; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: var(--font-weight-semibold);">NEW</span>`
             : '';
 
           return `
-          <div class="tech-badge" data-tip="${escapeHtml(tooltipContent)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${isNew ? '#d1fae5' : color + '15'}; border: 1px solid ${isNew ? '#10b981' : color + '40'}; border-radius: 6px; margin: 4px; cursor: help;">
-            <span style="font-weight: 600; color: ${color};">${escapeHtml(name)}</span>${newBadge}
-            <span style="font-size: 11px; color: #6b7280; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${percentage}%</span>
-            ${detectionIcons ? `<span style="font-size: 10px; opacity: 0.7;">${detectionIcons}</span>` : ''}
+          <div class="tech-badge" data-tip="${escapeHtml(tooltipContent)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${isNew ? '#d1fae5' : color + '15'}; border: 1px solid ${isNew ? 'var(--color-success)' : color + '40'}; border-radius: var(--radius-md); margin: 4px; cursor: help;">
+            <span style="font-weight: var(--font-weight-semibold); color: ${color};">${escapeHtml(name)}</span>${newBadge}
+            <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); background: var(--color-bg-surface-alt); padding: 2px 6px; border-radius: var(--radius-sm);">${percentage}%</span>
+            ${detectionIcons ? `<span style="font-size: var(--font-size-2xs); opacity: 0.7;">${detectionIcons}</span>` : ''}
           </div>
         `;
         })
@@ -297,10 +297,10 @@ function getTechnologyStack(data: ReportSectionData) {
 
       return `
         <div class="tech-category" style="margin-bottom: 20px;">
-          <h4 style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #374151;">
-            <span style="font-size: 20px;">${icon}</span>
+          <h4 style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--color-text-secondary);">
+            <span style="font-size: var(--font-size-lg);">${icon}</span>
             <span>${escapeHtml(category)}</span>
-            <span style="font-size: 12px; color: #9ca3af; font-weight: normal;">(${visibleCount})</span>
+            <span style="font-size: var(--font-size-xs); color: var(--color-text-disabled); font-weight: normal;">(${visibleCount})</span>
           </h4>
           <div style="display: flex; flex-wrap: wrap; gap: 4px;">
             ${techBadges}
@@ -322,37 +322,37 @@ function getTechnologyStack(data: ReportSectionData) {
       <h2>🔧 Technology Stack</h2>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-          <div style="font-size: 32px; font-weight: 700;">${detectedTechs.length}</div>
-          <div style="font-size: 13px; opacity: 0.9;">Technologies</div>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+          <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${detectedTechs.length}</div>
+          <div style="font-size: var(--font-size-sm); opacity: 0.9;">Technologies</div>
         </div>
-        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-          <div style="font-size: 32px; font-weight: 700;">${totalCategories}</div>
-          <div style="font-size: 13px; opacity: 0.9;">Categories</div>
+        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+          <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${totalCategories}</div>
+          <div style="font-size: var(--font-size-sm); opacity: 0.9;">Categories</div>
         </div>
-        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-          <div style="font-size: 32px; font-weight: 700;">${pages.length}</div>
-          <div style="font-size: 13px; opacity: 0.9;">Pages Analyzed</div>
+        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+          <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${pages.length}</div>
+          <div style="font-size: var(--font-size-sm); opacity: 0.9;">Pages Analyzed</div>
         </div>
       </div>
 
-      <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: var(--color-bg-surface); border-radius: var(--radius-xl); padding: 20px; box-shadow: var(--shadow-sm);">
         ${categoryHtml}
       </div>
 
       ${
         comparison.removedTechs.length > 0
           ? `
-      <div style="margin-top: 20px; padding: 15px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #ef4444;">
-        <h4 style="margin: 0 0 10px; color: #991b1b;">🗑️ No Longer Detected (${comparison.removedTechs.length})</h4>
-        <p style="margin: 0 0 12px; color: #991b1b; font-size: 14px;">
+      <div style="margin-top: 20px; padding: 15px; background: var(--color-error-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-error);">
+        <h4 style="margin: 0 0 10px; color: var(--color-error-text);">🗑️ No Longer Detected (${comparison.removedTechs.length})</h4>
+        <p style="margin: 0 0 12px; color: var(--color-error-text); font-size: var(--font-size-base);">
           These technologies were detected in the previous audit but are no longer present:
         </p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
           ${comparison.removedTechs
             .map(
               (name) => `
-            <span style="display: inline-block; padding: 4px 10px; background: #fee2e2; border: 1px solid #fecaca; border-radius: 4px; color: #991b1b; font-size: 13px; text-decoration: line-through;">${escapeHtml(name)}</span>
+            <span style="display: inline-block; padding: 4px 10px; background: #fee2e2; border: 1px solid var(--color-error-border); border-radius: var(--radius-sm); color: var(--color-error-text); font-size: var(--font-size-sm); text-decoration: line-through;">${escapeHtml(name)}</span>
           `,
             )
             .join('')}
@@ -365,9 +365,9 @@ function getTechnologyStack(data: ReportSectionData) {
       ${
         comparison.newTechs.length > 0
           ? `
-      <div style="margin-top: 20px; padding: 15px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
-        <h4 style="margin: 0 0 10px; color: #065f46;">✨ Newly Detected (${comparison.newTechs.length})</h4>
-        <p style="margin: 0; color: #065f46; font-size: 14px;">
+      <div style="margin-top: 20px; padding: 15px; background: var(--color-success-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-success);">
+        <h4 style="margin: 0 0 10px; color: var(--color-success-text);">✨ Newly Detected (${comparison.newTechs.length})</h4>
+        <p style="margin: 0; color: var(--color-success-text); font-size: var(--font-size-base);">
           ${comparison.newTechs.map((t) => escapeHtml(t)).join(', ')}
         </p>
       </div>
@@ -375,12 +375,12 @@ function getTechnologyStack(data: ReportSectionData) {
           : ''
       }
 
-      <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
+      <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: var(--radius-lg); border-left: 4px solid var(--color-info);">
         <h4 style="margin: 0 0 10px; color: #1e40af;">💡 About Technology Detection</h4>
-        <p style="margin: 0 0 12px; color: #1e40af; font-size: 14px; line-height: 1.6;">
+        <p style="margin: 0 0 12px; color: #1e40af; font-size: var(--font-size-base); line-height: 1.6;">
           Technologies are detected by analyzing multiple signals. <strong>Hover over each technology</strong> to see how it was detected.
         </p>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #1e40af;">
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--font-size-xs); color: #1e40af;">
           <span title="Detected via HTML content patterns">📄 HTML patterns</span>
           <span title="Detected via script source URLs">📜 Script URLs</span>
           <span title="Detected via meta tags (e.g., generator)">🏷️ Meta tags</span>
@@ -401,7 +401,7 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
   const compareLabel = shortDomain(comparison.compareDomainName);
 
   if (originAgg.totalUnique === 0 && compareAgg.totalUnique === 0) {
-    return `<div class="section" id="technology-stack"><h2>🔧 Technology Stack</h2><p style="color: #6b7280; text-align: center; padding: 20px;">No technologies detected.</p></div>`;
+    return `<div class="section" id="technology-stack"><h2>🔧 Technology Stack</h2><p style="color: var(--color-text-muted); text-align: center; padding: 20px;">No technologies detected.</p></div>`;
   }
 
   const originNames = new Set(originAgg.technologies.map((t) => t.name));
@@ -416,7 +416,7 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
     names
       .map(
         (name) =>
-          `<span style="${style};display:inline-block;padding:4px 10px;border-radius:6px;margin:3px;font-size:12px;font-weight:500;">${escapeHtml(name)}</span>`,
+          `<span style="${style};display:inline-block;padding:4px 10px;border-radius:6px;margin:3px;font-size:var(--font-size-xs);font-weight:500;">${escapeHtml(name)}</span>`,
       )
       .join('');
 
@@ -425,27 +425,27 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
       <h2>🔧 Technology Stack (Comparison)</h2>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-          <div style="font-size: 32px; font-weight: 700;">${shared.length}</div>
-          <div style="font-size: 13px; opacity: 0.9;">Shared</div>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+          <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${shared.length}</div>
+          <div style="font-size: var(--font-size-sm); opacity: 0.9;">Shared</div>
         </div>
-        <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-          <div style="font-size: 32px; font-weight: 700;">${onlyOrigin.length}</div>
-          <div style="font-size: 13px; opacity: 0.9;">Only ${escapeHtml(originLabel)}</div>
+        <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+          <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${onlyOrigin.length}</div>
+          <div style="font-size: var(--font-size-sm); opacity: 0.9;">Only ${escapeHtml(originLabel)}</div>
         </div>
-        <div style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-          <div style="font-size: 32px; font-weight: 700;">${onlyCompare.length}</div>
-          <div style="font-size: 13px; opacity: 0.9;">Only ${escapeHtml(compareLabel)}</div>
+        <div style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+          <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${onlyCompare.length}</div>
+          <div style="font-size: var(--font-size-sm); opacity: 0.9;">Only ${escapeHtml(compareLabel)}</div>
         </div>
       </div>
 
-      <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: var(--color-bg-surface); border-radius: var(--radius-xl); padding: 20px; box-shadow: var(--shadow-sm);">
         ${
           shared.length > 0
             ? `
         <div style="margin-bottom: 20px;">
-          <h4 style="color: #374151; margin-bottom: 10px;">Shared Technologies (${shared.length})</h4>
-          <div style="display: flex; flex-wrap: wrap;">${renderBadges(shared, 'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb')}</div>
+          <h4 style="color: var(--color-text-secondary); margin-bottom: 10px;">Shared Technologies (${shared.length})</h4>
+          <div style="display: flex; flex-wrap: wrap;">${renderBadges(shared, 'background:var(--color-bg-surface-alt);color:var(--color-text-secondary);border:1px solid #e5e7eb')}</div>
         </div>`
             : ''
         }
@@ -455,7 +455,7 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
             ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #1d4ed8; margin-bottom: 10px;">Only in ${escapeHtml(originLabel)} (${onlyOrigin.length})</h4>
-          <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyOrigin, 'background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd')}</div>
+          <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyOrigin, 'background:var(--blue-100);color:#1d4ed8;border:1px solid #93c5fd')}</div>
         </div>`
             : ''
         }

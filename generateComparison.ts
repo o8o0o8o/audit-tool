@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import { HistoryManager } from './historyManager';
 import { escapeHtml } from './lib/reports/html-utils';
+import { getDesignTokens } from './lib/reports/sections/design-tokens';
+import { getUIComponents } from './lib/reports/sections/ui-components';
 import type { InsightsSummary } from './lib/types';
 
 /**
@@ -35,6 +37,8 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audit Comparison - ${escapeHtml(domainName)}</title>
     <style>
+        ${getDesignTokens()}
+        ${getUIComponents()}
         * {
             margin: 0;
             padding: 0;
@@ -43,7 +47,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--gradient-executive);
             padding: 40px 20px;
             min-height: 100vh;
         }
@@ -56,34 +60,34 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         .header {
             background: white;
             padding: 30px;
-            border-radius: 12px;
+            border-radius: var(--radius-xl);
             margin-bottom: 30px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .header h1 {
-            color: #1f2937;
+            color: var(--gray-800);
             margin-bottom: 10px;
         }
 
         .date-range {
-            color: #6b7280;
+            color: var(--color-text-muted);
             font-size: 18px;
         }
 
         .section {
             background: white;
             padding: 30px;
-            border-radius: 12px;
+            border-radius: var(--radius-xl);
             margin-bottom: 30px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .section h2 {
-            color: #1f2937;
+            color: var(--gray-800);
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 2px solid #e5e7eb;
+            border-bottom: 2px solid var(--color-border-default);
         }
 
         .comparison-grid {
@@ -94,15 +98,15 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .metric-card {
-            background: #f9fafb;
+            background: var(--color-bg-page);
             padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #3b82f6;
+            border-radius: var(--radius-lg);
+            border-left: 4px solid var(--color-info);
         }
 
         .metric-label {
-            font-size: 14px;
-            color: #6b7280;
+            font-size: var(--font-size-base);
+            color: var(--color-text-muted);
             margin-bottom: 8px;
         }
 
@@ -115,38 +119,38 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .old-value {
-            color: #9ca3af;
+            color: var(--color-text-disabled);
         }
 
         .arrow {
             font-size: 20px;
-            color: #6b7280;
+            color: var(--color-text-muted);
         }
 
         .new-value {
-            color: #1f2937;
+            color: var(--gray-800);
         }
 
         .delta {
             font-size: 16px;
             padding: 4px 8px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             font-weight: 500;
         }
 
         .delta.positive {
-            background: #d1fae5;
-            color: #065f46;
+            background: var(--color-success-bg);
+            color: var(--color-success-text);
         }
 
         .delta.negative {
-            background: #fee2e2;
-            color: #991b1b;
+            background: var(--color-error-bg);
+            color: var(--color-error-text);
         }
 
         .delta.neutral {
-            background: #e5e7eb;
-            color: #4b5563;
+            background: var(--color-border-default);
+            color: var(--gray-600);
         }
 
         .score-visual {
@@ -170,15 +174,15 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .score-circle.old {
-            background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+            background: linear-gradient(135deg, var(--gray-400) 0%, var(--gray-500) 100%);
         }
 
         .score-circle.new {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            background: linear-gradient(135deg, var(--blue-500) 0%, var(--blue-600) 100%);
         }
 
         .score-label {
-            font-size: 12px;
+            font-size: var(--font-size-xs);
             margin-top: 5px;
             opacity: 0.9;
         }
@@ -191,20 +195,20 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         .changes-list li {
             padding: 12px;
             margin: 8px 0;
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-base);
         }
 
         .changes-list li.improvement {
-            background: #d1fae5;
-            color: #065f46;
-            border-left: 4px solid #10b981;
+            background: var(--color-success-bg);
+            color: var(--color-success-text);
+            border-left: 4px solid var(--color-success);
         }
 
         .changes-list li.regression {
-            background: #fee2e2;
-            color: #991b1b;
-            border-left: 4px solid #ef4444;
+            background: var(--color-error-bg);
+            color: var(--color-error-text);
+            border-left: 4px solid var(--color-error);
         }
 
         .category-comparison {
@@ -215,15 +219,15 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .category-card {
-            background: #f9fafb;
+            background: var(--color-bg-page);
             padding: 15px;
-            border-radius: 6px;
+            border-radius: var(--radius-md);
             text-align: center;
         }
 
         .category-name {
-            font-size: 12px;
-            color: #6b7280;
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
             margin-bottom: 8px;
             text-transform: uppercase;
             font-weight: 600;
@@ -231,7 +235,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
 
         .summary-banner {
             padding: 20px;
-            border-radius: 8px;
+            border-radius: var(--radius-lg);
             margin-bottom: 20px;
             text-align: center;
             font-size: 18px;
@@ -239,17 +243,17 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .summary-banner.improved {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: var(--gradient-success);
             color: white;
         }
 
         .summary-banner.declined {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            background: var(--gradient-danger);
             color: white;
         }
 
         .summary-banner.unchanged {
-            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            background: linear-gradient(135deg, var(--gray-500) 0%, var(--gray-600) 100%);
             color: white;
         }
     </style>
@@ -513,9 +517,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             ${
               oldAudit.performance.p75TTFB && newAudit.performance.p75TTFB
                 ? `
-            <h3 style="margin-top: 25px; color: #374151;">P75 Percentiles (Core Web Vitals standard)</h3>
+            <h3 style="margin-top: 25px; color: var(--color-text-secondary);">P75 Percentiles (Core Web Vitals standard)</h3>
             <div class="comparison-grid">
-                <div class="metric-card" style="border-left-color: #8b5cf6;">
+                <div class="metric-card" style="border-left-color: var(--purple-500);">
                     <div class="metric-label">P75 TTFB</div>
                     <div class="metric-comparison">
                         <span class="old-value">${oldAudit.performance.p75TTFB}ms</span>
@@ -526,7 +530,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
                         </span>
                     </div>
                 </div>
-                <div class="metric-card" style="border-left-color: #ec4899;">
+                <div class="metric-card" style="border-left-color: var(--pink-500);">
                     <div class="metric-label">P75 LCP</div>
                     <div class="metric-comparison">
                         <span class="old-value">${oldAudit.performance.p75LCP}ms</span>
@@ -562,7 +566,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             ? `
         <div class="section">
             <h2>🔧 Fixed Issues (${comparison.fixed.length})</h2>
-            <p style="color: #6b7280; margin-bottom: 15px;">Issues present in the old audit but resolved in the new one.</p>
+            <p style="color: var(--color-text-muted); margin-bottom: 15px;">Issues present in the old audit but resolved in the new one.</p>
             <ul class="changes-list">
                 ${comparison.fixed.map((issue: string) => `<li class="improvement">✓ ${escapeHtml(issue)}</li>`).join('')}
             </ul>
@@ -576,7 +580,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             ? `
         <div class="section">
             <h2>🆕 New Issues (${comparison.newIssues.length})</h2>
-            <p style="color: #6b7280; margin-bottom: 15px;">Issues not present in the old audit that appeared in the new one.</p>
+            <p style="color: var(--color-text-muted); margin-bottom: 15px;">Issues not present in the old audit that appeared in the new one.</p>
             <ul class="changes-list">
                 ${comparison.newIssues.map((issue: string) => `<li class="regression">✗ ${escapeHtml(issue)}</li>`).join('')}
             </ul>

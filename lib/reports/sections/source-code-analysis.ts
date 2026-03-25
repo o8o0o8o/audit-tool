@@ -5,20 +5,20 @@
  */
 
 import { escapeHtml } from '../html-utils';
-import type { ReportSectionData, SeverityColorConfig } from '../../types';
+import type { ReportSectionData } from '../../types';
 
 /**
  * Get severity badge HTML
  */
 function getSeverityBadge(severity: string) {
-  const colors = {
-    critical: { bg: '#fef2f2', border: '#fecaca', text: '#991b1b' },
-    high: { bg: '#fffbeb', border: '#fed7aa', text: '#92400e' },
-    medium: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
-    low: { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534' },
+  const classMap: Record<string, string> = {
+    critical: 'ui-badge--critical',
+    high: 'ui-badge--high',
+    medium: 'ui-badge--medium',
+    low: 'ui-badge--low',
   };
-  const c = (colors as Record<string, SeverityColorConfig>)[severity] ?? colors.medium;
-  return `<span style="display: inline-block; padding: 2px 8px; background: ${c.bg}; border: 1px solid ${c.border}; border-radius: 4px; color: ${c.text}; font-size: 11px; font-weight: 600; text-transform: uppercase;">${escapeHtml(severity)}</span>`;
+  const badgeClass = classMap[severity] || classMap.medium;
+  return `<span class="ui-badge ${badgeClass} text-upper">${escapeHtml(severity)}</span>`;
 }
 
 /**
@@ -56,8 +56,8 @@ function getSourceCodeAnalysis(data: ReportSectionData) {
 function getFrameworkInfo(repo: Record<string, unknown>) {
   if (!repo.framework) {
     return `
-      <div style="padding: 15px; background: #fffbeb; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 20px;">
-        <p style="margin: 0; color: #92400e;">Could not detect a web framework from the repository.</p>
+      <div style="padding: 15px; background: var(--color-warning-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-warning); margin-bottom: 20px;">
+        <p style="margin: 0; color: var(--color-warning-text);">Could not detect a web framework from the repository.</p>
       </div>
     `;
   }
@@ -67,17 +67,17 @@ function getFrameworkInfo(repo: Record<string, unknown>) {
 
   return `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px;">
-      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-        <div style="font-size: 24px; font-weight: 700;">${escapeHtml(repo.framework)}</div>
-        <div style="font-size: 13px; opacity: 0.9;">Framework${routerInfo}</div>
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold);">${escapeHtml(repo.framework)}</div>
+        <div style="font-size: var(--font-size-sm); opacity: 0.9;">Framework${routerInfo}</div>
       </div>
-      <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-        <div style="font-size: 24px; font-weight: 700;">${repo.version ? escapeHtml(repo.version) : 'N/A'}</div>
-        <div style="font-size: 13px; opacity: 0.9;">Version</div>
+      <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold);">${repo.version ? escapeHtml(repo.version) : 'N/A'}</div>
+        <div style="font-size: var(--font-size-sm); opacity: 0.9;">Version</div>
       </div>
-      <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: 12px; color: white; text-align: center;">
-        <div style="font-size: 16px; font-weight: 700;">${configInfo}</div>
-        <div style="font-size: 13px; opacity: 0.9;">Config File</div>
+      <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="font-size: var(--font-size-md); font-weight: var(--font-weight-bold);">${configInfo}</div>
+        <div style="font-size: var(--font-size-sm); opacity: 0.9;">Config File</div>
       </div>
     </div>
   `;
@@ -92,8 +92,8 @@ function getConfigValidation(repo: Record<string, unknown>) {
 
   if (issues.length === 0 && warnings.length === 0) {
     return `
-      <div style="padding: 15px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 20px;">
-        <p style="margin: 0; color: #065f46; font-weight: 600;">All framework configuration checks passed.</p>
+      <div style="padding: 15px; background: var(--color-success-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-success); margin-bottom: 20px;">
+        <p style="margin: 0; color: var(--color-success-text); font-weight: var(--font-weight-semibold);">All framework configuration checks passed.</p>
       </div>
     `;
   }
@@ -108,23 +108,23 @@ function getConfigValidation(repo: Record<string, unknown>) {
       (f) => `
     <tr>
       <td style="padding: 10px 12px;">${getSeverityBadge(f.severity as string)}</td>
-      <td style="padding: 10px 12px; font-weight: 500;">${escapeHtml(f.message)}</td>
-      <td style="padding: 10px 12px; font-size: 13px; color: #4b5563;">${escapeHtml((f.detail as string) ?? '')}</td>
+      <td style="padding: 10px 12px; font-weight: var(--font-weight-medium);">${escapeHtml(f.message)}</td>
+      <td style="padding: 10px 12px; font-size: var(--font-size-sm); color: #4b5563;">${escapeHtml((f.detail as string) ?? '')}</td>
     </tr>
   `,
     )
     .join('');
 
   return `
-    <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
-      <h3 style="margin: 0 0 15px; color: #1f2937;">Framework Configuration</h3>
+    <div style="background: var(--color-bg-surface); border-radius: var(--radius-xl); padding: 20px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
+      <h3 style="margin: 0 0 15px; color: var(--gray-800);">Framework Configuration</h3>
       <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-              <th style="padding: 10px 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase; width: 100px;">Severity</th>
-              <th style="padding: 10px 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase;">Finding</th>
-              <th style="padding: 10px 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase;">Details</th>
+            <tr style="background: var(--color-bg-page); border-bottom: 2px solid #e5e7eb;">
+              <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; width: 100px;">Severity</th>
+              <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Finding</th>
+              <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Details</th>
             </tr>
           </thead>
           <tbody>
@@ -146,7 +146,12 @@ function getRouteCoverage(repo: Record<string, unknown>) {
   const details = (repo.routeDetails ?? {}) as Record<string, unknown>;
   const coveragePercent = stats.totalRoutes > 0 ? Math.round((stats.coveredRoutes / stats.totalRoutes) * 100) : 0;
 
-  const coverageColor = coveragePercent >= 80 ? '#10b981' : coveragePercent >= 50 ? '#f59e0b' : '#ef4444';
+  const coverageColor =
+    coveragePercent >= 80
+      ? 'var(--color-success)'
+      : coveragePercent >= 50
+        ? 'var(--color-warning)'
+        : 'var(--color-error)';
 
   // Uncovered routes table
   let uncoveredHtml = '';
@@ -158,11 +163,11 @@ function getRouteCoverage(repo: Record<string, unknown>) {
         (r: Record<string, unknown>) => `
       <tr>
         <td style="padding: 8px 12px;"><code>${escapeHtml(r.pattern)}</code></td>
-        <td style="padding: 8px 12px; font-size: 13px; color: #6b7280;"><code>${escapeHtml(r.file)}</code></td>
+        <td style="padding: 8px 12px; font-size: var(--font-size-sm); color: var(--color-text-muted);"><code>${escapeHtml(r.file)}</code></td>
         <td style="padding: 8px 12px;">${
           r.isDynamic
-            ? '<span style="color: #7c3aed; font-size: 12px;">dynamic</span>'
-            : '<span style="color: #2563eb; font-size: 12px;">static</span>'
+            ? '<span style="color: #7c3aed; font-size: var(--font-size-xs);">dynamic</span>'
+            : '<span style="color: #2563eb; font-size: var(--font-size-xs);">static</span>'
         }</td>
       </tr>
     `,
@@ -171,14 +176,14 @@ function getRouteCoverage(repo: Record<string, unknown>) {
 
     uncoveredHtml = `
       <div style="margin-top: 15px;">
-        <h4 style="margin: 0 0 10px; color: #991b1b;">Routes Not in Sitemap${uncovered.length > 20 ? ` (showing 20 of ${uncovered.length})` : ''}</h4>
+        <h4 style="margin: 0 0 10px; color: var(--color-error-text);">Routes Not in Sitemap${uncovered.length > 20 ? ` (showing 20 of ${uncovered.length})` : ''}</h4>
         <div style="overflow-x: auto;">
           <table style="width: 100%; border-collapse: collapse;">
             <thead>
-              <tr style="background: #fef2f2; border-bottom: 1px solid #fecaca;">
-                <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #991b1b;">Route Pattern</th>
-                <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #991b1b;">Source File</th>
-                <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #991b1b;">Type</th>
+              <tr style="background: var(--color-error-bg); border-bottom: 1px solid #fecaca;">
+                <th style="padding: 8px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-error-text);">Route Pattern</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-error-text);">Source File</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-error-text);">Type</th>
               </tr>
             </thead>
             <tbody>
@@ -191,29 +196,29 @@ function getRouteCoverage(repo: Record<string, unknown>) {
   }
 
   return `
-    <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
-      <h3 style="margin: 0 0 15px; color: #1f2937;">Route-to-Sitemap Coverage</h3>
+    <div style="background: var(--color-bg-surface); border-radius: var(--radius-xl); padding: 20px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
+      <h3 style="margin: 0 0 15px; color: var(--gray-800);">Route-to-Sitemap Coverage</h3>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 15px;">
-        <div style="text-align: center; padding: 15px; background: #f9fafb; border-radius: 8px;">
-          <div style="font-size: 28px; font-weight: 700; color: ${coverageColor};">${coveragePercent}%</div>
-          <div style="font-size: 12px; color: #6b7280;">Coverage</div>
+        <div style="text-align: center; padding: 15px; background: var(--color-bg-page); border-radius: var(--radius-lg);">
+          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: ${coverageColor};">${coveragePercent}%</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Coverage</div>
         </div>
-        <div style="text-align: center; padding: 15px; background: #f9fafb; border-radius: 8px;">
-          <div style="font-size: 28px; font-weight: 700; color: #1f2937;">${stats.totalRoutes}</div>
-          <div style="font-size: 12px; color: #6b7280;">Total Routes</div>
+        <div style="text-align: center; padding: 15px; background: var(--color-bg-page); border-radius: var(--radius-lg);">
+          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: var(--gray-800);">${stats.totalRoutes}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Total Routes</div>
         </div>
-        <div style="text-align: center; padding: 15px; background: #f9fafb; border-radius: 8px;">
-          <div style="font-size: 28px; font-weight: 700; color: #10b981;">${stats.coveredRoutes}</div>
-          <div style="font-size: 12px; color: #6b7280;">In Sitemap</div>
+        <div style="text-align: center; padding: 15px; background: var(--color-bg-page); border-radius: var(--radius-lg);">
+          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: var(--color-success);">${stats.coveredRoutes}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">In Sitemap</div>
         </div>
-        <div style="text-align: center; padding: 15px; background: #f9fafb; border-radius: 8px;">
-          <div style="font-size: 28px; font-weight: 700; color: #ef4444;">${stats.uncoveredRoutes}</div>
-          <div style="font-size: 12px; color: #6b7280;">Missing</div>
+        <div style="text-align: center; padding: 15px; background: var(--color-bg-page); border-radius: var(--radius-lg);">
+          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: var(--color-error);">${stats.uncoveredRoutes}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Missing</div>
         </div>
-        <div style="text-align: center; padding: 15px; background: #f9fafb; border-radius: 8px;">
-          <div style="font-size: 28px; font-weight: 700; color: #7c3aed;">${stats.dynamicRoutes || 0}</div>
-          <div style="font-size: 12px; color: #6b7280;">Dynamic</div>
+        <div style="text-align: center; padding: 15px; background: var(--color-bg-page); border-radius: var(--radius-lg);">
+          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: #7c3aed;">${stats.dynamicRoutes || 0}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Dynamic</div>
         </div>
       </div>
 
@@ -244,7 +249,7 @@ function getSourceMapping(repo: Record<string, unknown>) {
           return `
         <div style="margin-bottom: 6px;">
           <div>${fileRef}</div>
-          <div style="font-size: 12px; color: #6b7280;">${escapeHtml(loc.suggestion)}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">${escapeHtml(loc.suggestion)}</div>
         </div>
       `;
         })
@@ -253,11 +258,11 @@ function getSourceMapping(repo: Record<string, unknown>) {
       const moreCount = locs.length > 5 ? locs.length - 5 : 0;
 
       return `
-      <tr style="border-bottom: 1px solid #e5e7eb;">
-        <td style="padding: 12px; vertical-align: top; font-weight: 500; max-width: 300px;">${escapeHtml(issueKey)}</td>
+      <tr style="border-bottom: 1px solid var(--color-border-default);">
+        <td style="padding: 12px; vertical-align: top; font-weight: var(--font-weight-medium); max-width: 300px;">${escapeHtml(issueKey)}</td>
         <td style="padding: 12px; vertical-align: top;">
           ${locationHtml}
-          ${moreCount > 0 ? `<div style="font-size: 12px; color: #9ca3af;">...and ${moreCount} more location(s)</div>` : ''}
+          ${moreCount > 0 ? `<div style="font-size: var(--font-size-xs); color: var(--color-text-disabled);">...and ${moreCount} more location(s)</div>` : ''}
         </td>
       </tr>
     `;
@@ -265,17 +270,17 @@ function getSourceMapping(repo: Record<string, unknown>) {
     .join('');
 
   return `
-    <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
-      <h3 style="margin: 0 0 15px; color: #1f2937;">Issue-to-Source Mapping</h3>
-      <p style="margin: 0 0 15px; color: #6b7280; font-size: 14px;">
+    <div style="background: var(--color-bg-surface); border-radius: var(--radius-xl); padding: 20px; box-shadow: var(--shadow-sm); margin-bottom: 20px;">
+      <h3 style="margin: 0 0 15px; color: var(--gray-800);">Issue-to-Source Mapping</h3>
+      <p style="margin: 0 0 15px; color: var(--color-text-muted); font-size: var(--font-size-base);">
         The following audit issues were traced to source file locations in the repository.
       </p>
       <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-              <th style="padding: 10px 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase;">Issue</th>
-              <th style="padding: 10px 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase;">Source Location(s)</th>
+            <tr style="background: var(--color-bg-page); border-bottom: 2px solid #e5e7eb;">
+              <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Issue</th>
+              <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Source Location(s)</th>
             </tr>
           </thead>
           <tbody>

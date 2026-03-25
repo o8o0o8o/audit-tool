@@ -69,16 +69,16 @@ function getPerformanceStats(data: ReportSectionData) {
 
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: #1f2937; margin-bottom: 10px;">📈 Performance Statistics</h2>
-      <p style="text-align: center; color: #6b7280; margin-bottom: 25px;">Statistical analysis based on ${pagesWithPerf.length} pages with performance data</p>
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Performance Statistics</h2>
+      <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Statistical analysis based on ${pagesWithPerf.length} pages with performance data</p>
 
       ${cruxSection}
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px;">
-        ${ttfbValues.length > 0 ? getStatCard('ttfb', '⚡ TTFB', '#8b5cf6', '#7c3aed', ttfbValues, 'ms', avg, p50, p75, p95, p99) : ''}
-        ${lcpValues.length > 0 ? getStatCard('lcp', '🎨 LCP', '#ec4899', '#db2777', lcpValues, 'ms', avg, p50, p75, p95, p99) : ''}
+        ${ttfbValues.length > 0 ? getStatCard('ttfb', '⚡ TTFB', 'var(--purple-500)', 'var(--purple-600)', ttfbValues, 'ms', avg, p50, p75, p95, p99) : ''}
+        ${lcpValues.length > 0 ? getStatCard('lcp', '🎨 LCP', 'var(--pink-500)', '#db2777', lcpValues, 'ms', avg, p50, p75, p95, p99) : ''}
         ${clsValues.length > 0 ? getClsCard(clsValues, avg, p50, p75, p95, p99) : ''}
-        ${inpValues.length > 0 ? getStatCard('inp', '👆 INP', '#f97316', '#ea580c', inpValues, 'ms', avg, p50, p75, p95, p99) : ''}
+        ${inpValues.length > 0 ? getStatCard('inp', '👆 INP', 'var(--orange-500)', '#ea580c', inpValues, 'ms', avg, p50, p75, p95, p99) : ''}
         ${pageSizes.length > 0 ? getPageSizeCard(pageSizes, avg, p50, p75, p95, p99) : ''}
       </div>
 
@@ -134,7 +134,7 @@ function getCrUXSection(
       const thresholds: Record<string, number> = { LCP: 2500, CLS: 0.1, INP: 200, TTFB: 800, FCP: 1800 };
       const threshold = thresholds[metric];
       const isPassing = metric === 'CLS' ? fieldP75 <= threshold : fieldP75 <= threshold;
-      const statusColor = isPassing ? '#10b981' : '#ef4444';
+      const statusColor = isPassing ? 'var(--color-success)' : 'var(--color-error)';
       const statusText = isPassing ? 'Good' : 'Needs Improvement';
 
       // Compare lab vs field
@@ -143,36 +143,36 @@ function getCrUXSection(
         const diff = labValue - fieldP75;
         const percentDiff = fieldP75 > 0 ? Math.round(Math.abs(diff / fieldP75) * 100) : 0;
         if (diff > fieldP75 * 0.2) {
-          comparisonText = `<span style="color: #f59e0b; font-size: 11px;">Lab ${percentDiff}% slower</span>`;
+          comparisonText = `<span style="color: var(--color-warning); font-size: var(--font-size-xs);">Lab ${percentDiff}% slower</span>`;
         } else if (diff < -fieldP75 * 0.2) {
-          comparisonText = `<span style="color: #10b981; font-size: 11px;">Lab ${percentDiff}% faster</span>`;
+          comparisonText = `<span style="color: var(--color-success); font-size: var(--font-size-xs);">Lab ${percentDiff}% faster</span>`;
         }
       }
 
       return `
-      <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb;">
+      <div style="background: var(--color-bg-surface); padding: 15px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <span style="font-weight: 600; color: #374151;">${metric}</span>
-          <span style="font-size: 12px; color: ${statusColor}; font-weight: 600;">${statusText}</span>
+          <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-secondary);">${metric}</span>
+          <span style="font-size: var(--font-size-xs); color: ${statusColor}; font-weight: var(--font-weight-semibold);">${statusText}</span>
         </div>
         <div style="display: flex; gap: 20px; margin-bottom: 10px;">
           <div style="flex: 1;">
-            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🌐 Field (Real Users)</div>
-            <div style="font-size: 18px; font-weight: 700; color: #1f2937;">p75: ${fieldDisplay}</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: 2px;">🌐 Field (Real Users)</div>
+            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--gray-800);">p75: ${fieldDisplay}</div>
           </div>
           <div style="flex: 1;">
-            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🔬 Lab (Test)</div>
-            <div style="font-size: 18px; font-weight: 600; color: #6b7280;">p75: ${labDisplay}</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: 2px;">🔬 Lab (Test)</div>
+            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-muted);">p75: ${labDisplay}</div>
           </div>
         </div>
         ${comparisonText}
         <div style="margin-top: 10px;">
-          <div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: #e5e7eb;">
-            <div style="width: ${dist.good || 0}%; background: #10b981;" title="Good: ${dist.good || 0}%"></div>
-            <div style="width: ${dist.needsImprovement || 0}%; background: #f59e0b;" title="Needs Improvement: ${dist.needsImprovement || 0}%"></div>
-            <div style="width: ${dist.poor || 0}%; background: #ef4444;" title="Poor: ${dist.poor || 0}%"></div>
+          <div style="display: flex; height: 8px; border-radius: var(--radius-sm); overflow: hidden; background: var(--color-border-default);">
+            <div style="width: ${dist.good || 0}%; background: var(--color-success);" title="Good: ${dist.good || 0}%"></div>
+            <div style="width: ${dist.needsImprovement || 0}%; background: var(--color-warning);" title="Needs Improvement: ${dist.needsImprovement || 0}%"></div>
+            <div style="width: ${dist.poor || 0}%; background: var(--color-error);" title="Poor: ${dist.poor || 0}%"></div>
           </div>
-          <div style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7280; margin-top: 4px;">
+          <div style="display: flex; justify-content: space-between; font-size: var(--font-size-2xs); color: var(--color-text-muted); margin-top: 4px;">
             <span>Good ${dist.good || 0}%</span>
             <span>NI ${dist.needsImprovement || 0}%</span>
             <span>Poor ${dist.poor || 0}%</span>
@@ -193,26 +193,26 @@ function getCrUXSection(
     : 'Last 28 days';
 
   return `
-    <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border-radius: 12px; border: 2px solid #10b981;">
+    <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border-radius: var(--radius-xl); border: 2px solid #10b981;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <div>
-          <h3 style="margin: 0; color: #065f46; display: flex; align-items: center; gap: 8px;">
+          <h3 style="margin: 0; color: var(--color-success-text); display: flex; align-items: center; gap: 8px;">
             🌐 Chrome UX Report (CrUX) - Real User Data
-            <span style="background: #10b981; color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">FIELD DATA</span>
+            <span style="background: var(--color-success); color: white; font-size: var(--font-size-2xs); padding: 2px 6px; border-radius: var(--radius-sm); font-weight: var(--font-weight-semibold);">FIELD DATA</span>
           </h3>
-          <p style="margin: 5px 0 0; font-size: 12px; color: #047857;">
+          <p style="margin: 5px 0 0; font-size: var(--font-size-xs); color: #047857;">
             Real-world performance from actual Chrome users. ${periodText}.
           </p>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: 11px; color: #047857;">Origin: ${cruxData.target ?? 'N/A'}</div>
-          <div style="font-size: 11px; color: #047857;">Type: ${cruxData.targetType === 'origin' ? 'Origin-level' : 'URL-level'}</div>
+          <div style="font-size: var(--font-size-xs); color: #047857;">Origin: ${cruxData.target ?? 'N/A'}</div>
+          <div style="font-size: var(--font-size-xs); color: #047857;">Type: ${cruxData.targetType === 'origin' ? 'Origin-level' : 'URL-level'}</div>
         </div>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
         ${metricsHtml}
       </div>
-      <p style="margin: 15px 0 0; font-size: 11px; color: #047857; text-align: center;">
+      <p style="margin: 15px 0 0; font-size: var(--font-size-xs); color: #047857; text-align: center;">
         ℹ️ Field data from real users is more accurate than lab tests. Lab tests show controlled conditions; field data shows actual user experience.
       </p>
     </div>
@@ -242,10 +242,10 @@ function getStatCard(
   const learnMore = info.learnMore ?? '';
 
   return `
-    <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: 8px;" title="${description}">
-      <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">${icon} ${fullName}</div>
-      <div style="font-size: 11px; opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${unit}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
+    <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: var(--radius-lg);" title="${description}">
+      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 4px;">${icon} ${fullName}</div>
+      <div style="font-size: var(--font-size-xs); opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${unit}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--font-size-xs);">
         <div><strong>Average:</strong> ${avg(values)}${unit}</div>
         <div><strong>P50:</strong> ${p50(values)}${unit}</div>
         <div><strong>P75:</strong> ${p75(values)}${unit}</div>
@@ -273,10 +273,10 @@ function getClsCard(
   const learnMore = info.learnMore ?? '';
 
   return `
-    <div style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); color: white; padding: 20px; border-radius: 8px;" title="${description}">
-      <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">📐 Cumulative Layout Shift</div>
-      <div style="font-size: 11px; opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
+    <div style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); color: white; padding: 20px; border-radius: var(--radius-lg);" title="${description}">
+      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 4px;">📐 Cumulative Layout Shift</div>
+      <div style="font-size: var(--font-size-xs); opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--font-size-xs);">
         <div><strong>Average:</strong> ${parseFloat(String(avg(clsValues))).toFixed(3)}</div>
         <div><strong>P50:</strong> ${p50(clsValues).toFixed(3)}</div>
         <div><strong>P75:</strong> ${p75(clsValues).toFixed(3)}</div>
@@ -303,10 +303,10 @@ function getPageSizeCard(
   const threshold = (THRESHOLDS.PAGE_SIZE / (1024 * 1024)).toFixed(1);
 
   return `
-    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 20px; border-radius: 8px;" title="${description}">
-      <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">📦 Total Page Size</div>
-      <div style="font-size: 11px; opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}MB • Smaller pages load faster</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
+    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 20px; border-radius: var(--radius-lg);" title="${description}">
+      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 4px;">📦 Total Page Size</div>
+      <div style="font-size: var(--font-size-xs); opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}MB • Smaller pages load faster</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--font-size-xs);">
         <div><strong>Average:</strong> ${(parseFloat(String(avg(pageSizes))) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P50:</strong> ${(p50(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
         <div><strong>P75:</strong> ${(p75(pageSizes) / (1024 * 1024)).toFixed(2)}MB</div>
@@ -330,8 +330,18 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
 
   const rows = slowest
     .map((p, i) => {
-      const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
-      const lcpColor = (p.LCP ?? 0) > 4000 ? '#ef4444' : (p.LCP ?? 0) > 2500 ? '#f59e0b' : '#10b981';
+      const ttfbColor =
+        (p.TTFB ?? 0) > 1500
+          ? 'var(--color-error)'
+          : (p.TTFB ?? 0) > 800
+            ? 'var(--color-warning)'
+            : 'var(--color-success)';
+      const lcpColor =
+        (p.LCP ?? 0) > 4000
+          ? 'var(--color-error)'
+          : (p.LCP ?? 0) > 2500
+            ? 'var(--color-warning)'
+            : 'var(--color-success)';
       let shortUrl;
       try {
         shortUrl = new URL(p.url).pathname;
@@ -342,13 +352,13 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
 
       return `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">${i + 1}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 13px; word-break: break-all;">
-          <a href="${escapeHtml(p.url)}" target="_blank" style="color: #2563eb; text-decoration: none;">${escapeHtml(shortUrl)}</a>
+        <td style="padding: 8px; border-bottom: 1px solid var(--color-border-default); font-size: var(--font-size-xs); color: var(--color-text-disabled);">${i + 1}</td>
+        <td style="padding: 8px; border-bottom: 1px solid var(--color-border-default); font-size: var(--font-size-sm); word-break: break-all;">
+          <a href="${escapeHtml(p.url)}" target="_blank" style="color: var(--color-link); text-decoration: none;">${escapeHtml(shortUrl)}</a>
         </td>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: ${ttfbColor}; text-align: right;">${p.TTFB}ms</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: ${lcpColor}; text-align: right;">${p.LCP ? p.LCP + 'ms' : '—'}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${p.CLS ?? '—'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid var(--color-border-default); font-weight: var(--font-weight-semibold); color: ${ttfbColor}; text-align: right;">${p.TTFB}ms</td>
+        <td style="padding: 8px; border-bottom: 1px solid var(--color-border-default); font-weight: var(--font-weight-semibold); color: ${lcpColor}; text-align: right;">${p.LCP ? p.LCP + 'ms' : '—'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid var(--color-border-default); text-align: right;">${p.CLS ?? '—'}</td>
       </tr>
     `;
     })
@@ -356,16 +366,16 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
 
   return `
     <div style="margin-top: 20px;">
-      <h3 style="color: #1f2937; margin-bottom: 12px;">🐢 Slowest Pages</h3>
-      <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🐢 Slowest Pages</h3>
+      <div style="background: var(--color-bg-surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);">
         <table style="width: 100%; border-collapse: collapse; min-width: auto;">
           <thead>
-            <tr style="background: #f9fafb;">
-              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">#</th>
-              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">URL</th>
-              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">TTFB</th>
-              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">LCP</th>
-              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">CLS</th>
+            <tr style="background: var(--color-bg-page);">
+              <th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted);">#</th>
+              <th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted);">URL</th>
+              <th style="padding: 8px; text-align: right; font-size: var(--font-size-xs); color: var(--color-text-muted);">TTFB</th>
+              <th style="padding: 8px; text-align: right; font-size: var(--font-size-xs); color: var(--color-text-muted);">LCP</th>
+              <th style="padding: 8px; text-align: right; font-size: var(--font-size-xs); color: var(--color-text-muted);">CLS</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -398,20 +408,20 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
     .map(([bottleneck, count]: [string, number]) => {
       const pct = Math.round((count / total) * 100);
       const color = bottleneck.toLowerCase().includes('ttfb')
-        ? '#8b5cf6'
+        ? 'var(--purple-500)'
         : bottleneck.toLowerCase().includes('load')
-          ? '#ec4899'
+          ? 'var(--pink-500)'
           : bottleneck.toLowerCase().includes('render')
-            ? '#f59e0b'
-            : '#6b7280';
+            ? 'var(--color-warning)'
+            : 'var(--color-text-muted)';
       return `
       <div style="margin-bottom: 8px;">
-        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px;">
-          <span style="color: #374151; font-weight: 500;">${bottleneck}</span>
-          <span style="color: #6b7280;">${count} pages (${pct}%)</span>
+        <div style="display: flex; justify-content: space-between; font-size: var(--font-size-sm); margin-bottom: 2px;">
+          <span style="color: var(--color-text-secondary); font-weight: var(--font-weight-medium);">${bottleneck}</span>
+          <span style="color: var(--color-text-muted);">${count} pages (${pct}%)</span>
         </div>
-        <div style="height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
-          <div style="width: ${pct}%; height: 100%; background: ${color}; border-radius: 4px;"></div>
+        <div style="height: 8px; background: var(--color-border-default); border-radius: var(--radius-sm); overflow: hidden;">
+          <div style="width: ${pct}%; height: 100%; background: ${color}; border-radius: var(--radius-sm);"></div>
         </div>
       </div>
     `;
@@ -427,18 +437,18 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: #1f2937; margin-bottom: 12px;">🔍 LCP Bottleneck Analysis</h3>
-      <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb;">
-        <p style="font-size: 13px; color: #6b7280; margin-bottom: 15px;">
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🔍 LCP Bottleneck Analysis</h3>
+      <div style="background: var(--color-bg-surface); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
+        <p style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 15px;">
           Analysis of ${total} pages with LCP data — showing what's slowing down the Largest Contentful Paint.
         </p>
         ${bars}
         ${
           recommendation
             ? `
-        <div style="margin-top: 15px; padding: 12px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b;">
-          <div style="font-size: 12px; font-weight: 600; color: #92400e; margin-bottom: 4px;">Top recommendation:</div>
-          <div style="font-size: 13px; color: #78350f;">${escapeHtml(recommendation)}</div>
+        <div style="margin-top: 15px; padding: 12px; background: #fffbeb; border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
+          <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: #92400e; margin-bottom: 4px;">Top recommendation:</div>
+          <div style="font-size: var(--font-size-sm); color: #78350f;">${escapeHtml(recommendation)}</div>
         </div>
         `
             : ''
@@ -489,11 +499,18 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
       key: 'ttfb',
       label: '⚡ TTFB',
       unit: 'ms',
-      colors: ['#8b5cf6', '#7c3aed'],
+      colors: ['var(--purple-500)', 'var(--purple-600)'],
       oVals: origin.ttfb,
       cVals: compare.ttfb,
     },
-    { key: 'lcp', label: '🎨 LCP', unit: 'ms', colors: ['#ec4899', '#db2777'], oVals: origin.lcp, cVals: compare.lcp },
+    {
+      key: 'lcp',
+      label: '🎨 LCP',
+      unit: 'ms',
+      colors: ['var(--pink-500)', '#db2777'],
+      oVals: origin.lcp,
+      cVals: compare.lcp,
+    },
     {
       key: 'cls',
       label: '📐 CLS',
@@ -503,12 +520,19 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
       cVals: compare.cls,
       isCls: true,
     },
-    { key: 'inp', label: '👆 INP', unit: 'ms', colors: ['#f97316', '#ea580c'], oVals: origin.inp, cVals: compare.inp },
+    {
+      key: 'inp',
+      label: '👆 INP',
+      unit: 'ms',
+      colors: ['var(--orange-500)', '#ea580c'],
+      oVals: origin.inp,
+      cVals: compare.inp,
+    },
     {
       key: 'pageSize',
       label: '📦 Page Size',
       unit: 'MB',
-      colors: ['#f59e0b', '#d97706'],
+      colors: ['var(--amber-500)', 'var(--amber-600)'],
       oVals: origin.pageSize,
       cVals: compare.pageSize,
       isSize: true,
@@ -535,22 +559,22 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
       const fullName = info.fullName ?? m.label;
 
       return `
-        <div style="background: linear-gradient(135deg, ${m.colors[0]} 0%, ${m.colors[1]} 100%); color: white; padding: 20px; border-radius: 8px;">
-          <div style="font-size: 14px; opacity: 0.9; margin-bottom: 12px;">${m.label} ${fullName !== m.label ? `(${fullName})` : ''}</div>
+        <div style="background: linear-gradient(135deg, ${m.colors[0]} 0%, ${m.colors[1]} 100%); color: white; padding: 20px; border-radius: var(--radius-lg);">
+          <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 12px;">${m.label} ${fullName !== m.label ? `(${fullName})` : ''}</div>
           <div class="dual-stat-card">
             <div class="dual-stat-side">
-              <div style="grid-column: 1 / -1; font-size: 10px; font-weight: 600; text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; color: #93c5fd;">${originLabel}</div>
+              <div style="grid-column: 1 / -1; font-size: var(--font-size-2xs); font-weight: var(--font-weight-semibold); text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; color: #93c5fd;">${originLabel}</div>
               <div><strong>Avg:</strong> ${formatVal(oAvg)}</div>
               <div><strong>P75:</strong> ${formatVal(oP75)}</div>
             </div>
             <div class="dual-stat-divider"></div>
             <div class="dual-stat-side">
-              <div style="grid-column: 1 / -1; font-size: 10px; font-weight: 600; text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; color: #c4b5fd;">${compareLabel}</div>
+              <div style="grid-column: 1 / -1; font-size: var(--font-size-2xs); font-weight: var(--font-weight-semibold); text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; color: #c4b5fd;">${compareLabel}</div>
               <div><strong>Avg:</strong> ${formatVal(cAvg)}</div>
               <div><strong>P75:</strong> ${formatVal(cP75)}</div>
             </div>
           </div>
-          <div style="text-align: center; margin-top: 10px; font-size: 12px;">${delta}</div>
+          <div style="text-align: center; margin-top: 10px; font-size: var(--font-size-xs);">${delta}</div>
         </div>
       `;
     })
@@ -558,8 +582,8 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
 
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: #1f2937; margin-bottom: 10px;">📈 Performance Comparison</h2>
-      <p style="text-align: center; color: #6b7280; margin-bottom: 25px;">
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Performance Comparison</h2>
+      <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">
         ${originLabel}: ${origin.pagesWithPerf.length} pages | ${compareLabel}: ${compare.pagesWithPerf.length} pages with performance data
       </p>
 
@@ -592,7 +616,12 @@ function getComparisonSlowestPages(
   const renderRows = (pages: PageInfo[], label: string, badgeClass: string) =>
     pages
       .map((p, i) => {
-        const ttfbColor = (p.TTFB ?? 0) > 1500 ? '#ef4444' : (p.TTFB ?? 0) > 800 ? '#f59e0b' : '#10b981';
+        const ttfbColor =
+          (p.TTFB ?? 0) > 1500
+            ? 'var(--color-error)'
+            : (p.TTFB ?? 0) > 800
+              ? 'var(--color-warning)'
+              : 'var(--color-success)';
         let shortUrl;
         try {
           shortUrl = new URL(p.url).pathname;
@@ -603,12 +632,12 @@ function getComparisonSlowestPages(
 
         return `
       <tr>
-        <td style="padding: 6px 8px; font-size: 12px; color: #9ca3af;">${i + 1}</td>
+        <td style="padding: 6px 8px; font-size: var(--font-size-xs); color: var(--color-text-disabled);">${i + 1}</td>
         <td style="padding: 6px 8px;"><span class="site-badge ${badgeClass}">${escapeHtml(label)}</span></td>
-        <td style="padding: 6px 8px; font-size: 13px;">
-          <a href="${escapeHtml(p.url)}" target="_blank" style="color: #2563eb; text-decoration: none;">${escapeHtml(shortUrl)}</a>
+        <td style="padding: 6px 8px; font-size: var(--font-size-sm);">
+          <a href="${escapeHtml(p.url)}" target="_blank" style="color: var(--color-link); text-decoration: none;">${escapeHtml(shortUrl)}</a>
         </td>
-        <td style="padding: 6px 8px; font-weight: 600; color: ${ttfbColor}; text-align: right;">${p.TTFB}ms</td>
+        <td style="padding: 6px 8px; font-weight: var(--font-weight-semibold); color: ${ttfbColor}; text-align: right;">${p.TTFB}ms</td>
         <td style="padding: 6px 8px; text-align: right;">${p.LCP ? p.LCP + 'ms' : '—'}</td>
       </tr>
     `;
@@ -617,16 +646,16 @@ function getComparisonSlowestPages(
 
   return `
     <div style="margin-top: 20px;">
-      <h3 style="color: #1f2937; margin-bottom: 12px;">🐢 Slowest Pages</h3>
-      <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🐢 Slowest Pages</h3>
+      <div style="background: var(--color-bg-surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: #f9fafb;">
-              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 30px;">#</th>
-              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280; width: 80px;">Site</th>
-              <th style="padding: 8px; text-align: left; font-size: 11px; color: #6b7280;">URL</th>
-              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">TTFB</th>
-              <th style="padding: 8px; text-align: right; font-size: 11px; color: #6b7280;">LCP</th>
+            <tr style="background: var(--color-bg-page);">
+              <th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); width: 30px;">#</th>
+              <th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); width: 80px;">Site</th>
+              <th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted);">URL</th>
+              <th style="padding: 8px; text-align: right; font-size: var(--font-size-xs); color: var(--color-text-muted);">TTFB</th>
+              <th style="padding: 8px; text-align: right; font-size: var(--font-size-xs); color: var(--color-text-muted);">LCP</th>
             </tr>
           </thead>
           <tbody>

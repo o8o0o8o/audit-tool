@@ -25,10 +25,10 @@ function getQuickWins(data: ReportSectionData) {
       <div class="wins-issues-title">
         <span>🎯</span>
         <span>Quick Wins</span>
-        <span style="font-size: 14px; opacity: 0.9;">(${quickWins.length} opportunities)</span>
+        <span class="text-base opacity-90">(${quickWins.length} opportunities)</span>
       </div>
 
-      <p style="text-align: center; margin-bottom: 25px; font-size: 14px; opacity: 0.95;">
+      <p class="text-center mb-7 text-base" style="opacity: 0.95;">
         High-impact fixes that take less than 30 minutes each
       </p>
 
@@ -47,7 +47,7 @@ function getQuickWinCard(win: QuickWinFull, index: number) {
   const exampleHtml = win.example
     ? `
     <details class="code-example-wrapper">
-      <summary style="cursor: pointer; font-size: 12px; color: #3b82f6; font-weight: 600; margin-bottom: 4px;">Show code example</summary>
+      <summary class="cursor-pointer text-xs font-semibold mb-1" style="color: var(--color-info);">Show code example</summary>
       <div class="code-example">${escapeHtml(win.example)}</div>
     </details>
   `
@@ -58,12 +58,12 @@ function getQuickWinCard(win: QuickWinFull, index: number) {
       ? `
     <div class="affected-pages">
       <strong>Affected pages:</strong>
-      <div style="margin-top: 5px;">
+      <div class="mt-2">
         ${win.examples
           .slice(0, 3)
-          .map((ex: string) => `<div style="margin: 2px 0; opacity: 0.85;">${escapeHtml(ex)}</div>`)
+          .map((ex: string) => `<div class="opacity-85" style="margin: 2px 0;">${escapeHtml(ex)}</div>`)
           .join('')}
-        ${win.affectedPages > 3 ? `<div style="opacity: 0.7;">... and ${win.affectedPages - 3} more</div>` : ''}
+        ${win.affectedPages > 3 ? `<div class="opacity-70">... and ${win.affectedPages - 3} more</div>` : ''}
       </div>
     </div>
   `
@@ -95,7 +95,7 @@ function getQuickWinCard(win: QuickWinFull, index: number) {
       </div>
 
       <div class="fix-content">
-        <strong style="display: block; margin-bottom: 8px;">✅ How to Fix:</strong>
+        <strong class="block mb-3">✅ How to Fix:</strong>
         ${escapeHtml(win.fix)}
       </div>
 

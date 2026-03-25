@@ -4,7 +4,7 @@
  */
 
 import { METRIC_INFO, SIGNAL_CATEGORIES, getSignalInfo, formatSignalValue, isSignalGood } from './metrics-metadata';
-import type { PageInfo, SeverityColorConfig, HeadingCount } from '../types';
+import type { PageInfo, HeadingCount } from '../types';
 import { formatBytes } from '../utils';
 
 /**
@@ -28,10 +28,10 @@ function escapeHtml(unsafe: unknown): string {
  * @returns {string} Color hex code
  */
 function getStatusColor(status: number) {
-  if (status === 200) return '#10b981';
-  if (status >= 300 && status < 400) return '#3b82f6';
-  if (status >= 400 && status < 500) return '#f59e0b';
-  return '#ef4444';
+  if (status === 200) return 'var(--color-status-2xx)';
+  if (status >= 300 && status < 400) return 'var(--color-status-3xx)';
+  if (status >= 400 && status < 500) return 'var(--color-status-4xx)';
+  return 'var(--color-status-5xx)';
 }
 
 /**
@@ -42,21 +42,21 @@ function getStatusColor(status: number) {
  * @returns {string} Color hex code
  */
 function getMetricColor(value: unknown, threshold: number, isInverse: boolean = false): string {
-  if (value === null || value === undefined || value === 'N/A') return '#9ca3af';
+  if (value === null || value === undefined || value === 'N/A') return 'var(--color-text-disabled)';
 
   const numValue = parseFloat(String(value));
-  if (isNaN(numValue)) return '#9ca3af';
+  if (isNaN(numValue)) return 'var(--color-text-disabled)';
 
   if (isInverse) {
     // For metrics where lower is better
-    if (numValue <= threshold) return '#10b981'; // Good
-    if (numValue <= threshold * 1.5) return '#f59e0b'; // Warning
-    return '#ef4444'; // Bad
+    if (numValue <= threshold) return 'var(--color-success)'; // Good
+    if (numValue <= threshold * 1.5) return 'var(--color-warning)'; // Warning
+    return 'var(--color-error)'; // Bad
   } else {
     // For metrics where higher is better
-    if (numValue >= threshold) return '#10b981';
-    if (numValue >= threshold * 0.8) return '#f59e0b';
-    return '#ef4444';
+    if (numValue >= threshold) return 'var(--color-success)';
+    if (numValue >= threshold * 0.8) return 'var(--color-warning)';
+    return 'var(--color-error)';
   }
 }
 
@@ -68,10 +68,10 @@ function getMetricColor(value: unknown, threshold: number, isInverse: boolean = 
  * @returns {string} Color hex code
  */
 function getTextLengthColor(length: number, min: number, max: number) {
-  if (!length) return '#ef4444';
-  if (length < min) return '#f59e0b';
-  if (length > max) return '#f59e0b';
-  return '#10b981';
+  if (!length) return 'var(--color-error)';
+  if (length < min) return 'var(--color-warning)';
+  if (length > max) return 'var(--color-warning)';
+  return 'var(--color-success)';
 }
 
 /**
@@ -104,7 +104,7 @@ function getMissingMetaTags(page: PageInfo): string[] {
  */
 function makeUrlClickable(url: string) {
   const escapedUrl = escapeHtml(url);
-  return `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none;">${escapedUrl}</a>`;
+  return `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="ui-link">${escapedUrl}</a>`;
 }
 
 /**
@@ -189,15 +189,15 @@ function getTextLengthTooltip(length: number, min: number, max: number, fieldNam
  * @returns {string} HTML for severity badge
  */
 function getSeverityBadge(severity: string) {
-  const colors: Record<string, SeverityColorConfig> = {
-    CRITICAL: { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
-    HIGH: { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
-    MEDIUM: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
-    LOW: { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
+  const classMap: Record<string, string> = {
+    CRITICAL: 'ui-badge--critical',
+    HIGH: 'ui-badge--high',
+    MEDIUM: 'ui-badge--medium',
+    LOW: 'ui-badge--low',
   };
 
-  const color = colors[severity] || colors.MEDIUM;
-  return `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${color.bg}; color: ${color.text}; border: 1px solid ${color.border};">${severity}</span>`;
+  const badgeClass = classMap[severity] || classMap.MEDIUM;
+  return `<span class="ui-badge ${badgeClass}">${severity}</span>`;
 }
 
 /**
@@ -206,10 +206,10 @@ function getSeverityBadge(severity: string) {
  * @returns {string} Color hex code
  */
 function getScoreColor(score: number) {
-  if (score >= 90) return '#10b981';
-  if (score >= 70) return '#f59e0b';
-  if (score >= 50) return '#f97316';
-  return '#ef4444';
+  if (score >= 90) return 'var(--color-score-good)';
+  if (score >= 70) return 'var(--color-score-warning)';
+  if (score >= 50) return 'var(--color-score-orange)';
+  return 'var(--color-score-bad)';
 }
 
 /**
@@ -223,14 +223,14 @@ function getTrendIndicator(current: number, previous: number, higherIsBetter: bo
   if (previous === null || previous === undefined) return '';
 
   const diff = current - previous;
-  if (diff === 0) return '<span style="color: #6b7280;">→</span>';
+  if (diff === 0) return '<span class="text-muted">→</span>';
 
   const isPositive = higherIsBetter ? diff > 0 : diff < 0;
   const arrow = diff > 0 ? '↑' : '↓';
-  const color = isPositive ? '#10b981' : '#ef4444';
+  const colorClass = isPositive ? 'text-good' : 'text-bad';
   const absValue = Math.abs(diff).toFixed(1);
 
-  return `<span style="color: ${color}; font-size: 12px;">${arrow}${absValue}</span>`;
+  return `<span class="${colorClass} text-xs">${arrow}${absValue}</span>`;
 }
 
 /**
@@ -408,48 +408,48 @@ function getSignalStyles() {
   return `
     .signal-tooltip {
       max-width: 300px;
-      padding: 12px;
-      font-size: 13px;
+      padding: var(--space-4);
+      font-size: var(--font-size-sm);
     }
     .signal-tooltip .signal-name {
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: #1f2937;
+      font-weight: var(--font-weight-semibold);
+      margin-bottom: var(--space-2);
+      color: var(--gray-800);
     }
     .signal-tooltip .signal-description {
-      color: #4b5563;
-      margin-bottom: 8px;
+      color: var(--gray-600);
+      margin-bottom: var(--space-3);
       line-height: 1.4;
     }
     .signal-tooltip .signal-note {
-      color: #6b7280;
-      font-size: 12px;
-      margin-bottom: 8px;
-      padding: 6px;
-      background: #f9fafb;
-      border-radius: 4px;
+      color: var(--color-text-muted);
+      font-size: var(--font-size-xs);
+      margin-bottom: var(--space-3);
+      padding: var(--space-2);
+      background: var(--color-bg-page);
+      border-radius: var(--radius-sm);
     }
     .signal-tooltip .signal-value {
-      font-weight: 500;
-      padding: 4px 8px;
-      border-radius: 4px;
+      font-weight: var(--font-weight-medium);
+      padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-sm);
       display: inline-block;
-      margin-bottom: 6px;
+      margin-bottom: var(--space-2);
     }
-    .signal-tooltip .signal-value.good { background: #d1fae5; color: #065f46; }
-    .signal-tooltip .signal-value.bad { background: #fee2e2; color: #991b1b; }
-    .signal-tooltip .signal-value.neutral { background: #f3f4f6; color: #374151; }
+    .signal-tooltip .signal-value.good { background: var(--color-success-bg); color: var(--color-success-text); }
+    .signal-tooltip .signal-value.bad { background: var(--color-error-bg); color: var(--color-error-text); }
+    .signal-tooltip .signal-value.neutral { background: var(--color-bg-surface-alt); color: var(--color-text-secondary); }
     .signal-tooltip .signal-threshold {
-      color: #6b7280;
-      font-size: 12px;
+      color: var(--color-text-muted);
+      font-size: var(--font-size-xs);
     }
     .signal-tooltip .signal-learn-more {
-      margin-top: 8px;
+      margin-top: var(--space-3);
     }
     .signal-tooltip .signal-learn-more a {
-      color: #2563eb;
+      color: var(--color-link);
       text-decoration: none;
-      font-size: 12px;
+      font-size: var(--font-size-xs);
     }
 
     .signal-status {
@@ -458,72 +458,72 @@ function getSignalStyles() {
       justify-content: center;
       width: 20px;
       height: 20px;
-      border-radius: 50%;
-      font-size: 12px;
+      border-radius: var(--radius-full);
+      font-size: var(--font-size-xs);
     }
-    .signal-status.good { background: #d1fae5; color: #065f46; }
-    .signal-status.bad { background: #fee2e2; color: #991b1b; }
-    .signal-status.neutral { background: #f3f4f6; color: #6b7280; }
+    .signal-status.good { background: var(--color-success-bg); color: var(--color-success-text); }
+    .signal-status.bad { background: var(--color-error-bg); color: var(--color-error-text); }
+    .signal-status.neutral { background: var(--color-bg-surface-alt); color: var(--color-text-muted); }
 
     .signal-card {
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 16px;
-      background: white;
+      border: 1px solid var(--color-border-default);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      background: var(--color-bg-surface);
       transition: box-shadow 0.2s;
     }
     .signal-card:hover {
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      box-shadow: var(--shadow-md);
     }
-    .signal-card.good { border-left: 4px solid #10b981; }
-    .signal-card.bad { border-left: 4px solid #ef4444; }
-    .signal-card.neutral { border-left: 4px solid #9ca3af; }
+    .signal-card.good { border-left: 4px solid var(--color-success); }
+    .signal-card.bad { border-left: 4px solid var(--color-error); }
+    .signal-card.neutral { border-left: 4px solid var(--color-text-disabled); }
     .signal-card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: var(--space-3);
     }
     .signal-card-name {
-      font-weight: 600;
-      color: #1f2937;
+      font-weight: var(--font-weight-semibold);
+      color: var(--gray-800);
     }
     .signal-card-value {
-      font-size: 24px;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 8px;
+      font-size: var(--font-size-2xl);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-primary);
+      margin-bottom: var(--space-3);
     }
     .signal-card-description {
-      color: #6b7280;
-      font-size: 13px;
-      line-height: 1.5;
-      margin-bottom: 8px;
+      color: var(--color-text-muted);
+      font-size: var(--font-size-sm);
+      line-height: var(--line-height-normal);
+      margin-bottom: var(--space-3);
     }
     .signal-card-link {
-      color: #2563eb;
+      color: var(--color-link);
       text-decoration: none;
-      font-size: 12px;
+      font-size: var(--font-size-xs);
     }
 
     .signal-category {
-      margin-bottom: 32px;
+      margin-bottom: var(--space-8);
     }
     .signal-category-name {
-      font-size: 18px;
-      font-weight: 600;
-      color: #1f2937;
-      margin-bottom: 4px;
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-semibold);
+      color: var(--gray-800);
+      margin-bottom: var(--space-1);
     }
     .signal-category-description {
-      color: #6b7280;
-      font-size: 14px;
-      margin-bottom: 16px;
+      color: var(--color-text-muted);
+      font-size: var(--font-size-base);
+      margin-bottom: var(--space-5);
     }
     .signal-category-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 16px;
+      gap: var(--space-5);
     }
   `;
 }

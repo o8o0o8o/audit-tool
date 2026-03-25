@@ -205,7 +205,7 @@ function getTopIssues(data: ReportSectionData) {
         <span>Top ${topIssues.length} Issues to Address</span>
       </div>
 
-      <p style="text-align: center; margin-bottom: 25px; font-size: 14px; opacity: 0.95;">
+      <p class="text-center mb-7 text-base" style="opacity: 0.95;">
         Prioritized by severity - fix these first
       </p>
 
@@ -241,7 +241,7 @@ function getIssueCard(
       ? `
     <div class="affected-pages">
       <strong>Affected locations (${totalCount}):</strong>
-      <div class="issue-examples-list" style="margin-top: 5px;">
+      <div class="issue-examples-list mt-2">
         ${examples
           .slice(0, VISIBLE_COUNT)
           .map((ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`)
@@ -256,10 +256,10 @@ function getIssueCard(
               .join('')}
           </div>
           <button class="issue-toggle-btn" onclick="var el=document.getElementById('issue-more-${index}');var showing=el.style.display!=='none';el.style.display=showing?'none':'block';this.textContent=showing?'Show all ${examples.length} examples...':'Show less';">Show all ${examples.length} examples...</button>
-          ${totalCount > examples.length ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>` : ''}
+          ${totalCount > examples.length ? `<div class="text-xs mt-1" style="opacity: 0.6;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>` : ''}
         `
             : totalCount > examples.length
-              ? `<div style="opacity: 0.6; font-size: 12px; margin-top: 2px;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>`
+              ? `<div class="text-xs mt-1" style="opacity: 0.6;">(${totalCount} total occurrences, showing ${examples.length} examples)</div>`
               : ''
         }
       </div>
@@ -348,7 +348,7 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
         <span>Top ${topIssues.length} Issues (Comparison)</span>
       </div>
 
-      <p style="text-align: center; margin-bottom: 25px; font-size: 14px; opacity: 0.95;">
+      <p class="text-center mb-7 text-base" style="opacity: 0.95;">
         Prioritized by severity — showing issues across both <strong>${escapeHtml(originLabel)}</strong> and <strong>${escapeHtml(compareLabel)}</strong>
       </p>
 
@@ -356,9 +356,9 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
         .map((item, index) => {
           const statusBadge =
             item.status === 'fixed'
-              ? `<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">FIXED in ${escapeHtml(compareLabel)}</span>`
+              ? `<span class="ui-badge ui-badge--success" style="margin-left: var(--space-3);">FIXED in ${escapeHtml(compareLabel)}</span>`
               : item.status === 'new'
-                ? `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:8px;">NEW in ${escapeHtml(compareLabel)}</span>`
+                ? `<span class="ui-badge ui-badge--error" style="margin-left: var(--space-3);">NEW in ${escapeHtml(compareLabel)}</span>`
                 : '';
           return getIssueCardWithBadge(item, index, jsonData, statusBadge);
         })

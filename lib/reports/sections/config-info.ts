@@ -71,7 +71,7 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
       ${robotsSitemaps.length > 3 ? `<li>... and ${robotsSitemaps.length - 3} more</li>` : ''}
     </ul>
   `
-      : '<p style="color: #f59e0b;">⚠ No sitemaps listed in robots.txt</p>';
+      : '<p style="color: var(--color-warning);">⚠ No sitemaps listed in robots.txt</p>';
 
   return `
     <div class="info-card ${robotsStatus}">
@@ -112,16 +112,16 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
         .slice(0, 3)
         .map((sm) => {
           const smData = (sitemaps[sm] ?? {}) as Record<string, unknown>;
-          return `<li>${escapeHtml(sm)} <span style="color: #9ca3af;">(${smData.total ?? 0} URLs)</span></li>`;
+          return `<li>${escapeHtml(sm)} <span style="color: var(--color-text-disabled);">(${smData.total ?? 0} URLs)</span></li>`;
         })
         .join('')}
       ${individualSitemaps.length > 3 ? `<li>... and ${individualSitemaps.length - 3} more</li>` : ''}
     </ul>
   `
-      : '<p style="color: #ef4444;">✗ No sitemaps found</p>';
+      : '<p style="color: var(--color-error);">✗ No sitemaps found</p>';
 
   const errorsNote = hasSitemapErrors
-    ? '<p style="color: #f59e0b; margin-top: 8px;">⚠ Issues detected (see analysis below)</p>'
+    ? '<p style="color: var(--color-warning); margin-top: 8px;">⚠ Issues detected (see analysis below)</p>'
     : '';
 
   return `
@@ -173,7 +173,7 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
     return `
       <div class="info-card ${issuesStatus}">
         <h3>⚠️ Related Issues</h3>
-        <p style="color: #10b981;">✓ No robots.txt or sitemap issues detected</p>
+        <p style="color: var(--color-success);">✓ No robots.txt or sitemap issues detected</p>
       </div>
     `;
   }
@@ -232,7 +232,7 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
     return `
       <div class="info-card success">
         <h3>✅ Crawl Coverage</h3>
-        <p style="color: #10b981;">All URLs from sitemap were successfully crawled</p>
+        <p style="color: var(--color-success);">All URLs from sitemap were successfully crawled</p>
         <p><span class="label">Sitemap URLs:</span> ${sitemapTotal}</p>
         <p><span class="label">Pages Crawled:</span> ${pagesCrawled}</p>
       </div>
@@ -252,12 +252,12 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
     missingUrls.length > 0
       ? `
     <details style="margin-top: 8px;">
-      <summary style="cursor: pointer; color: #3b82f6; font-size: 12px; font-weight: 600;">
+      <summary style="cursor: pointer; color: var(--color-info); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold);">
         Show ${missingUrls.length} missing URL(s)
       </summary>
-      <ul style="margin-top: 8px; font-size: 11px; max-height: 200px; overflow-y: auto;">
+      <ul style="margin-top: 8px; font-size: var(--font-size-xs); max-height: 200px; overflow-y: auto;">
         ${showUrls.map((url) => `<li style="word-break: break-all; margin: 4px 0;">${makeUrlClickable(url)}</li>`).join('')}
-        ${missingUrls.length > 10 ? `<li style="color: #9ca3af;">... and ${missingUrls.length - 10} more</li>` : ''}
+        ${missingUrls.length > 10 ? `<li style="color: var(--color-text-disabled);">... and ${missingUrls.length - 10} more</li>` : ''}
       </ul>
     </details>
   `
@@ -269,8 +269,8 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
       <p><span class="label">Coverage:</span> ${coveragePercent}%</p>
       <p><span class="label">Sitemap URLs:</span> ${sitemapTotal.toLocaleString()}</p>
       <p><span class="label">Pages Crawled:</span> ${pagesCrawled.toLocaleString()}</p>
-      <p><span class="label" style="color: #f59e0b;">Not Crawled:</span> ${notCrawled.toLocaleString()}</p>
-      <p style="margin-top: 8px; font-size: 12px; color: #6b7280;">
+      <p><span class="label" style="color: var(--color-warning);">Not Crawled:</span> ${notCrawled.toLocaleString()}</p>
+      <p style="margin-top: 8px; font-size: var(--font-size-xs); color: var(--color-text-muted);">
         ${notCrawled} URL(s) from the sitemap were not successfully crawled.
         This may be due to errors, timeouts, or redirects.
       </p>
@@ -299,9 +299,9 @@ function getAuditConfigCard(jsonData: Record<string, unknown>) {
     .join('');
 
   return `
-    <div style="margin-top: 20px; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <h3 style="margin: 0 0 12px; color: #1f2937; font-size: 15px;">Audit Timing</h3>
-      ${timing.elapsedTimeFormatted ? `<p style="color: #6b7280; font-size: 13px; margin-bottom: 12px;">Total duration: <strong>${escapeHtml(timing.elapsedTimeFormatted)}</strong></p>` : ''}
+    <div style="margin-top: 20px; padding: 16px; background: var(--color-bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+      <h3 style="margin: 0 0 12px; color: var(--gray-800); font-size: 15px;">Audit Timing</h3>
+      ${timing.elapsedTimeFormatted ? `<p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-bottom: 12px;">Total duration: <strong>${escapeHtml(timing.elapsedTimeFormatted)}</strong></p>` : ''}
       <div class="timing-phases">
         ${phaseRows}
       </div>
@@ -333,13 +333,13 @@ function getAnalysisConfigCard(jsonData: Record<string, unknown>) {
   if (flags.length === 0 && analysisSettings.length === 0) return '';
 
   return `
-    <div style="margin-top: 20px; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <h3 style="margin: 0 0 12px; color: #1f2937; font-size: 15px;">Audit Configuration</h3>
+    <div style="margin-top: 20px; padding: 16px; background: var(--color-bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+      <h3 style="margin: 0 0 12px; color: var(--gray-800); font-size: 15px;">Audit Configuration</h3>
       ${
         flags.length > 0
           ? `
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-          ${flags.map((f) => `<span style="background: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 4px; font-size: 12px;">${escapeHtml(f)}</span>`).join('')}
+          ${flags.map((f) => `<span style="background: var(--color-bg-surface-alt); color: var(--color-text-secondary); padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${escapeHtml(f)}</span>`).join('')}
         </div>
       `
           : ''
@@ -348,8 +348,8 @@ function getAnalysisConfigCard(jsonData: Record<string, unknown>) {
         analysisSettings.length > 0
           ? `
         <div style="border-top: 1px solid #e5e7eb; padding-top: 10px;">
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 6px;">Analysis Settings</div>
-          ${analysisSettings.map((s) => `<div style="font-size: 12px; color: #374151; margin: 3px 0;">${escapeHtml(s)}</div>`).join('')}
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: 6px;">Analysis Settings</div>
+          ${analysisSettings.map((s) => `<div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 3px 0;">${escapeHtml(s)}</div>`).join('')}
         </div>
       `
           : ''

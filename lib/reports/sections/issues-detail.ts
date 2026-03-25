@@ -35,10 +35,18 @@ function isCrawlerError(issue: string) {
 const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  critical: { bg: '#fef2f2', text: '#991b1b', dot: '#ef4444' },
-  high: { bg: '#fff7ed', text: '#9a3412', dot: '#f97316' },
-  medium: { bg: '#fffbeb', text: '#92400e', dot: '#f59e0b' },
-  low: { bg: '#f0fdf4', text: '#166534', dot: '#22c55e' },
+  critical: {
+    bg: 'var(--color-severity-critical-bg)',
+    text: 'var(--color-severity-critical-text)',
+    dot: 'var(--color-error)',
+  },
+  high: { bg: 'var(--color-severity-high-bg)', text: 'var(--color-severity-high-text)', dot: 'var(--orange-500)' },
+  medium: {
+    bg: 'var(--color-severity-medium-bg)',
+    text: 'var(--color-severity-medium-text)',
+    dot: 'var(--color-warning)',
+  },
+  low: { bg: 'var(--color-severity-low-bg)', text: 'var(--color-severity-low-text)', dot: 'var(--green-500)' },
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -102,7 +110,7 @@ function getIssuesDetail(data: ReportSectionData) {
   return `
     <div class="issues-section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
-        <h2 style="margin:0;font-size:20px;color:#1f2937;">Issues (${issues.length})</h2>
+        <h2 style="margin:0;font-size:var(--font-size-lg);color:var(--gray-800);">Issues (${issues.length})</h2>
         <div class="severity-filter-bar">
           ${renderFilterPill('all', 'All', issues.length, true)}
           ${counts.critical > 0 ? renderFilterPill('critical', 'Critical', counts.critical) : ''}
@@ -112,7 +120,7 @@ function getIssuesDetail(data: ReportSectionData) {
         </div>
       </div>
 
-      ${counts.critical > 0 ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#991b1b;"><strong>${counts.critical} critical issue${counts.critical > 1 ? 's' : ''}</strong> require immediate attention.</div>` : ''}
+      ${counts.critical > 0 ? `<div style="background:var(--color-error-bg);border:1px solid var(--color-error-border);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:16px;font-size:var(--font-size-sm);color:var(--color-error-text);"><strong>${counts.critical} critical issue${counts.critical > 1 ? 's' : ''}</strong> require immediate attention.</div>` : ''}
 
       <table class="issues-table" style="table-layout:fixed;width:100%;">
         <colgroup>
@@ -165,7 +173,7 @@ function getIssuesDetail(data: ReportSectionData) {
 
 function renderFilterPill(value: string, label: string, count: number, active = false) {
   const sev = SEVERITY_STYLES[value];
-  const activeStyle = active ? 'background:#1f2937;color:white;border-color:#1f2937;' : '';
+  const activeStyle = active ? 'background:var(--gray-800);color:white;border-color:var(--gray-800);' : '';
   const dotHtml = sev
     ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sev.dot};margin-right:4px;"></span>`
     : '';
@@ -183,11 +191,11 @@ function renderIssueRow(issue: IssueEntry, idx: number) {
 
   return `
     <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
-      <td style="text-align:center;color:#9ca3af;font-size:12px;"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
+      <td style="text-align:center;color:var(--color-text-disabled);font-size:var(--font-size-xs);"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
-      <td style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;vertical-align:middle;">QUICK WIN</span>' : ''}</td>
+      <td style="font-weight:var(--font-weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:var(--amber-100);color:var(--color-warning-text);padding:1px 6px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);vertical-align:middle;">QUICK WIN</span>' : ''}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums;">${count}</td>
-      <td style="text-align:right;font-size:12px;color:#6b7280;">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
+      <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
     </tr>
     <tr class="issue-detail-row" id="issue-detail-${idx}" style="display:none;">
       <td colspan="5" style="padding:0;">
@@ -212,9 +220,9 @@ function renderIssueDetail(
   const fixHtml = fix
     ? `
     <div style="margin-bottom:12px;">
-      <div style="font-size:12px;font-weight:600;color:#059669;margin-bottom:4px;">How to fix</div>
-      <div style="font-size:13px;color:#374151;line-height:1.5;">${escapeHtml(fix.fix)}</div>
-      ${fix.example ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:#3b82f6;font-weight:500;">Code example</summary><pre style="margin-top:4px;padding:8px;background:#1f2937;color:#e5e7eb;border-radius:4px;font-size:12px;overflow-x:auto;white-space:pre-wrap;">${escapeHtml(fix.example)}</pre></details>` : ''}
+      <div style="font-size:var(--font-size-xs);font-weight:var(--font-weight-semibold);color:var(--green-emerald-600);margin-bottom:4px;">How to fix</div>
+      <div style="font-size:var(--font-size-sm);color:var(--color-text-secondary);line-height:1.5;">${escapeHtml(fix.fix)}</div>
+      ${fix.example ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:var(--font-size-xs);color:var(--color-info);font-weight:var(--font-weight-medium);">Code example</summary><pre style="margin-top:4px;padding:8px;background:var(--gray-800);color:var(--color-border-default);border-radius:var(--radius-sm);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;">${escapeHtml(fix.example)}</pre></details>` : ''}
     </div>
   `
     : '';
@@ -223,13 +231,13 @@ function renderIssueDetail(
     examples.length > 0
       ? `
     <div>
-      <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:4px;">Affected pages (${count})</div>
+      <div style="font-size:var(--font-size-xs);font-weight:var(--font-weight-semibold);color:var(--color-text-muted);margin-bottom:4px;">Affected pages (${count})</div>
       <div style="display:flex;flex-direction:column;gap:2px;">
         ${examples
           .slice(0, VISIBLE)
           .map(
             (ex) =>
-              `<div style="font-size:12px;color:#374151;padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
+              `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
           )
           .join('')}
         ${
@@ -240,22 +248,22 @@ function renderIssueDetail(
               .slice(VISIBLE)
               .map(
                 (ex) =>
-                  `<div style="font-size:12px;color:#374151;padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
+                  `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
               )
               .join('')}
           </div>
-          <button onclick="event.stopPropagation();var el=document.getElementById('issue-more-${idx}');var s=el.style.display!=='none';el.style.display=s?'none':'block';this.textContent=s?'Show all ${examples.length}...':'Show less';" style="background:none;border:none;color:#3b82f6;cursor:pointer;font-size:12px;padding:2px 0;text-align:left;">Show all ${examples.length}...</button>
+          <button onclick="event.stopPropagation();var el=document.getElementById('issue-more-${idx}');var s=el.style.display!=='none';el.style.display=s?'none':'block';this.textContent=s?'Show all ${examples.length}...':'Show less';" style="background:none;border:none;color:var(--color-info);cursor:pointer;font-size:var(--font-size-xs);padding:2px 0;text-align:left;">Show all ${examples.length}...</button>
         `
             : ''
         }
-        ${count > examples.length ? `<div style="font-size:11px;color:#9ca3af;">${count} total, ${examples.length} shown</div>` : ''}
+        ${count > examples.length ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${count} total, ${examples.length} shown</div>` : ''}
       </div>
     </div>
   `
       : '';
 
   return `
-    <div style="padding:12px 12px 12px 44px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+    <div style="padding:12px 12px 12px 44px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border-default);">
       ${fixHtml}
       ${pagesHtml}
     </div>
@@ -337,7 +345,7 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
   return `
     <div class="issues-section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
-        <h2 style="margin:0;font-size:20px;color:#1f2937;">Issues Comparison (${issues.length})</h2>
+        <h2 style="margin:0;font-size:var(--font-size-lg);color:var(--gray-800);">Issues Comparison (${issues.length})</h2>
         <div class="severity-filter-bar">
           ${renderFilterPill('all', 'All', issues.length, true)}
           ${counts.critical > 0 ? renderFilterPill('critical', 'Critical', counts.critical) : ''}
@@ -351,8 +359,8 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
         fixedCount > 0 || newCount > 0
           ? `
       <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-        ${fixedCount > 0 ? `<div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #166534;"><strong>${fixedCount} issue${fixedCount > 1 ? 's' : ''}</strong> fixed in ${escapeHtml(compareLabel)}</div>` : ''}
-        ${newCount > 0 ? `<div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #991b1b;"><strong>${newCount} new issue${newCount > 1 ? 's' : ''}</strong> in ${escapeHtml(compareLabel)}</div>` : ''}
+        ${fixedCount > 0 ? `<div style="background: #f0fdf4; border: 1px solid var(--color-success-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #166534;"><strong>${fixedCount} issue${fixedCount > 1 ? 's' : ''}</strong> fixed in ${escapeHtml(compareLabel)}</div>` : ''}
+        ${newCount > 0 ? `<div style="background: #fef2f2; border: 1px solid var(--color-error-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #991b1b;"><strong>${newCount} new issue${newCount > 1 ? 's' : ''}</strong> in ${escapeHtml(compareLabel)}</div>` : ''}
       </div>
       `
           : ''
@@ -420,25 +428,26 @@ function renderComparisonIssueRow(issue: ComparisonIssueEntry, idx: number) {
 
   const statusBadge =
     status === 'fixed'
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">FIXED</span>'
+      ? '<span style="background:var(--color-success-bg);color:var(--color-success-text);padding:2px 8px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);">FIXED</span>'
       : status === 'new'
-        ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">NEW</span>'
+        ? '<span style="background:var(--color-error-bg);color:var(--color-error-text);padding:2px 8px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);">NEW</span>'
         : (() => {
             const delta = compareCount - originCount;
-            if (delta === 0) return '<span style="color:#6b7280;font-size:11px;">same</span>';
-            const color = delta < 0 ? '#059669' : '#dc2626';
-            return `<span style="color:${color};font-size:11px;font-weight:600;">${delta > 0 ? '+' : ''}${delta}</span>`;
+            if (delta === 0)
+              return '<span style="color:var(--color-text-muted);font-size:var(--font-size-xs);">same</span>';
+            const color = delta < 0 ? 'var(--color-success-alt)' : 'var(--color-error-alt)';
+            return `<span style="color:${color};font-size:var(--font-size-xs);font-weight:var(--font-weight-semibold);">${delta > 0 ? '+' : ''}${delta}</span>`;
           })();
 
   return `
     <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
-      <td style="text-align:center;color:#9ca3af;font-size:12px;"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
+      <td style="text-align:center;color:var(--color-text-disabled);font-size:var(--font-size-xs);"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
-      <td style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;vertical-align:middle;">QUICK WIN</span>' : ''}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;${status === 'new' ? 'color:#9ca3af;' : ''}">${status === 'new' ? '—' : originCount}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;${status === 'fixed' ? 'color:#9ca3af;' : ''}">${status === 'fixed' ? '—' : compareCount}</td>
+      <td style="font-weight:var(--font-weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:var(--amber-100);color:var(--color-warning-text);padding:1px 6px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);vertical-align:middle;">QUICK WIN</span>' : ''}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;${status === 'new' ? 'color:var(--color-text-disabled);' : ''}">${status === 'new' ? '—' : originCount}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;${status === 'fixed' ? 'color:var(--color-text-disabled);' : ''}">${status === 'fixed' ? '—' : compareCount}</td>
       <td style="text-align:center;">${statusBadge}</td>
-      <td style="text-align:right;font-size:12px;color:#6b7280;">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
+      <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
     </tr>
     <tr class="issue-detail-row" id="issue-detail-${idx}" style="display:none;">
       <td colspan="7" style="padding:0;">

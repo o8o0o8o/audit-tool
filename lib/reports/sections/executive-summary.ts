@@ -15,7 +15,11 @@ function extractSummary(jsonData: Record<string, unknown>) {
 }
 
 function getScoreColor(score: number): string {
-  return score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+  return score >= 80
+    ? 'var(--color-score-good)'
+    : score >= 60
+      ? 'var(--color-score-warning)'
+      : 'var(--color-score-bad)';
 }
 
 function getLetterGrade(score: number): string {
@@ -56,8 +60,8 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
   const categoryHealthHtml =
     Object.keys(categoryScores).length > 0
       ? `
-    <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2);">
-      <div style="text-align: center; margin-bottom: 16px; font-size: 14px; opacity: 0.9;">Category Health</div>
+    <div class="mt-7 border-t" style="border-color: rgba(255,255,255,0.2); padding-top: var(--space-6);">
+      <div class="text-center mb-5 text-base opacity-90">Category Health</div>
       ${getCategoryBars(categoryScores)}
     </div>
   `
@@ -81,21 +85,21 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
           <div class="summary-card-label">Total Issues</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #fca5a5;">${summary.criticalCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--red-200);">${summary.criticalCount ?? 0}</div>
           <div class="summary-card-label">Critical</div>
           ${((summary.criticalCount as number) ?? 0) > 0 ? '<div class="summary-card-hint">Fix immediately</div>' : ''}
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #fdba74;">${summary.highCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--orange-200);">${summary.highCount ?? 0}</div>
           <div class="summary-card-label">High</div>
           ${((summary.highCount as number) ?? 0) > 0 ? '<div class="summary-card-hint">Fix this week</div>' : ''}
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #fde047;">${summary.mediumCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--amber-200);">${summary.mediumCount ?? 0}</div>
           <div class="summary-card-label">Medium</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: #a5f3fc;">${summary.lowCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--blue-200);">${summary.lowCount ?? 0}</div>
           <div class="summary-card-label">Low</div>
         </div>
         <div class="summary-card">
@@ -133,8 +137,8 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
       <h2>📊 Comparison Summary</h2>
 
       <!-- Dual score display -->
-      <div style="display: flex; justify-content: center; align-items: center; gap: 40px; margin: 20px 0; flex-wrap: wrap;">
-        <div style="text-align: center;">
+      <div class="flex justify-center items-center gap-8 flex-wrap" style="margin: var(--space-6) 0;">
+        <div class="text-center">
           <div class="score-circle" style="position: relative;">
             <div class="score-ring" style="--score: ${originScore}; --color: ${getScoreColor(originScore)};"></div>
             <div class="score-number ${originScore >= 80 ? 'good' : originScore >= 60 ? 'warning' : 'bad'}">${originScore}</div>
@@ -142,15 +146,15 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
           </div>
         </div>
 
-        <div style="text-align: center;">
-          <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">Delta</div>
-          <div style="font-size: 32px; font-weight: 800; color: ${scoreDelta > 0 ? '#10b981' : scoreDelta < 0 ? '#ef4444' : 'rgba(255,255,255,0.5)'};">
+        <div class="text-center">
+          <div class="text-base opacity-70 mb-3">Delta</div>
+          <div class="font-bold" style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-extrabold); color: ${scoreDelta > 0 ? 'var(--color-success)' : scoreDelta < 0 ? 'var(--color-error)' : 'rgba(255,255,255,0.5)'};">
             ${scoreDelta > 0 ? '+' : ''}${scoreDelta}
           </div>
-          <div style="font-size: 12px; color: rgba(255,255,255,0.6);">${scoreDelta > 0 ? 'Compare is better' : scoreDelta < 0 ? 'Origin is better' : 'Equal'}</div>
+          <div class="text-xs" style="color: rgba(255,255,255,0.6);">${scoreDelta > 0 ? 'Compare is better' : scoreDelta < 0 ? 'Origin is better' : 'Equal'}</div>
         </div>
 
-        <div style="text-align: center;">
+        <div class="text-center">
           <div class="score-circle" style="position: relative;">
             <div class="score-ring" style="--score: ${compareScore}; --color: ${getScoreColor(compareScore)};"></div>
             <div class="score-number ${compareScore >= 80 ? 'good' : compareScore >= 60 ? 'warning' : 'bad'}">${compareScore}</div>
@@ -162,10 +166,10 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
       <!-- Dual issue counts -->
       <div class="summary-grid">
         ${getDualSummaryCard('Total Issues', (originSummary.totalIssues as number) ?? 0, (compareSummary.totalIssues as number) ?? 0, originLabel, compareLabel, '', true)}
-        ${getDualSummaryCard('Critical', (originSummary.criticalCount as number) ?? 0, (compareSummary.criticalCount as number) ?? 0, originLabel, compareLabel, '#fca5a5', true)}
-        ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, '#fdba74', true)}
-        ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, '#fde047', true)}
-        ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, '#a5f3fc', true)}
+        ${getDualSummaryCard('Critical', (originSummary.criticalCount as number) ?? 0, (compareSummary.criticalCount as number) ?? 0, originLabel, compareLabel, 'var(--red-200)', true)}
+        ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, 'var(--orange-200)', true)}
+        ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, 'var(--amber-200)', true)}
+        ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, 'var(--blue-200)', true)}
         ${getDualSummaryCard('Pass Rate', (originSummary.passRate as number) || 0, (compareSummary.passRate as number) || 0, originLabel, compareLabel, '', false, '%')}
       </div>
 
@@ -173,8 +177,8 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
       ${
         Object.keys(originCategoryScores).length > 0 || Object.keys(compareCategoryScores).length > 0
           ? `
-      <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2);">
-        <div style="text-align: center; margin-bottom: 16px; font-size: 14px; opacity: 0.9;">Category Health</div>
+      <div class="mt-7 border-t" style="border-color: rgba(255,255,255,0.2); padding-top: var(--space-6);">
+        <div class="text-center mb-5 text-base opacity-90">Category Health</div>
         ${getDualCategoryBars(originCategoryScores, compareCategoryScores, originLabel, compareLabel)}
       </div>
       `
@@ -202,14 +206,14 @@ function getDualSummaryCard(
 
   return `
     <div class="summary-card">
-      <div style="display: flex; justify-content: center; gap: 16px; align-items: baseline;">
-        <div style="text-align: center;">
-          <div style="font-size: 10px; font-weight: 600; color: #93c5fd; text-transform: uppercase;">${originLabel}</div>
+      <div class="flex justify-center items-center gap-5" style="align-items: baseline;">
+        <div class="text-center">
+          <div class="text-2xs font-semibold text-upper" style="color: #93c5fd;">${originLabel}</div>
           <div class="summary-card-value" ${color ? `style="color: ${color};"` : ''}>${originVal}${unit}</div>
         </div>
-        <div style="font-size: 11px; padding-top: 14px;">${deltaBadge}</div>
-        <div style="text-align: center;">
-          <div style="font-size: 10px; font-weight: 600; color: #c4b5fd; text-transform: uppercase;">${compareLabel}</div>
+        <div class="text-xs" style="padding-top: var(--space-4);">${deltaBadge}</div>
+        <div class="text-center">
+          <div class="text-2xs font-semibold text-upper" style="color: #c4b5fd;">${compareLabel}</div>
           <div class="summary-card-value" ${color ? `style="color: ${color};"` : ''}>${compareVal}${unit}</div>
         </div>
       </div>
@@ -239,10 +243,10 @@ function getEstimatedScoreAfterFixes(summary: Record<string, unknown>, overallSc
   if (predicted <= overallScore) return '';
 
   return `
-    <div style="margin-top: 20px; padding: 12px 16px; background: rgba(255,255,255,0.15); border-radius: 8px; font-size: 13px; text-align: center;">
+    <div class="ui-stat mt-6 text-center text-sm">
       <strong>Estimated Score After Fixes:</strong>
       Fix all critical + high issues to potentially reach
-      <strong style="color: #10b981;">~${predicted}/100</strong>
+      <strong style="color: var(--color-success);">~${predicted}/100</strong>
     </div>`;
 }
 
@@ -296,9 +300,9 @@ function getInsightHighlights(jsonData: Record<string, unknown>) {
   if (badges.length === 0) return '';
 
   return `
-    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.2);">
-      <div style="text-align: center; margin-bottom: 10px; font-size: 13px; opacity: 0.8;">Key Insights</div>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+    <div class="mt-5 border-t" style="border-color: rgba(255,255,255,0.2); padding-top: var(--space-5);">
+      <div class="text-center mb-4 text-sm opacity-85">Key Insights</div>
+      <div class="flex flex-wrap gap-3 justify-center">
         ${badges.join('')}
       </div>
     </div>
@@ -339,10 +343,10 @@ function getCategoryBars(categoryScores: Partial<CategoryScores>) {
       const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
 
       return `
-      <div style="margin: 12px 0;" title="${description}">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+      <div class="mb-4" title="${description}">
+        <div class="flex justify-between mb-1 text-sm">
           <span>${icon} ${cat.name}</span>
-          <span style="font-weight: 700;">${cat.score}/100</span>
+          <span class="font-bold">${cat.score}/100</span>
         </div>
         <div class="progress-bar-container">
           <div class="progress-bar ${progressClass}" style="width: ${cat.score}%;"></div>
@@ -380,28 +384,29 @@ function getDualCategoryBars(
       const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
 
       const getBarClass = (s: number) => (s >= 80 ? 'progress-good' : s >= 60 ? 'progress-warning' : 'progress-bad');
-      const deltaColor = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
+      const deltaColor =
+        delta > 0 ? 'var(--color-success)' : delta < 0 ? 'var(--color-error)' : 'var(--color-text-muted)';
       const deltaText = delta !== 0 ? `${delta > 0 ? '+' : ''}${delta}` : '—';
 
       return `
-      <div style="margin: 14px 0;" title="${description}">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+      <div class="mb-5" title="${description}">
+        <div class="flex justify-between mb-2 text-sm">
           <span>${icon} ${cat.name}</span>
           <span>
-            <span style="color: #93c5fd; font-weight: 600; font-size: 12px;">${originScore}</span>
-            <span style="color: ${deltaColor}; font-weight: 700; font-size: 11px; margin: 0 6px;">${deltaText}</span>
-            <span style="color: #c4b5fd; font-weight: 600; font-size: 12px;">${compareScore}</span>
+            <span class="font-semibold text-xs" style="color: #93c5fd;">${originScore}</span>
+            <span class="font-bold text-xs" style="color: ${deltaColor}; margin: 0 var(--space-2);">${deltaText}</span>
+            <span class="font-semibold text-xs" style="color: #c4b5fd;">${compareScore}</span>
           </span>
         </div>
-        <div style="display: flex; gap: 4px; align-items: center;">
-          <span style="font-size: 9px; color: #93c5fd; min-width: 14px; text-align: center;">O</span>
-          <div class="progress-bar-container" style="flex: 1;">
+        <div class="flex gap-1 items-center">
+          <span class="text-2xs text-center" style="color: #93c5fd; min-width: 14px;">O</span>
+          <div class="progress-bar-container flex-1">
             <div class="progress-bar ${getBarClass(originScore)}" style="width: ${originScore}%;"></div>
           </div>
         </div>
-        <div style="display: flex; gap: 4px; align-items: center; margin-top: 2px;">
-          <span style="font-size: 9px; color: #c4b5fd; min-width: 14px; text-align: center;">C</span>
-          <div class="progress-bar-container" style="flex: 1;">
+        <div class="flex gap-1 items-center mt-1">
+          <span class="text-2xs text-center" style="color: #c4b5fd; min-width: 14px;">C</span>
+          <div class="progress-bar-container flex-1">
             <div class="progress-bar ${getBarClass(compareScore)}" style="width: ${compareScore}%;"></div>
           </div>
         </div>

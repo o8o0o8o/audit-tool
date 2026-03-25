@@ -32,20 +32,20 @@ function getHistoricalProgress(data: ReportSectionData) {
   if (!previousAudit || !trendData || auditCount < 2) {
     return `
       <div class="charts-section">
-        <h2 style="text-align: center; color: #1f2937; margin-bottom: 10px;">📈 Historical Progress</h2>
+        <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Historical Progress</h2>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-          ${getInfoCard('Current Score', currentScore, '#8b5cf6', '#7c3aed', 'Out of 100')}
-          ${getInfoCard('Total Issues', currentIssues, '#f59e0b', '#d97706', 'Found in this audit')}
-          ${getInfoCard('Total Audits', auditCount, '#3b82f6', '#2563eb', 'Tracked over time')}
+          ${getInfoCard('Current Score', currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
+          ${getInfoCard('Total Issues', currentIssues, 'var(--color-warning)', 'var(--amber-600)', 'Found in this audit')}
+          ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
         </div>
-        <div style="padding: 30px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; text-align: center; border: 2px dashed #3b82f6;">
+        <div style="padding: 30px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: var(--radius-xl); text-align: center; border: 2px dashed #3b82f6;">
           <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
-          <h3 style="color: #1e40af; margin-bottom: 10px;">This is your first audit!</h3>
-          <p style="color: #1e40af; max-width: 500px; margin: 0 auto; line-height: 1.6;">
+          <h3 style="color: var(--blue-800); margin-bottom: 10px;">This is your first audit!</h3>
+          <p style="color: var(--blue-800); max-width: 500px; margin: 0 auto; line-height: 1.6;">
             Run another audit later to see trends and compare progress over time.
             Historical charts will appear after your second audit.
           </p>
-          <p style="color: #6b7280; font-size: 13px; margin-top: 15px;">
+          <p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-top: 15px;">
             💡 Tip: Schedule regular audits (weekly/monthly) to track SEO improvements
           </p>
         </div>
@@ -58,14 +58,14 @@ function getHistoricalProgress(data: ReportSectionData) {
 
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: #1f2937; margin-bottom: 10px;">📈 Historical Progress</h2>
-      <p style="text-align: center; color: #6b7280; margin-bottom: 25px;">Track your SEO improvements over ${auditCount} audit${auditCount > 1 ? 's' : ''}</p>
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Historical Progress</h2>
+      <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Track your SEO improvements over ${auditCount} audit${auditCount > 1 ? 's' : ''}</p>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
         ${getDeltaCard('Score Change', scoreDelta, scoreDelta >= 0, 'Since last audit')}
         ${getDeltaCard('Issues Change', issuesDelta, issuesDelta <= 0, 'Since last audit', true)}
-        ${getInfoCard('Total Audits', auditCount, '#3b82f6', '#2563eb', 'Tracked over time')}
-        ${getInfoCard('Current Score', currentScore, '#8b5cf6', '#7c3aed', 'Out of 100')}
+        ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
+        ${getInfoCard('Current Score', currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
       </div>
 
       ${getCategoryDeltaCards(jsonData, previousAudit)}
@@ -119,13 +119,13 @@ function getInsightTrends(trendData: TrendDataCompat | null) {
     const delta = last - first;
     const improved = m.inverse ? delta < 0 : delta > 0;
     const arrow = delta === 0 ? '→' : improved ? '↓' : '↑';
-    const color = delta === 0 ? '#6b7280' : improved ? '#10b981' : '#ef4444';
+    const color = delta === 0 ? 'var(--color-text-muted)' : improved ? 'var(--color-success)' : 'var(--color-error)';
 
     rows.push(`
-      <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f9fafb;border-radius:6px;">
-        <span style="font-size:16px;">${m.icon}</span>
-        <span style="flex:1;font-size:13px;color:#374151;">${m.label}</span>
-        <span style="font-size:13px;color:#9ca3af;">${first}</span>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--color-bg-page);border-radius:var(--radius-md);">
+        <span style="font-size:var(--font-size-md);">${m.icon}</span>
+        <span style="flex:1;font-size:var(--font-size-sm);color:var(--color-text-secondary);">${m.label}</span>
+        <span style="font-size:var(--font-size-sm);color:var(--color-text-disabled);">${first}</span>
         <span style="color:${color};font-weight:600;">${arrow} ${last}</span>
         <span style="font-size:12px;color:${color};">(${delta > 0 ? '+' : ''}${typeof delta === 'number' && !Number.isInteger(delta) ? delta.toFixed(1) : delta})</span>
       </div>
@@ -136,7 +136,7 @@ function getInsightTrends(trendData: TrendDataCompat | null) {
 
   return `
     <div style="margin-top:24px;">
-      <h3 style="font-size:16px;color:#1f2937;margin-bottom:12px;">Insight Trends</h3>
+      <h3 style="font-size:var(--font-size-md);color:var(--gray-800);margin-bottom:12px;">Insight Trends</h3>
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${rows.join('')}
       </div>
@@ -180,27 +180,27 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
 
       return `
       <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default);">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: #9ca3af; font-size: 12px;">${index + 1}.</span>
-            <span style="font-size: 13px; color: #374151;">${escapeHtml(truncateIssue(item.issue, 60))}</span>
+            <span style="color: var(--color-text-disabled); font-size: var(--font-size-xs);">${index + 1}.</span>
+            <span style="font-size: var(--font-size-sm); color: #374151;">${escapeHtml(truncateIssue(item.issue, 60))}</span>
           </div>
         </td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
-          <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: ${severityColor}; color: white;">
+        <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
+          <span style="display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); background: ${severityColor}; color: white;">
             ${item.severity.toUpperCase()}
           </span>
         </td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 12px; color: #6b7280;">${firstCount} pages</div>
+        <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">${firstCount} pages</div>
         </td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
-          <div style="font-size: 14px; font-weight: 600; color: #1f2937;">${latestCount} pages</div>
+        <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
+          <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--gray-800);">${latestCount} pages</div>
         </td>
-        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
+        <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
           <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
             ${trendIcon}
-            <span style="font-size: 12px; color: ${getTrendColor(item.trend)};">${changeText}</span>
+            <span style="font-size: var(--font-size-xs); color: ${getTrendColor(item.trend)};">${changeText}</span>
           </div>
         </td>
       </tr>
@@ -210,22 +210,22 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
 
   return `
     <div style="margin-top: 30px;">
-      <h3 style="color: #1f2937; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+      <h3 style="color: var(--gray-800); margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
         📊 Issue Changes Between Audits
-        <span style="font-size: 12px; font-weight: 400; color: #6b7280;">(Top 10 most impactful)</span>
+        <span style="font-size: var(--font-size-xs); font-weight: 400; color: var(--color-text-muted);">(Top 10 most impactful)</span>
       </h3>
-      <p style="color: #6b7280; font-size: 13px; margin-bottom: 15px;">
+      <p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-bottom: 15px;">
         Comparing affected pages: first audit → current audit. ↓ = improving (fewer pages), ↑ = worsening (more pages)
       </p>
-      <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="background: var(--color-bg-surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: #f9fafb;">
-              <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;">Issue</th>
-              <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;">Severity</th>
-              <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;">First Audit</th>
-              <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;">Now</th>
-              <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;">Change</th>
+            <tr style="background: var(--color-bg-page);">
+              <th style="padding: 12px; text-align: left; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase;">Issue</th>
+              <th style="padding: 12px; text-align: center; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase;">Severity</th>
+              <th style="padding: 12px; text-align: center; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase;">First Audit</th>
+              <th style="padding: 12px; text-align: center; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase;">Now</th>
+              <th style="padding: 12px; text-align: center; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase;">Change</th>
             </tr>
           </thead>
           <tbody>
@@ -247,34 +247,34 @@ function getSeverityWeight(severity: string) {
 
 function getSeverityColor(severity: string) {
   const colors: Record<string, string> = {
-    critical: '#dc2626',
+    critical: 'var(--red-600)',
     high: '#ea580c',
-    medium: '#f59e0b',
-    low: '#6b7280',
+    medium: 'var(--color-warning)',
+    low: 'var(--color-text-muted)',
   };
-  return colors[severity?.toLowerCase()] ?? '#6b7280';
+  return colors[severity?.toLowerCase()] ?? 'var(--color-text-muted)';
 }
 
 function getTrendIcon(trend: string) {
   const icons: Record<string, string> = {
-    improving: '<span style="color: #10b981; font-size: 16px;">↓</span>',
-    worsening: '<span style="color: #ef4444; font-size: 16px;">↑</span>',
-    stable: '<span style="color: #6b7280; font-size: 16px;">→</span>',
-    new: '<span style="color: #f59e0b; font-size: 14px;">🆕</span>',
-    fixed: '<span style="color: #10b981; font-size: 14px;">✓</span>',
+    improving: '<span style="color: var(--color-success); font-size: var(--font-size-md);">↓</span>',
+    worsening: '<span style="color: var(--color-error); font-size: var(--font-size-md);">↑</span>',
+    stable: '<span style="color: var(--color-text-muted); font-size: var(--font-size-md);">→</span>',
+    new: '<span style="color: var(--color-warning); font-size: var(--font-size-base);">🆕</span>',
+    fixed: '<span style="color: var(--color-success); font-size: var(--font-size-base);">✓</span>',
   };
   return icons[trend] ?? icons.stable;
 }
 
 function getTrendColor(trend: string) {
   const colors: Record<string, string> = {
-    improving: '#10b981',
-    worsening: '#ef4444',
-    stable: '#6b7280',
-    new: '#f59e0b',
-    fixed: '#10b981',
+    improving: 'var(--color-success)',
+    worsening: 'var(--color-error)',
+    stable: 'var(--color-text-muted)',
+    new: 'var(--color-warning)',
+    fixed: 'var(--color-success)',
   };
-  return colors[trend] ?? '#6b7280';
+  return colors[trend] ?? 'var(--color-text-muted)';
 }
 
 function getChangeText(item: IssueTrendItem) {
@@ -303,15 +303,13 @@ function getDeltaCard(
   invertSign: boolean = false,
 ) {
   const displayValue = invertSign ? value : value;
-  const gradient = isPositive
-    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-    : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+  const gradient = isPositive ? 'var(--gradient-success)' : 'var(--gradient-danger)';
 
   return `
-    <div style="background: ${gradient}; color: white; padding: 20px; border-radius: 8px; text-align: center;">
-      <div style="font-size: 14px; opacity: 0.9; margin-bottom: 10px;">${title}</div>
-      <div style="font-size: 32px; font-weight: 700;">${displayValue > 0 ? '+' : ''}${displayValue}</div>
-      <div style="font-size: 12px; opacity: 0.9;">${subtitle}</div>
+    <div style="background: ${gradient}; color: white; padding: 20px; border-radius: var(--radius-lg); text-align: center;">
+      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 10px;">${title}</div>
+      <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${displayValue > 0 ? '+' : ''}${displayValue}</div>
+      <div style="font-size: var(--font-size-xs); opacity: 0.9;">${subtitle}</div>
     </div>
   `;
 }
@@ -327,10 +325,10 @@ function getInfoCard(
   subtitle: string,
 ) {
   return `
-    <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: 8px; text-align: center;">
-      <div style="font-size: 14px; opacity: 0.9; margin-bottom: 10px;">${title}</div>
-      <div style="font-size: 32px; font-weight: 700;">${value}</div>
-      <div style="font-size: 12px; opacity: 0.9;">${subtitle}</div>
+    <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: var(--radius-lg); text-align: center;">
+      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 10px;">${title}</div>
+      <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${value}</div>
+      <div style="font-size: var(--font-size-xs); opacity: 0.9;">${subtitle}</div>
     </div>
   `;
 }
@@ -359,15 +357,15 @@ function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit:
       if (prev === undefined) return '';
 
       const delta = current - prev;
-      const color = delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
+      const color = delta > 0 ? 'var(--color-success)' : delta < 0 ? 'var(--color-error)' : 'var(--color-text-muted)';
       const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
       const sign = delta > 0 ? '+' : '';
 
       return `
       <div style="text-align: center; padding: 12px;">
-        <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">${cat.icon} ${cat.name}</div>
-        <div style="font-size: 20px; font-weight: 700; color: #1f2937;">${current}</div>
-        <div style="font-size: 13px; color: ${color}; font-weight: 600;">${sign}${delta} ${arrow}</div>
+        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 4px;">${cat.icon} ${cat.name}</div>
+        <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--gray-800);">${current}</div>
+        <div style="font-size: var(--font-size-sm); color: ${color}; font-weight: var(--font-weight-semibold);">${sign}${delta} ${arrow}</div>
       </div>
     `;
     })
@@ -376,8 +374,8 @@ function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit:
   if (cards.length === 0) return '';
 
   return `
-    <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 16px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-      <div style="width: 100%; text-align: center; font-size: 13px; color: #6b7280; margin-bottom: 8px; font-weight: 600;">Category Changes vs Previous Audit</div>
+    <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 16px; background: var(--color-bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+      <div style="width: 100%; text-align: center; font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 8px; font-weight: var(--font-weight-semibold);">Category Changes vs Previous Audit</div>
       ${cards.join('')}
     </div>
   `;

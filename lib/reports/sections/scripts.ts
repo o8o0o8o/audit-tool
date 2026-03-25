@@ -595,19 +595,19 @@ function getScripts(data: ReportSectionData) {
 
               // Build severity badge
               const severityColors = {
-                  'CRITICAL': 'background: #dc2626; color: white;',
-                  'HIGH': 'background: #ea580c; color: white;',
-                  'MEDIUM': 'background: #f59e0b; color: white;',
-                  'LOW': 'background: #3b82f6; color: white;'
+                  'CRITICAL': 'background: var(--red-600); color: var(--color-text-inverse);',
+                  'HIGH': 'background: #ea580c; color: var(--color-text-inverse);',
+                  'MEDIUM': 'background: var(--color-warning); color: var(--color-text-inverse);',
+                  'LOW': 'background: var(--color-info); color: white;'
               };
-              const severityStyle = severityColors[severity] || 'background: #6b7280; color: white;';
+              const severityStyle = severityColors[severity] || 'background: var(--color-text-muted); color: var(--color-text-inverse);';
 
               // Build HTML content
               let html = '<div class="issue-details">';
 
               // Severity badge
               html += '<div style="margin-bottom: 20px;">';
-              html += '<span style="' + severityStyle + ' padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 14px;">';
+              html += '<span style="' + severityStyle + ' padding: 6px 12px; border-radius: var(--radius-sm); font-weight: var(--font-weight-semibold); font-size: 14px;">';
               html += severity;
               html += '</span>';
               html += '</div>';
@@ -615,35 +615,35 @@ function getScripts(data: ReportSectionData) {
               // Issue description
               html += '<div class="metric-section">';
               html += '<h4>Issue Description</h4>';
-              html += '<p style="color: #374151; line-height: 1.6;">' + issueName + '</p>';
+              html += '<p style="color: var(--color-text-secondary); line-height: 1.6;">' + issueName + '</p>';
               html += '</div>';
 
               // Affected pages count
               html += '<div class="metric-section">';
               html += '<h4>Affected Pages</h4>';
-              html += '<p style="font-size: 24px; font-weight: 600; color: #1f2937;">' + affectedPages.length + ' page(s)</p>';
+              html += '<p style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); color: var(--gray-800);">' + affectedPages.length + ' page(s)</p>';
               html += '</div>';
 
               // List of affected URLs
               if (affectedPages.length > 0) {
                   html += '<div class="metric-section">';
                   html += '<h4>Affected URLs</h4>';
-                  html += '<div style="max-height: 400px; overflow-y: auto; background: #f9fafb; border-radius: 6px; padding: 12px;">';
+                  html += '<div style="max-height: 400px; overflow-y: auto; background: var(--color-bg-page); border-radius: var(--radius-md); padding: 12px;">';
 
                   const maxDisplay = 100; // Show up to 100 URLs
                   const urlsToShow = affectedPages.slice(0, maxDisplay);
 
                   html += '<ul style="list-style: none; padding: 0; margin: 0;">';
                   urlsToShow.forEach((url, index) => {
-                      html += '<li style="padding: 8px; margin: 4px 0; background: white; border-radius: 4px; border-left: 3px solid #3b82f6;">';
-                      html += '<span style="color: #9ca3af; font-size: 12px; margin-right: 8px;">' + (index + 1) + '.</span>';
-                      html += '<a href="' + esc(url) + '" target="_blank" style="color: #2563eb; text-decoration: none; word-break: break-all; font-size: 13px;">' + esc(url) + '</a>';
+                      html += '<li style="padding: 8px; margin: 4px 0; background: var(--color-bg-surface); border-radius: var(--radius-sm); border-left: 3px solid var(--color-info);">';
+                      html += '<span style="color: var(--color-text-disabled); font-size: var(--font-size-xs); margin-right: 8px;">' + (index + 1) + '.</span>';
+                      html += '<a href="' + esc(url) + '" target="_blank" style="color: var(--color-link); text-decoration: none; word-break: break-all; font-size: var(--font-size-sm);">' + esc(url) + '</a>';
                       html += '</li>';
                   });
                   html += '</ul>';
 
                   if (affectedPages.length > maxDisplay) {
-                      html += '<p style="color: #6b7280; font-size: 12px; margin-top: 12px; text-align: center;">... and ' + (affectedPages.length - maxDisplay) + ' more page(s)</p>';
+                      html += '<p style="color: var(--color-text-muted); font-size: var(--font-size-xs); margin-top: 12px; text-align: center;">... and ' + (affectedPages.length - maxDisplay) + ' more page(s)</p>';
                   }
 
                   html += '</div>';
@@ -681,15 +681,15 @@ function getScripts(data: ReportSectionData) {
                   html += '<h4>Thresholds</h4>';
                   html += '<div class="threshold-grid">';
                   html += '<div class="threshold-item threshold-good">';
-                  html += '<div style="font-weight: 600;">Good</div>';
+                  html += '<div style="font-weight: var(--font-weight-semibold);">Good</div>';
                   html += '<div>' + metricData.good + '</div>';
                   html += '</div>';
                   html += '<div class="threshold-item threshold-warning">';
-                  html += '<div style="font-weight: 600;">Warning</div>';
+                  html += '<div style="font-weight: var(--font-weight-semibold);">Warning</div>';
                   html += '<div>' + metricData.warning + '</div>';
                   html += '</div>';
                   html += '<div class="threshold-item threshold-bad">';
-                  html += '<div style="font-weight: 600;">Bad</div>';
+                  html += '<div style="font-weight: var(--font-weight-semibold);">Bad</div>';
                   html += '<div>' + metricData.bad + '</div>';
                   html += '</div>';
                   html += '</div>';
@@ -839,9 +839,9 @@ function getScripts(data: ReportSectionData) {
                   html += '<p>' + incomingLinks.length + ' page(s) link to this URL:</p>';
                   html += '<div style="margin-top: 12px; max-height: 400px; overflow-y: auto;">';
                   incomingLinks.forEach((link, index) => {
-                      html += '<div style="padding: 8px; margin: 4px 0; background: #f9fafb; border-radius: 4px; font-size: 12px; word-break: break-all;">';
-                      html += '<span style="color: #9ca3af; margin-right: 8px;">' + (index + 1) + '.</span>';
-                      html += '<a href="' + esc(link) + '" target="_blank" style="color: #2563eb;">' + esc(link) + '</a>';
+                      html += '<div style="padding: 8px; margin: 4px 0; background: var(--color-bg-page); border-radius: var(--radius-sm); font-size: var(--font-size-xs); word-break: break-all;">';
+                      html += '<span style="color: var(--color-text-disabled); margin-right: 8px;">' + (index + 1) + '.</span>';
+                      html += '<a href="' + esc(link) + '" target="_blank" style="color: var(--color-link);">' + esc(link) + '</a>';
                       html += '</div>';
                   });
                   html += '</div>';
@@ -1003,11 +1003,11 @@ function getScripts(data: ReportSectionData) {
                   // Determine color based on trend
                   const firstVal = counts.find(c => c > 0) || 0;
                   const lastVal = counts[counts.length - 1] || 0;
-                  let lineColor = '#6b7280'; // stable - gray
+                  let lineColor = 'var(--color-text-muted)'; // stable - gray
                   if (lastVal < firstVal * 0.8) {
-                      lineColor = '#10b981'; // improving - green
+                      lineColor = 'var(--color-success)'; // improving - green
                   } else if (lastVal > firstVal * 1.2) {
-                      lineColor = '#ef4444'; // worsening - red
+                      lineColor = 'var(--color-error)'; // worsening - red
                   }
 
                   new Chart(canvas, {
@@ -1419,7 +1419,7 @@ function getScripts(data: ReportSectionData) {
                   }
               });
           } else if (coverageCtx) {
-              coverageCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:13px;">No code coverage data (enable --perf)</div>';
+              coverageCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No code coverage data (enable --perf)</div>';
           }
 
           // Chart 8: Language Distribution
@@ -1447,7 +1447,7 @@ function getScripts(data: ReportSectionData) {
                   }
               });
           } else if (langCtx) {
-              langCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:13px;">No language detection data</div>';
+              langCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No language detection data</div>';
           }
 
           // Chart 9: PageRank Distribution
@@ -1478,7 +1478,7 @@ function getScripts(data: ReportSectionData) {
                   }
               });
           } else if (pageRankCtx) {
-              pageRankCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:13px;">No PageRank data</div>';
+              pageRankCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No PageRank data</div>';
           }
 
           // Chart 10: CTA Distribution
@@ -1505,7 +1505,7 @@ function getScripts(data: ReportSectionData) {
                   }
               });
           } else if (ctaCtx) {
-              ctaCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:13px;">No CTA data</div>';
+              ctaCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No CTA data</div>';
           }
       })();
 
@@ -2470,20 +2470,20 @@ function getScripts(data: ReportSectionData) {
               var modal = document.createElement('div');
               modal.id = 'keyboardHelpModal';
               modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
-              modal.innerHTML = '<div style="background:white;padding:24px;border-radius:12px;max-width:400px;width:90%;color:#111827;">' +
+              modal.innerHTML = '<div style="background:var(--color-bg-surface);padding:24px;border-radius:var(--radius-xl);max-width:400px;width:90%;color:var(--color-text-primary);">' +
                   '<h3 style="margin:0 0 16px;">Keyboard Shortcuts</h3>' +
                   '<table style="width:100%;font-size:14px;min-width:auto;">' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">?</kbd></td><td style="border:none;">Toggle this help</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">/</kbd></td><td style="border:none;">Focus URL search</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">t</kbd></td><td style="border:none;">Back to top</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">s</kbd></td><td style="border:none;">Toggle search</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">j/k</kbd></td><td style="border:none;">Navigate table rows</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">e</kbd></td><td style="border:none;">Expand/collapse all</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">p</kbd></td><td style="border:none;">Print report</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">1-6</kbd></td><td style="border:none;">Jump to section</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-family:monospace;color:#111827;">Esc</kbd></td><td style="border:none;">Close modals</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">?</kbd></td><td style="border:none;">Toggle this help</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">/</kbd></td><td style="border:none;">Focus URL search</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">t</kbd></td><td style="border:none;">Back to top</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">s</kbd></td><td style="border:none;">Toggle search</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">j/k</kbd></td><td style="border:none;">Navigate table rows</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">e</kbd></td><td style="border:none;">Expand/collapse all</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">p</kbd></td><td style="border:none;">Print report</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">1-6</kbd></td><td style="border:none;">Jump to section</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">Esc</kbd></td><td style="border:none;">Close modals</td></tr>' +
                   '</table>' +
-                  '<button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:6px 16px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;">Close</button>' +
+                  '<button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:6px 16px;background:#3b82f6;color:white;border:none;border-radius:var(--radius-md);cursor:pointer;">Close</button>' +
                   '</div>';
               modal.addEventListener('click', function(e) {
                   if (e.target === modal) modal.remove();
@@ -2606,14 +2606,14 @@ function getScripts(data: ReportSectionData) {
                   if (cells[i].style.display === 'none') continue;
                   var headerText = headers[i].textContent.trim().split('\\n')[0];
                   var cellValue = cells[i].textContent.trim();
-                  var cellColor = cells[i].style.color || '#111827';
+                  var cellColor = cells[i].style.color || 'var(--color-text-primary)';
                   html += '<div class="page-detail-card">' +
                       '<div class="detail-label">' + headerText + '</div>' +
                       '<div class="detail-value" style="color:' + cellColor + ';">' + cellValue + '</div>' +
                       '</div>';
               }
               html += '</div>';
-              html += '<p style="margin-top:16px;font-size:12px;color:#9ca3af;">Double-click any row to view details</p>';
+              html += '<p style="margin-top:16px;font-size:var(--font-size-xs);color:var(--color-text-disabled);">Double-click any row to view details</p>';
 
               body.innerHTML = html;
               modal.classList.add('active');
@@ -3013,21 +3013,21 @@ function getScripts(data: ReportSectionData) {
               if (!badge) {
                   badge = document.createElement('span');
                   badge.id = 'ageBadge';
-                  badge.style.cssText = 'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;';
+                  badge.style.cssText = 'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:var(--radius-xl);font-size:11px;font-weight:600;';
                   ts.parentNode.appendChild(badge);
               }
               if (days > 7) {
                   badge.textContent = ago + ' - consider re-running';
-                  badge.style.background = '#fef3c7';
-                  badge.style.color = '#92400e';
+                  badge.style.background = 'var(--amber-100)';
+                  badge.style.color = 'var(--color-warning-text)';
               } else if (days > 0) {
                   badge.textContent = ago;
-                  badge.style.background = '#dbeafe';
-                  badge.style.color = '#1e40af';
+                  badge.style.background = 'var(--blue-100)';
+                  badge.style.color = 'var(--blue-800)';
               } else {
                   badge.textContent = ago;
-                  badge.style.background = '#d1fae5';
-                  badge.style.color = '#065f46';
+                  badge.style.background = 'var(--color-success-bg)';
+                  badge.style.color = 'var(--color-success-text)';
               }
           }
           update();

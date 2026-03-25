@@ -5,6 +5,7 @@
  */
 
 import { THRESHOLDS } from '../constants';
+import { incrementCounter } from '../utils';
 import type { ChromePage } from '../types';
 
 // ─── Vitals-specific interfaces ─────────────────────────────────────────────
@@ -710,7 +711,7 @@ class VitalsCollector {
       for (const source of entry.sources || []) {
         if (source.node) {
           const key = source.node;
-          elementCounts.set(key, (elementCounts.get(key) ?? 0) + 1);
+          incrementCounter(elementCounts, key);
         }
       }
     }
@@ -751,7 +752,7 @@ class VitalsCollector {
     for (const task of longTasks) {
       for (const attr of task.attribution || []) {
         if (attr.containerSrc) {
-          scriptCounts.set(attr.containerSrc, (scriptCounts.get(attr.containerSrc) ?? 0) + task.blockingTime);
+          incrementCounter(scriptCounts, attr.containerSrc, task.blockingTime);
         }
       }
     }

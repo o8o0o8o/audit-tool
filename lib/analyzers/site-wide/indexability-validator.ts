@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { formatUrlList, calcPercent } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -107,7 +107,7 @@ class IndexabilityValidator {
     }
 
     const totalPages = Object.keys(allPages).length;
-    const indexablePercent = totalPages > 0 ? Math.round((stats.indexable / totalPages) * 100) : 0;
+    const indexablePercent = calcPercent(stats.indexable, totalPages);
 
     console.log(`Indexability: ${stats.indexable}/${totalPages} pages indexable (${indexablePercent}%)`);
     console.log(`Non-indexable: ${stats.nonIndexable} pages`);

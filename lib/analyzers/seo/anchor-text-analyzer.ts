@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY, GENERIC_ANCHORS, STOP_WORDS } from '../../constants';
-import { isInternalLink, getOrigin } from '../../utils';
+import { isInternalLink, getOrigin, incrementCounter, getTopEntries } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface PageLink {
@@ -234,7 +234,7 @@ class AnchorTextAnalyzer {
           targetAnchorMap.set(targetUrl, new Map());
         }
         const anchors = targetAnchorMap.get(targetUrl);
-        anchors.set(anchor, (anchors.get(anchor) ?? 0) + 1);
+        incrementCounter(anchors, anchor);
 
         // Track site-wide distribution
         if (anchor && !(GENERIC_ANCHORS as readonly string[]).includes(anchor)) {
@@ -261,9 +261,7 @@ class AnchorTextAnalyzer {
       stats.totalInternalLinks > 0 ? parseFloat(((uniqueAnchors / stats.totalInternalLinks) * 100).toFixed(1)) : 0;
 
     // Top anchors
-    stats.topAnchors = (Object.entries(stats.siteWideAnchorDistribution) as [string, number][])
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
+    stats.topAnchors = getTopEntries(Object.entries(stats.siteWideAnchorDistribution) as [string, number][], 10)
       .map(([anchor, count]) => ({ anchor, count }));
 
     // Site-wide issues

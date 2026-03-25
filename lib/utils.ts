@@ -542,6 +542,20 @@ function estimateScoreAfterFixes(
 }
 
 /**
+ * Escape HTML to prevent XSS.
+ * Handles null/undefined by returning empty string.
+ */
+function escapeHtml(unsafe: unknown): string {
+  if (unsafe === null || unsafe === undefined) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
  * Format a list of URLs as HTML <li> elements with links.
  * Escapes HTML to prevent XSS. Optionally limits the number of items shown.
  */
@@ -549,10 +563,53 @@ function formatUrlList(urls: string[], maxItems?: number): string {
   const items = maxItems ? urls.slice(0, maxItems) : urls;
   return items
     .map((u) => {
-      const escaped = u.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const escaped = escapeHtml(u);
       return `<li><a href="${escaped}">${escaped}</a></li>`;
     })
     .join('');
+}
+
+/**
+ * Fetch a URL with an automatic timeout using AbortController.
+ * Returns the fetch Response. Throws on timeout or network error.
+ */
+async function fetchWithTimeout(
+  url: string,
+  timeout: number,
+  options: RequestInit = {},
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Calculate a percentage, returning 0 when total is 0.
+ * Result is rounded to the nearest integer.
+ */
+function calcPercent(count: number, total: number): number {
+  return total > 0 ? Math.round((count / total) * 100) : 0;
+}
+
+/**
+ * Increment a counter in a Map. Equivalent to `map.set(key, (map.get(key) ?? 0) + amount)`.
+ */
+function incrementCounter<K>(map: Map<K, number>, key: K, amount: number = 1): void {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+/**
+ * Get the top N entries from an iterable of [key, value] pairs, sorted by value descending.
+ */
+function getTopEntries<K>(entries: Iterable<[K, number]>, n: number): [K, number][] {
+  return Array.from(entries)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n);
 }
 
 /**
@@ -595,6 +652,11 @@ export {
   estimateScoreAfterFixes,
   formatUrlList,
   shortenUrl,
+  escapeHtml,
+  fetchWithTimeout,
+  calcPercent,
+  incrementCounter,
+  getTopEntries,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

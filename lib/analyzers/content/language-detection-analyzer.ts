@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { formatUrlList, getTopEntries } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 // Trigram language profiles - top trigrams for common languages
@@ -602,9 +602,7 @@ class LanguageDetectionAnalyzer {
     }
 
     // Sort by frequency and take top 200
-    const textProfile = (Object.entries(textTrigrams) as [string, number][])
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 200)
+    const textProfile = getTopEntries(Object.entries(textTrigrams) as [string, number][], 200)
       .map(([tri]) => tri);
 
     // Compare against each language profile

@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { incrementCounter, calcPercent, getTopEntries } from '../../utils';
 import type { ChromePage, Issue, PageInfo } from '../../types';
 import type { ConsoleMessage } from 'playwright';
 
@@ -251,13 +252,13 @@ class ConsoleErrorAnalyzer {
             .replace(/\d+/g, 'N')
             .substring(0, 100);
 
-          commonErrors.set(normalized, (commonErrors.get(normalized) ?? 0) + 1);
+          incrementCounter(commonErrors, normalized);
         }
       }
     }
 
     const totalPages = Object.keys(pages).length;
-    const errorPercentage = totalPages > 0 ? Math.round((pagesWithErrors / totalPages) * 100) : 0;
+    const errorPercentage = calcPercent(pagesWithErrors, totalPages);
 
     if (pagesWithCriticalErrors > 0) {
       issues.push({
@@ -282,9 +283,7 @@ class ConsoleErrorAnalyzer {
     }
 
     // Report most common errors
-    const topErrors = Array.from(commonErrors.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
+    const topErrors = getTopEntries(commonErrors.entries(), 3);
 
     if (topErrors.length > 0 && topErrors[0][1] > 3) {
       warnings.push({

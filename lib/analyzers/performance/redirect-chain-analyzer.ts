@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { incrementCounter } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class RedirectChainAnalyzer {
@@ -108,7 +109,7 @@ class RedirectChainAnalyzer {
     // Check for redirect loops (same URL appears twice in chain, excluding the expected original→final structure)
     const urlCounts = new Map();
     for (const redirect of redirectChain) {
-      urlCounts.set(redirect.url, (urlCounts.get(redirect.url) ?? 0) + 1);
+      incrementCounter(urlCounts, redirect.url);
     }
     const loopUrls = [...urlCounts.entries()].filter(([, count]) => count > 1);
     if (loopUrls.length > 0) {

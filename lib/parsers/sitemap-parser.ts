@@ -5,6 +5,7 @@
 
 import { parse, type HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
+import { fetchWithTimeout } from '../utils';
 
 interface SitemapEntry {
   total: number;
@@ -50,12 +51,7 @@ class SitemapParser {
       try {
         console.log(`Fetching sitemap: ${sitemapUrl}`);
 
-        // Fetch with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), THRESHOLDS.FETCH_TIMEOUT);
-
-        const sitemapResponse = await fetch(sitemapUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
+        const sitemapResponse = await fetchWithTimeout(sitemapUrl, THRESHOLDS.FETCH_TIMEOUT);
 
         const sitemap = await sitemapResponse.text();
         const parsedSitemap = parse(sitemap);
@@ -80,12 +76,7 @@ class SitemapParser {
 
               console.log(`  Fetching nested sitemap: ${sitemapPage}`);
 
-              // Fetch with timeout
-              const nestedController = new AbortController();
-              const nestedTimeoutId = setTimeout(() => nestedController.abort(), THRESHOLDS.FETCH_TIMEOUT);
-
-              const sitemapPageResponse = await fetch(sitemapPage, { signal: nestedController.signal });
-              clearTimeout(nestedTimeoutId);
+              const sitemapPageResponse = await fetchWithTimeout(sitemapPage, THRESHOLDS.FETCH_TIMEOUT);
 
               if (!sitemapPageResponse.ok) {
                 console.log(`  Error: HTTP ${sitemapPageResponse.status} for nested sitemap ${sitemapPage}`);

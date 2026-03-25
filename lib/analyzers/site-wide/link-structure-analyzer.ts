@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { incrementCounter, getTopEntries } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface HubPage {
@@ -137,7 +138,7 @@ class LinkStructureAnalyzer {
           : Object.entries(linkData.externalDomains ?? {});
 
       for (const [domain, count] of externalDomainEntries) {
-        linkStats.externalDomains.set(domain, (linkStats.externalDomains.get(domain) ?? 0) + count);
+        incrementCounter(linkStats.externalDomains, domain, count);
       }
 
       // Sum up for averages
@@ -172,10 +173,8 @@ class LinkStructureAnalyzer {
 
     // Report 1: Site-wide broken links summary
     if (linkStats.totalBrokenLinks > 0) {
-      const topBrokenPages = (Array.from(linkStats.brokenLinksByPage.entries()) as [string, number][])
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([url, count]: [string, number]) => `<li><a href="${url}">${url}</a> (${count} broken links)</li>`)
+      const topBrokenPages = getTopEntries(linkStats.brokenLinksByPage.entries(), 10)
+        .map(([url, count]) => `<li><a href="${url}">${url}</a> (${count} broken links)</li>`)
         .join('');
 
       issues.push({
@@ -209,9 +208,7 @@ class LinkStructureAnalyzer {
     }
 
     // Report 4: External link concentration
-    const topExternalDomains = (Array.from(linkStats.externalDomains.entries()) as [string, number][])
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+    const topExternalDomains = getTopEntries(linkStats.externalDomains.entries(), 5);
 
     if (topExternalDomains.length > 0 && topExternalDomains[0][1] > pagesAnalyzed * 0.5) {
       const domainList = topExternalDomains

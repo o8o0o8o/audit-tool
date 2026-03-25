@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { isInternalLink, getOrigin } from '../../utils';
+import { isInternalLink, getOrigin, fetchWithTimeout } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Known spam/low-quality domains (simplified list)
@@ -298,19 +298,13 @@ class ExternalLinksAnalyzer {
       const batchResults = await Promise.allSettled(
         batch.map(async (url: string) => {
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, timeout, {
               method: 'HEAD',
-              signal: controller.signal,
               redirect: 'follow',
               headers: {
                 'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
               },
             });
-
-            clearTimeout(timeoutId);
 
             return {
               url,

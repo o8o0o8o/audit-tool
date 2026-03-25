@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { formatUrlList, calcPercent, incrementCounter, getTopEntries } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -58,7 +58,7 @@ class SocialMediaValidator {
       // Track social images
       const ogImage = socialData.openGraph?.['og:image'];
       if (ogImage) {
-        socialStats.socialImages.set(ogImage, (socialStats.socialImages.get(ogImage) ?? 0) + 1);
+        incrementCounter(socialStats.socialImages, ogImage);
 
         // Check for relative URLs
         if (!ogImage.startsWith('http')) {
@@ -88,9 +88,8 @@ class SocialMediaValidator {
       socialStats.totalWarnings += socialData.warnings?.length ?? 0;
     }
 
-    const ogCoverage = pagesAnalyzed > 0 ? Math.round((socialStats.pagesWithOpenGraph / pagesAnalyzed) * 100) : 0;
-    const twitterCoverage =
-      pagesAnalyzed > 0 ? Math.round((socialStats.pagesWithTwitterCard / pagesAnalyzed) * 100) : 0;
+    const ogCoverage = calcPercent(socialStats.pagesWithOpenGraph, pagesAnalyzed);
+    const twitterCoverage = calcPercent(socialStats.pagesWithTwitterCard, pagesAnalyzed);
 
     console.log(`Open Graph coverage: ${socialStats.pagesWithOpenGraph}/${pagesAnalyzed} pages (${ogCoverage}%)`);
     console.log(
@@ -124,12 +123,12 @@ class SocialMediaValidator {
     }
 
     // Report 3: Default social image usage (same image on many pages)
-    const imageUsage = Array.from(socialStats.socialImages.entries()).sort((a, b) => b[1] - a[1]);
+    const imageUsage = getTopEntries(socialStats.socialImages.entries(), socialStats.socialImages.size);
 
     if (imageUsage.length > 0 && imageUsage[0][1] > pagesAnalyzed * 0.7) {
       issues.push({
         title: `Default social image used on most pages`,
-        description: `The same Open Graph image is used on ${imageUsage[0][1]} pages (${Math.round((imageUsage[0][1] / pagesAnalyzed) * 100)}%). Consider using unique images for each page: ${imageUsage[0][0]}`,
+        description: `The same Open Graph image is used on ${imageUsage[0][1]} pages (${calcPercent(imageUsage[0][1], pagesAnalyzed)}%). Consider using unique images for each page: ${imageUsage[0][0]}`,
         severity: SEVERITY.MEDIUM,
       });
     }

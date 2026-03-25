@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { formatUrlList, calcPercent, incrementCounter } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -51,7 +51,7 @@ class StructuredDataValidator {
         const type = schema.type;
 
         // Count schema types
-        schemaStats.schemaTypes.set(type, (schemaStats.schemaTypes.get(type) ?? 0) + 1);
+        incrementCounter(schemaStats.schemaTypes, type);
 
         // Collect Organization schemas for consistency check
         if (type === 'Organization' || type === 'LocalBusiness') {
@@ -100,7 +100,7 @@ class StructuredDataValidator {
 
     // Report findings
     const totalPages = Object.keys(allPages).length;
-    const coveragePercent = totalPages > 0 ? Math.round((schemaStats.pagesWithSchema / totalPages) * 100) : 0;
+    const coveragePercent = calcPercent(schemaStats.pagesWithSchema, totalPages);
 
     console.log(`Structured data coverage: ${schemaStats.pagesWithSchema}/${totalPages} pages (${coveragePercent}%)`);
     console.log(`Schema types found: ${Array.from(schemaStats.schemaTypes.keys()).join(', ')}`);

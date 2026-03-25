@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { calcPercent, incrementCounter } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -65,10 +66,7 @@ class AnalyticsValidator {
       if (analytics.hasCookieConsent) {
         analyticsStats.pagesWithCookieConsent++;
         if (analytics.consentTool) {
-          analyticsStats.consentTools.set(
-            analytics.consentTool,
-            (analyticsStats.consentTools.get(analytics.consentTool) ?? 0) + 1,
-          );
+          incrementCounter(analyticsStats.consentTools, analytics.consentTool);
         }
       }
 
@@ -91,15 +89,15 @@ class AnalyticsValidator {
       // Track unique tracking IDs (handle missing/undefined trackingIds)
       const trackingIds = analytics.trackingIds || {};
       (trackingIds.ga4 || []).forEach((id: string) => {
-        analyticsStats.ga4Ids.set(id, (analyticsStats.ga4Ids.get(id) ?? 0) + 1);
+        incrementCounter(analyticsStats.ga4Ids, id);
       });
 
       (trackingIds.ua || []).forEach((id: string) => {
-        analyticsStats.uaIds.set(id, (analyticsStats.uaIds.get(id) ?? 0) + 1);
+        incrementCounter(analyticsStats.uaIds, id);
       });
 
       (trackingIds.gtm || []).forEach((id: string) => {
-        analyticsStats.gtmIds.set(id, (analyticsStats.gtmIds.get(id) ?? 0) + 1);
+        incrementCounter(analyticsStats.gtmIds, id);
       });
 
       // Count issues and warnings
@@ -108,9 +106,9 @@ class AnalyticsValidator {
     }
 
     const totalPages = pagesAnalyzed;
-    const ga4Coverage = totalPages > 0 ? Math.round((analyticsStats.pagesWithGA4 / totalPages) * 100) : 0;
-    const gtmCoverage = totalPages > 0 ? Math.round((analyticsStats.pagesWithGTM / totalPages) * 100) : 0;
-    const consentCoverage = totalPages > 0 ? Math.round((analyticsStats.pagesWithCookieConsent / totalPages) * 100) : 0;
+    const ga4Coverage = calcPercent(analyticsStats.pagesWithGA4, totalPages);
+    const gtmCoverage = calcPercent(analyticsStats.pagesWithGTM, totalPages);
+    const consentCoverage = calcPercent(analyticsStats.pagesWithCookieConsent, totalPages);
 
     console.log(`GA4 coverage: ${analyticsStats.pagesWithGA4}/${totalPages} pages (${ga4Coverage}%)`);
     console.log(`GTM coverage: ${analyticsStats.pagesWithGTM}/${totalPages} pages (${gtmCoverage}%)`);
@@ -122,7 +120,7 @@ class AnalyticsValidator {
     if (analyticsStats.pagesWithoutAnalytics > totalPages * 0.1 && totalPages > 10) {
       issues.push({
         title: `Many pages missing analytics`,
-        description: `${analyticsStats.pagesWithoutAnalytics} page(s) (${Math.round((analyticsStats.pagesWithoutAnalytics / totalPages) * 100)}%) have no analytics or tracking tools. Consider adding GA4 for visitor insights.`,
+        description: `${analyticsStats.pagesWithoutAnalytics} page(s) (${calcPercent(analyticsStats.pagesWithoutAnalytics, totalPages)}%) have no analytics or tracking tools. Consider adding GA4 for visitor insights.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -205,7 +203,7 @@ class AnalyticsValidator {
 
     // Report 8: Both UA and GA4 detected (migration check)
     if (analyticsStats.pagesWithUA > 0 && analyticsStats.pagesWithGA4 > 0) {
-      const uaCoverage = Math.round((analyticsStats.pagesWithUA / totalPages) * 100);
+      const uaCoverage = calcPercent(analyticsStats.pagesWithUA, totalPages);
       issues.push({
         title: `Both Universal Analytics and GA4 detected`,
         description: `Your site has both UA (${uaCoverage}% coverage) and GA4 (${ga4Coverage}% coverage). Universal Analytics stopped collecting data in July 2024. Complete migration to GA4 and remove UA code.`,
@@ -221,8 +219,7 @@ class AnalyticsValidator {
 
     // Report 9: Privacy policy coverage
     if (hasTracking) {
-      const privacyCoverage =
-        totalPages > 0 ? Math.round((analyticsStats.pagesWithPrivacyPolicy / totalPages) * 100) : 0;
+      const privacyCoverage = calcPercent(analyticsStats.pagesWithPrivacyPolicy, totalPages);
       if (privacyCoverage < 80) {
         issues.push({
           title: `Privacy policy link missing on many pages`,

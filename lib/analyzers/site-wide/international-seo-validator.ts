@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { formatUrlList, calcPercent, incrementCounter } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -63,8 +63,7 @@ class InternationalSEOValidator {
 
       // Track URL structures
       if (intl.urlStructure) {
-        const currentCount = stats.urlStructures.get(intl.urlStructure) ?? 0;
-        stats.urlStructures.set(intl.urlStructure, currentCount + 1);
+        incrementCounter(stats.urlStructures, intl.urlStructure);
       }
 
       // Track missing lang attribute
@@ -192,7 +191,7 @@ class InternationalSEOValidator {
 
     // Report 7: Pages without hreflang on multilanguage site
     if (stats.pagesWithoutHreflang > 0 && stats.pagesWithHreflang > 0) {
-      const percentWithout = Math.round((stats.pagesWithoutHreflang / totalPages) * 100);
+      const percentWithout = calcPercent(stats.pagesWithoutHreflang, totalPages);
 
       if (percentWithout > 20) {
         issues.push({
@@ -226,7 +225,7 @@ class InternationalSEOValidator {
           avgContentLength: Math.round((stats.contentLengthByLang.get(lang) ?? 0) / data.count),
         })),
         urlStructures: Array.from(stats.urlStructures.entries()).map(([type, count]) => ({ type, count })),
-        hreflangCoverage: totalPages > 0 ? Math.round((stats.pagesWithHreflang / totalPages) * 100) : 0,
+        hreflangCoverage: calcPercent(stats.pagesWithHreflang, totalPages),
         pagesWithHreflang: stats.pagesWithHreflang,
         pagesWithoutHreflang: stats.pagesWithoutHreflang,
       },

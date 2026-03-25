@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getTopEntries } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Resource types and their security impact
@@ -317,9 +318,7 @@ class MixedContentAnalyzer {
     }
 
     // Report common insecure origins
-    const topOrigins = (Object.entries(stats.commonMixedOrigins) as [string, number][])
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+    const topOrigins = getTopEntries(Object.entries(stats.commonMixedOrigins) as [string, number][], 5);
 
     if (topOrigins.length > 0) {
       warnings.push({

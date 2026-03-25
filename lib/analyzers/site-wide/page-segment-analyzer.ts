@@ -1,5 +1,6 @@
 import type { Issue, PageInfo } from '../../types';
 import { SEVERITY } from '../../constants';
+import { calcPercent } from '../../utils';
 
 interface StatusBreakdown {
   '2xx': number;
@@ -266,7 +267,7 @@ class PageSegmentAnalyzer {
       distribution[type] = {
         label: segment.label,
         count: segment.count,
-        percentage: total > 0 ? Math.round((segment.count / total) * 100) : 0,
+        percentage: calcPercent(segment.count, total),
       };
     });
 

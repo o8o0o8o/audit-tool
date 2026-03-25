@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { getOrigin } from '../../utils';
+import { getOrigin, incrementCounter } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ResourceHint {
@@ -302,7 +302,7 @@ class ResourceHintsAnalyzer {
           stats.pagesWithMissingLcpPreload++;
           // Track common missing hints
           const key = this.getFileName(lcpUrl);
-          commonMissingHints.set(key, (commonMissingHints.get(key) ?? 0) + 1);
+          incrementCounter(commonMissingHints, key);
         }
       }
     }

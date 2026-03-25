@@ -5,22 +5,7 @@
 
 import { METRIC_INFO, SIGNAL_CATEGORIES, getSignalInfo, formatSignalValue, isSignalGood } from './metrics-metadata';
 import type { PageInfo, HeadingCount } from '../types';
-import { formatBytes } from '../utils';
-
-/**
- * Escape HTML to prevent XSS
- * @param {*} unsafe - Value to escape
- * @returns {string} Escaped HTML string
- */
-function escapeHtml(unsafe: unknown): string {
-  if (unsafe === null || unsafe === undefined) return '';
-  return String(unsafe)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+import { formatBytes, escapeHtml } from '../utils';
 
 /**
  * Get status badge color based on HTTP status code

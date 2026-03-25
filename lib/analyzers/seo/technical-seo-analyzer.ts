@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { incrementCounter } from '../../utils';
 import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class TechnicalSEOAnalyzer {
@@ -555,12 +556,12 @@ class TechnicalSEOAnalyzer {
 
         if (page.technical.jsFramework) {
           const fw = page.technical.jsFramework;
-          frameworks.set(fw, (frameworks.get(fw) ?? 0) + 1);
+          incrementCounter(frameworks, fw);
         }
 
         if (page.technical.cms) {
           const cms = page.technical.cms;
-          cmsCount.set(cms, (cmsCount.get(cms) ?? 0) + 1);
+          incrementCounter(cmsCount, cms);
         }
 
         if (page.technical.amp) ampPages++;

@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getHeader } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Sensitive features that should be restricted
@@ -44,8 +45,8 @@ class PermissionsPolicyAnalyzer {
     const headers = pageData.responseHeaders ?? {};
 
     // Check both Permissions-Policy and legacy Feature-Policy
-    const ppHeader = headers['permissions-policy'] || headers['Permissions-Policy'] || '';
-    const fpHeader = headers['feature-policy'] || headers['Feature-Policy'] || '';
+    const ppHeader = getHeader(headers, 'permissions-policy') ?? '';
+    const fpHeader = getHeader(headers, 'feature-policy') ?? '';
 
     info.hasPermissionsPolicy = ppHeader.length > 0;
     info.hasFeaturePolicy = fpHeader.length > 0;

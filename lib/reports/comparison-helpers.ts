@@ -146,8 +146,20 @@ function deltaSymbol(value: number): string {
   return value > 0 ? '+' : '';
 }
 
+/**
+ * Get CSS variable color for a delta (for use in report section templates)
+ * @param delta - Numeric change
+ * @param higherIsBetter - If true, positive delta is good (default true)
+ */
+function getDeltaCssColor(delta: number, higherIsBetter = true): string {
+  if (delta === 0) return 'var(--color-text-muted)';
+  const isGood = higherIsBetter ? delta > 0 : delta < 0;
+  return isGood ? 'var(--color-success)' : 'var(--color-error)';
+}
+
 export {
   getDeltaColor,
+  getDeltaCssColor,
   formatDeltaBadge,
   formatPercentDelta,
   formatDualValue,

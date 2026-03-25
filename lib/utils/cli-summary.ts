@@ -4,6 +4,8 @@
  */
 
 import type { AnalysisDetail, PageInfo, AuditSummary } from '../types';
+import { getLetterGrade, estimateScoreAfterFixes } from '../utils';
+import { SCORING } from '../constants';
 
 interface AuditResultsExtended {
   analysis: {
@@ -157,18 +159,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     overallScore >= 80 ? C.BRIGHT_GREEN : overallScore >= 60 ? C.GREEN : overallScore >= 40 ? C.ORANGE : C.RED;
   const scoreLabel =
     overallScore >= 90 ? 'Excellent' : overallScore >= 70 ? 'Good' : overallScore >= 50 ? 'Needs Work' : 'Poor';
-  const letterGrade =
-    overallScore >= 95
-      ? 'A+'
-      : overallScore >= 90
-        ? 'A'
-        : overallScore >= 80
-          ? 'B'
-          : overallScore >= 70
-            ? 'C'
-            : overallScore >= 60
-              ? 'D'
-              : 'F';
+  const letterGrade = getLetterGrade(overallScore);
   const gauge = bar(overallScore, 100, 30);
   line(
     `${C.BOLD}Score:${C.RESET} ${scoreColor}${C.BOLD}${overallScore}${C.RESET}/100 (${scoreColor}${letterGrade}${C.RESET}) ${scoreColor}${scoreLabel}${C.RESET}`,
@@ -294,14 +285,8 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
 
   // Score prediction based on category headroom
   if (criticalCount > 0 || highCount > 0) {
-    const weights = { seo: 0.3, performance: 0.25, technical: 0.2, accessibility: 0.15, security: 0.1 };
-    let potentialGain = 0;
-    for (const [cat, w] of Object.entries(weights)) {
-      const headroom = 100 - (categoryScores[cat] ?? 100);
-      potentialGain += headroom * 0.6 * w;
-    }
-    const predicted = Math.min(100, Math.round(overallScore + potentialGain));
-    if (predicted > overallScore) {
+    const predicted = estimateScoreAfterFixes(overallScore, categoryScores, SCORING.CATEGORY_WEIGHTS);
+    if (predicted) {
       emptyLine();
       divider();
       line(`${C.BOLD}Prediction:${C.RESET} Fix all critical+high issues → ~${C.GREEN}${predicted}${C.RESET}/100`);
@@ -388,8 +373,7 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
   const totalPages = pageData.total ?? Object.keys(pageData.pages ?? {}).length;
 
   const score = summary.overallScore ?? 0;
-  const grade =
-    score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
+  const grade = getLetterGrade(score);
 
   return {
     domain: domainName,

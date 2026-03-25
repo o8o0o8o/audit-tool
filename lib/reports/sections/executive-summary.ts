@@ -5,30 +5,16 @@
  */
 
 import { CATEGORY_CONFIG } from '../metrics-metadata';
-import { formatDeltaBadge, shortDomain } from '../comparison-helpers';
+import { formatDeltaBadge, shortDomain, getDeltaCssColor } from '../comparison-helpers';
+import { getScoreColor } from '../html-utils';
+import { getLetterGrade, estimateScoreAfterFixes } from '../../utils';
+import { SCORING } from '../../constants';
 import type { PageInfo, ReportSectionData, CategoryScores, ComparisonData } from '../../types';
 
 /** Helper to extract summary from jsonData */
 function extractSummary(jsonData: Record<string, unknown>) {
   const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
   return (analysisObj.summary ?? {}) as Record<string, unknown>;
-}
-
-function getScoreColor(score: number): string {
-  return score >= 80
-    ? 'var(--color-score-good)'
-    : score >= 60
-      ? 'var(--color-score-warning)'
-      : 'var(--color-score-bad)';
-}
-
-function getLetterGrade(score: number): string {
-  if (score >= 95) return 'A+';
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B';
-  if (score >= 70) return 'C';
-  if (score >= 60) return 'D';
-  return 'F';
 }
 
 /**
@@ -227,20 +213,8 @@ function getEstimatedScoreAfterFixes(summary: Record<string, unknown>, overallSc
   if (((summary.criticalCount as number) ?? 0) + ((summary.highCount as number) ?? 0) === 0) return '';
 
   const cats = (summary.categoryScores ?? {}) as Record<string, number>;
-  const weights: Record<string, number> = {
-    seo: 0.3,
-    performance: 0.25,
-    technical: 0.2,
-    accessibility: 0.15,
-    security: 0.1,
-  };
-  let potentialGain = 0;
-  for (const [cat, w] of Object.entries(weights)) {
-    const headroom = 100 - (cats[cat] || 100);
-    potentialGain += headroom * 0.6 * w;
-  }
-  const predicted = Math.min(100, Math.round(overallScore + potentialGain));
-  if (predicted <= overallScore) return '';
+  const predicted = estimateScoreAfterFixes(overallScore, cats, SCORING.CATEGORY_WEIGHTS);
+  if (!predicted) return '';
 
   return `
     <div class="ui-stat mt-6 text-center text-sm">
@@ -384,8 +358,7 @@ function getDualCategoryBars(
       const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
 
       const getBarClass = (s: number) => (s >= 80 ? 'progress-good' : s >= 60 ? 'progress-warning' : 'progress-bad');
-      const deltaColor =
-        delta > 0 ? 'var(--color-success)' : delta < 0 ? 'var(--color-error)' : 'var(--color-text-muted)';
+      const deltaColor = getDeltaCssColor(delta);
       const deltaText = delta !== 0 ? `${delta > 0 ? '+' : ''}${delta}` : '—';
 
       return `

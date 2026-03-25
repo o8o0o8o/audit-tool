@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReportDataProcessor } from './lib/reports/data-processor';
+import { getLetterGrade } from './lib/utils';
 import type {
   PageInfo,
   AnalysisDetail,
@@ -250,8 +251,7 @@ function generateQuickWinsCSV(jsonData: AuditJsonData) {
 function generateSummaryCSV(jsonData: AuditJsonData) {
   const summary: Partial<AuditSummary> = jsonData.analysis?.summary ?? {};
   const score = summary.overallScore ?? 0;
-  const grade =
-    score >= 95 ? 'A+' : score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
+  const grade = getLetterGrade(score);
   const rows = [
     ['Metric', 'Value'],
     ['Overall SEO Score', score],

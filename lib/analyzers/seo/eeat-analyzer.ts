@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { parseJsonLdSchemas } from '../../utils';
 import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class EEATAnalyzer {
@@ -106,28 +107,20 @@ class EEATAnalyzer {
     const result: { author: string | null; credentials: string[] } = { author: null, credentials: [] };
 
     // Check schema.org author
-    const scripts = parsedPage.querySelectorAll('script[type="application/ld+json"]');
-    for (const script of scripts) {
-      try {
-        const data = JSON.parse(script.textContent);
-        const schemas = Array.isArray(data) ? data : [data];
-        for (const schema of schemas) {
-          if (schema.author) {
-            const author = typeof schema.author === 'string' ? schema.author : schema.author.name;
-            if (author) {
-              result.author = author;
-              if (schema.author.jobTitle) {
-                result.credentials.push(schema.author.jobTitle);
-              }
-              if (schema.author.description) {
-                result.credentials.push(schema.author.description);
-              }
-            }
+    const schemas = parseJsonLdSchemas(parsedPage);
+    for (const schema of schemas) {
+      if (schema.author) {
+        const authorObj = schema.author as Record<string, unknown>;
+        const author = typeof schema.author === 'string' ? schema.author : (authorObj.name as string);
+        if (author) {
+          result.author = author;
+          if (authorObj.jobTitle) {
+            result.credentials.push(authorObj.jobTitle as string);
+          }
+          if (authorObj.description) {
+            result.credentials.push(authorObj.description as string);
           }
         }
-      } catch {
-        // JSON parsing failed - script contains invalid JSON-LD, skip silently
-        // This is expected for malformed structured data
       }
     }
 

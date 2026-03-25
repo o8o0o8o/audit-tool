@@ -17,6 +17,7 @@ import type {
 } from './lib/types';
 import { FileManager } from './lib/storage/file-manager';
 import { sanitizeDomainName } from './validators';
+import { statAvg, statPercentile } from './lib/utils';
 
 /**
  * Audit History Manager
@@ -220,11 +221,11 @@ class HistoryManager {
 
     if (pagesWithPerf.length === 0) return null;
 
-    const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a: number, b: number) => a + b, 0) / arr.length : 0);
+    const avg = statAvg;
     const p75 = (arr: number[]) => {
       if (arr.length === 0) return 0;
       const sorted = [...arr].sort((a, b) => a - b);
-      return sorted[Math.floor(sorted.length * 0.75)];
+      return statPercentile(sorted, 0.75);
     };
 
     // Support both old (vitals.ttfb) and new (TTFB) formats

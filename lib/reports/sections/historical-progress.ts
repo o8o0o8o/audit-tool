@@ -3,7 +3,8 @@
  * Displays trend charts and progress metrics over time
  */
 
-import { escapeHtml } from '../html-utils';
+import { escapeHtml, getSeverityBadge } from '../html-utils';
+import { getDeltaCssColor } from '../comparison-helpers';
 import type { ReportSectionData, TrendDataCompat, AuditSnapshot, IssueTrend } from '../../types';
 
 type IssueTrendItem = IssueTrend & { issue: string; priorityScore: number };
@@ -173,7 +174,6 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
   const issueRows = sortedIssues
     .map((item: IssueTrendItem, index: number) => {
       const trendIcon = getTrendIcon(item.trend);
-      const severityColor = getSeverityColor(item.severity);
       const changeText = getChangeText(item);
       const firstCount = item.counts[0] || 0;
       const latestCount = item.latestCount;
@@ -187,9 +187,7 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
           </div>
         </td>
         <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
-          <span style="display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); background: ${severityColor}; color: white;">
-            ${item.severity.toUpperCase()}
-          </span>
+          ${getSeverityBadge(item.severity.toUpperCase())}
         </td>
         <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
           <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">${firstCount} pages</div>
@@ -243,16 +241,6 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
 function getSeverityWeight(severity: string) {
   const weights: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
   return weights[severity?.toLowerCase()] ?? 1;
-}
-
-function getSeverityColor(severity: string) {
-  const colors: Record<string, string> = {
-    critical: 'var(--red-600)',
-    high: '#ea580c',
-    medium: 'var(--color-warning)',
-    low: 'var(--color-text-muted)',
-  };
-  return colors[severity?.toLowerCase()] ?? 'var(--color-text-muted)';
 }
 
 function getTrendIcon(trend: string) {
@@ -357,7 +345,7 @@ function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit:
       if (prev === undefined) return '';
 
       const delta = current - prev;
-      const color = delta > 0 ? 'var(--color-success)' : delta < 0 ? 'var(--color-error)' : 'var(--color-text-muted)';
+      const color = getDeltaCssColor(delta);
       const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
       const sign = delta > 0 ? '+' : '';
 

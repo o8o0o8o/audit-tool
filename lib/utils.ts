@@ -453,6 +453,94 @@ function getOrigin(url: string): string {
   }
 }
 
+/**
+ * Statistical helper: average of a numeric array
+ */
+function statAvg(arr: number[]): number {
+  return arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+}
+
+/**
+ * Statistical helper: percentile of a sorted numeric array
+ * Assumes the array is already sorted ascending.
+ */
+function statPercentile(sortedArr: number[], p: number): number {
+  if (sortedArr.length === 0) return 0;
+  return sortedArr[Math.floor(sortedArr.length * p)];
+}
+
+/**
+ * Get letter grade from score (0-100)
+ */
+function getLetterGrade(score: number): string {
+  if (score >= 95) return 'A+';
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
+}
+
+/**
+ * Normalize URL for comparison purposes (strips hash fragment and trailing slash)
+ */
+function normalizeUrlForComparison(urlString: string): string {
+  return urlString.split('#')[0].replace(/\/$/, '');
+}
+
+/**
+ * Case-insensitive HTTP header lookup.
+ * Playwright normalizes headers to lowercase, but external sources may not.
+ */
+function getHeader(headers: Record<string, string>, key: string): string | undefined {
+  return headers[key.toLowerCase()] ?? headers[key] ?? undefined;
+}
+
+/**
+ * Parse JSON-LD schemas from a parsed HTML page.
+ * Returns an array of parsed schema objects. Invalid JSON-LD blocks are skipped.
+ */
+function parseJsonLdSchemas(parsedPage: { querySelectorAll(selector: string): { textContent: string }[] }): Record<string, unknown>[] {
+  const schemas: Record<string, unknown>[] = [];
+  const scripts = parsedPage.querySelectorAll('script[type="application/ld+json"]');
+  for (const script of scripts) {
+    try {
+      const data = JSON.parse(script.textContent);
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        schemas.push(item);
+        // Also expand @graph items
+        if (item['@graph'] && Array.isArray(item['@graph'])) {
+          for (const graphItem of item['@graph']) {
+            schemas.push(graphItem);
+          }
+        }
+      }
+    } catch {
+      // Invalid JSON-LD, skip
+    }
+  }
+  return schemas;
+}
+
+/**
+ * Calculate predicted score after fixing all critical+high issues.
+ * Returns null if no improvement is possible.
+ */
+function estimateScoreAfterFixes(
+  overallScore: number,
+  categoryScores: Record<string, number>,
+  categoryWeights: Record<string, number>,
+): number | null {
+  let potentialGain = 0;
+  for (const [cat, w] of Object.entries(categoryWeights)) {
+    const headroom = 100 - (categoryScores[cat] || 100);
+    potentialGain += headroom * 0.6 * w;
+  }
+  const predicted = Math.min(100, Math.round(overallScore + potentialGain));
+  return predicted > overallScore ? predicted : null;
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -468,6 +556,13 @@ export {
   calculateDaysDiff,
   isInternalLink,
   getOrigin,
+  statAvg,
+  statPercentile,
+  getLetterGrade,
+  normalizeUrlForComparison,
+  getHeader,
+  parseJsonLdSchemas,
+  estimateScoreAfterFixes,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

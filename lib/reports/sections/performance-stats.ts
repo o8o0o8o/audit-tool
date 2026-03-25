@@ -6,6 +6,7 @@
 import { METRIC_INFO, THRESHOLDS } from '../metrics-metadata';
 import { escapeHtml } from '../html-utils';
 import { shortDomain, formatPercentDelta } from '../comparison-helpers';
+import { statAvg, statPercentile } from '../../utils';
 import type { PageInfo, ReportSectionData, MetricInfoEntry, ComparisonData } from '../../types';
 
 /**
@@ -56,11 +57,11 @@ function getPerformanceStats(data: ReportSectionData) {
     .sort((a, b) => a - b);
 
   const avg = (arr: number[]): string | number =>
-    arr.length > 0 ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(0) : 0;
-  const p50 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.5)] : 0);
-  const p75 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0);
-  const p95 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.95)] : 0);
-  const p99 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.99)] : 0);
+    arr.length > 0 ? statAvg(arr).toFixed(0) : 0;
+  const p50 = (arr: number[]) => statPercentile(arr, 0.5);
+  const p75 = (arr: number[]) => statPercentile(arr, 0.75);
+  const p95 = (arr: number[]) => statPercentile(arr, 0.95);
+  const p99 = (arr: number[]) => statPercentile(arr, 0.99);
 
   // Build CrUX comparison section if available
   const cruxSection = cruxData
@@ -488,8 +489,8 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
 
   if (origin.pagesWithPerf.length === 0 && compare.pagesWithPerf.length === 0) return '';
 
-  const avg = (arr: number[]): number => (arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0);
-  const p75 = (arr: number[]) => (arr.length > 0 ? arr[Math.floor(arr.length * 0.75)] : 0);
+  const avg = (arr: number[]): number => Math.round(statAvg(arr));
+  const p75 = (arr: number[]) => statPercentile(arr, 0.75);
 
   const originLabel = shortDomain(comparison.originDomainName);
   const compareLabel = shortDomain(comparison.compareDomainName);

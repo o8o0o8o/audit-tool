@@ -1,3 +1,4 @@
+import { getHeader, normalizeUrlForComparison } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
 
 class IndexabilityAnalyzer {
@@ -52,7 +53,7 @@ class IndexabilityAnalyzer {
 
     // 3. Check X-Robots-Tag HTTP header (use pre-captured headers)
     const headers = responseHeaders || {};
-    const xRobotsTag = headers['x-robots-tag'] || headers['X-Robots-Tag'];
+    const xRobotsTag = getHeader(headers, 'x-robots-tag');
 
     if (xRobotsTag) {
       indexabilityData.xRobotsTag = xRobotsTag.toLowerCase();
@@ -82,8 +83,8 @@ class IndexabilityAnalyzer {
       }
 
       // Normalize URLs for comparison (strip hash, trailing slash)
-      const normalizedCanonical = resolvedCanonical.split('#')[0].replace(/\/$/, '');
-      const normalizedCurrent = url.split('#')[0].replace(/\/$/, '');
+      const normalizedCanonical = normalizeUrlForComparison(resolvedCanonical);
+      const normalizedCurrent = normalizeUrlForComparison(url);
 
       if (normalizedCanonical !== normalizedCurrent) {
         indexabilityData.canonicalPointsElsewhere = true;

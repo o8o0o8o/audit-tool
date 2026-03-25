@@ -1,3 +1,4 @@
+import { getHeader, normalizeUrlForComparison } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
 
 class InternationalSEOAnalyzer {
@@ -61,7 +62,7 @@ class InternationalSEOAnalyzer {
 
     // 2. Check Content-Language HTTP header (use pre-captured headers)
     const headers = responseHeaders || {};
-    const contentLanguage = headers['content-language'] || headers['Content-Language'];
+    const contentLanguage = getHeader(headers, 'content-language');
     if (contentLanguage) {
       intlData.contentLanguageHeader = contentLanguage ?? null;
 
@@ -108,7 +109,7 @@ class InternationalSEOAnalyzer {
         }
 
         // Check for self-referential hreflang
-        if (href === url || href!.replace(/\/$/, '') === url.replace(/\/$/, '')) {
+        if (href === url || normalizeUrlForComparison(href!) === normalizeUrlForComparison(url)) {
           intlData.hasSelfReferential = true;
         }
 

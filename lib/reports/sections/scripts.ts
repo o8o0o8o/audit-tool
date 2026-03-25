@@ -3,6 +3,7 @@
  * Provides interactive functionality: sorting, modals, charts, CSV export
  */
 
+import { extractAnalysis, extractSummary } from '../data-processor';
 import type { PageInfo, ReportSectionData, AnalysisDetail } from '../../types';
 
 /**
@@ -25,8 +26,8 @@ function safeJsonStringify(data: unknown) {
  * @returns {Object} Minimal data needed for charts
  */
 function calculateChartData(jsonData: Record<string, unknown>) {
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  const summary = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const analysisObj = extractAnalysis(jsonData);
+  const summary = extractSummary(jsonData);
   const details = (analysisObj.details ?? {}) as Record<string, unknown>;
   const pages = ((jsonData.pageData as Record<string, unknown>)?.pages ?? {}) as Record<string, PageInfo>;
 

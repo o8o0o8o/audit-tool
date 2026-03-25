@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 import { LinkDepthAnalyzer } from './link-depth-analyzer';
 
@@ -50,10 +51,7 @@ class InternalPageRankAnalyzer {
     const lowRankPages = ranked.filter(([, score]) => score < lowThreshold);
 
     if (lowRankPages.length > pages.length * 0.2 && lowRankPages.length > 5) {
-      const examples = lowRankPages
-        .slice(0, 5)
-        .map(([url]) => `<li><a href="${url}">${url}</a></li>`)
-        .join('');
+      const examples = formatUrlList(lowRankPages.slice(0, 5).map(([url]) => url));
       warnings.push({
         title: `${lowRankPages.length} pages have very low internal link equity`,
         description: `These pages receive minimal internal link equity, reducing their ranking potential:<ul>${examples}</ul>${lowRankPages.length > 5 ? `<p>...and ${lowRankPages.length - 5} more</p>` : ''}`,

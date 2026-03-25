@@ -15,7 +15,7 @@ import {
   getMetricTooltip,
   getTextLengthTooltip,
 } from '../html-utils';
-import { shortDomain } from '../comparison-helpers';
+import { extractComparisonLabels } from '../comparison-helpers';
 import type {
   PageInfo,
   ReportSectionData,
@@ -1176,8 +1176,7 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
 }
 
 function getComparisonPagesTable(data: ReportSectionData, comparison: ComparisonData) {
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
   const hasPerf = data.hasPerformanceMetrics;
 
   // Build lookup maps

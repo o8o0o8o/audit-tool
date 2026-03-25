@@ -5,17 +5,12 @@
  */
 
 import { CATEGORY_CONFIG } from '../metrics-metadata';
-import { formatDeltaBadge, shortDomain, getDeltaCssColor } from '../comparison-helpers';
+import { formatDeltaBadge, extractComparisonLabels, getDeltaCssColor } from '../comparison-helpers';
 import { getScoreColor } from '../html-utils';
+import { extractSummary } from '../data-processor';
 import { getLetterGrade, estimateScoreAfterFixes } from '../../utils';
 import { SCORING } from '../../constants';
 import type { PageInfo, ReportSectionData, CategoryScores, ComparisonData } from '../../types';
-
-/** Helper to extract summary from jsonData */
-function extractSummary(jsonData: Record<string, unknown>) {
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  return (analysisObj.summary ?? {}) as Record<string, unknown>;
-}
 
 /**
  * Generate the executive summary section
@@ -112,8 +107,7 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
   const compareScore = (compareSummary.overallScore ?? 0) as number;
   const scoreDelta = compareScore - originScore;
 
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   const originCategoryScores = (originSummary.categoryScores ?? {}) as Record<string, number>;
   const compareCategoryScores = (compareSummary.categoryScores ?? {}) as Record<string, number>;

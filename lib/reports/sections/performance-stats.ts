@@ -5,7 +5,7 @@
 
 import { METRIC_INFO, THRESHOLDS } from '../metrics-metadata';
 import { escapeHtml } from '../html-utils';
-import { shortDomain, formatPercentDelta } from '../comparison-helpers';
+import { extractComparisonLabels, formatPercentDelta } from '../comparison-helpers';
 import { statAvg, statPercentile } from '../../utils';
 import type { PageInfo, ReportSectionData, MetricInfoEntry, ComparisonData } from '../../types';
 
@@ -492,8 +492,7 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
   const avg = (arr: number[]): number => Math.round(statAvg(arr));
   const p75 = (arr: number[]) => statPercentile(arr, 0.75);
 
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   const metrics = [
     {

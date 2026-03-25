@@ -12,7 +12,7 @@
  */
 
 import { escapeHtml } from '../html-utils';
-import { shortDomain, formatPercentDelta } from '../comparison-helpers';
+import { extractComparisonLabels, formatPercentDelta } from '../comparison-helpers';
 import type { PageInfo, ReportSectionData, ComparisonData } from '../../types';
 
 /**
@@ -67,8 +67,7 @@ function getComparisonContentInsights(jsonData: Record<string, unknown>, compari
 
   if (originPages.length === 0 && comparePages.length === 0) return '';
 
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   const sections = [
     getComparisonCTASection(originPages, comparePages, originLabel, compareLabel),

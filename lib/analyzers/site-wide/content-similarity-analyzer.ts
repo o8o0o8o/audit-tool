@@ -6,6 +6,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class ContentSimilarityAnalyzer {
@@ -81,10 +82,7 @@ class ContentSimilarityAnalyzer {
       const totalAffected = similarGroups.reduce((sum, g) => sum + g.pageCount, 0);
 
       for (const group of similarGroups.slice(0, 10)) {
-        const urlList = group.urls
-          .slice(0, 5)
-          .map((u) => `<li><a href="${u}">${u}</a></li>`)
-          .join('');
+        const urlList = formatUrlList(group.urls, 5);
         issues.push({
           title: `${group.pageCount} pages have very similar content`,
           description: `Near-duplicate content detected across these pages:<ul>${urlList}</ul>${group.urls.length > 5 ? `<p>...and ${group.urls.length - 5} more</p>` : ''}<p>Consider consolidating with canonical tags or differentiating the content.</p>`,

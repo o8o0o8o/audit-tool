@@ -157,6 +157,17 @@ function getDeltaCssColor(delta: number, higherIsBetter = true): string {
   return isGood ? 'var(--color-success)' : 'var(--color-error)';
 }
 
+/**
+ * Extract origin/compare labels from comparison data.
+ * Avoids repeating shortDomain(comparison.originDomainName) across report sections.
+ */
+function extractComparisonLabels(comparison: { originDomainName: string; compareDomainName: string }) {
+  return {
+    originLabel: shortDomain(comparison.originDomainName),
+    compareLabel: shortDomain(comparison.compareDomainName),
+  };
+}
+
 export {
   getDeltaColor,
   getDeltaCssColor,
@@ -166,6 +177,7 @@ export {
   formatDualScore,
   getComparisonHeader,
   shortDomain,
+  extractComparisonLabels,
   deltaClass,
   deltaSymbol,
 };

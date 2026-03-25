@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml, makeUrlClickable } from '../html-utils';
+import { extractAnalysis } from '../data-processor';
 import type { PageInfo, ReportSectionData } from '../../types';
 
 /**
@@ -38,8 +39,8 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
   const robots = (jsonData.robots ?? {}) as Record<string, unknown>;
   const robotsSitemaps = (robots.sitemaps ?? []) as unknown[];
   const userAgents = (robots['user-agent'] ?? {}) as Record<string, unknown>;
-  const analysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  const overallIssues = (analysis.overall ?? []) as unknown[];
+  const analysisObj = extractAnalysis(jsonData);
+  const overallIssues = (analysisObj.overall ?? []) as unknown[];
   const hasRobotsErrors =
     overallIssues.some((err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('robots')) ||
     false;
@@ -96,7 +97,7 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
     (key) => key !== 'urls' && key !== 'total' && typeof sitemaps[key] === 'object',
   );
 
-  const analysisData = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const analysisData = extractAnalysis(jsonData);
   const overallIssues = (analysisData.overall ?? []) as unknown[];
   const hasSitemapErrors =
     overallIssues.some((err: unknown) => err && typeof err === 'string' && err.toLowerCase().includes('sitemap')) ||
@@ -139,8 +140,8 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
  * Generate the related issues card
  */
 function getIssuesCard(jsonData: Record<string, unknown>) {
-  const analysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  const bySeverity = (analysis.bySeverity ?? {}) as Record<string, unknown[]>;
+  const analysisObj = extractAnalysis(jsonData);
+  const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, unknown[]>;
 
   // Filter for robots.txt and sitemap related issues
   const filterRobotsSitemap = (issues: unknown[]) =>

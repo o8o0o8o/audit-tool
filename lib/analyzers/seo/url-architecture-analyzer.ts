@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { TRACKING_PARAMS } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class UrlArchitectureAnalyzer {
@@ -55,26 +56,11 @@ class UrlArchitectureAnalyzer {
         });
       }
 
-      // Check for tracking parameters
-      const trackingParams = [
-        'utm_source',
-        'utm_medium',
-        'utm_campaign',
-        'utm_term',
-        'utm_content',
-        'fbclid',
-        'gclid',
-        'msclkid',
-        'mc_cid',
-        'mc_eid',
-        '_ga',
-        'ref',
-        'source',
-      ];
+      // Check for tracking parameters (uses centralized TRACKING_PARAMS from utils)
       const foundTracking: string[] = [];
-      for (const param of trackingParams) {
-        if (parsedUrl.searchParams.has(param)) {
-          foundTracking.push(param);
+      for (const [key] of parsedUrl.searchParams) {
+        if (TRACKING_PARAMS.has(key.toLowerCase())) {
+          foundTracking.push(key);
         }
       }
       if (foundTracking.length > 0) {

@@ -541,6 +541,20 @@ function estimateScoreAfterFixes(
   return predicted > overallScore ? predicted : null;
 }
 
+/**
+ * Format a list of URLs as HTML <li> elements with links.
+ * Escapes HTML to prevent XSS. Optionally limits the number of items shown.
+ */
+function formatUrlList(urls: string[], maxItems?: number): string {
+  const items = maxItems ? urls.slice(0, maxItems) : urls;
+  return items
+    .map((u) => {
+      const escaped = u.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return `<li><a href="${escaped}">${escaped}</a></li>`;
+    })
+    .join('');
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -563,6 +577,7 @@ export {
   getHeader,
   parseJsonLdSchemas,
   estimateScoreAfterFixes,
+  formatUrlList,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

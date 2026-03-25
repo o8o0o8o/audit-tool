@@ -4,7 +4,7 @@
  */
 
 import { escapeHtml } from '../html-utils';
-import { shortDomain } from '../comparison-helpers';
+import { extractComparisonLabels } from '../comparison-helpers';
 import type { PageInfo, ReportSectionData, AuditSnapshot, ComparisonData } from '../../types';
 
 /**
@@ -397,8 +397,7 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
   const originAgg = aggregateTechnologies(originPages);
   const compareAgg = aggregateTechnologies(comparison.comparePages);
 
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   if (originAgg.totalUnique === 0 && compareAgg.totalUnique === 0) {
     return `<div class="section" id="technology-stack"><h2>🔧 Technology Stack</h2><p style="color: var(--color-text-muted); text-align: center; padding: 20px;">No technologies detected.</p></div>`;

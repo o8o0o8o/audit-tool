@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -104,10 +105,7 @@ class InternationalSEOValidator {
 
     // Report 1: Missing lang attribute
     if (stats.missingLangAttribute.length > 0) {
-      const urlList = stats.missingLangAttribute
-        .slice(0, 10)
-        .map((u) => `<li><a href="${u}">${u}</a></li>`)
-        .join('');
+      const urlList = formatUrlList(stats.missingLangAttribute, 10);
       const moreCount =
         stats.missingLangAttribute.length > 10 ? ` (showing 10 of ${stats.missingLangAttribute.length})` : '';
 
@@ -142,10 +140,7 @@ class InternationalSEOValidator {
 
     // Report 4: Missing self-referential hreflang
     if (stats.missingSelfReferential.length > 10) {
-      const urlList = stats.missingSelfReferential
-        .slice(0, 5)
-        .map((u) => `<li><a href="${u}">${u}</a></li>`)
-        .join('');
+      const urlList = formatUrlList(stats.missingSelfReferential, 5);
 
       issues.push({
         title: `Pages missing self-referential hreflang`,
@@ -324,18 +319,18 @@ class InternationalSEOValidator {
 
     for (const { group } of languageGroups) {
       // Within this group, check if any hreflang is assigned to multiple different URLs
-      const langToUrls = new Map();
+      const langToUrls = new Map<string, string[]>();
       for (const [lang, groupUrl] of group) {
         if (lang === 'x-default') continue;
         if (!langToUrls.has(lang)) langToUrls.set(lang, []);
-        langToUrls.get(lang).push(groupUrl);
+        langToUrls.get(lang)!.push(groupUrl);
       }
 
       for (const [lang, urls] of langToUrls) {
         const uniqueUrls = [...new Set(urls)];
         if (uniqueUrls.length > 1) {
           duplicateLangCount++;
-          const urlList = uniqueUrls.map((u) => `<li><a href="${u}">${u}</a></li>`).join('');
+          const urlList = formatUrlList(uniqueUrls);
           issues.push({
             title: `Duplicate hreflang assignment within language group`,
             description: `${uniqueUrls.length} different URLs claim hreflang="${lang}" in the same language group:<ul>${urlList}</ul>`,

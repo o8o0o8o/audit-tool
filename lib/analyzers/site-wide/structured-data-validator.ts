@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -138,7 +139,7 @@ class StructuredDataValidator {
 
     // Check 2: WebSite schema (should only appear once, typically on homepage)
     if (schemaStats.websiteSchemas.length > 1) {
-      const urlList = schemaStats.websiteSchemas.map((w) => `<li><a href="${w.url}">${w.url}</a></li>`).join('');
+      const urlList = formatUrlList(schemaStats.websiteSchemas.map((w) => w.url));
       issues.push({
         title: `WebSite schema appears on multiple pages`,
         description: `WebSite schema found on ${schemaStats.websiteSchemas.length} pages. It should typically only appear on the homepage:<ul>${urlList}</ul>`,
@@ -151,7 +152,7 @@ class StructuredDataValidator {
     for (const [headline, urls] of schemaStats.duplicateArticles) {
       if (urls.length > 1) {
         duplicateArticleCount++;
-        const urlList = urls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('');
+        const urlList = formatUrlList(urls);
         issues.push({
           title: `Duplicate Article schema with same headline`,
           description: `Article headline "${headline}" appears on ${urls.length} different pages:<ul>${urlList}</ul>`,
@@ -165,7 +166,7 @@ class StructuredDataValidator {
     for (const [productName, urls] of schemaStats.duplicateProducts) {
       if (urls.length > 1) {
         duplicateProductCount++;
-        const urlList = urls.map((url: string) => `<li><a href="${url}">${url}</a></li>`).join('');
+        const urlList = formatUrlList(urls);
         issues.push({
           title: `Duplicate Product schema with same name`,
           description: `Product name "${productName}" appears on ${urls.length} different pages:<ul>${urlList}</ul>`,

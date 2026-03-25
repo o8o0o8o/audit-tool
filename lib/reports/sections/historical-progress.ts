@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml, getSeverityBadge } from '../html-utils';
+import { extractAnalysis, extractSummary } from '../data-processor';
 import { getDeltaCssColor } from '../comparison-helpers';
 import type { ReportSectionData, TrendDataCompat, AuditSnapshot, IssueTrend } from '../../types';
 
@@ -23,8 +24,7 @@ function getHistoricalProgress(data: ReportSectionData) {
 
   const { jsonData, trendData, previousAudit } = data;
 
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  const summaryObj = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const summaryObj = extractSummary(jsonData);
   const currentScore = (summaryObj.overallScore ?? 0) as number;
   const currentIssues = (summaryObj.totalIssues ?? 0) as number;
   const auditCount = trendData?.labels?.length ?? 1;
@@ -325,8 +325,7 @@ function getInfoCard(
  * Generate category score deltas between current and previous audit
  */
 function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit: AuditSnapshot | null) {
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  const summaryObj = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const summaryObj = extractSummary(jsonData);
   const currentCats = (summaryObj.categoryScores ?? {}) as Record<string, number>;
   const prevCats = (previousAudit?.summary?.categoryScores ?? {}) as Record<string, number>;
 

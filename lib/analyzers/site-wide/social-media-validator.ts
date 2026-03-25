@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -107,14 +108,12 @@ class SocialMediaValidator {
 
     // Report 2: Pages without any social tags
     if (socialStats.pagesWithoutSocial > 0) {
-      const pagesWithoutList = Object.keys(allPages)
+      const pagesWithoutUrls = Object.keys(allPages)
         .filter((url) => {
           const page = allPages[url];
           return page.socialMedia && !page.socialMedia.hasOpenGraph && !page.socialMedia.hasTwitterCard;
-        })
-        .slice(0, 10)
-        .map((url) => `<li><a href="${url}">${url}</a></li>`)
-        .join('');
+        });
+      const pagesWithoutList = formatUrlList(pagesWithoutUrls, 10);
       const moreCount = socialStats.pagesWithoutSocial > 10 ? ` (showing 10 of ${socialStats.pagesWithoutSocial})` : '';
 
       issues.push({

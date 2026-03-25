@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import { extractSummary } from '../data-processor';
 import type { ReportSectionData, QuickWinFull } from '../../types';
 
 /**
@@ -14,8 +15,7 @@ import type { ReportSectionData, QuickWinFull } from '../../types';
  */
 function getQuickWins(data: ReportSectionData) {
   const { jsonData } = data;
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
-  const summaryObj = (analysisObj.summary ?? {}) as Record<string, unknown>;
+  const summaryObj = extractSummary(jsonData);
   const quickWins = (summaryObj.quickWins ?? []) as QuickWinFull[];
 
   if (quickWins.length === 0) return '';

@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 // Trigram language profiles - top trigrams for common languages
@@ -678,10 +679,7 @@ class LanguageDetectionAnalyzer {
     }
 
     if (langMismatches.length > 0) {
-      const examples = langMismatches
-        .slice(0, 5)
-        .map((u) => `<li><a href="${u}">${u}</a></li>`)
-        .join('');
+      const examples = formatUrlList(langMismatches, 5);
       issues.push({
         title: `${langMismatches.length} page(s) have content language mismatches`,
         description: `The detected content language does not match the declared language:<ul>${examples}</ul>${langMismatches.length > 5 ? `<p>...and ${langMismatches.length - 5} more</p>` : ''}`,

@@ -5,7 +5,8 @@
 
 import { isCrawlerError } from '../../constants';
 import { escapeHtml } from '../html-utils';
-import { shortDomain } from '../comparison-helpers';
+import { extractAnalysis } from '../data-processor';
+import { extractComparisonLabels } from '../comparison-helpers';
 import type { ReportSectionData, ComparisonData } from '../../types';
 
 /**
@@ -160,7 +161,7 @@ function getTopIssues(data: ReportSectionData) {
   }
 
   const { jsonData } = data;
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const analysisObj = extractAnalysis(jsonData);
   const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, string[]>;
 
   const allIssues = [
@@ -204,7 +205,7 @@ function getIssueCard(
 ) {
   // Strip severity suffix from issue key (format: "Error message [severity]")
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const analysisObj = extractAnalysis(jsonData);
   const detailsMap = (analysisObj.details ?? {}) as Record<string, Record<string, unknown>>;
   const details = detailsMap[issueKey] ?? ({} as Record<string, unknown>);
   const examples = (details.examples ?? []) as string[];
@@ -274,7 +275,7 @@ function getIssueCard(
 
 function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: ComparisonData) {
   const extractIssues = (data: Record<string, unknown>) => {
-    const analysisObj = (data.analysis ?? {}) as Record<string, unknown>;
+    const analysisObj = extractAnalysis(data);
     const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, string[]>;
     return [
       ...(bySeverity.critical ?? []).map((issue: string) => ({
@@ -314,8 +315,7 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
   const topIssues = mergedIssues.slice(0, 10);
   if (topIssues.length === 0) return '';
 
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   return `
     <div class="top-issues-section">
@@ -350,7 +350,7 @@ function getIssueCardWithBadge(
   extraBadge: string,
 ) {
   const issueKey = item.issue.replace(/ \[(critical|high|medium|low)\]$/i, '');
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const analysisObj = extractAnalysis(jsonData);
   const detailsMap = (analysisObj.details ?? {}) as Record<string, Record<string, unknown>>;
   const details = detailsMap[issueKey] ?? ({} as Record<string, unknown>);
   const examples = (details.examples ?? []) as string[];

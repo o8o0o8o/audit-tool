@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { escapeHtml } from '../../reports/html-utils';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -53,10 +53,10 @@ class DuplicateChecker {
         duplicateTitleCount++;
         duplicateTitles.set(title, urls);
 
-        const urlList = urls.map((url) => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`).join('');
+        const urlList = formatUrlList(urls);
         issues.push({
           title: `Duplicate page titles found`,
-          description: `The title "${escapeHtml(title)}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
+          description: `The title "${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -72,10 +72,10 @@ class DuplicateChecker {
         duplicateDescriptionCount++;
         duplicateDescriptions.set(description, urls);
 
-        const urlList = urls.map((url) => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`).join('');
+        const urlList = formatUrlList(urls);
         issues.push({
           title: `Duplicate meta descriptions found`,
-          description: `The description "${escapeHtml(description.substring(0, 100))}${description.length > 100 ? '...' : ''}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
+          description: `The description "${description.substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;')}${description.length > 100 ? '...' : ''}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
           severity: SEVERITY.MEDIUM,
         });
       }

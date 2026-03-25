@@ -6,8 +6,9 @@
 
 import { isCrawlerError, SEVERITY_ORDER } from '../../constants';
 import { escapeHtml } from '../html-utils';
+import { extractAnalysis } from '../data-processor';
 import { ScoreCalculator } from '../../scoring/score-calculator';
-import { shortDomain } from '../comparison-helpers';
+import { extractComparisonLabels } from '../comparison-helpers';
 import type { ReportSectionData, AnalysisDetail, FixRecommendation, ComparisonData } from '../../types';
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
@@ -43,7 +44,7 @@ function getIssuesDetail(data: ReportSectionData) {
   }
 
   const { jsonData } = data;
-  const analysisObj = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const analysisObj = extractAnalysis(jsonData);
   const details = (analysisObj.details ?? {}) as Record<string, AnalysisDetail>;
   const fixes = ScoreCalculator.getFixRecommendations();
 
@@ -254,10 +255,10 @@ interface ComparisonIssueEntry extends IssueEntry {
 }
 
 function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison: ComparisonData) {
-  const originAnalysis = (jsonData.analysis ?? {}) as Record<string, unknown>;
+  const originAnalysis = extractAnalysis(jsonData);
   const originDetails = (originAnalysis.details ?? {}) as Record<string, AnalysisDetail>;
 
-  const compareAnalysis = (comparison.compareJsonData.analysis ?? {}) as Record<string, unknown>;
+  const compareAnalysis = extractAnalysis(comparison.compareJsonData);
   const compareDetails = (compareAnalysis.details ?? {}) as Record<string, AnalysisDetail>;
 
   const fixes = ScoreCalculator.getFixRecommendations();
@@ -315,8 +316,7 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
 
   const fixedCount = issues.filter((i) => i.status === 'fixed').length;
   const newCount = issues.filter((i) => i.status === 'new').length;
-  const originLabel = shortDomain(comparison.originDomainName);
-  const compareLabel = shortDomain(comparison.compareDomainName);
+  const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   return `
     <div class="issues-section">

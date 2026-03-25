@@ -464,4 +464,20 @@ class ReportDataProcessor {
   }
 }
 
-export { ReportDataProcessor };
+/**
+ * Extract analysis object from jsonData.
+ * Avoids repeating `(jsonData.analysis ?? {}) as Record<string, unknown>` across report sections.
+ */
+function extractAnalysis(jsonData: Record<string, unknown>): Record<string, unknown> {
+  return (jsonData.analysis ?? {}) as Record<string, unknown>;
+}
+
+/**
+ * Extract summary object from jsonData.analysis.summary.
+ */
+function extractSummary(jsonData: Record<string, unknown>): Record<string, unknown> {
+  const analysis = extractAnalysis(jsonData);
+  return (analysis.summary ?? {}) as Record<string, unknown>;
+}
+
+export { ReportDataProcessor, extractAnalysis, extractSummary };

@@ -317,6 +317,39 @@ export function isCrawlerError(issue: string): boolean {
 // Severity sort order for issue prioritization
 export const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
+// Stop words for text analysis (keyword extraction, anchor text analysis)
+// Core grammatical stop words plus common words that don't carry keyword value
+export const STOP_WORDS = new Set([
+  // Articles & determiners
+  'a', 'an', 'the',
+  // Conjunctions
+  'and', 'or', 'but', 'nor', 'so', 'yet',
+  // Prepositions
+  'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'into', 'about', 'after', 'over',
+  // Be verbs
+  'is', 'was', 'are', 'were', 'been', 'be', 'am', 'being',
+  // Have verbs
+  'have', 'has', 'had', 'having',
+  // Do verbs
+  'do', 'does', 'did',
+  // Modal verbs
+  'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought',
+  // Pronouns
+  'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
+  'my', 'your', 'his', 'its', 'our', 'their',
+  'this', 'that', 'these', 'those',
+  'what', 'which', 'who', 'whom', 'whose',
+  // Adverbs & common words
+  'where', 'when', 'why', 'how', 'not', 'no', 'only', 'very', 'just', 'also', 'now', 'here', 'there',
+  'too', 'then', 'than', 'so', 'up', 'out', 'if',
+  // Common function words
+  'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'own', 'same', 'any',
+  // Common verbs with little keyword value
+  'said', 'say', 'get', 'go', 'make', 'know', 'take', 'see', 'come', 'think', 'look', 'want', 'give', 'use', 'used',
+  // Common nouns/misc with little keyword value
+  'people', 'time', 'year', 'day', 'way', 'one', 'two', 'good', 'new', 'first', 'well', 'even', 'back', 'work',
+]) as ReadonlySet<string>;
+
 // Generic anchor texts that provide no SEO value
 export const GENERIC_ANCHORS = [
   'click here',

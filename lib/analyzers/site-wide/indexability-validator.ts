@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { formatUrlList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -148,10 +149,7 @@ class IndexabilityValidator {
     // Report 3: Status code errors summary
     if (stats.statusErrors.size > 0) {
       for (const [statusCode, urls] of stats.statusErrors) {
-        const urlList = urls
-          .slice(0, 5)
-          .map((u) => `<li><a href="${u}">${u}</a></li>`)
-          .join('');
+        const urlList = formatUrlList(urls, 5);
         const moreCount = urls.length > 5 ? ` (showing 5 of ${urls.length})` : '';
 
         issues.push({
@@ -173,10 +171,7 @@ class IndexabilityValidator {
 
     // Report 5: Pages with nofollow
     if (stats.nofollowPages.length > 0 && stats.nofollowPages.length < totalPages * 0.1) {
-      const urlList = stats.nofollowPages
-        .slice(0, 5)
-        .map((u) => `<li><a href="${u}">${u}</a></li>`)
-        .join('');
+      const urlList = formatUrlList(stats.nofollowPages, 5);
       const moreCount = stats.nofollowPages.length > 5 ? ` (showing 5 of ${stats.nofollowPages.length})` : '';
 
       issues.push({
@@ -188,10 +183,7 @@ class IndexabilityValidator {
 
     // Report 6: Authentication required pages
     if (stats.authRequired.length > 0) {
-      const urlList = stats.authRequired
-        .slice(0, 5)
-        .map((u) => `<li><a href="${u}">${u}</a></li>`)
-        .join('');
+      const urlList = formatUrlList(stats.authRequired, 5);
       issues.push({
         title: `Pages require authentication`,
         description: `${stats.authRequired.length} page(s) require authentication and cannot be crawled:<ul>${urlList}</ul>`,

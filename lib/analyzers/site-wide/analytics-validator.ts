@@ -119,8 +119,8 @@ class AnalyticsValidator {
     // Report 1: Pages without any analytics
     if (analyticsStats.pagesWithoutAnalytics > totalPages * 0.1 && totalPages > 10) {
       issues.push({
-        title: `Many pages missing analytics`,
-        description: `${analyticsStats.pagesWithoutAnalytics} page(s) (${calcPercent(analyticsStats.pagesWithoutAnalytics, totalPages)}%) have no analytics or tracking tools. Consider adding GA4 for visitor insights.`,
+        message: `Many pages missing analytics`,
+        detail: `${analyticsStats.pagesWithoutAnalytics} page(s) (${calcPercent(analyticsStats.pagesWithoutAnalytics, totalPages)}%) have no analytics or tracking tools. Consider adding GA4 for visitor insights.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -132,8 +132,8 @@ class AnalyticsValidator {
         .join('');
 
       issues.push({
-        title: `Inconsistent GA4 measurement IDs across pages`,
-        description: `Found ${analyticsStats.ga4Ids.size} different GA4 measurement IDs across your site. All pages should use the same ID:<ul>${idsList}</ul>`,
+        message: `Inconsistent GA4 measurement IDs across pages`,
+        detail: `Found ${analyticsStats.ga4Ids.size} different GA4 measurement IDs across your site. All pages should use the same ID:<ul>${idsList}</ul>`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -145,8 +145,8 @@ class AnalyticsValidator {
         .join('');
 
       issues.push({
-        title: `Inconsistent GTM container IDs across pages`,
-        description: `Found ${analyticsStats.gtmIds.size} different GTM container IDs. All pages should use the same container:<ul>${idsList}</ul>`,
+        message: `Inconsistent GTM container IDs across pages`,
+        detail: `Found ${analyticsStats.gtmIds.size} different GTM container IDs. All pages should use the same container:<ul>${idsList}</ul>`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -158,8 +158,8 @@ class AnalyticsValidator {
         .join('');
 
       issues.push({
-        title: `Inconsistent Universal Analytics IDs across pages`,
-        description: `Found ${analyticsStats.uaIds.size} different UA tracking IDs across your site:<ul>${idsList}</ul>`,
+        message: `Inconsistent Universal Analytics IDs across pages`,
+        detail: `Found ${analyticsStats.uaIds.size} different UA tracking IDs across your site:<ul>${idsList}</ul>`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -167,8 +167,8 @@ class AnalyticsValidator {
     // Report 5: Low GA4 coverage
     if (ga4Coverage < 90 && totalPages > 10) {
       issues.push({
-        title: `Low GA4 coverage across site`,
-        description: `Only ${ga4Coverage}% of pages (${analyticsStats.pagesWithGA4}/${totalPages}) have GA4 tracking. Ensure all pages include your analytics code.`,
+        message: `Low GA4 coverage across site`,
+        detail: `Only ${ga4Coverage}% of pages (${analyticsStats.pagesWithGA4}/${totalPages}) have GA4 tracking. Ensure all pages include your analytics code.`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -182,8 +182,8 @@ class AnalyticsValidator {
 
     if (hasTracking && consentCoverage < 80) {
       issues.push({
-        title: `Inconsistent cookie consent implementation`,
-        description: `Your site uses tracking but only ${consentCoverage}% of pages (${analyticsStats.pagesWithCookieConsent}/${totalPages}) have cookie consent. GDPR/CCPA requires consent on all pages with tracking.`,
+        message: `Inconsistent cookie consent implementation`,
+        detail: `Your site uses tracking but only ${consentCoverage}% of pages (${analyticsStats.pagesWithCookieConsent}/${totalPages}) have cookie consent. GDPR/CCPA requires consent on all pages with tracking.`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -195,8 +195,8 @@ class AnalyticsValidator {
         .join('');
 
       issues.push({
-        title: `Multiple cookie consent tools detected`,
-        description: `Found ${analyticsStats.consentTools.size} different consent tools across your site. Use one consistent solution:<ul>${toolsList}</ul>`,
+        message: `Multiple cookie consent tools detected`,
+        detail: `Found ${analyticsStats.consentTools.size} different consent tools across your site. Use one consistent solution:<ul>${toolsList}</ul>`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -205,14 +205,14 @@ class AnalyticsValidator {
     if (analyticsStats.pagesWithUA > 0 && analyticsStats.pagesWithGA4 > 0) {
       const uaCoverage = calcPercent(analyticsStats.pagesWithUA, totalPages);
       issues.push({
-        title: `Both Universal Analytics and GA4 detected`,
-        description: `Your site has both UA (${uaCoverage}% coverage) and GA4 (${ga4Coverage}% coverage). Universal Analytics stopped collecting data in July 2024. Complete migration to GA4 and remove UA code.`,
+        message: `Both Universal Analytics and GA4 detected`,
+        detail: `Your site has both UA (${uaCoverage}% coverage) and GA4 (${ga4Coverage}% coverage). Universal Analytics stopped collecting data in July 2024. Complete migration to GA4 and remove UA code.`,
         severity: SEVERITY.HIGH,
       });
     } else if (analyticsStats.pagesWithUA > 0 && analyticsStats.pagesWithGA4 === 0) {
       issues.push({
-        title: `Still using Universal Analytics only`,
-        description: `Your site only uses Universal Analytics, which stopped collecting data in July 2024. Migrate to GA4 immediately to continue tracking visitors.`,
+        message: `Still using Universal Analytics only`,
+        detail: `Your site only uses Universal Analytics, which stopped collecting data in July 2024. Migrate to GA4 immediately to continue tracking visitors.`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -222,8 +222,8 @@ class AnalyticsValidator {
       const privacyCoverage = calcPercent(analyticsStats.pagesWithPrivacyPolicy, totalPages);
       if (privacyCoverage < 80) {
         issues.push({
-          title: `Privacy policy link missing on many pages`,
-          description: `Your site uses tracking but only ${privacyCoverage}% of pages (${analyticsStats.pagesWithPrivacyPolicy}/${totalPages}) have a privacy policy link. Privacy policies are required by GDPR/CCPA.`,
+          message: `Privacy policy link missing on many pages`,
+          detail: `Your site uses tracking but only ${privacyCoverage}% of pages (${analyticsStats.pagesWithPrivacyPolicy}/${totalPages}) have a privacy policy link. Privacy policies are required by GDPR/CCPA.`,
           severity: SEVERITY.HIGH,
         });
       }

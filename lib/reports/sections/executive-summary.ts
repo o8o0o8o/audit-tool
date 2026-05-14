@@ -6,7 +6,7 @@
 
 import { CATEGORY_CONFIG } from '../metrics-metadata';
 import { formatDeltaBadge, extractComparisonLabels, getDeltaCssColor } from '../comparison-helpers';
-import { getScoreColor } from '../html-utils';
+import { getScoreColor, getScoreClass } from '../html-utils';
 import { extractSummary, extractPageInsights } from '../data-processor';
 import { getLetterGrade, estimateScoreAfterFixes } from '../../utils';
 import { SCORING } from '../../constants';
@@ -32,9 +32,7 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
   const overallScore = (summary.overallScore ?? 0) as number;
   const categoryScores = (summary.categoryScores ?? {}) as Record<string, number>;
 
-  let scoreClass = 'bad';
-  if (overallScore >= 80) scoreClass = 'good';
-  else if (overallScore >= 60) scoreClass = 'warning';
+  const scoreClass = getScoreClass(overallScore);
 
   const letterGrade = getLetterGrade(overallScore);
 
@@ -121,7 +119,7 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
         <div class="text-center">
           <div class="score-circle" style="position: relative;">
             <div class="score-ring" style="--score: ${originScore}; --color: ${getScoreColor(originScore)};"></div>
-            <div class="score-number ${originScore >= 80 ? 'good' : originScore >= 60 ? 'warning' : 'bad'}">${originScore}</div>
+            <div class="score-number ${getScoreClass(originScore)}">${originScore}</div>
             <div class="score-label">${originLabel} (${getLetterGrade(originScore)})</div>
           </div>
         </div>
@@ -137,7 +135,7 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
         <div class="text-center">
           <div class="score-circle" style="position: relative;">
             <div class="score-ring" style="--score: ${compareScore}; --color: ${getScoreColor(compareScore)};"></div>
-            <div class="score-number ${compareScore >= 80 ? 'good' : compareScore >= 60 ? 'warning' : 'bad'}">${compareScore}</div>
+            <div class="score-number ${getScoreClass(compareScore)}">${compareScore}</div>
             <div class="score-label">${compareLabel} (${getLetterGrade(compareScore)})</div>
           </div>
         </div>
@@ -292,9 +290,7 @@ const CATEGORY_NAMES: Record<string, string> = {
 
 /** Get CSS class for a progress bar based on score */
 function getProgressBarClass(score: number): string {
-  if (score >= 80) return 'progress-good';
-  if (score >= 60) return 'progress-warning';
-  return 'progress-bad';
+  return `progress-${getScoreClass(score)}`;
 }
 
 /**

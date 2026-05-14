@@ -473,6 +473,22 @@ function extractAnalysis(jsonData: Record<string, unknown>): Record<string, unkn
 }
 
 /**
+ * Extract analysis details map from audit data.
+ */
+function extractDetails(jsonData: Record<string, unknown>): Record<string, AnalysisDetail> {
+  const analysisObj = extractAnalysis(jsonData);
+  return (analysisObj.details ?? {}) as Record<string, AnalysisDetail>;
+}
+
+/**
+ * Extract issues grouped by severity from audit data.
+ */
+function extractBySeverity(jsonData: Record<string, unknown>): Record<string, string[]> {
+  const analysisObj = extractAnalysis(jsonData);
+  return (analysisObj.bySeverity ?? {}) as Record<string, string[]>;
+}
+
+/**
  * Extract summary object from jsonData.analysis.summary.
  */
 function extractSummary(jsonData: Record<string, unknown>): Record<string, unknown> {
@@ -517,4 +533,4 @@ function extractPageInsights(pages: PageInfo[]) {
   };
 }
 
-export { ReportDataProcessor, extractAnalysis, extractSummary, extractPageInsights };
+export { ReportDataProcessor, extractAnalysis, extractDetails, extractBySeverity, extractSummary, extractPageInsights };

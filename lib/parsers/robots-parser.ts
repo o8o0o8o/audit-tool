@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../constants';
+import { formatBytes } from '../utils';
 
 // Maximum robots.txt size (Google's limit is 500KB)
 const MAX_ROBOTS_SIZE = 500 * 1024;
@@ -190,13 +191,13 @@ class RobotsParser {
     if (result.metadata.size > MAX_ROBOTS_SIZE) {
       result.errors.push({
         message: 'robots.txt exceeds size limit',
-        detail: `File is ${Math.round(result.metadata.size / 1024)}KB but Google's limit is 500KB. Rules beyond this limit may be ignored.`,
+        detail: `File is ${formatBytes(result.metadata.size)} but Google's limit is 500KB. Rules beyond this limit may be ignored.`,
         severity: SEVERITY.HIGH,
       });
     } else if (result.metadata.size > MAX_ROBOTS_SIZE * 0.8) {
       result.errors.push({
         message: 'robots.txt is approaching size limit',
-        detail: `File is ${Math.round(result.metadata.size / 1024)}KB (${Math.round((result.metadata.size / MAX_ROBOTS_SIZE) * 100)}% of Google's 500KB limit).`,
+        detail: `File is ${formatBytes(result.metadata.size)} (${Math.round((result.metadata.size / MAX_ROBOTS_SIZE) * 100)}% of Google's 500KB limit).`,
         severity: SEVERITY.LOW,
       });
     }

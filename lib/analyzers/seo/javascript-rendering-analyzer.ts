@@ -4,7 +4,8 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { isInternalLink } from '../../utils';
+import { isInternalLink, countLazyLoadingPatterns, countWords, calcPercent } from '../../utils';
+import { TechnologyDetector } from './technology-detector';
 import type { Issue, PageInfo } from '../../types';
 
 class JavaScriptRenderingAnalyzer {
@@ -41,7 +42,7 @@ class JavaScriptRenderingAnalyzer {
     info.renderedContentLength = renderedHtml.length;
 
     // Detect JS framework
-    info.jsFramework = this.detectFramework(rawHtml, pageData);
+    info.jsFramework = TechnologyDetector.quickDetectFramework(rawHtml);
 
     // Extract content from both versions
     const rawContent = this.extractContent(rawHtml);
@@ -50,7 +51,7 @@ class JavaScriptRenderingAnalyzer {
     // Calculate content difference
     if (info.rawContentLength > 0 && info.renderedContentLength > 0) {
       const diff = Math.abs(info.renderedContentLength - info.rawContentLength);
-      info.contentDifferencePercent = Math.round((diff / info.rawContentLength) * 100);
+      info.contentDifferencePercent = calcPercent(diff, info.rawContentLength);
     }
 
     // Check for significant JS-dependent content
@@ -96,8 +97,8 @@ class JavaScriptRenderingAnalyzer {
     }
 
     // Main content
-    const rawWordCount = this.countWords(rawContent.text);
-    const renderedWordCount = this.countWords(renderedContent.text);
+    const rawWordCount = countWords(rawContent.text);
+    const renderedWordCount = countWords(renderedContent.text);
     const wordCountDiff = renderedWordCount - rawWordCount;
 
     if (wordCountDiff > 200) {
@@ -138,7 +139,7 @@ class JavaScriptRenderingAnalyzer {
     }
 
     // Check for lazy-loaded content
-    const lazyElements = this.detectLazyLoading(rawHtml);
+    const lazyElements = countLazyLoadingPatterns(rawHtml);
     if (lazyElements.length > 0) {
       warnings.push({
         message: 'Lazy-loaded content detected',
@@ -224,39 +225,6 @@ class JavaScriptRenderingAnalyzer {
   }
 
   /**
-   * Detect JavaScript framework
-   * @param {string} html - Raw HTML
-   * @param {object} pageData - Page data
-   * @returns {string|null}
-   */
-  static detectFramework(html: string, _pageData: PageInfo) {
-    // Check for framework markers
-    if (html.includes('__NEXT_DATA__') || html.includes('_next/static')) {
-      return 'Next.js';
-    }
-    if (html.includes('__NUXT__') || html.includes('/_nuxt/')) {
-      return 'Nuxt.js';
-    }
-    if (html.includes('ng-version="') || html.includes('_ngcontent-') || html.includes('_nghost-')) {
-      return 'Angular';
-    }
-    if (html.includes('data-reactroot') || html.includes('data-reactid') || html.includes('__REACT_')) {
-      return 'React';
-    }
-    if (html.includes('data-v-') || html.includes('__VUE__')) {
-      return 'Vue.js';
-    }
-    if (html.includes('data-ember-action') || html.includes('class="ember-view"')) {
-      return 'Ember.js';
-    }
-    if (html.includes('svelte-') || html.includes('__svelte')) {
-      return 'Svelte';
-    }
-
-    return null;
-  }
-
-  /**
    * Detect SPA patterns in HTML
    * @param {string} html - HTML content
    * @returns {boolean}
@@ -272,43 +240,11 @@ class JavaScriptRenderingAnalyzer {
   }
 
   /**
-   * Check for SSR markers
-   * @param {string} html - HTML content
-   * @returns {boolean}
+   * Check for SSR markers in raw HTML
    */
   static hasSSRMarkers(html: string) {
     const ssrMarkers = ['data-reactroot', '__NEXT_DATA__', '__NUXT__', 'data-server-rendered', 'ng-state'];
-
     return ssrMarkers.some((marker) => html.includes(marker));
-  }
-
-  /**
-   * Detect lazy loading patterns
-   * @param {string} html - HTML content
-   * @returns {Array}
-   */
-  static detectLazyLoading(html: string) {
-    const lazyPatterns = [/loading=["']lazy["']/gi, /data-src=/gi, /data-lazy/gi, /lazyload/gi, /lazy-load/gi];
-
-    const matches: string[] = [];
-    for (const pattern of lazyPatterns) {
-      const found = html.match(pattern);
-      if (found) {
-        matches.push(...found);
-      }
-    }
-
-    return matches;
-  }
-
-  /**
-   * Count words in text
-   * @param {string} text
-   * @returns {number}
-   */
-  static countWords(text: string) {
-    if (!text) return 0;
-    return text.split(/\s+/).filter((w) => w.length > 0).length;
   }
 
   /**

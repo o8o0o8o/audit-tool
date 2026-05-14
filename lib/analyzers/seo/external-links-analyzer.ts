@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { isInternalLink, getOrigin, fetchWithTimeout } from '../../utils';
+import { isInternalLink, getOrigin, fetchWithTimeout, getHostname } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Known spam/low-quality domains (simplified list)
@@ -81,12 +81,8 @@ class ExternalLinksAnalyzer {
       info.totalExternalLinks++;
 
       // Get domain
-      let domain;
-      try {
-        domain = new URL(href).hostname;
-      } catch {
-        continue;
-      }
+      const domain = getHostname(href);
+      if (!domain) continue;
 
       // Track by domain
       if (!info.linksByDomain[domain]) {

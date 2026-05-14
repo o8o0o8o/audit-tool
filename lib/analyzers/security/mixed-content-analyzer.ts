@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { getTopEntries } from '../../utils';
+import { getTopEntries, getFileNameFromUrl, isSameDomain } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Resource types and their security impact
@@ -85,7 +85,7 @@ class MixedContentAnalyzer {
     if (info.activeMixedContent.length > 0) {
       const examples = info.activeMixedContent
         .slice(0, 5)
-        .map((r) => `${r.type}: ${this.getFileName(r.url)}`)
+        .map((r) => `${r.type}: ${getFileNameFromUrl(r.url)}`)
         .join(', ');
 
       issues.push({
@@ -99,7 +99,7 @@ class MixedContentAnalyzer {
     if (info.passiveMixedContent.length > 0) {
       const examples = info.passiveMixedContent
         .slice(0, 5)
-        .map((r) => `${r.type}: ${this.getFileName(r.url)}`)
+        .map((r) => `${r.type}: ${getFileNameFromUrl(r.url)}`)
         .join(', ');
 
       warnings.push({
@@ -119,7 +119,7 @@ class MixedContentAnalyzer {
     }
 
     // Check for HTTP links to same domain
-    const insecureInternalLinks = htmlMixed.filter((m) => m.type === 'link' && this.isSameDomain(m.url, url));
+    const insecureInternalLinks = htmlMixed.filter((m) => m.type === 'link' && isSameDomain(m.url, url));
     if (insecureInternalLinks.length > 0) {
       warnings.push({
         message: 'Internal links use HTTP instead of HTTPS',
@@ -207,30 +207,7 @@ class MixedContentAnalyzer {
     return mixed;
   }
 
-  /**
-   * Check if URL is same domain
-   */
-  static isSameDomain(url1: string, url2: string) {
-    try {
-      const host1 = new URL(url1).hostname.replace(/^www\./, '');
-      const host2 = new URL(url2).hostname.replace(/^www\./, '');
-      return host1 === host2;
-    } catch {
-      return false;
-    }
-  }
 
-  /**
-   * Get filename from URL
-   */
-  static getFileName(url: string) {
-    try {
-      const pathname = new URL(url).pathname;
-      return pathname.split('/').pop() ?? pathname.substring(0, 30);
-    } catch {
-      return url?.substring(0, 30) ?? 'unknown';
-    }
-  }
 
   /**
    * Analyze mixed content across the site

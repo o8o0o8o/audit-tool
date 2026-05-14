@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { removeTrailingSlash, clampScore, getFileNameFromUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface KeywordPageData {
@@ -169,9 +170,9 @@ class LinkingOpportunityAnalyzer {
     try {
       const parsed = new URL(url);
       // Remove trailing slash, lowercase, remove query params for comparison
-      return parsed.origin + parsed.pathname.replace(/\/$/, '').toLowerCase();
+      return parsed.origin + removeTrailingSlash(parsed.pathname).toLowerCase();
     } catch {
-      return url.toLowerCase().replace(/\/$/, '');
+      return removeTrailingSlash(url.toLowerCase());
     }
   }
 
@@ -270,7 +271,7 @@ class LinkingOpportunityAnalyzer {
           suggestedLinks.push({
             targetUrl,
             sharedKeywords: data.sharedKeywords.slice(0, 5).map((k: SharedKeywordInfo) => k.keyword),
-            relevanceScore: Math.min(Math.round(score), 100),
+            relevanceScore: clampScore(score),
             anchorTextSuggestion: this.suggestAnchorText(data.sharedKeywords, allPages[targetUrl]),
           });
         }
@@ -349,7 +350,7 @@ class LinkingOpportunityAnalyzer {
     if (excellentOpps.length > 5) {
       const topPages = excellentOpps
         .slice(0, 3)
-        .map((o) => o.sourcePage.split('/').pop() ?? 'homepage')
+        .map((o) => getFileNameFromUrl(o.sourcePage) || 'homepage')
         .join(', ');
       issues.push({
         message: 'High-impact linking opportunities available',

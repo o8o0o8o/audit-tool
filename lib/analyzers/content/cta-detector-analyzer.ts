@@ -170,8 +170,8 @@ class CTADetectorAnalyzer {
 
     if (pagesWithoutCTAs > pages.length * 0.5 && pages.length > 5) {
       warnings.push({
-        title: `${pagesWithoutCTAs} of ${pages.length} pages have no conversion elements`,
-        description: `Over half of the pages lack forms, CTA buttons, or contact links. Consider adding conversion paths where appropriate.`,
+        message: `${pagesWithoutCTAs} of ${pages.length} pages have no conversion elements`,
+        detail: `Over half of the pages lack forms, CTA buttons, or contact links. Consider adding conversion paths where appropriate.`,
         severity: SEVERITY.LOW,
       });
     }

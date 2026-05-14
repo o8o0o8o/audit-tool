@@ -4,22 +4,8 @@
  * route coverage, and issue-to-source mapping
  */
 
-import { escapeHtml } from '../html-utils';
+import { escapeHtml, getSeverityBadge } from '../html-utils';
 import type { ReportSectionData } from '../../types';
-
-/**
- * Get severity badge HTML
- */
-function getSeverityBadge(severity: string) {
-  const classMap: Record<string, string> = {
-    critical: 'ui-badge--critical',
-    high: 'ui-badge--high',
-    medium: 'ui-badge--medium',
-    low: 'ui-badge--low',
-  };
-  const badgeClass = classMap[severity] || classMap.medium;
-  return `<span class="ui-badge ${badgeClass} text-upper">${escapeHtml(severity)}</span>`;
-}
 
 /**
  * Generate the source code analysis section

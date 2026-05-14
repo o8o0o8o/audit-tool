@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { incrementCounter, calcPercent, getTopEntries } from '../../utils';
+import { incrementCounter, calcPercent, getTopEntries, truncateText } from '../../utils';
 import type { ChromePage, Issue, PageInfo } from '../../types';
 import type { ConsoleMessage } from 'playwright';
 
@@ -168,7 +168,7 @@ class ConsoleErrorAnalyzer {
     if (criticalErrors.length > 0) {
       const examples = criticalErrors
         .slice(0, 3)
-        .map((e) => `"${e.text.substring(0, 100)}${e.text.length > 100 ? '...' : ''}"`)
+        .map((e) => `"${truncateText(e.text, 100)}"`)
         .join('<br>');
 
       issues.push({
@@ -182,7 +182,7 @@ class ConsoleErrorAnalyzer {
     if (otherErrors.length > 0) {
       const examples = otherErrors
         .slice(0, 2)
-        .map((e) => `"${e.text.substring(0, 80)}..."`)
+        .map((e) => `"${truncateText(e.text, 80)}"`)
         .join('<br>');
 
       issues.push({

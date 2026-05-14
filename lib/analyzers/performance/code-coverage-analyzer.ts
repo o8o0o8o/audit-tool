@@ -8,7 +8,8 @@
  * Call startCoverage() before navigation, and analyze() after page load.
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { calcPercent, getFileNameFromUrl, formatBytes } from '../../utils';
 import type { Issue, ChromePage, PageInfo, NetworkRequest, CodeCoverageFile } from '../../types';
 
 interface CDPClient {
@@ -140,7 +141,7 @@ class CodeCoverageAnalyzer {
               url: scriptUrl,
               total: totalLength,
               unused: unusedBytes,
-              unusedPercent: Math.round((unusedBytes / totalLength) * 100),
+              unusedPercent: calcPercent(unusedBytes, totalLength),
             });
           }
         }
@@ -204,7 +205,7 @@ class CodeCoverageAnalyzer {
               url: sheetUrl,
               total: textLength,
               unused: unusedBytes,
-              unusedPercent: Math.round((unusedBytes / textLength) * 100),
+              unusedPercent: calcPercent(unusedBytes, textLength),
             });
           }
         }
@@ -230,18 +231,12 @@ class CodeCoverageAnalyzer {
     }
 
     // Calculate ratios
-    if (info.js.total > 0) {
-      info.js.ratio = Math.round((info.js.unused / info.js.total) * 100);
-    }
-    if (info.css.total > 0) {
-      info.css.ratio = Math.round((info.css.unused / info.css.total) * 100);
-    }
+    info.js.ratio = calcPercent(info.js.unused, info.js.total);
+    info.css.ratio = calcPercent(info.css.unused, info.css.total);
 
     info.totalBytes = info.js.total + info.css.total;
     info.totalUnusedBytes = info.js.unused + info.css.unused;
-    if (info.totalBytes > 0) {
-      info.unusedRatio = Math.round((info.totalUnusedBytes / info.totalBytes) * 100);
-    }
+    info.unusedRatio = calcPercent(info.totalUnusedBytes, info.totalBytes);
 
     // Sort files by unused bytes
     info.js.files.sort((a, b) => b.unused - a.unused);
@@ -250,7 +245,7 @@ class CodeCoverageAnalyzer {
     info.css.files = info.css.files.slice(0, 10);
 
     // Report issues with top offending files for actionable insights
-    if (info.js.ratio > 70 && info.js.total > 50000) {
+    if (info.js.ratio > 70 && info.js.total > THRESHOLDS.INLINE_JS_SIZE_WARNING) {
       const topFiles = info.js.files.slice(0, 3);
       const fileList =
         topFiles.length > 0
@@ -258,14 +253,14 @@ class CodeCoverageAnalyzer {
             topFiles
               .map(
                 (f) =>
-                  `<li><code>${f.url.split('/').pop() ?? f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
+                  `<li><code>${getFileNameFromUrl(f.url)}</code> — ${f.unusedPercent}% unused (${formatBytes(f.unused)})</li>`,
               )
               .join('') +
             '</ul>'
           : '';
       issues.push({
         message: 'High percentage of unused JavaScript',
-        detail: `<a href="${url}">${url}</a>: ${info.js.ratio}% of JavaScript is unused (${(info.js.unused / 1024).toFixed(0)}KB of ${(info.js.total / 1024).toFixed(0)}KB).${fileList}`,
+        detail: `<a href="${url}">${url}</a>: ${info.js.ratio}% of JavaScript is unused (${formatBytes(info.js.unused)} of ${formatBytes(info.js.total)}).${fileList}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -278,19 +273,19 @@ class CodeCoverageAnalyzer {
             topCssFiles
               .map(
                 (f) =>
-                  `<li><code>${f.url.split('/').pop() ?? f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB)</li>`,
+                  `<li><code>${getFileNameFromUrl(f.url)}</code> — ${f.unusedPercent}% unused (${formatBytes(f.unused)})</li>`,
               )
               .join('') +
             '</ul>'
           : '';
       issues.push({
         message: 'High percentage of unused CSS',
-        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${(info.css.unused / 1024).toFixed(0)}KB of ${(info.css.total / 1024).toFixed(0)}KB).${cssFileList}`,
+        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${formatBytes(info.css.unused)} of ${formatBytes(info.css.total)}).${cssFileList}`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
-    if (info.totalUnusedBytes > 500000) {
+    if (info.totalUnusedBytes > THRESHOLDS.UNUSED_CODE_BYTES_WARNING) {
       const topFiles = info.js.files.slice(0, 5);
       const fileList =
         topFiles.length > 0
@@ -298,14 +293,14 @@ class CodeCoverageAnalyzer {
             topFiles
               .map(
                 (f) =>
-                  `<li><code>${f.url.split('/').pop() ?? f.url}</code> — ${f.unusedPercent}% unused (${(f.unused / 1024).toFixed(0)}KB of ${(f.total / 1024).toFixed(0)}KB)</li>`,
+                  `<li><code>${getFileNameFromUrl(f.url)}</code> — ${f.unusedPercent}% unused (${formatBytes(f.unused)} of ${formatBytes(f.total)})</li>`,
               )
               .join('') +
             '</ul>'
           : '';
       warnings.push({
         message: 'Large amount of unused code',
-        detail: `<a href="${url}">${url}</a>: ${(info.totalUnusedBytes / 1024).toFixed(0)}KB of unused code (${info.unusedRatio}% of total). This significantly impacts page load time.${fileList}`,
+        detail: `<a href="${url}">${url}</a>: ${formatBytes(info.totalUnusedBytes)} of unused code (${info.unusedRatio}% of total). This significantly impacts page load time.${fileList}`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -358,21 +353,21 @@ class CodeCoverageAnalyzer {
     if (pagesWithData === 0) return { issues, warnings };
 
     // Average across site
-    const avgJSUnused = totalJS > 0 ? Math.round((totalUnusedJS / totalJS) * 100) : 0;
-    const avgCSSUnused = totalCSS > 0 ? Math.round((totalUnusedCSS / totalCSS) * 100) : 0;
+    const avgJSUnused = calcPercent(totalUnusedJS, totalJS);
+    const avgCSSUnused = calcPercent(totalUnusedCSS, totalCSS);
 
     if (avgJSUnused > 60) {
       issues.push({
-        title: `Site-wide: ${avgJSUnused}% of JavaScript is unused on average`,
-        description: `Across ${pagesWithData} pages, ${(totalUnusedJS / 1024 / 1024).toFixed(1)}MB of JavaScript went unused. Consider tree-shaking, code splitting, or lazy loading.`,
+        message: `Site-wide: ${avgJSUnused}% of JavaScript is unused on average`,
+        detail: `Across ${pagesWithData} pages, ${formatBytes(totalUnusedJS)} of JavaScript went unused. Consider tree-shaking, code splitting, or lazy loading.`,
         severity: SEVERITY.HIGH,
       });
     }
 
     if (avgCSSUnused > 70) {
       issues.push({
-        title: `Site-wide: ${avgCSSUnused}% of CSS is unused on average`,
-        description: `Across ${pagesWithData} pages, ${(totalUnusedCSS / 1024 / 1024).toFixed(1)}MB of CSS went unused. Consider CSS purging or critical CSS extraction.`,
+        message: `Site-wide: ${avgCSSUnused}% of CSS is unused on average`,
+        detail: `Across ${pagesWithData} pages, ${formatBytes(totalUnusedCSS)} of CSS went unused. Consider CSS purging or critical CSS extraction.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -391,8 +386,8 @@ class CodeCoverageAnalyzer {
         })
         .join('');
       warnings.push({
-        title: `${frequentlyUnused.length} script(s) consistently have high unused code`,
-        description: `These scripts are frequently loaded but mostly unused:<ul>${list}</ul>`,
+        message: `${frequentlyUnused.length} script(s) consistently have high unused code`,
+        detail: `These scripts are frequently loaded but mostly unused:<ul>${list}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }

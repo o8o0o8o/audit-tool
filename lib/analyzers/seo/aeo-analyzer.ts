@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { detectAuthorInfo, calcPercent } from '../../utils';
 import type { ParsedPage, ChromePage, Issue, PageInfo, AeoData } from '../../types';
 
 interface AeoInfo extends AeoData {
@@ -139,7 +140,7 @@ class AEOAnalyzer {
 
     info.totalElements = semanticCount + genericCount;
     info.genericElements = genericCount;
-    info.semanticHTMLRatio = info.totalElements > 0 ? Math.round((semanticCount / info.totalElements) * 100) : 0;
+    info.semanticHTMLRatio = calcPercent(semanticCount, info.totalElements);
 
     // Check for missing key semantic elements
     if (!info.semanticElements.main) {
@@ -239,11 +240,9 @@ class AEOAnalyzer {
    * @private
    */
   static #analyzeCitationSignals(parsedPage: ParsedPage, info: AeoInfo, _warnings: Issue[], _url: string) {
-    // Check for author info
-    const authorMeta = parsedPage.querySelector('meta[name="author"]');
-    const authorSchema = parsedPage.toString().includes('"author"');
-    const authorByline = parsedPage.querySelector('[rel="author"], .author, [itemprop="author"]');
-    info.hasAuthorInfo = !!((authorMeta ?? authorSchema) || authorByline);
+    // Check for author info (uses shared utility)
+    const authorResult = detectAuthorInfo(parsedPage);
+    info.hasAuthorInfo = authorResult.author !== null;
 
     // Check for clear, concise introductory content (first paragraph)
     const firstParagraph = parsedPage.querySelector('article p, main p, .content p');

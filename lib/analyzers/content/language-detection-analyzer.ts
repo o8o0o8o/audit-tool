@@ -679,8 +679,8 @@ class LanguageDetectionAnalyzer {
     if (langMismatches.length > 0) {
       const examples = formatUrlList(langMismatches, 5);
       issues.push({
-        title: `${langMismatches.length} page(s) have content language mismatches`,
-        description: `The detected content language does not match the declared language:<ul>${examples}</ul>${langMismatches.length > 5 ? `<p>...and ${langMismatches.length - 5} more</p>` : ''}`,
+        message: `${langMismatches.length} page(s) have content language mismatches`,
+        detail: `The detected content language does not match the declared language:<ul>${examples}</ul>${langMismatches.length > 5 ? `<p>...and ${langMismatches.length - 5} more</p>` : ''}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -690,8 +690,8 @@ class LanguageDetectionAnalyzer {
     if (langKeys.length > 1) {
       const langSummary = langKeys.map((l) => `${l}: ${detectedLanguages[l]} pages`).join(', ');
       warnings.push({
-        title: `Site has content in ${langKeys.length} detected languages`,
-        description: `Detected languages: ${langSummary}. Ensure proper hreflang implementation for multilingual content.`,
+        message: `Site has content in ${langKeys.length} detected languages`,
+        detail: `Detected languages: ${langSummary}. Ensure proper hreflang implementation for multilingual content.`,
         severity: SEVERITY.LOW,
       });
     }

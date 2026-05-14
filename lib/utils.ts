@@ -4,6 +4,8 @@
  */
 
 import crypto from 'crypto';
+import * as fs from 'fs';
+import * as zlib from 'zlib';
 import { THRESHOLDS, SEVERITY } from './constants';
 import type { UrlAnalysis } from './types';
 // Import core URL validation from validators.js for consistency
@@ -246,7 +248,7 @@ function analyzeUrlStructure(urlString: string, origin: string): UrlAnalysis {
     analysis.length = pathAndQuery.length;
     analysis.isHttps = url.protocol === 'https:';
 
-    const pathSegments = url.pathname.split('/').filter((segment) => segment.length > 0);
+    const pathSegments = getPathSegments(url.pathname);
     analysis.depth = pathSegments.length;
 
     analysis.hasUppercase = /[A-Z]/.test(url.pathname);
@@ -443,6 +445,31 @@ function isInternalLink(href: string, origin: string): boolean {
 }
 
 /**
+ * Strip "www." prefix from a hostname/domain.
+ */
+function stripWww(hostname: string): string {
+  return hostname.replace(/^www\./, '');
+}
+
+/**
+ * Check if two URLs belong to the same domain (ignoring www prefix).
+ */
+function isSameDomain(url1: string, url2: string): boolean {
+  const host1 = getHostname(url1);
+  const host2 = getHostname(url2);
+  if (!host1 || !host2) return false;
+  return stripWww(host1) === stripWww(host2);
+}
+
+/**
+ * Check if a request hostname is first-party relative to the origin hostname.
+ * Returns true if the hosts are the same or one is a subdomain of the other.
+ */
+function isFirstPartyHost(reqHost: string, originHost: string): boolean {
+  return reqHost === originHost || reqHost.endsWith('.' + originHost) || originHost.endsWith('.' + reqHost);
+}
+
+/**
  * Get origin from a URL string
  */
 function getOrigin(url: string): string {
@@ -451,6 +478,33 @@ function getOrigin(url: string): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Safely extract hostname from a URL string.
+ * Returns empty string on invalid URLs.
+ */
+function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Remove trailing slash from a path, preserving root '/'.
+ */
+function removeTrailingSlash(path: string): string {
+  return path === '/' ? '/' : path.replace(/\/$/, '');
+}
+
+/**
+ * Split a URL pathname into non-empty segments.
+ * E.g. '/a/b/c/' -> ['a', 'b', 'c']
+ */
+function getPathSegments(pathname: string): string[] {
+  return pathname.split('/').filter((s) => s.length > 0);
 }
 
 /**
@@ -628,6 +682,370 @@ function shortenUrl(url: string, maxLength = 50): string {
   }
 }
 
+/**
+ * Extract the filename from a URL path.
+ * Returns the last path segment, or a truncated fallback on invalid URLs.
+ */
+function getFileNameFromUrl(url: string, maxLength = 50): string {
+  try {
+    const pathname = new URL(url).pathname;
+    return pathname.split('/').pop() ?? pathname.substring(0, maxLength);
+  } catch {
+    return url?.substring(0, maxLength) ?? 'unknown';
+  }
+}
+
+/**
+ * Extract meta tag values from a parsed HTML page.
+ * @param parsedPage - Parsed HTML page with querySelector
+ * @param selectorAttr - The meta attribute to query by ('property' for OG, 'name' for Twitter)
+ * @param tags - Object with tag names as keys, values will be populated
+ * @returns The number of tags found
+ */
+function extractMetaTags(
+  parsedPage: { querySelector(selector: string): { getAttribute(name: string): string | undefined | null } | null },
+  selectorAttr: string,
+  tags: Record<string, string | null>,
+): number {
+  let found = 0;
+  for (const key in tags) {
+    const tag = parsedPage.querySelector(`meta[${selectorAttr}="${key}"]`);
+    if (tag) {
+      tags[key] = tag.getAttribute('content') ?? null;
+      found++;
+    }
+  }
+  return found;
+}
+
+/**
+ * Strip the severity suffix (e.g. " [critical]") from an issue string.
+ */
+function stripIssueSeverity(issue: string): string {
+  return issue.replace(/\s*\[(critical|high|medium|low)\]\s*$/i, '');
+}
+
+/**
+ * Clamp a score to the 0-100 range.
+ */
+function clampScore(score: number): number {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+/**
+ * Truncate a string to maxLength, appending '...' if truncated.
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (!text || text.length <= maxLength) return text ?? '';
+  return text.substring(0, maxLength - 3) + '...';
+}
+
+/**
+ * Check if a robots directive string contains a specific directive (case-insensitive).
+ * Works for both meta robots content and X-Robots-Tag header values.
+ */
+function hasRobotsDirective(directiveString: string, directive: string): boolean {
+  return directiveString.toLowerCase().includes(directive.toLowerCase());
+}
+
+/**
+ * Count words in a text string.
+ */
+function countWords(text: string): number {
+  if (!text) return 0;
+  return text.split(/\s+/).filter((w) => w.length > 0).length;
+}
+
+/**
+ * Check if a URL is a non-content page (cart, login, search, etc.).
+ * These pages are excluded from content quality checks.
+ */
+function isNonContentPage(url: string): boolean {
+  const nonContentPatterns = [
+    /\/(cart|checkout|basket|login|register|account|search|404|error)/i,
+    /\/(tag|category|archive|author)\/[^/]+\/?$/i,
+    /\?(s|q|query|search)=/i,
+    /\/page\/\d+\/?$/i,
+    /\/(home|index)\/?$/i,
+  ];
+
+  if (nonContentPatterns.some((pattern) => pattern.test(url))) return true;
+
+  // Exclude homepage
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, '');
+    if (path === '') return true;
+  } catch {
+    /* ignore */
+  }
+
+  return false;
+}
+
+/**
+ * Detect important page links (about, contact, privacy, terms, etc.)
+ * from parsed HTML. Used by E-E-A-T, cookie consent, and analytics analyzers.
+ */
+function detectImportantPageLinks(parsedPage: { querySelectorAll(selector: string): { getAttribute(name: string): string | undefined | null; textContent: string }[]; text?: string }) {
+  const links = parsedPage.querySelectorAll('a');
+  const result = {
+    hasAboutPage: false,
+    hasContactInfo: false,
+    hasPrivacyPolicy: false,
+    hasTermsOfService: false,
+    hasCookiePolicy: false,
+    hasAccessibilityStatement: false,
+    hasImpressum: false,
+  };
+
+  for (const link of links) {
+    const href = (link.getAttribute('href') ?? '').toLowerCase();
+    const text = (link.textContent || '').toLowerCase();
+
+    if (/about|who.we.are|our.team|our.story/i.test(href) || /about|who we are/i.test(text)) {
+      result.hasAboutPage = true;
+    }
+    if (/contact|get.in.touch/i.test(href) || /contact/i.test(text)) {
+      result.hasContactInfo = true;
+    }
+    if (/privacy/i.test(href) || /privacy/i.test(text)) {
+      result.hasPrivacyPolicy = true;
+    }
+    if (/terms|tos|conditions/i.test(href) || /terms/i.test(text)) {
+      result.hasTermsOfService = true;
+    }
+    if (/cookie.policy|cookie-policy|cookies$/i.test(href) || /cookie policy/i.test(text)) {
+      result.hasCookiePolicy = true;
+    }
+    if (/accessibility/i.test(href) || /accessibility statement|accessibility/i.test(text)) {
+      result.hasAccessibilityStatement = true;
+    }
+    if (/impressum|imprint|legal.notice|legal-notice/i.test(href) || /impressum|imprint|legal notice/i.test(text)) {
+      result.hasImpressum = true;
+    }
+  }
+
+  // Also check for contact info in content
+  const bodyText = parsedPage.text || '';
+  if (/\b[\w.-]+@[\w.-]+\.\w{2,}\b/.test(bodyText)) {
+    result.hasContactInfo = true;
+  }
+  if (/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(bodyText)) {
+    result.hasContactInfo = true;
+  }
+
+  return result;
+}
+
+/**
+ * Detect author information from a parsed HTML page.
+ * Checks JSON-LD schemas, meta tags, and common CSS selectors.
+ */
+function detectAuthorInfo(parsedPage: { querySelector(selector: string): { getAttribute(name: string): string | undefined | null; textContent: string } | null; querySelectorAll(selector: string): { textContent: string }[]; text?: string }) {
+  const result: { author: string | null; credentials: string[] } = { author: null, credentials: [] };
+
+  // Check schema.org author
+  const schemas = parseJsonLdSchemas(parsedPage);
+  for (const schema of schemas) {
+    if (schema.author) {
+      const authorObj = schema.author as Record<string, unknown>;
+      const author = typeof schema.author === 'string' ? schema.author : (authorObj.name as string);
+      if (author) {
+        result.author = author;
+        if (authorObj.jobTitle) {
+          result.credentials.push(authorObj.jobTitle as string);
+        }
+        if (authorObj.description) {
+          result.credentials.push(authorObj.description as string);
+        }
+      }
+    }
+  }
+
+  // Check meta author
+  if (!result.author) {
+    const metaAuthor = parsedPage.querySelector('meta[name="author"]');
+    if (metaAuthor) {
+      result.author = metaAuthor.getAttribute('content') ?? null;
+    }
+  }
+
+  // Check common author patterns in HTML
+  if (!result.author) {
+    const authorSelectors = [
+      '[rel="author"]',
+      '.author-name',
+      '.author',
+      '.byline',
+      '[itemprop="author"]',
+      '.post-author',
+      '.article-author',
+      '.entry-author',
+    ];
+
+    for (const selector of authorSelectors) {
+      const el = parsedPage.querySelector(selector);
+      if (el) {
+        const text = el.textContent.trim();
+        if (text && text.length < 100) {
+          result.author = text.replace(/^by\s+/i, '');
+          break;
+        }
+      }
+    }
+  }
+
+  // Look for credentials near author
+  if (result.author) {
+    const credentialPatterns = [
+      /\b(MD|PhD|Dr\.|M\.D\.|DO|JD|MBA|CPA|CFP|RN|LCSW)\b/gi,
+      /\b(certified|licensed|registered|board-certified)\s+\w+/gi,
+      /\b(\d+)\+?\s*years?\s*(of)?\s*experience/gi,
+    ];
+
+    const bodyText = parsedPage.text || '';
+    for (const pattern of credentialPatterns) {
+      const matches = bodyText.match(pattern);
+      if (matches) {
+        result.credentials.push(...matches.slice(0, 3));
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Calculate Jaccard similarity between two sets.
+ * Returns a value between 0 (completely different) and 1 (identical).
+ * Uses an optimized loop over the smaller set.
+ */
+function jaccardSimilarity(setA: Set<string>, setB: Set<string>): number {
+  if (setA.size === 0 && setB.size === 0) return 0;
+
+  let intersection = 0;
+  const smaller = setA.size <= setB.size ? setA : setB;
+  const larger = setA.size <= setB.size ? setB : setA;
+
+  for (const item of smaller) {
+    if (larger.has(item)) intersection++;
+  }
+
+  const union = setA.size + setB.size - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+/**
+ * Detect lazy loading implementation from a parsed HTML page.
+ * Returns info about native or library-based lazy loading, or null if none found.
+ */
+function detectLazyLoading(parsedPage: { querySelectorAll(selector: string): unknown[]; toString(): string }): { type: string; count?: number; pattern?: string } | null {
+  // Check for native lazy loading
+  const lazyImages = parsedPage.querySelectorAll('img[loading="lazy"]');
+  if (lazyImages.length > 0) {
+    return { type: 'native', count: lazyImages.length };
+  }
+
+  // Check for common lazy loading libraries
+  const html = parsedPage.toString();
+  if (html.includes('data-src') || html.includes('data-lazy')) {
+    return { type: 'library', pattern: 'data-src' };
+  }
+  if (html.includes('lazyload') || html.includes('lazy-load')) {
+    return { type: 'library', pattern: 'class-based' };
+  }
+
+  return null;
+}
+
+/**
+ * Count lazy loading patterns in raw HTML string (for JS rendering comparison).
+ */
+function countLazyLoadingPatterns(html: string): string[] {
+  const lazyPatterns = [/loading=["']lazy["']/gi, /data-src=/gi, /data-lazy/gi, /lazyload/gi, /lazy-load/gi];
+
+  const matches: string[] = [];
+  for (const pattern of lazyPatterns) {
+    const found = html.match(pattern);
+    if (found) {
+      matches.push(...found);
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Read a gzip-compressed JSON file and parse it.
+ */
+function readCompressedJson<T = unknown>(filePath: string): T {
+  const compressed = fs.readFileSync(filePath);
+  return JSON.parse(zlib.gunzipSync(compressed).toString('utf-8')) as T;
+}
+
+/**
+ * Write data as gzip-compressed JSON.
+ */
+function writeCompressedJson(filePath: string, data: unknown): void {
+  const jsonString = JSON.stringify(data);
+  fs.writeFileSync(filePath, zlib.gzipSync(jsonString));
+}
+
+/**
+ * Get the platform-specific command for opening a file/URL in the default browser.
+ */
+function getOpenCommand(): string {
+  return process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+}
+
+// JS framework and CMS detection functions have been consolidated into
+// TechnologyDetector.quickDetectFramework() and TechnologyDetector.quickDetectCMS()
+// in lib/analyzers/seo/technology-detector.ts
+
+/**
+ * Check for server-side rendering indicators in a parsed page.
+ */
+function hasSSRIndicators(parsedPage: { querySelector(selector: string): { textContent: string } | null; toString(): string }): boolean {
+  const mainContent = parsedPage.querySelector('main, article, .content, #content');
+  if (mainContent) {
+    const text = mainContent.textContent.trim();
+    if (text.length > 100) return true;
+  }
+
+  const html = parsedPage.toString();
+  return html.includes('__NEXT_DATA__') || html.includes('__NUXT__');
+}
+
+/**
+ * Get the number of incoming links for a URL from an incoming links record.
+ * Handles both array and number formats.
+ */
+function getIncomingLinkCount(incomingLinks: Record<string, unknown>, url: string): number {
+  const incoming = incomingLinks[url];
+  if (Array.isArray(incoming)) return incoming.length;
+  if (typeof incoming === 'number') return incoming;
+  return 0;
+}
+
+/**
+ * Convert a Map or plain object to an array of [key, value] entries.
+ * Handles the Map/Object ambiguity that occurs after JSON serialization/restoration.
+ */
+function normalizeToEntries<V>(data: Map<string, V> | Record<string, V> | null | undefined): [string, V][] {
+  if (data instanceof Map) return Array.from(data.entries());
+  if (!data) return [];
+  return Object.entries(data) as [string, V][];
+}
+
+/**
+ * Format a sample list showing first N items with a "and X more" suffix.
+ */
+function formatSampleList(items: string[], limit = 5, separator = ', '): string {
+  const shown = items.slice(0, limit).join(separator);
+  const remaining = items.length - limit;
+  return remaining > 0 ? `${shown}${separator}and ${remaining} more` : shown;
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -657,6 +1075,32 @@ export {
   calcPercent,
   incrementCounter,
   getTopEntries,
+  extractMetaTags,
+  truncateText,
+  hasRobotsDirective,
+  getFileNameFromUrl,
+  isSameDomain,
+  isFirstPartyHost,
+  getHostname,
+  removeTrailingSlash,
+  getPathSegments,
+  clampScore,
+  countWords,
+  isNonContentPage,
+  detectImportantPageLinks,
+  detectAuthorInfo,
+  detectLazyLoading,
+  countLazyLoadingPatterns,
+  hasSSRIndicators,
+  getOpenCommand,
+  jaccardSimilarity,
+  readCompressedJson,
+  stripIssueSeverity,
+  stripWww,
+  writeCompressedJson,
+  getIncomingLinkCount,
+  normalizeToEntries,
+  formatSampleList,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getFileNameFromUrl, getHostname } from '../../utils';
 import type { Issue, ParsedPage } from '../../types';
 
 class SRIAnalyzer {
@@ -102,7 +103,7 @@ class SRIAnalyzer {
     try {
       // Protocol-relative or absolute URL
       if (src.startsWith('//')) {
-        return !src.startsWith('//' + new URL(pageOrigin).hostname);
+        return !src.startsWith('//' + getHostname(pageOrigin));
       }
       if (src.startsWith('http://') || src.startsWith('https://')) {
         return new URL(src).origin !== pageOrigin;
@@ -117,8 +118,7 @@ class SRIAnalyzer {
   private static truncateUrl(url: string): string {
     try {
       const parsed = new URL(url, 'https://example.com');
-      const fileName = parsed.pathname.split('/').pop() ?? parsed.hostname;
-      return `${parsed.hostname}/${fileName}`;
+      return `${parsed.hostname}/${getFileNameFromUrl(url)}`;
     } catch {
       return url.substring(0, 60);
     }

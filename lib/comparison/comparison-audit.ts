@@ -10,8 +10,7 @@ import { exec } from 'child_process';
 // Import SEOData from extracted module (avoids circular dependency with robots.js)
 import { SEOData } from '../seo-data';
 import { PageMatcher } from './page-matcher';
-import { generateTimestamp } from '../utils';
-import { formatElapsedTime } from '../utils';
+import { generateTimestamp, formatElapsedTime, escapeHtml, getOpenCommand, readCompressedJson, writeCompressedJson, getHostname } from '../utils';
 import { generateHTML } from '../../generateHTML';
 import type { PageInfo, Issue, AuditSummary } from '../types';
 
@@ -150,8 +149,10 @@ class ComparisonAudit {
     this.#comparisonResults = null;
 
     // Extract domain names (deferred when using sitemap files)
-    this.originDomain = originUrl ? new URL(originUrl).hostname : null;
-    this.compareDomain = compareUrl ? new URL(compareUrl).hostname : null;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- getHostname returns '' on failure, need || to coerce to null
+    this.originDomain = originUrl ? (getHostname(originUrl) || null) : null;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+    this.compareDomain = compareUrl ? (getHostname(compareUrl) || null) : null;
 
     // Set up comparison directory (deferred if domains not yet known)
     if (this.originDomain && this.compareDomain) {
@@ -223,59 +224,35 @@ class ComparisonAudit {
   }
 
   /**
-   * Audit the origin site
+   * Audit a single site and return the result
    */
-  async #auditOrigin() {
-    const seo = new SEOData(
-      this.#originUrl,
-      this.#options.proceed,
-      this.#options.perf,
-      this.#options.saveHtml,
-      this.#options.concurrency,
-      this.#options.sitemap,
-    );
-
+  async #auditSite(url: string | null, proceed: boolean, sitemap: string | null, label: string): Promise<AuditSiteResult> {
+    const seo = new SEOData(url, proceed, this.#options.perf, this.#options.saveHtml, this.#options.concurrency, sitemap);
     await seo.audit();
-    this.#originResults = {
+    console.log(`\n✅ ${label} audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
+    return {
       data: seo.data,
       domain: seo.domainName,
       resultsDir: seo.resultsDir,
       file: seo.file,
       htmlPath: seo.fileManager.getHtmlFilePath(),
     };
+  }
 
-    // Update domain if it was derived from sitemap
-    this.originDomain ??= seo.domainName;
-
-    console.log(`\n✅ Origin audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
+  /**
+   * Audit the origin site
+   */
+  async #auditOrigin() {
+    this.#originResults = await this.#auditSite(this.#originUrl, this.#options.proceed, this.#options.sitemap, 'Origin');
+    this.originDomain ??= this.#originResults.domain;
   }
 
   /**
    * Audit the compare site
    */
   async #auditCompare() {
-    const seo = new SEOData(
-      this.#compareUrl,
-      false, // Don't proceed for compare site, always fresh
-      this.#options.perf,
-      this.#options.saveHtml,
-      this.#options.concurrency,
-      this.#options.compareSitemap,
-    );
-
-    await seo.audit();
-    this.#compareResults = {
-      data: seo.data,
-      domain: seo.domainName,
-      resultsDir: seo.resultsDir,
-      file: seo.file,
-      htmlPath: seo.fileManager.getHtmlFilePath(),
-    };
-
-    // Update domain if it was derived from sitemap
-    this.compareDomain ??= seo.domainName;
-
-    console.log(`\n✅ Compare audit complete: ${Object.keys(seo.data.pageData.pages ?? {}).length} pages`);
+    this.#compareResults = await this.#auditSite(this.#compareUrl, false, this.#options.compareSitemap, 'Compare');
+    this.compareDomain ??= this.#compareResults.domain;
   }
 
   /**
@@ -312,10 +289,7 @@ class ComparisonAudit {
     for (const batchFile of batchFiles) {
       try {
         const filePath = path.join(pagesDir, batchFile);
-        const compressed = fs.readFileSync(filePath);
-        const batchData = JSON.parse(zlib.gunzipSync(compressed).toString('utf-8')) as {
-          pages?: Record<string, PageInfo>;
-        };
+        const batchData = readCompressedJson<{ pages?: Record<string, PageInfo> }>(filePath);
         if (batchData.pages) {
           Object.assign(allPages, batchData.pages);
         }
@@ -366,6 +340,44 @@ class ComparisonAudit {
     const originSummary = originData.analysis?.summary ?? {};
     const compareSummary = compareData.analysis?.summary ?? {};
 
+    const extractScores = (s: Partial<AuditSummary>): ScoreSet => ({
+      overall: s.overallScore ?? 0,
+      seo: s.categoryScores?.seo ?? 0,
+      performance: s.categoryScores?.performance ?? 0,
+      accessibility: s.categoryScores?.accessibility ?? 0,
+      security: s.categoryScores?.security ?? 0,
+      technical: s.categoryScores?.technical ?? 0,
+    });
+
+    const extractIssues = (s: Partial<AuditSummary>): IssueSet => ({
+      total: s.totalIssues ?? 0,
+      critical: s.criticalCount ?? 0,
+      high: s.highCount ?? 0,
+      medium: s.mediumCount ?? 0,
+      low: s.lowCount ?? 0,
+    });
+
+    const diffScores = (a: ScoreSet, b: ScoreSet): ScoreSet => ({
+      overall: a.overall - b.overall,
+      seo: a.seo - b.seo,
+      performance: a.performance - b.performance,
+      accessibility: a.accessibility - b.accessibility,
+      security: a.security - b.security,
+      technical: a.technical - b.technical,
+    });
+    const diffIssues = (a: IssueSet, b: IssueSet): IssueSet => ({
+      total: a.total - b.total,
+      critical: a.critical - b.critical,
+      high: a.high - b.high,
+      medium: a.medium - b.medium,
+      low: a.low - b.low,
+    });
+
+    const oScores = extractScores(originSummary);
+    const cScores = extractScores(compareSummary);
+    const oIssues = extractIssues(originSummary);
+    const cIssues = extractIssues(compareSummary);
+
     this.#comparisonResults = {
       meta: {
         originUrl: this.#originUrl,
@@ -383,57 +395,8 @@ class ComparisonAudit {
         originOnlyPages: matchStats.originOnlyCount,
         compareOnlyPages: matchStats.compareOnlyCount,
         matchPercentage: matchStats.matchPercentage,
-        scoreComparison: {
-          origin: {
-            overall: originSummary.overallScore ?? 0,
-            seo: originSummary.categoryScores?.seo ?? 0,
-            performance: originSummary.categoryScores?.performance ?? 0,
-            accessibility: originSummary.categoryScores?.accessibility ?? 0,
-            security: originSummary.categoryScores?.security ?? 0,
-            technical: originSummary.categoryScores?.technical ?? 0,
-          },
-          compare: {
-            overall: compareSummary.overallScore ?? 0,
-            seo: compareSummary.categoryScores?.seo ?? 0,
-            performance: compareSummary.categoryScores?.performance ?? 0,
-            accessibility: compareSummary.categoryScores?.accessibility ?? 0,
-            security: compareSummary.categoryScores?.security ?? 0,
-            technical: compareSummary.categoryScores?.technical ?? 0,
-          },
-          delta: {
-            overall: (originSummary.overallScore ?? 0) - (compareSummary.overallScore ?? 0),
-            seo: (originSummary.categoryScores?.seo ?? 0) - (compareSummary.categoryScores?.seo ?? 0),
-            performance:
-              (originSummary.categoryScores?.performance ?? 0) - (compareSummary.categoryScores?.performance ?? 0),
-            accessibility:
-              (originSummary.categoryScores?.accessibility ?? 0) - (compareSummary.categoryScores?.accessibility ?? 0),
-            security: (originSummary.categoryScores?.security ?? 0) - (compareSummary.categoryScores?.security ?? 0),
-            technical: (originSummary.categoryScores?.technical ?? 0) - (compareSummary.categoryScores?.technical ?? 0),
-          },
-        },
-        issueComparison: {
-          origin: {
-            total: originSummary.totalIssues ?? 0,
-            critical: originSummary.criticalCount ?? 0,
-            high: originSummary.highCount ?? 0,
-            medium: originSummary.mediumCount ?? 0,
-            low: originSummary.lowCount ?? 0,
-          },
-          compare: {
-            total: compareSummary.totalIssues ?? 0,
-            critical: compareSummary.criticalCount ?? 0,
-            high: compareSummary.highCount ?? 0,
-            medium: compareSummary.mediumCount ?? 0,
-            low: compareSummary.lowCount ?? 0,
-          },
-          delta: {
-            total: (originSummary.totalIssues ?? 0) - (compareSummary.totalIssues ?? 0),
-            critical: (originSummary.criticalCount ?? 0) - (compareSummary.criticalCount ?? 0),
-            high: (originSummary.highCount ?? 0) - (compareSummary.highCount ?? 0),
-            medium: (originSummary.mediumCount ?? 0) - (compareSummary.mediumCount ?? 0),
-            low: (originSummary.lowCount ?? 0) - (compareSummary.lowCount ?? 0),
-          },
-        },
+        scoreComparison: { origin: oScores, compare: cScores, delta: diffScores(oScores, cScores) },
+        issueComparison: { origin: oIssues, compare: cIssues, delta: diffIssues(oIssues, cIssues) },
       },
       pageComparisons,
       originOnly: this.#formatUnmatchedPages(matchResult.originOnly),
@@ -564,12 +527,8 @@ class ComparisonAudit {
 
     // Save comparison JSON
     const comparisonFile = path.join(this.comparisonDir, 'comparison.json.gz');
-    const jsonString = JSON.stringify(this.#comparisonResults);
-    const compressedData = zlib.gzipSync(jsonString);
-    fs.writeFileSync(comparisonFile, compressedData);
-
-    const sizeMB = compressedData.length / (1024 * 1024);
-    console.log(`\n💾 Saved comparison data: ${comparisonFile} (${sizeMB.toFixed(2)} MB)`);
+    writeCompressedJson(comparisonFile, this.#comparisonResults);
+    console.log(`\n💾 Saved comparison data: ${comparisonFile}`);
 
     // Generate individual HTML reports for each site
     try {
@@ -602,7 +561,7 @@ class ComparisonAudit {
 
     // Auto-open comparison report in browser if --open flag is set
     if (this.#options.open) {
-      const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      const openCmd = getOpenCommand();
       const absolutePath = path.resolve(htmlFile);
       exec(`${openCmd} "${absolutePath}"`, (err) => {
         if (err) console.log('Could not auto-open comparison report:', err.message);
@@ -808,9 +767,9 @@ class ComparisonAudit {
     <div class="header">
       <h1>Site Comparison Report</h1>
       <div class="header-sites">
-        <span class="site-badge">${this.#escapeHtml(this.originDomain)}</span>
+        <span class="site-badge">${escapeHtml(this.originDomain)}</span>
         <span class="vs">vs</span>
-        <span class="site-badge">${this.#escapeHtml(this.compareDomain)}</span>
+        <span class="site-badge">${escapeHtml(this.compareDomain)}</span>
       </div>
       <div class="meta">
         Generated: ${new Date().toLocaleString()} | Duration: ${data.meta.duration}
@@ -844,21 +803,21 @@ class ComparisonAudit {
     <div class="card">
       <h2>Score Comparison</h2>
       <div class="score-comparison">
-        ${this.#getScoreCard('Overall', scores.origin.overall, scores.compare.overall, scores.delta.overall)}
-        ${this.#getScoreCard('SEO', scores.origin.seo, scores.compare.seo, scores.delta.seo)}
-        ${this.#getScoreCard('Performance', scores.origin.performance, scores.compare.performance, scores.delta.performance)}
-        ${this.#getScoreCard('Accessibility', scores.origin.accessibility, scores.compare.accessibility, scores.delta.accessibility)}
-        ${this.#getScoreCard('Security', scores.origin.security, scores.compare.security, scores.delta.security)}
+        ${this.#getComparisonCard('Overall', scores.origin.overall, scores.compare.overall, scores.delta.overall, true)}
+        ${this.#getComparisonCard('SEO', scores.origin.seo, scores.compare.seo, scores.delta.seo, true)}
+        ${this.#getComparisonCard('Performance', scores.origin.performance, scores.compare.performance, scores.delta.performance, true)}
+        ${this.#getComparisonCard('Accessibility', scores.origin.accessibility, scores.compare.accessibility, scores.delta.accessibility, true)}
+        ${this.#getComparisonCard('Security', scores.origin.security, scores.compare.security, scores.delta.security, true)}
       </div>
     </div>
 
     <div class="card">
       <h2>Issue Comparison</h2>
       <div class="stats-grid">
-        ${this.#getIssueCard('Critical', issues.origin.critical, issues.compare.critical, issues.delta.critical)}
-        ${this.#getIssueCard('High', issues.origin.high, issues.compare.high, issues.delta.high)}
-        ${this.#getIssueCard('Medium', issues.origin.medium, issues.compare.medium, issues.delta.medium)}
-        ${this.#getIssueCard('Low', issues.origin.low, issues.compare.low, issues.delta.low)}
+        ${this.#getComparisonCard('Critical', issues.origin.critical, issues.compare.critical, issues.delta.critical, false, 'stat')}
+        ${this.#getComparisonCard('High', issues.origin.high, issues.compare.high, issues.delta.high, false, 'stat')}
+        ${this.#getComparisonCard('Medium', issues.origin.medium, issues.compare.medium, issues.delta.medium, false, 'stat')}
+        ${this.#getComparisonCard('Low', issues.origin.low, issues.compare.low, issues.delta.low, false, 'stat')}
       </div>
     </div>
 
@@ -999,35 +958,32 @@ class ComparisonAudit {
   }
 
   /**
-   * Get score card HTML
+   * Get a comparison card HTML (used for both scores and issues)
+   * @param higherIsBetter - true for scores, false for issues
    */
-  #getScoreCard(label: string, origin: number, compare: number, delta: number) {
-    const deltaClass = delta > 0 ? 'positive' : delta < 0 ? 'negative' : 'neutral';
-    const deltaSign = delta > 0 ? '+' : '';
-    return `
-      <div class="score-item">
-        <div class="score-label">${label}</div>
-        <div class="score-values">
-          <span class="score-num">${origin}</span>
-          <span class="score-arrow">→</span>
-          <span class="score-num">${compare}</span>
-        </div>
-        <div class="delta ${deltaClass}">${deltaSign}${delta}</div>
-      </div>
-    `;
-  }
+  #getComparisonCard(label: string, origin: number, compare: number, delta: number, higherIsBetter: boolean, style: 'score' | 'stat' = 'score') {
+    const isPositive = higherIsBetter ? delta > 0 : delta < 0;
+    const cls = delta === 0 ? 'neutral' : isPositive ? 'positive' : 'negative';
+    const sign = delta > 0 ? '+' : '';
 
-  /**
-   * Get issue card HTML
-   */
-  #getIssueCard(label: string, origin: number, compare: number, delta: number) {
-    const deltaClass = delta < 0 ? 'positive' : delta > 0 ? 'negative' : 'neutral';
-    const deltaSign = delta > 0 ? '+' : '';
+    if (style === 'score') {
+      return `
+        <div class="score-item">
+          <div class="score-label">${label}</div>
+          <div class="score-values">
+            <span class="score-num">${origin}</span>
+            <span class="score-arrow">→</span>
+            <span class="score-num">${compare}</span>
+          </div>
+          <div class="delta ${cls}">${sign}${delta}</div>
+        </div>
+      `;
+    }
     return `
       <div class="stat-card">
         <div class="stat-label">${label}</div>
         <div class="stat-value" style="font-size: 1.5rem;">${origin} → ${compare}</div>
-        <div class="delta ${deltaClass}">${deltaSign}${delta}</div>
+        <div class="delta ${cls}">${sign}${delta}</div>
       </div>
     `;
   }
@@ -1061,7 +1017,7 @@ class ComparisonAudit {
 
         return `
         <tr data-status="${status}">
-          <td class="path-cell" title="${this.#escapeHtml(page.path)}">${this.#escapeHtml(page.path)}</td>
+          <td class="path-cell" title="${escapeHtml(page.path)}">${escapeHtml(page.path)}</td>
           <td>${page.status.origin} / ${page.status.compare}</td>
           <td class="delta-cell ${getDeltaClass(page.deltas.LCP)}">${formatDelta(page.deltas.LCP, 'ms')}</td>
           <td class="delta-cell ${getDeltaClass(page.deltas.CLS)}">${formatDelta(page.deltas.CLS)}</td>
@@ -1083,8 +1039,8 @@ class ComparisonAudit {
       .map(
         ([path, page]: [string, UnmatchedPageInfo]) => `
       <tr>
-        <td class="path-cell">${this.#escapeHtml(path)}</td>
-        <td>${this.#escapeHtml(page.title || '-')}</td>
+        <td class="path-cell">${escapeHtml(path)}</td>
+        <td>${escapeHtml(page.title || '-')}</td>
         <td>${page.status}</td>
         <td>${page.issues}</td>
       </tr>
@@ -1108,19 +1064,6 @@ class ComparisonAudit {
   }
 
   /**
-   * Escape HTML special characters
-   */
-  #escapeHtml(str: string | null | undefined) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  /**
    * Print summary to console
    */
   #printSummary() {
@@ -1140,29 +1083,24 @@ class ComparisonAudit {
     console.log(`  Origin Only:      ${data.summary.originOnlyPages}`);
     console.log(`  Compare Only:     ${data.summary.compareOnlyPages}`);
 
+    const formatRow = (name: string, o: number, c: number, d: number, pad = 15) => {
+      const sign = d > 0 ? '+' : '';
+      return `  ${name.padEnd(pad)} ${o} → ${c}  (${sign}${d})`;
+    };
+
     console.log('\nSCORE COMPARISON (Origin → Compare)');
     console.log('-'.repeat(40));
-    const formatScore = (name: string, o: number, c: number, d: number) => {
-      const sign = d > 0 ? '+' : '';
-      return `  ${name.padEnd(15)} ${o} → ${c}  (${sign}${d})`;
-    };
-    console.log(formatScore('Overall:', scores.origin.overall, scores.compare.overall, scores.delta.overall));
-    console.log(formatScore('SEO:', scores.origin.seo, scores.compare.seo, scores.delta.seo));
-    console.log(
-      formatScore('Performance:', scores.origin.performance, scores.compare.performance, scores.delta.performance),
-    );
-    console.log(formatScore('Security:', scores.origin.security, scores.compare.security, scores.delta.security));
+    console.log(formatRow('Overall:', scores.origin.overall, scores.compare.overall, scores.delta.overall));
+    console.log(formatRow('SEO:', scores.origin.seo, scores.compare.seo, scores.delta.seo));
+    console.log(formatRow('Performance:', scores.origin.performance, scores.compare.performance, scores.delta.performance));
+    console.log(formatRow('Security:', scores.origin.security, scores.compare.security, scores.delta.security));
 
     console.log('\nISSUE SUMMARY (Origin → Compare)');
     console.log('-'.repeat(40));
-    const formatIssue = (name: string, o: number, c: number, d: number) => {
-      const sign = d > 0 ? '+' : '';
-      return `  ${name.padEnd(12)} ${o} → ${c}  (${sign}${d})`;
-    };
-    console.log(formatIssue('Critical:', issues.origin.critical, issues.compare.critical, issues.delta.critical));
-    console.log(formatIssue('High:', issues.origin.high, issues.compare.high, issues.delta.high));
-    console.log(formatIssue('Medium:', issues.origin.medium, issues.compare.medium, issues.delta.medium));
-    console.log(formatIssue('Low:', issues.origin.low, issues.compare.low, issues.delta.low));
+    console.log(formatRow('Critical:', issues.origin.critical, issues.compare.critical, issues.delta.critical, 12));
+    console.log(formatRow('High:', issues.origin.high, issues.compare.high, issues.delta.high, 12));
+    console.log(formatRow('Medium:', issues.origin.medium, issues.compare.medium, issues.delta.medium, 12));
+    console.log(formatRow('Low:', issues.origin.low, issues.compare.low, issues.delta.low, 12));
 
     console.log('\nREPORTS GENERATED');
     console.log('-'.repeat(40));

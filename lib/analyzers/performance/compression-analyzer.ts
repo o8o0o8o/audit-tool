@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { formatBytes } from '../../utils';
+import { formatBytes, getFileNameFromUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ResourceAnalysisEntry {
@@ -118,7 +118,7 @@ class CompressionAnalyzer {
       const totalSavings = uncompressedLarge.reduce((sum: number, r) => sum + r.potentialSavings, 0);
       const examples = uncompressedLarge
         .slice(0, 3)
-        .map((r) => `${this.getFileName(r.url)} (${formatBytes(r.size)})`)
+        .map((r) => `${getFileNameFromUrl(r.url)} (${formatBytes(r.size)})`)
         .join(', ');
 
       issues.push({
@@ -271,19 +271,6 @@ class CompressionAnalyzer {
     return { issues, warnings, stats };
   }
 
-  /**
-   * Get filename from URL
-   * @param {string} url
-   * @returns {string}
-   */
-  static getFileName(url: string) {
-    try {
-      const pathname = new URL(url).pathname;
-      return pathname.split('/').pop() ?? pathname;
-    } catch {
-      return url;
-    }
-  }
 }
 
 export { CompressionAnalyzer };

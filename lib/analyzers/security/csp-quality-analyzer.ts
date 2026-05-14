@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { clampScore, getHeader } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Dangerous directive values
@@ -33,9 +34,8 @@ class CSPQualityAnalyzer {
 
     const headers = pageData.responseHeaders ?? {};
 
-    const cspHeader = headers['content-security-policy'] || headers['Content-Security-Policy'] || '';
-    const cspReportOnly =
-      headers['content-security-policy-report-only'] || headers['Content-Security-Policy-Report-Only'] || '';
+    const cspHeader = getHeader(headers, 'content-security-policy') ?? '';
+    const cspReportOnly = getHeader(headers, 'content-security-policy-report-only') ?? '';
 
     info.hasCSP = cspHeader.length > 0;
     info.hasReportOnly = cspReportOnly.length > 0;
@@ -130,7 +130,7 @@ class CSPQualityAnalyzer {
       }
     }
 
-    info.score = Math.max(0, Math.min(100, score));
+    info.score = clampScore(score);
 
     // Report issues
     if (info.dangerousDirectives.length > 0) {

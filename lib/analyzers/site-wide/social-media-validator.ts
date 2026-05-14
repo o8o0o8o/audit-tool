@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList, calcPercent, incrementCounter, getTopEntries } from '../../utils';
+import { formatUrlList, calcPercent, incrementCounter, getTopEntries, escapeHtml } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -99,8 +99,8 @@ class SocialMediaValidator {
     // Report 1: Low Open Graph coverage
     if (ogCoverage < 80 && pagesAnalyzed > 10) {
       issues.push({
-        title: `Low Open Graph tag coverage`,
-        description: `Only ${ogCoverage}% of pages (${socialStats.pagesWithOpenGraph}/${pagesAnalyzed}) have Open Graph tags. This affects Facebook, LinkedIn, and WhatsApp sharing.`,
+        message: `Low Open Graph tag coverage`,
+        detail: `Only ${ogCoverage}% of pages (${socialStats.pagesWithOpenGraph}/${pagesAnalyzed}) have Open Graph tags. This affects Facebook, LinkedIn, and WhatsApp sharing.`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -116,8 +116,8 @@ class SocialMediaValidator {
       const moreCount = socialStats.pagesWithoutSocial > 10 ? ` (showing 10 of ${socialStats.pagesWithoutSocial})` : '';
 
       issues.push({
-        title: `Pages missing social media tags`,
-        description: `${socialStats.pagesWithoutSocial} page(s) have no social media tags (Open Graph or Twitter Card)${moreCount}:<ul>${pagesWithoutList}</ul>`,
+        message: `Pages missing social media tags`,
+        detail: `${socialStats.pagesWithoutSocial} page(s) have no social media tags (Open Graph or Twitter Card)${moreCount}:<ul>${pagesWithoutList}</ul>`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -127,8 +127,8 @@ class SocialMediaValidator {
 
     if (imageUsage.length > 0 && imageUsage[0][1] > pagesAnalyzed * 0.7) {
       issues.push({
-        title: `Default social image used on most pages`,
-        description: `The same Open Graph image is used on ${imageUsage[0][1]} pages (${calcPercent(imageUsage[0][1], pagesAnalyzed)}%). Consider using unique images for each page: ${imageUsage[0][0]}`,
+        message: `Default social image used on most pages`,
+        detail: `The same Open Graph image is used on ${imageUsage[0][1]} pages (${calcPercent(imageUsage[0][1], pagesAnalyzed)}%). Consider using unique images for each page: ${imageUsage[0][0]}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -137,12 +137,12 @@ class SocialMediaValidator {
     if (socialStats.relativeImageUrls.length > 0) {
       const relativeList = socialStats.relativeImageUrls
         .slice(0, 5)
-        .map((item) => `<li><a href="${item.url}">${item.url}</a> - ${item.image}</li>`)
+        .map((item) => `<li><a href="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a> - ${escapeHtml(item.image)}</li>`)
         .join('');
 
       issues.push({
-        title: `Social images use relative URLs`,
-        description: `${socialStats.relativeImageUrls.length} page(s) have relative URLs in og:image or twitter:image. These must be absolute URLs:<ul>${relativeList}</ul>`,
+        message: `Social images use relative URLs`,
+        detail: `${socialStats.relativeImageUrls.length} page(s) have relative URLs in og:image or twitter:image. These must be absolute URLs:<ul>${relativeList}</ul>`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -151,12 +151,12 @@ class SocialMediaValidator {
     if (socialStats.imageDimensionIssues.length > 5) {
       const dimensionList = socialStats.imageDimensionIssues
         .slice(0, 5)
-        .map((item) => `<li><a href="${item.url}">${item.url}</a> - ${item.dimensions} (recommended: 1200x630)</li>`)
+        .map((item) => `<li><a href="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a> - ${escapeHtml(item.dimensions)} (recommended: 1200x630)</li>`)
         .join('');
 
       issues.push({
-        title: `Social images below recommended dimensions`,
-        description: `${socialStats.imageDimensionIssues.length} page(s) have social images smaller than the recommended 1200x630:<ul>${dimensionList}</ul>`,
+        message: `Social images below recommended dimensions`,
+        detail: `${socialStats.imageDimensionIssues.length} page(s) have social images smaller than the recommended 1200x630:<ul>${dimensionList}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -169,8 +169,8 @@ class SocialMediaValidator {
 
     if (missingTwitterButHaveOG.length > pagesAnalyzed * 0.5) {
       warnings.push({
-        title: `Many pages missing Twitter Card tags`,
-        description: `${missingTwitterButHaveOG.length} page(s) have Open Graph but no Twitter Card tags. While Twitter falls back to OG, explicit Twitter tags provide better control.`,
+        message: `Many pages missing Twitter Card tags`,
+        detail: `${missingTwitterButHaveOG.length} page(s) have Open Graph but no Twitter Card tags. While Twitter falls back to OG, explicit Twitter tags provide better control.`,
         severity: SEVERITY.LOW,
       });
     }

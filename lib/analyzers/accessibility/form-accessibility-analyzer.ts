@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { calcPercent } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, FormInput } from '../../types';
 
 interface FormAnalysis {
@@ -142,7 +143,7 @@ class FormAccessibilityAnalyzer {
     const totalChecks = formData.totalInputs * 3; // label, autocomplete, aria
     const failedChecks = formData.inputsWithoutLabels * 2 + formData.inputsWithoutAutocomplete;
     formData.accessibilityScore =
-      totalChecks > 0 ? Math.max(0, Math.round(100 - (failedChecks / totalChecks) * 100)) : 100;
+      totalChecks > 0 ? Math.max(0, 100 - calcPercent(failedChecks, totalChecks)) : 100;
 
     return { issues, warnings, formData };
   }
@@ -355,7 +356,7 @@ class FormAccessibilityAnalyzer {
     }
 
     if (totalInputsWithoutLabels > 0) {
-      const percentage = Math.round((totalInputsWithoutLabels / totalInputs) * 100);
+      const percentage = calcPercent(totalInputsWithoutLabels, totalInputs);
       issues.push({
         message: `${totalInputsWithoutLabels} form inputs across site missing labels`,
         detail: `${percentage}% of form inputs lack proper labels. This is a WCAG 2.1 Level A failure affecting screen reader users.`,

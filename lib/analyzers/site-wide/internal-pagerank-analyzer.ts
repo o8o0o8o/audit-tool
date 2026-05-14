@@ -53,8 +53,8 @@ class InternalPageRankAnalyzer {
     if (lowRankPages.length > pages.length * 0.2 && lowRankPages.length > 5) {
       const examples = formatUrlList(lowRankPages.slice(0, 5).map(([url]) => url));
       warnings.push({
-        title: `${lowRankPages.length} pages have very low internal link equity`,
-        description: `These pages receive minimal internal link equity, reducing their ranking potential:<ul>${examples}</ul>${lowRankPages.length > 5 ? `<p>...and ${lowRankPages.length - 5} more</p>` : ''}`,
+        message: `${lowRankPages.length} pages have very low internal link equity`,
+        detail: `These pages receive minimal internal link equity, reducing their ranking potential:<ul>${examples}</ul>${lowRankPages.length > 5 ? `<p>...and ${lowRankPages.length - 5} more</p>` : ''}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -65,8 +65,8 @@ class InternalPageRankAnalyzer {
       const medianScore = ranked[Math.floor(ranked.length / 2)][1] as number;
       if (medianScore > 0 && topScore / medianScore > 20) {
         warnings.push({
-          title: 'Internal link equity is highly concentrated',
-          description: `The top page (<a href="${ranked[0][0]}">${ranked[0][0]}</a>) has ${Math.round(topScore / medianScore)}x more internal link equity than the median page. Consider distributing links more evenly.`,
+          message: 'Internal link equity is highly concentrated',
+          detail: `The top page (<a href="${ranked[0][0]}">${ranked[0][0]}</a>) has ${Math.round(topScore / medianScore)}x more internal link equity than the median page. Consider distributing links more evenly.`,
           severity: SEVERITY.LOW,
         });
       }

@@ -1,4 +1,5 @@
 import { SEVERITY } from '../../constants';
+import { clampScore } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface KeywordIndexEntry {
@@ -320,7 +321,7 @@ class ContentGapAnalyzer {
       score += 5;
     }
 
-    return Math.min(Math.round(score), 100);
+    return clampScore(score);
   }
 
   /**

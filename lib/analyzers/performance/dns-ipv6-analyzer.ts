@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getHostname } from '../../utils';
 import type { Issue } from '../../types';
 import * as dns from 'dns';
 import { promisify } from 'util';
@@ -38,9 +39,8 @@ class DNSIPv6Analyzer {
       nameserverCount: 0,
     };
 
-    try {
-      info.domain = new URL(origin).hostname;
-    } catch {
+    info.domain = getHostname(origin);
+    if (!info.domain) {
       return { issues, warnings, info };
     }
 

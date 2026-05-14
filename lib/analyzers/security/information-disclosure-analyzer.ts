@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getHeader, truncateText } from '../../utils';
 import type { Issue, PageInfo, ParsedPage } from '../../types';
 
 // Headers that leak server information
@@ -58,8 +59,7 @@ class InformationDisclosureAnalyzer {
 
     // 1. Check for server information disclosure in headers
     for (const headerName of DISCLOSURE_HEADERS) {
-      const value =
-        headers[headerName] || headers[headerName.toLowerCase()] || headers[this.capitalizeHeader(headerName)] || '';
+      const value = getHeader(headers, headerName) || '';
 
       if (value) {
         info.disclosedHeaders.push({ name: headerName, value });
@@ -120,7 +120,7 @@ class InformationDisclosureAnalyzer {
     }
 
     // Also check SourceMap response header
-    const sourceMapHeader = headers['sourcemap'] || headers['SourceMap'] || headers['x-sourcemap'] || '';
+    const sourceMapHeader = getHeader(headers, 'sourcemap') ?? getHeader(headers, 'x-sourcemap') ?? '';
     if (sourceMapHeader) {
       info.sourceMapUrls.push(sourceMapHeader);
     }
@@ -148,7 +148,7 @@ class InformationDisclosureAnalyzer {
 
       for (const pattern of SENSITIVE_COMMENT_PATTERNS) {
         if (pattern.test(comment)) {
-          sensitiveFindings.push(comment.trim().substring(0, 50) + (comment.length > 50 ? '...' : ''));
+          sensitiveFindings.push(truncateText(comment.trim(), 50));
           break;
         }
       }

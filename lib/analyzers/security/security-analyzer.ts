@@ -1,3 +1,4 @@
+import { getHeader } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
 
 interface InsecureCookieDetail {
@@ -39,7 +40,7 @@ class SecurityAnalyzer {
     };
 
     for (const [header, name] of Object.entries(securityHeaders)) {
-      if (!headers[header] && !headers[header.toLowerCase()]) {
+      if (!getHeader(headers, header)) {
         (securityIssues.missingHeaders as string[]).push(name);
       }
     }

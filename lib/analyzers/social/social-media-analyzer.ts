@@ -1,3 +1,4 @@
+import { extractMetaTags } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
 
 class SocialMediaAnalyzer {
@@ -25,14 +26,7 @@ class SocialMediaAnalyzer {
       'og:image:alt': null,
     };
 
-    for (const property in ogTags) {
-      const tag = parsedPage.querySelector(`meta[property="${property}"]`);
-      if (tag) {
-        ogTags[property] = tag.getAttribute('content') ?? null;
-        socialData.hasOpenGraph = true;
-      }
-    }
-
+    socialData.hasOpenGraph = extractMetaTags(parsedPage, 'property', ogTags) > 0;
     socialData.openGraph = ogTags;
 
     // Extract Twitter Card tags
@@ -46,13 +40,7 @@ class SocialMediaAnalyzer {
       'twitter:creator': null,
     };
 
-    for (const name in twitterTags) {
-      const tag = parsedPage.querySelector(`meta[name="${name}"]`);
-      if (tag) {
-        twitterTags[name] = tag.getAttribute('content') ?? null;
-        socialData.hasTwitterCard = true;
-      }
-    }
+    socialData.hasTwitterCard = extractMetaTags(parsedPage, 'name', twitterTags) > 0;
 
     socialData.twitterCard = twitterTags;
 

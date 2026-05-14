@@ -3,7 +3,8 @@
  * Analyzes font loading strategies to prevent FOUT/FOIT issues
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { formatBytes } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, NetworkRequest } from '../../types';
 
 interface FontFileInfo {
@@ -94,18 +95,16 @@ class FontLoadingAnalyzer {
     // Generate issues
 
     // Large total font size
-    if (fontData.totalFontSize > 500000) {
-      // 500KB
+    if (fontData.totalFontSize > THRESHOLDS.FONT_SIZE_CRITICAL) {
       issues.push({
         message: 'Excessive web font payload',
-        detail: `<a href="${url}">${url}</a> loads ${(fontData.totalFontSize / 1024).toFixed(0)}KB of fonts. Consider subsetting fonts or reducing font variants.`,
+        detail: `<a href="${url}">${url}</a> loads ${formatBytes(fontData.totalFontSize)} of fonts. Consider subsetting fonts or reducing font variants.`,
         severity: SEVERITY.HIGH,
       });
-    } else if (fontData.totalFontSize > 250000) {
-      // 250KB
+    } else if (fontData.totalFontSize > THRESHOLDS.FONT_SIZE_WARNING) {
       warnings.push({
         message: 'Large web font payload',
-        detail: `<a href="${url}">${url}</a> loads ${(fontData.totalFontSize / 1024).toFixed(0)}KB of fonts. Consider optimizing.`,
+        detail: `<a href="${url}">${url}</a> loads ${formatBytes(fontData.totalFontSize)} of fonts. Consider optimizing.`,
         severity: SEVERITY.MEDIUM,
       });
     }

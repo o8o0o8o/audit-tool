@@ -28,7 +28,7 @@ import {
   normalizeTextForComparison,
   CRAWL_SETTINGS,
 } from '../constants';
-import { normalizeUrl, createSafeFilename } from '../utils';
+import { normalizeUrl, createSafeFilename, truncateText } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import type { ChromePage } from '../types';
 
@@ -55,10 +55,7 @@ export function processTitle(
 
   // Truncate excessively long titles to prevent memory issues
   const originalLength = title.length;
-  let processedTitle = title;
-  if (originalLength > maxTitleLength) {
-    processedTitle = title.substring(0, maxTitleLength) + '...';
-  }
+  const processedTitle = truncateText(title, maxTitleLength);
 
   const titleLength = originalLength;
 
@@ -151,8 +148,7 @@ export function processMetaTags(
       const maxDescLength = CRAWL_SETTINGS.MAX_DESCRIPTION_LENGTH ?? 1000;
       const descLength = content ? content.length : 0;
       // Truncate excessively long descriptions to prevent memory issues
-      const processedContent =
-        content && content.length > maxDescLength ? content.substring(0, maxDescLength) + '...' : content;
+      const processedContent = content ? truncateText(content, maxDescLength) : content;
       pageData.description = processedContent;
       pageData.descriptionLength = descLength;
 

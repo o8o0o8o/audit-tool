@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { incrementCounter } from '../../utils';
+import { incrementCounter, stripWww, getHostname } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class RedirectChainAnalyzer {
@@ -49,17 +49,16 @@ class RedirectChainAnalyzer {
       }
 
       // Check for www redirect
-      try {
-        const fromHost = new URL(fromUrl).hostname;
-        const toHost = new URL(toUrl).hostname;
+      {
+        const fromHost = getHostname(fromUrl);
+        const toHost = getHostname(toUrl);
         if (
-          (fromHost.startsWith('www.') && !toHost.startsWith('www.')) ||
-          (!fromHost.startsWith('www.') && toHost.startsWith('www.'))
+          fromHost && toHost &&
+          ((fromHost.startsWith('www.') && !toHost.startsWith('www.')) ||
+          (!fromHost.startsWith('www.') && toHost.startsWith('www.')))
         ) {
           info.hasWwwRedirect = true;
         }
-      } catch {
-        // Invalid URL
       }
 
       // Track redirect time if available
@@ -129,7 +128,7 @@ class RedirectChainAnalyzer {
       // Different domain entirely
       if (
         originalUrl.hostname !== finalUrl.hostname &&
-        originalUrl.hostname.replace(/^www\./, '') !== finalUrl.hostname.replace(/^www\./, '')
+        stripWww(originalUrl.hostname) !== stripWww(finalUrl.hostname)
       ) {
         warnings.push({
           message: 'Redirect to different domain',

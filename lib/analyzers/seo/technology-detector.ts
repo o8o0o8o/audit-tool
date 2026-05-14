@@ -678,6 +678,29 @@ class TechnologyDetector {
   }
 
   /**
+   * Quick detection: return the first matching JS framework name or null.
+   * Lighter alternative to the full detect()/detectFromHtml() methods.
+   */
+  static quickDetectFramework(html: string): string | null {
+    const lower = html.toLowerCase();
+    for (const sig of this.SIGNATURES.frameworks) {
+      if (sig.patterns.html?.some((p) => p.test(lower))) return sig.name;
+    }
+    return null;
+  }
+
+  /**
+   * Quick detection: return the first matching CMS name or null.
+   */
+  static quickDetectCMS(html: string): string | null {
+    const lower = html.toLowerCase();
+    for (const sig of this.SIGNATURES.cms) {
+      if (sig.patterns.html?.some((p) => p.test(lower))) return sig.name;
+    }
+    return null;
+  }
+
+  /**
    * Format category name
    * @private
    */

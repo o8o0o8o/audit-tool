@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList, calcPercent } from '../../utils';
+import { formatUrlList, calcPercent, escapeHtml } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -118,13 +118,13 @@ class IndexabilityValidator {
     if (noindexInSitemap.length > 0) {
       const urlList = noindexInSitemap
         .slice(0, 10)
-        .map((p) => `<li><a href="${p.url}">${p.url}</a> (${p.reason})</li>`)
+        .map((p) => `<li><a href="${escapeHtml(p.url)}">${escapeHtml(p.url)}</a> (${escapeHtml(p.reason)})</li>`)
         .join('');
       const moreCount = noindexInSitemap.length > 10 ? ` (showing 10 of ${noindexInSitemap.length})` : '';
 
       issues.push({
-        title: `Pages in sitemap are marked noindex`,
-        description: `${noindexInSitemap.length} page(s) are listed in sitemap but have noindex directive${moreCount}:<ul>${urlList}</ul>`,
+        message: `Pages in sitemap are marked noindex`,
+        detail: `${noindexInSitemap.length} page(s) are listed in sitemap but have noindex directive${moreCount}:<ul>${urlList}</ul>`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -140,8 +140,8 @@ class IndexabilityValidator {
 
     if (indexableNotInSitemap > 0) {
       issues.push({
-        title: `Indexable pages missing from sitemap`,
-        description: `${indexableNotInSitemap} indexable page(s) are not listed in the sitemap`,
+        message: `Indexable pages missing from sitemap`,
+        detail: `${indexableNotInSitemap} indexable page(s) are not listed in the sitemap`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -153,8 +153,8 @@ class IndexabilityValidator {
         const moreCount = urls.length > 5 ? ` (showing 5 of ${urls.length})` : '';
 
         issues.push({
-          title: `Pages with HTTP ${statusCode} errors`,
-          description: `${urls.length} page(s) return HTTP ${statusCode}${moreCount}:<ul>${urlList}</ul>`,
+          message: `Pages with HTTP ${statusCode} errors`,
+          detail: `${urls.length} page(s) return HTTP ${statusCode}${moreCount}:<ul>${urlList}</ul>`,
           severity: statusCode >= 500 ? SEVERITY.CRITICAL : SEVERITY.HIGH,
         });
       }
@@ -163,8 +163,8 @@ class IndexabilityValidator {
     // Report 4: Canonical conflicts summary
     if (stats.canonicalConflicts.length > 5) {
       issues.push({
-        title: `Many pages with non-self-referencing canonicals`,
-        description: `${stats.canonicalConflicts.length} page(s) have canonical tags pointing to different URLs. This may indicate duplicate content issues.`,
+        message: `Many pages with non-self-referencing canonicals`,
+        detail: `${stats.canonicalConflicts.length} page(s) have canonical tags pointing to different URLs. This may indicate duplicate content issues.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -175,8 +175,8 @@ class IndexabilityValidator {
       const moreCount = stats.nofollowPages.length > 5 ? ` (showing 5 of ${stats.nofollowPages.length})` : '';
 
       issues.push({
-        title: `Pages have nofollow directive`,
-        description: `${stats.nofollowPages.length} page(s) have nofollow in meta robots${moreCount}:<ul>${urlList}</ul>`,
+        message: `Pages have nofollow directive`,
+        detail: `${stats.nofollowPages.length} page(s) have nofollow in meta robots${moreCount}:<ul>${urlList}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -185,8 +185,8 @@ class IndexabilityValidator {
     if (stats.authRequired.length > 0) {
       const urlList = formatUrlList(stats.authRequired, 5);
       issues.push({
-        title: `Pages require authentication`,
-        description: `${stats.authRequired.length} page(s) require authentication and cannot be crawled:<ul>${urlList}</ul>`,
+        message: `Pages require authentication`,
+        detail: `${stats.authRequired.length} page(s) require authentication and cannot be crawled:<ul>${urlList}</ul>`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -194,8 +194,8 @@ class IndexabilityValidator {
     // Report 7: Low indexability percentage
     if (indexablePercent < 70 && totalPages > 10) {
       issues.push({
-        title: `Low site indexability`,
-        description: `Only ${indexablePercent}% of pages (${stats.indexable}/${totalPages}) are indexable. This may significantly impact search visibility.`,
+        message: `Low site indexability`,
+        detail: `Only ${indexablePercent}% of pages (${stats.indexable}/${totalPages}) are indexable. This may significantly impact search visibility.`,
         severity: SEVERITY.CRITICAL,
       });
     }

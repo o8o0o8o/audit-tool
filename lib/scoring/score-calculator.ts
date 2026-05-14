@@ -4,6 +4,7 @@
  */
 
 import { SCORING } from '../constants';
+import { clampScore, stripIssueSeverity } from '../utils';
 import type {
   PageInfo,
   PageData,
@@ -72,7 +73,7 @@ class ScoreCalculator {
       score += (categoryScores[category as keyof CategoryScores] || 0) * weight;
     }
 
-    return Math.max(0, Math.min(100, Math.round(score)));
+    return clampScore(score);
   }
 
   /**
@@ -276,8 +277,7 @@ class ScoreCalculator {
       const issues = _issues as string[];
       const weight = severityWeight[severity] || 1;
       for (const issue of issues) {
-        // Strip severity suffix like " [critical]" for matching
-        const cleanIssue = issue.replace(/\s*\[(?:critical|high|medium|low)\]\s*$/i, '');
+        const cleanIssue = stripIssueSeverity(issue);
         if (categorized.has(cleanIssue)) continue;
 
         const lowerIssue = cleanIssue.toLowerCase();

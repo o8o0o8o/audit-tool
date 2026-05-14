@@ -6,8 +6,21 @@
 import { METRIC_INFO, THRESHOLDS } from '../metrics-metadata';
 import { escapeHtml, getMetricColor } from '../html-utils';
 import { extractComparisonLabels, formatPercentDelta } from '../comparison-helpers';
-import { statAvg, statPercentile, shortenUrl } from '../../utils';
+import { statAvg, statPercentile, shortenUrl, calcPercent } from '../../utils';
 import type { PageInfo, ReportSectionData, MetricInfoEntry, ComparisonData } from '../../types';
+
+/**
+ * Extract, filter, and sort numeric metric values from pages.
+ * @param pages - Array of page data objects
+ * @param getter - Function to extract the metric value from a page
+ * @param minValue - Minimum value to include (default: > 0, use 0 for >= 0 metrics like CLS)
+ */
+function extractMetricValues(pages: PageInfo[], getter: (p: PageInfo) => number, minValue = 0): number[] {
+  return pages
+    .map(getter)
+    .filter((v) => (minValue === 0 ? v >= 0 : v > 0))
+    .sort((a, b) => a - b);
+}
 
 /**
  * Generate the performance statistics section
@@ -31,30 +44,12 @@ function getPerformanceStats(data: ReportSectionData) {
   if (pagesWithPerf.length === 0 && !cruxData) return '';
 
   // Calculate statistics - metrics are stored at top level (TTFB, LCP, CLS)
-  const ttfbValues = pagesWithPerf
-    .map((p) => p.TTFB ?? 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
-  const lcpValues = pagesWithPerf
-    .map((p) => p.LCP ?? 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
-  const clsValues = pagesWithPerf
-    .map((p) => p.CLS ?? 0)
-    .filter((v) => v >= 0)
-    .sort((a, b) => a - b);
-  const fcpValues = pagesWithPerf
-    .map((p) => p.FCP ?? 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
-  const inpValues = pagesWithPerf
-    .map((p) => p.INP ?? 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
-  const pageSizes = pagesArray
-    .map((p) => p.totalResponseSize ?? 0)
-    .filter((v) => v > 0)
-    .sort((a, b) => a - b);
+  const ttfbValues = extractMetricValues(pagesWithPerf, (p) => p.TTFB ?? 0);
+  const lcpValues = extractMetricValues(pagesWithPerf, (p) => p.LCP ?? 0);
+  const clsValues = extractMetricValues(pagesWithPerf, (p) => p.CLS ?? 0, 0);
+  const fcpValues = extractMetricValues(pagesWithPerf, (p) => p.FCP ?? 0);
+  const inpValues = extractMetricValues(pagesWithPerf, (p) => p.INP ?? 0);
+  const pageSizes = extractMetricValues(pagesArray, (p) => p.totalResponseSize ?? 0);
 
   const avg = (arr: number[]): string | number =>
     arr.length > 0 ? statAvg(arr).toFixed(0) : 0;
@@ -391,7 +386,7 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
   const bars = sorted
     .map(([bottleneck, count]: [string, number]) => {
-      const pct = Math.round((count / total) * 100);
+      const pct = calcPercent(count, total);
       const color = bottleneck.toLowerCase().includes('ttfb')
         ? 'var(--purple-500)'
         : bottleneck.toLowerCase().includes('load')

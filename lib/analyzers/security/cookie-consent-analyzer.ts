@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { detectImportantPageLinks } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, ConsentData, NetworkRequest } from '../../types';
 
 interface CookieInfo {
@@ -22,11 +23,7 @@ interface ConsentBannerDetection {
   method: string | null;
 }
 
-interface PolicyLinks {
-  hasPrivacyPolicy: boolean;
-  hasCookiePolicy: boolean;
-  links: { type: string; href: string }[];
-}
+
 
 class CookieConsentAnalyzer {
   // Common cookie consent platforms
@@ -97,11 +94,13 @@ class CookieConsentAnalyzer {
     consentData.consentPlatform = consentDetection.platform;
     consentData.bannerDetectionMethod = consentDetection.method;
 
-    // 2. Check for privacy/cookie policy links
-    const policyLinks = this.#findPolicyLinks(parsedPage);
-    consentData.hasCookiePolicy = policyLinks.hasCookiePolicy;
-    consentData.hasPrivacyPolicy = policyLinks.hasPrivacyPolicy;
-    consentData.policyLinks = policyLinks.links;
+    // 2. Check for privacy/cookie policy links (uses shared utility)
+    const importantLinks = detectImportantPageLinks(parsedPage);
+    consentData.hasCookiePolicy = importantLinks.hasCookiePolicy;
+    consentData.hasPrivacyPolicy = importantLinks.hasPrivacyPolicy;
+    consentData.policyLinks = [];
+    if (importantLinks.hasPrivacyPolicy) consentData.policyLinks.push({ type: 'privacy', href: '' });
+    if (importantLinks.hasCookiePolicy) consentData.policyLinks.push({ type: 'cookie', href: '' });
 
     // 3. Analyze cookies set on page load
     const cookieAnalysis = await this.#analyzeCookies(chromePage);
@@ -259,36 +258,7 @@ class CookieConsentAnalyzer {
     return result;
   }
 
-  /**
-   * Find privacy/cookie policy links
-   * @private
-   */
-  static #findPolicyLinks(parsedPage: ParsedPage): PolicyLinks {
-    const result: PolicyLinks = {
-      hasPrivacyPolicy: false,
-      hasCookiePolicy: false,
-      links: [],
-    };
-
-    const links = parsedPage.querySelectorAll('a');
-
-    for (const link of links) {
-      const href = link.getAttribute('href') ?? '';
-      const text = link.textContent.toLowerCase();
-
-      if (text.includes('privacy') || href.includes('privacy')) {
-        result.hasPrivacyPolicy = true;
-        result.links.push({ type: 'privacy', href });
-      }
-
-      if (text.includes('cookie') || href.includes('cookie')) {
-        result.hasCookiePolicy = true;
-        result.links.push({ type: 'cookie', href });
-      }
-    }
-
-    return result;
-  }
+  // Policy link detection has been consolidated into detectImportantPageLinks() in lib/utils.ts
 
   /**
    * Analyze cookies

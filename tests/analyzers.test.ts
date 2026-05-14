@@ -37,7 +37,7 @@ void describe('ResponseHeaderAnalyzer', () => {
       },
     };
     const result = ResponseHeaderAnalyzer.analyzeSiteWide(allPages as unknown as Record<string, PageInfo>);
-    assert.ok(result.issues.some((i) => (i.title ?? '').toLowerCase().includes('x-robots-tag')));
+    assert.ok(result.issues.some((i) => (i.message ?? '').toLowerCase().includes('x-robots-tag')));
   });
 
   void it('returns no issues for clean headers', () => {
@@ -89,7 +89,7 @@ void describe('LanguageDetectionAnalyzer', () => {
       },
     };
     const result = LanguageDetectionAnalyzer.analyzeSiteWide(allPages);
-    assert.ok(result.issues.some((i) => (i.title ?? i.description ?? '').toLowerCase().includes('language')));
+    assert.ok(result.issues.some((i) => (i.message ?? i.detail ?? '').toLowerCase().includes('language')));
   });
 });
 

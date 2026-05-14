@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { parseJsonLdSchemas } from '../../utils';
+import { detectImportantPageLinks, detectAuthorInfo, isNonContentPage } from '../../utils';
 import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class EEATAnalyzer {
@@ -38,7 +38,7 @@ class EEATAnalyzer {
     }
 
     // 1. Author Detection
-    const authorResult = this.detectAuthor(parsedPage);
+    const authorResult = detectAuthorInfo(parsedPage);
     signals.author = authorResult.author;
     signals.authorCredentials = authorResult.credentials;
 
@@ -62,7 +62,7 @@ class EEATAnalyzer {
     signals.expertiseSignals = this.detectExpertiseSignals(parsedPage);
 
     // 5. Check for important pages (via links)
-    const linkAnalysis = this.analyzeImportantLinks(parsedPage);
+    const linkAnalysis = detectImportantPageLinks(parsedPage);
     signals.hasAboutPage = linkAnalysis.hasAboutPage;
     signals.hasContactInfo = linkAnalysis.hasContactInfo;
     signals.hasPrivacyPolicy = linkAnalysis.hasPrivacyPolicy;
@@ -98,83 +98,6 @@ class EEATAnalyzer {
     pageData.eeat = signals;
 
     return { issues, warnings, signals };
-  }
-
-  /**
-   * Detect author information
-   */
-  static detectAuthor(parsedPage: ParsedPage) {
-    const result: { author: string | null; credentials: string[] } = { author: null, credentials: [] };
-
-    // Check schema.org author
-    const schemas = parseJsonLdSchemas(parsedPage);
-    for (const schema of schemas) {
-      if (schema.author) {
-        const authorObj = schema.author as Record<string, unknown>;
-        const author = typeof schema.author === 'string' ? schema.author : (authorObj.name as string);
-        if (author) {
-          result.author = author;
-          if (authorObj.jobTitle) {
-            result.credentials.push(authorObj.jobTitle as string);
-          }
-          if (authorObj.description) {
-            result.credentials.push(authorObj.description as string);
-          }
-        }
-      }
-    }
-
-    // Check meta author
-    if (!result.author) {
-      const metaAuthor = parsedPage.querySelector('meta[name="author"]');
-      if (metaAuthor) {
-        result.author = metaAuthor.getAttribute('content') ?? null;
-      }
-    }
-
-    // Check common author patterns in HTML
-    if (!result.author) {
-      const authorSelectors = [
-        '[rel="author"]',
-        '.author-name',
-        '.author',
-        '.byline',
-        '[itemprop="author"]',
-        '.post-author',
-        '.article-author',
-        '.entry-author',
-      ];
-
-      for (const selector of authorSelectors) {
-        const el = parsedPage.querySelector(selector);
-        if (el) {
-          const text = el.textContent.trim();
-          if (text && text.length < 100) {
-            result.author = text.replace(/^by\s+/i, '');
-            break;
-          }
-        }
-      }
-    }
-
-    // Look for credentials near author
-    if (result.author) {
-      const credentialPatterns = [
-        /\b(MD|PhD|Dr\.|M\.D\.|DO|JD|MBA|CPA|CFP|RN|LCSW)\b/gi,
-        /\b(certified|licensed|registered|board-certified)\s+\w+/gi,
-        /\b(\d+)\+?\s*years?\s*(of)?\s*experience/gi,
-      ];
-
-      const bodyText = parsedPage.text || '';
-      for (const pattern of credentialPatterns) {
-        const matches = bodyText.match(pattern);
-        if (matches) {
-          result.credentials.push(...matches.slice(0, 3));
-        }
-      }
-    }
-
-    return result;
   }
 
   /**
@@ -284,60 +207,6 @@ class EEATAnalyzer {
   }
 
   /**
-   * Analyze important page links
-   */
-  static analyzeImportantLinks(parsedPage: ParsedPage) {
-    const links = parsedPage.querySelectorAll('a');
-    const result = {
-      hasAboutPage: false,
-      hasContactInfo: false,
-      hasPrivacyPolicy: false,
-      hasTermsOfService: false,
-      hasCookiePolicy: false,
-      hasAccessibilityStatement: false,
-      hasImpressum: false,
-    };
-
-    for (const link of links) {
-      const href = (link.getAttribute('href') ?? '').toLowerCase();
-      const text = (link.textContent || '').toLowerCase();
-
-      if (/about|who.we.are|our.team|our.story/i.test(href) || /about|who we are/i.test(text)) {
-        result.hasAboutPage = true;
-      }
-      if (/contact|get.in.touch/i.test(href) || /contact/i.test(text)) {
-        result.hasContactInfo = true;
-      }
-      if (/privacy/i.test(href) || /privacy/i.test(text)) {
-        result.hasPrivacyPolicy = true;
-      }
-      if (/terms|tos|conditions/i.test(href) || /terms/i.test(text)) {
-        result.hasTermsOfService = true;
-      }
-      if (/cookie.policy|cookie-policy|cookies$/i.test(href) || /cookie policy/i.test(text)) {
-        result.hasCookiePolicy = true;
-      }
-      if (/accessibility/i.test(href) || /accessibility statement|accessibility/i.test(text)) {
-        result.hasAccessibilityStatement = true;
-      }
-      if (/impressum|imprint|legal.notice|legal-notice/i.test(href) || /impressum|imprint|legal notice/i.test(text)) {
-        result.hasImpressum = true;
-      }
-    }
-
-    // Also check for contact info in content
-    const bodyText = parsedPage.text || '';
-    if (/\b[\w.-]+@[\w.-]+\.\w{2,}\b/.test(bodyText)) {
-      result.hasContactInfo = true;
-    }
-    if (/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(bodyText)) {
-      result.hasContactInfo = true;
-    }
-
-    return result;
-  }
-
-  /**
    * Detect if page is YMYL (Your Money Your Life)
    */
   static detectYMYL(url: string, parsedPage: ParsedPage) {
@@ -384,12 +253,7 @@ class EEATAnalyzer {
    * Check if page is a content page (not homepage, category, etc.)
    */
   static isContentPage(url: string, parsedPage: ParsedPage) {
-    const urlLower = url.toLowerCase();
-
-    // Likely not content pages
-    if (/\/(home|index|category|tag|archive|search|cart|checkout|account|login)/i.test(urlLower)) {
-      return false;
-    }
+    if (isNonContentPage(url)) return false;
 
     // Check for article indicators
     const hasArticle = parsedPage.querySelector('article') !== null;

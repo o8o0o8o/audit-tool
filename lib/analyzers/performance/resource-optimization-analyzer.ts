@@ -1,5 +1,6 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
 import type { ChromePage, NetworkRequest, Issue } from '../../types';
+import { getHeader } from '../../utils';
 
 interface CompressionIssue {
   severity: string;
@@ -52,7 +53,7 @@ class ResourceOptimizationAnalyzer {
       const resourceType = reqData.resourceType;
 
       // Check compression
-      const contentEncoding = headers['content-encoding'] || '';
+      const contentEncoding = getHeader(headers, 'content-encoding') ?? '';
       if (contentEncoding.includes('br')) {
         resourceAnalysis.compression.brotliCompressed++;
         resourceAnalysis.compression.compressedSize += size;
@@ -105,7 +106,7 @@ class ResourceOptimizationAnalyzer {
       }
 
       // Detect HTTP protocol version
-      const protocol = headers[':protocol'] || headers['protocol'] || '';
+      const protocol = getHeader(headers, ':protocol') ?? getHeader(headers, 'protocol') ?? '';
       if (protocol.includes('h3') || protocol.includes('http/3')) {
         resourceAnalysis.protocol.http3++;
       } else if (protocol.includes('h2') || protocol.includes('http/2')) {

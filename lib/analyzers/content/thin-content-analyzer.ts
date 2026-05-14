@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY, THRESHOLDS as GLOBAL_THRESHOLDS } from '../../constants';
-import { shortenUrl } from '../../utils';
+import { shortenUrl, isNonContentPage as sharedIsNonContentPage } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class ThinContentAnalyzer {
@@ -50,7 +50,7 @@ class ThinContentAnalyzer {
     metrics.textToHtmlRatio = cq.textToHtmlRatio ?? 0;
 
     // Skip non-content pages
-    if (this.isNonContentPage(url)) {
+    if (sharedIsNonContentPage(url)) {
       const extendedMetrics = { ...metrics, isNonContentPage: true };
       return { issues, warnings, metrics: extendedMetrics };
     }
@@ -59,21 +59,21 @@ class ThinContentAnalyzer {
     if (metrics.wordCount < this.THRESHOLDS.MIN_WORDS) {
       issues.push({
         message: 'Page has very thin content',
-        detail: `<a href="${url}">${this.shortenUrl(url)}</a> has only ${metrics.wordCount} words (minimum: ${this.THRESHOLDS.MIN_WORDS})`,
+        detail: `<a href="${url}">${shortenUrl(url)}</a> has only ${metrics.wordCount} words (minimum: ${this.THRESHOLDS.MIN_WORDS})`,
         severity: SEVERITY.HIGH,
       });
       metrics.isThinContent = true;
     } else if (metrics.wordCount < this.THRESHOLDS.LOW_WORDS) {
       warnings.push({
         message: 'Page has low content',
-        detail: `<a href="${url}">${this.shortenUrl(url)}</a> has ${metrics.wordCount} words (recommended: ${this.THRESHOLDS.RECOMMENDED_WORDS}+)`,
+        detail: `<a href="${url}">${shortenUrl(url)}</a> has ${metrics.wordCount} words (recommended: ${this.THRESHOLDS.RECOMMENDED_WORDS}+)`,
         severity: SEVERITY.MEDIUM,
       });
       metrics.isThinContent = true;
     } else if (metrics.wordCount < this.THRESHOLDS.RECOMMENDED_WORDS) {
       warnings.push({
         message: 'Page content could be expanded',
-        detail: `<a href="${url}">${this.shortenUrl(url)}</a> has ${metrics.wordCount} words (recommended: ${this.THRESHOLDS.RECOMMENDED_WORDS}+)`,
+        detail: `<a href="${url}">${shortenUrl(url)}</a> has ${metrics.wordCount} words (recommended: ${this.THRESHOLDS.RECOMMENDED_WORDS}+)`,
         severity: SEVERITY.LOW,
       });
     }
@@ -82,7 +82,7 @@ class ThinContentAnalyzer {
     if (metrics.textToHtmlRatio < this.THRESHOLDS.MIN_TEXT_RATIO && metrics.wordCount > 0) {
       warnings.push({
         message: 'Low text-to-HTML ratio',
-        detail: `<a href="${url}">${this.shortenUrl(url)}</a> has ${metrics.textToHtmlRatio.toFixed(1)}% text ratio (recommended: >${this.THRESHOLDS.MIN_TEXT_RATIO}%)`,
+        detail: `<a href="${url}">${shortenUrl(url)}</a> has ${metrics.textToHtmlRatio.toFixed(1)}% text ratio (recommended: >${this.THRESHOLDS.MIN_TEXT_RATIO}%)`,
         severity: SEVERITY.LOW,
       });
     }
@@ -91,7 +91,7 @@ class ThinContentAnalyzer {
     if (metrics.paragraphCount < this.THRESHOLDS.MIN_PARAGRAPHS && metrics.wordCount > this.THRESHOLDS.MIN_WORDS) {
       warnings.push({
         message: 'Content lacks paragraph structure',
-        detail: `<a href="${url}">${this.shortenUrl(url)}</a> has only ${metrics.paragraphCount} paragraphs. Break content into more paragraphs for readability.`,
+        detail: `<a href="${url}">${shortenUrl(url)}</a> has only ${metrics.paragraphCount} paragraphs. Break content into more paragraphs for readability.`,
         severity: SEVERITY.LOW,
       });
     }
@@ -100,30 +100,6 @@ class ThinContentAnalyzer {
     metrics.contentScore = this.calculateContentScore(metrics);
 
     return { issues, warnings, metrics };
-  }
-
-  /**
-   * Check if URL is a non-content page type
-   */
-  static isNonContentPage(url: string) {
-    const nonContentPatterns = [
-      /\/(cart|checkout|basket|login|register|account|search|404|error)/i,
-      /\/(tag|category|archive|author)\/[^/]+\/?$/i,
-      /\?(s|q|query|search)=/i,
-      /\/page\/\d+\/?$/i,
-    ];
-
-    if (nonContentPatterns.some((pattern) => pattern.test(url))) return true;
-
-    // Exclude homepage — it's navigational, not a long-form content page
-    try {
-      const path = new URL(url).pathname.replace(/\/+$/, '');
-      if (path === '') return true;
-    } catch {
-      /* ignore */
-    }
-
-    return false;
   }
 
   /**
@@ -165,9 +141,6 @@ class ThinContentAnalyzer {
     return Math.min(score, 100);
   }
 
-  /** @deprecated Use shortenUrl from lib/utils.ts */
-  static shortenUrl = shortenUrl;
-
   /**
    * Site-wide thin content analysis
    */
@@ -182,7 +155,7 @@ class ThinContentAnalyzer {
     const thinPagesList = [];
 
     for (const [url, page] of Object.entries(pages)) {
-      if (this.isNonContentPage(url)) continue;
+      if (sharedIsNonContentPage(url)) continue;
 
       const wordCount = page.contentQuality?.wordCount ?? 0;
       analyzedPages++;

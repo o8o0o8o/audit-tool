@@ -175,14 +175,14 @@ function getTextLengthTooltip(length: number, min: number, max: number, fieldNam
  */
 function getSeverityBadge(severity: string) {
   const classMap: Record<string, string> = {
-    CRITICAL: 'ui-badge--critical',
-    HIGH: 'ui-badge--high',
-    MEDIUM: 'ui-badge--medium',
-    LOW: 'ui-badge--low',
+    critical: 'ui-badge--critical',
+    high: 'ui-badge--high',
+    medium: 'ui-badge--medium',
+    low: 'ui-badge--low',
   };
 
-  const badgeClass = classMap[severity] || classMap.MEDIUM;
-  return `<span class="ui-badge ${badgeClass}">${severity}</span>`;
+  const badgeClass = classMap[severity.toLowerCase()] || classMap.medium;
+  return `<span class="ui-badge ${badgeClass}">${escapeHtml(severity)}</span>`;
 }
 
 /**
@@ -195,6 +195,46 @@ function getScoreColor(score: number) {
   if (score >= 70) return 'var(--color-score-warning)';
   if (score >= 50) return 'var(--color-score-orange)';
   return 'var(--color-score-bad)';
+}
+
+/**
+ * Generate a "show more" expandable list with a toggle button.
+ * Renders the first `visibleCount` items, hides the rest behind a toggle.
+ * @param items - All items to display
+ * @param renderItem - Function to render a single item as HTML
+ * @param id - Unique DOM ID for the hidden container
+ * @param visibleCount - Number of items to show before the toggle (default: 5)
+ * @param totalCount - Optional total count (if different from items.length, shown as extra info)
+ */
+function renderExpandableList(
+  items: string[],
+  renderItem: (item: string) => string,
+  id: string,
+  visibleCount = 5,
+  totalCount?: number,
+): string {
+  if (items.length === 0) return '';
+  const total = totalCount ?? items.length;
+  const visible = items.slice(0, visibleCount).map(renderItem).join('');
+  if (items.length <= visibleCount) {
+    const overflow = total > items.length ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${total} total, ${items.length} shown</div>` : '';
+    return visible + overflow;
+  }
+  const hidden = items.slice(visibleCount).map(renderItem).join('');
+  const overflow = total > items.length ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${total} total, ${items.length} shown</div>` : '';
+  return `${visible}
+    <div id="${id}" style="display:none;">${hidden}</div>
+    <button onclick="event.stopPropagation();var el=document.getElementById('${id}');var s=el.style.display!=='none';el.style.display=s?'none':'block';this.textContent=s?'Show all ${items.length}...':'Show less';" style="background:none;border:none;color:var(--color-info);cursor:pointer;font-size:var(--font-size-xs);padding:2px 0;text-align:left;">Show all ${items.length}...</button>
+    ${overflow}`;
+}
+
+/**
+ * Get CSS class name for a score: 'good' (>=80), 'warning' (>=60), or 'bad'.
+ */
+function getScoreClass(score: number): 'good' | 'warning' | 'bad' {
+  if (score >= 80) return 'good';
+  if (score >= 60) return 'warning';
+  return 'bad';
 }
 
 /**
@@ -540,6 +580,8 @@ export {
   getTextLengthTooltip,
   getSeverityBadge,
   getScoreColor,
+  getScoreClass,
+  renderExpandableList,
   getTrendIndicator, // New signal-aware functions
   getSignalTooltipHtml,
   getSignalStatusIndicator,

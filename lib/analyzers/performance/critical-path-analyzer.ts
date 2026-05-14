@@ -3,7 +3,8 @@
  * Identifies resources that block first paint
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { getFileNameFromUrl, formatBytes } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, NetworkRequest } from '../../types';
 
 interface BlockingCSSEntry {
@@ -122,11 +123,10 @@ class CriticalPathAnalyzer {
     }
 
     // Large blocking CSS
-    if (criticalPathData.criticalCSSSize > 100000) {
-      // 100KB
+    if (criticalPathData.criticalCSSSize > THRESHOLDS.CRITICAL_CSS_SIZE_WARNING) {
       issues.push({
         message: 'Large render-blocking CSS',
-        detail: `<a href="${url}">${url}</a> blocks rendering with ${(criticalPathData.criticalCSSSize / 1024).toFixed(0)}KB of CSS. Extract and inline critical CSS.`,
+        detail: `<a href="${url}">${url}</a> blocks rendering with ${formatBytes(criticalPathData.criticalCSSSize)} of CSS. Extract and inline critical CSS.`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -138,7 +138,7 @@ class CriticalPathAnalyzer {
         message: 'Render-blocking JavaScript in <head>',
         detail: `<a href="${url}">${url}</a> has ${headBlockingJS.length} blocking script(s) in <head>: ${headBlockingJS
           .slice(0, 3)
-          .map((s) => s.src?.split('/').pop() ?? 'inline')
+          .map((s) => s.src ? getFileNameFromUrl(s.src) : 'inline')
           .join(', ')}. Move to end of body or add async/defer.`,
         severity: SEVERITY.HIGH,
       });
@@ -154,21 +154,19 @@ class CriticalPathAnalyzer {
     }
 
     // Large inline CSS (may indicate critical CSS, but check size)
-    if (criticalPathData.inlineCSSSize > 50000) {
-      // 50KB inline is too much
+    if (criticalPathData.inlineCSSSize > THRESHOLDS.INLINE_CSS_SIZE_WARNING) {
       warnings.push({
         message: 'Large inline CSS',
-        detail: `${(criticalPathData.inlineCSSSize / 1024).toFixed(0)}KB of inline CSS. Critical CSS should be ~14KB or less for optimal performance.`,
+        detail: `${formatBytes(criticalPathData.inlineCSSSize)} of inline CSS. Critical CSS should be ~14KB or less for optimal performance.`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     // Large HTML document
-    if (criticalPathData.documentSize > 100000) {
-      // 100KB
+    if (criticalPathData.documentSize > THRESHOLDS.DOCUMENT_SIZE_WARNING) {
       warnings.push({
         message: 'Large HTML document',
-        detail: `HTML document is ${(criticalPathData.documentSize / 1024).toFixed(0)}KB. Large documents increase time to first byte and parsing time.`,
+        detail: `HTML document is ${formatBytes(criticalPathData.documentSize)}. Large documents increase time to first byte and parsing time.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -367,7 +365,7 @@ class CriticalPathAnalyzer {
       recommendations.push('Combine CSS files to reduce blocking requests');
     }
 
-    if (data.criticalCSSSize > 50000 && !data.hasCriticalCSS) {
+    if (data.criticalCSSSize > THRESHOLDS.INLINE_CSS_SIZE_WARNING && !data.hasCriticalCSS) {
       recommendations.push('Extract and inline critical (above-the-fold) CSS');
     }
 

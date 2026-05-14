@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getHeader } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 const VALID_COOP = ['same-origin', 'same-origin-allow-popups', 'unsafe-none'];
@@ -36,9 +37,9 @@ class CrossOriginPolicyAnalyzer {
     const headers = pageData.responseHeaders ?? {};
 
     // Extract headers (case-insensitive)
-    info.coop = headers['cross-origin-opener-policy'] || headers['Cross-Origin-Opener-Policy'] || null;
-    info.coep = headers['cross-origin-embedder-policy'] || headers['Cross-Origin-Embedder-Policy'] || null;
-    info.corp = headers['cross-origin-resource-policy'] || headers['Cross-Origin-Resource-Policy'] || null;
+    info.coop = getHeader(headers, 'cross-origin-opener-policy') ?? null;
+    info.coep = getHeader(headers, 'cross-origin-embedder-policy') ?? null;
+    info.corp = getHeader(headers, 'cross-origin-resource-policy') ?? null;
 
     // Clean values (remove reporting directives)
     if (info.coop) info.coop = info.coop.split(';')[0].trim();

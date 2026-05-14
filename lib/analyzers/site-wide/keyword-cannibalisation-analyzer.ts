@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY, STOP_WORDS } from '../../constants';
-import { shortenUrl } from '../../utils';
+import { shortenUrl, jaccardSimilarity, getHostname, getPathSegments, truncateText } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface TitleConflictPage {
@@ -31,15 +31,13 @@ class KeywordCannibalisationAnalyzer {
     const brandWords = new Set<string>();
 
     for (const url of Object.keys(pages)) {
-      try {
-        const hostname = new URL(url).hostname;
+      const hostname = getHostname(url);
+      if (hostname) {
         // e.g. "ringgo.co.uk" -> "ringgo"
         const domainPart = hostname.split('.')[0];
         if (domainPart && domainPart.length >= 3) {
           brandWords.add(domainPart.toLowerCase());
         }
-      } catch {
-        /* skip */
       }
       break; // Only need one URL
     }
@@ -147,7 +145,7 @@ class KeywordCannibalisationAnalyzer {
           message: `Multiple pages targeting keyword: "${keyword}"`,
           detail: `${pages.length} pages have this keyword in title: ${pages
             .slice(0, 3)
-            .map((p: ConflictPage) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`)
+            .map((p: ConflictPage) => `<a href="${p.url}">${shortenUrl(p.url)}</a>`)
             .join(', ')}${pages.length > 3 ? ` (+${pages.length - 3} more)` : ''}`,
           severity: pages.length > 3 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
         });
@@ -167,7 +165,7 @@ class KeywordCannibalisationAnalyzer {
           message: `Multiple pages with similar H1 keyword: "${keyword}"`,
           detail: `${pages.length} pages target this in H1: ${pages
             .slice(0, 3)
-            .map((p: ConflictPage) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a>`)
+            .map((p: ConflictPage) => `<a href="${p.url}">${shortenUrl(p.url)}</a>`)
             .join(', ')}`,
           severity: SEVERITY.MEDIUM,
         });
@@ -190,7 +188,7 @@ class KeywordCannibalisationAnalyzer {
     for (const group of nearDuplicates) {
       issues.push({
         message: 'Near-duplicate page titles detected',
-        detail: `These pages have very similar titles: ${group.map((p) => `<a href="${p.url}">"${this.truncate(p.title ?? '', 40)}"</a>`).join(', ')}`,
+        detail: `These pages have very similar titles: ${group.map((p) => `<a href="${p.url}">"${truncateText(p.title ?? '', 40)}"</a>`).join(', ')}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -258,7 +256,7 @@ class KeywordCannibalisationAnalyzer {
   static extractTopic(url: string, _page: PageInfo) {
     try {
       const parsed = new URL(url);
-      const pathParts = parsed.pathname.split('/').filter((p) => p.length > 0);
+      const pathParts = getPathSegments(parsed.pathname);
 
       // Use first meaningful path segment as topic
       for (const part of pathParts) {
@@ -363,13 +361,7 @@ class KeywordCannibalisationAnalyzer {
    * Calculate Jaccard similarity between two strings
    */
   static calculateSimilarity(str1: string, str2: string) {
-    const set1 = new Set(str1.split(' '));
-    const set2 = new Set(str2.split(' '));
-
-    const intersection = new Set([...set1].filter((x) => set2.has(x)));
-    const union = new Set([...set1, ...set2]);
-
-    return intersection.size / union.size;
+    return jaccardSimilarity(new Set(str1.split(' ')), new Set(str2.split(' ')));
   }
 
   /**
@@ -379,17 +371,6 @@ class KeywordCannibalisationAnalyzer {
     return STOPWORDS.has(word.toLowerCase());
   }
 
-  /** @deprecated Use shortenUrl from lib/utils.ts */
-  static shortenUrl = (url: string) => shortenUrl(url, 40);
-
-  /**
-   * Truncate text
-   */
-  static truncate(text: string, length: number) {
-    if (!text) return '';
-    if (text.length <= length) return text;
-    return text.slice(0, length - 3) + '...';
-  }
 }
 
 export { KeywordCannibalisationAnalyzer };

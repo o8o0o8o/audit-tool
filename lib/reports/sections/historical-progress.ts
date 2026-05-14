@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml, getSeverityBadge } from '../html-utils';
+import { truncateText } from '../../utils';
 import { extractAnalysis, extractSummary } from '../data-processor';
 import { getDeltaCssColor } from '../comparison-helpers';
 import type { ReportSectionData, TrendDataCompat, AuditSnapshot, IssueTrend } from '../../types';
@@ -273,10 +274,7 @@ function getChangeText(item: IssueTrendItem) {
   return `${sign}${item.change} (${sign}${item.changePercent}%)`;
 }
 
-function truncateIssue(issue: string, maxLength: number) {
-  if (issue.length <= maxLength) return issue;
-  return issue.substring(0, maxLength - 3) + '...';
-}
+const truncateIssue = truncateText;
 
 // escapeHtml imported from ../html-utils
 

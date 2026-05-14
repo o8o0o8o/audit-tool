@@ -26,6 +26,7 @@ import { parseArgs } from './lib/args-parser';
 import { validateURL, sanitizeDomainName } from './validators';
 import { printHelp, interactiveMode } from './lib/cli-interactive';
 import { FileManager } from './lib/storage/file-manager';
+import { readCompressedJson } from './lib/utils';
 import pkg from './package.json';
 
 const MAX_RESTART_ATTEMPTS = 3;
@@ -163,7 +164,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
           if (latestRun) {
             const manifestPath = path.join(latestRun, 'manifest.json.gz');
             if (fs.existsSync(manifestPath)) {
-              const data = JSON.parse(zlib.gunzipSync(fs.readFileSync(manifestPath)).toString());
+              const data = readCompressedJson<{ pageData?: { processedPages?: unknown[]; pages?: Record<string, unknown> }; sitemaps?: { total?: number } }>(manifestPath);
               const processed = data.pageData?.processedPages?.length ?? Object.keys(data.pageData?.pages ?? {}).length;
               const total = data.sitemaps?.total ?? 0;
               if (total > 0) {

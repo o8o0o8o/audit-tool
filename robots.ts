@@ -5,6 +5,7 @@ import * as https from 'https';
 import * as http from 'http';
 import { exec, execFile } from 'child_process';
 import { generateHTML } from './generateHTML';
+import { getOpenCommand, getHostname } from './lib/utils';
 
 // Import modularized components
 import { parseArgs, calculateSafeConcurrency } from './lib/args-parser';
@@ -297,9 +298,9 @@ async function audit() {
 
       // Warn if comparing same domain (only when both are URLs)
       if (args.origin && args.compare) {
-        const originDomain = new URL(args.origin).hostname;
-        const compareDomain = new URL(args.compare).hostname;
-        if (originDomain === compareDomain) {
+        const originDomain = getHostname(args.origin);
+        const compareDomain = getHostname(args.compare);
+        if (originDomain && compareDomain && originDomain === compareDomain) {
           console.log('⚠️  Warning: Comparing same domain - results may be identical');
         }
       }
@@ -414,10 +415,15 @@ async function audit() {
     const htmlOutputPath = seo.fileManager.getHtmlFilePath();
     generateHTML(seo.file, seo.domainName!, htmlOutputPath);
 
+    // Extract summary once to avoid repeated deep property access
+    const summary = seo.data.analysis?.summary ?? {} as Record<string, unknown>;
+    const score = (summary.overallScore as number) ?? 0;
+    const totalIssues = (summary.totalIssues as number) ?? 0;
+    const totalPages = Object.keys(seo.data.pageData?.pages ?? {}).length;
+
     // Generate SVG score badge
     try {
       const badgePath = path.join(seo.fileManager.resultsDir, 'badge.svg');
-      const score = seo.data.analysis?.summary?.overallScore ?? 0;
       fs.writeFileSync(badgePath, generateBadgeSVG(score, seo.domainName!));
     } catch (e: unknown) {
       console.debug('Badge generation failed:', (e as Error).message);
@@ -437,7 +443,6 @@ async function audit() {
 
     // CI mode: exit with code 1 if score is below threshold
     if (args.ci !== null && args.ci !== undefined) {
-      const score = seo.data.analysis?.summary?.overallScore ?? 0;
       if (score < args.ci) {
         console.error(`\nCI check failed: score ${score} is below threshold ${args.ci}`);
         process.exit(1);
@@ -445,53 +450,40 @@ async function audit() {
       console.log(`\nCI check passed: score ${score} >= threshold ${args.ci}`);
     }
 
+    // Helper: POST JSON to a URL (used for Slack + webhooks)
+    const postJson = (url: string, payload: string, label: string) => {
+      try {
+        const parsed = new URL(url);
+        const transport = parsed.protocol === 'https:' ? https : http;
+        const req = transport.request(parsed, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+        });
+        req.on('error', (e) => console.log(`${label} failed: ${e.message}`));
+        req.write(payload);
+        req.end();
+        console.log(`${label} sent`);
+      } catch (e: unknown) {
+        console.log(`${label} error: ${(e as Error).message}`);
+      }
+    };
+
     // Send Slack notification if configured
     if (args.slack) {
-      try {
-        const score = seo.data.analysis?.summary?.overallScore ?? 0;
-        const issues = seo.data.analysis?.summary?.totalIssues ?? 0;
-        const emoji = score >= 80 ? ':white_check_mark:' : score >= 60 ? ':warning:' : ':x:';
-        const slackPayload = JSON.stringify({
-          text: `${emoji} *SEO Audit Complete: ${seo.domainName}*\nScore: *${score}/100* | Issues: ${issues}\nCritical: ${seo.data.analysis?.summary?.criticalCount ?? 0} | High: ${seo.data.analysis?.summary?.highCount ?? 0}`,
-        });
-        const slackUrl = new URL(args.slack);
-        const req = https.request(slackUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(slackPayload) },
-        });
-        req.on('error', (e) => console.log(`Slack notification failed: ${e.message}`));
-        req.write(slackPayload);
-        req.end();
-        console.log('Slack notification sent');
-      } catch (e: unknown) {
-        console.log(`Slack error: ${(e as Error).message}`);
-      }
+      const emoji = score >= 80 ? ':white_check_mark:' : score >= 60 ? ':warning:' : ':x:';
+      postJson(args.slack, JSON.stringify({
+        text: `${emoji} *SEO Audit Complete: ${seo.domainName}*\nScore: *${score}/100* | Issues: ${totalIssues}\nCritical: ${(summary.criticalCount as number) ?? 0} | High: ${(summary.highCount as number) ?? 0}`,
+      }), 'Slack notification');
     }
 
     // Send webhook notification if configured
     if (args.webhook) {
-      try {
-        const jsonSummary = getJsonSummary(seo.data as AuditResultsExtended, seo.domainName!, clickableReportPath);
-        const payload = JSON.stringify(jsonSummary);
-        const webhookUrl = new URL(args.webhook);
-        const transport = webhookUrl.protocol === 'https:' ? https : http;
-        const req = transport.request(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
-        });
-        req.on('error', (e) => console.log(`Webhook failed: ${e.message}`));
-        req.write(payload);
-        req.end();
-        console.log(`Webhook sent to ${args.webhook}`);
-      } catch (e: unknown) {
-        console.log(`Webhook error: ${(e as Error).message}`);
-      }
+      const jsonSummary = getJsonSummary(seo.data as AuditResultsExtended, seo.domainName!, clickableReportPath);
+      postJson(args.webhook, JSON.stringify(jsonSummary), `Webhook to ${args.webhook}`);
     }
 
     // Send desktop notification (best effort, no dependency required)
     try {
-      const score = seo.data.analysis?.summary?.overallScore ?? 0;
-      const totalPages = Object.keys(seo.data.pageData?.pages ?? {}).length;
       if (process.platform === 'darwin') {
         execFile('osascript', [
           '-e',
@@ -504,7 +496,7 @@ async function audit() {
 
     // Append to audit log
     try {
-      const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${seo.data.analysis?.summary?.overallScore ?? 0} | Issues: ${seo.data.analysis?.summary?.totalIssues ?? 0} | Pages: ${Object.keys(seo.data.pageData?.pages ?? {}).length}\n`;
+      const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${score} | Issues: ${totalIssues} | Pages: ${totalPages}\n`;
       fs.appendFileSync('audit-results/audit.log', logEntry);
     } catch (e: unknown) {
       console.debug('Audit log append failed:', (e as Error).message);
@@ -512,7 +504,7 @@ async function audit() {
 
     // Auto-open HTML report in browser if --open flag is set
     if (seo.shouldOpenReport) {
-      const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      const openCmd = getOpenCommand();
       exec(`${openCmd} "${absoluteHtmlPath}"`, (err) => {
         if (err) console.log('Could not auto-open report:', err.message);
       });

@@ -4,7 +4,7 @@
  */
 
 import type { AnalysisDetail, PageInfo, AuditSummary } from '../types';
-import { getLetterGrade, estimateScoreAfterFixes } from '../utils';
+import { getLetterGrade, estimateScoreAfterFixes, truncateText } from '../utils';
 import { SCORING } from '../constants';
 
 interface AuditResultsExtended {
@@ -201,7 +201,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
       .slice(0, 3);
     if (errorTypes.length > 0) {
       for (const [errorType, count] of errorTypes) {
-        const shortError = errorType.length > W - 12 ? errorType.substring(0, W - 15) + '...' : errorType;
+        const shortError = truncateText(errorType, W - 12);
         line(`    ${C.DIM}${shortError}: ${count}${C.RESET}`);
       }
     }

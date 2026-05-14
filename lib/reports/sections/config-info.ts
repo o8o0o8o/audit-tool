@@ -3,8 +3,9 @@
  * Displays robots.txt, sitemap, and crawl coverage information
  */
 
+import { stripIssueSeverity } from '../../utils';
 import { escapeHtml, makeUrlClickable } from '../html-utils';
-import { extractAnalysis } from '../data-processor';
+import { extractAnalysis, extractBySeverity } from '../data-processor';
 import type { PageInfo, ReportSectionData } from '../../types';
 
 /**
@@ -140,8 +141,7 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
  * Generate the related issues card
  */
 function getIssuesCard(jsonData: Record<string, unknown>) {
-  const analysisObj = extractAnalysis(jsonData);
-  const bySeverity = (analysisObj.bySeverity ?? {}) as Record<string, unknown[]>;
+  const bySeverity = extractBySeverity(jsonData) as Record<string, unknown[]>;
 
   // Filter for robots.txt and sitemap related issues
   const filterRobotsSitemap = (issues: unknown[]) =>
@@ -202,7 +202,7 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
     ...robotsSitemapIssues.medium.slice(0, 2),
   ]
     .map((issue) => {
-      const cleanIssue = issue.replace(/\s*\[(critical|high|medium|low)\]\s*$/i, '');
+      const cleanIssue = stripIssueSeverity(issue);
       return `<li>${escapeHtml(cleanIssue)}</li>`;
     })
     .join('');

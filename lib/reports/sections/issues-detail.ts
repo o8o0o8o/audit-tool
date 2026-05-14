@@ -5,11 +5,38 @@
  */
 
 import { isCrawlerError, SEVERITY_ORDER } from '../../constants';
-import { escapeHtml } from '../html-utils';
-import { extractAnalysis } from '../data-processor';
+import { escapeHtml, renderExpandableList } from '../html-utils';
+import { extractDetails } from '../data-processor';
 import { ScoreCalculator } from '../../scoring/score-calculator';
 import { extractComparisonLabels } from '../comparison-helpers';
 import type { ReportSectionData, AnalysisDetail, FixRecommendation, ComparisonData } from '../../types';
+
+/** Shared inline script for issue table filtering/expanding (used in both main and comparison reports) */
+function getIssueTableScript() {
+  return `<script>
+    function filterIssueSev(sev, btn) {
+      document.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      document.querySelectorAll('.issues-table-row').forEach(function(r) {
+        var show = sev === 'all' || r.dataset.severity === sev;
+        r.style.display = show ? '' : 'none';
+        var detail = r.nextElementSibling;
+        if (detail && detail.classList.contains('issue-detail-row')) {
+          detail.style.display = 'none';
+          r.querySelector('.row-chevron').textContent = '▸';
+        }
+      });
+    }
+    function toggleIssueDetail(idx) {
+      var row = document.getElementById('issue-detail-' + idx);
+      var chevron = document.getElementById('issue-chevron-' + idx);
+      if (!row) return;
+      var showing = row.style.display !== 'none';
+      row.style.display = showing ? 'none' : 'table-row';
+      if (chevron) chevron.textContent = showing ? '▸' : '▾';
+    }
+    </script>`;
+}
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
   critical: {
@@ -25,6 +52,16 @@ const SEVERITY_STYLES: Record<string, { bg: string; text: string; dot: string }>
   },
   low: { bg: 'var(--color-severity-low-bg)', text: 'var(--color-severity-low-text)', dot: 'var(--green-500)' },
 };
+
+/** Count issues by severity level. */
+function countBySeverity(issues: { detail: { severity: string } }[]) {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const issue of issues) {
+    const sev = issue.detail.severity as keyof typeof counts;
+    if (sev in counts) counts[sev]++;
+  }
+  return counts;
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,8 +81,7 @@ function getIssuesDetail(data: ReportSectionData) {
   }
 
   const { jsonData } = data;
-  const analysisObj = extractAnalysis(jsonData);
-  const details = (analysisObj.details ?? {}) as Record<string, AnalysisDetail>;
+  const details = extractDetails(jsonData);
   const fixes = ScoreCalculator.getFixRecommendations();
 
   // Build issue list
@@ -77,12 +113,7 @@ function getIssuesDetail(data: ReportSectionData) {
     return b.impactScore - a.impactScore;
   });
 
-  // Count by severity
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
-  for (const issue of issues) {
-    const sev = issue.detail.severity as keyof typeof counts;
-    if (sev in counts) counts[sev]++;
-  }
+  const counts = countBySeverity(issues);
 
   return `
     <div class="issues-section">
@@ -122,29 +153,7 @@ function getIssuesDetail(data: ReportSectionData) {
       </table>
     </div>
 
-    <script>
-    function filterIssueSev(sev, btn) {
-      document.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      document.querySelectorAll('.issues-table-row').forEach(function(r) {
-        var show = sev === 'all' || r.dataset.severity === sev;
-        r.style.display = show ? '' : 'none';
-        var detail = r.nextElementSibling;
-        if (detail && detail.classList.contains('issue-detail-row')) {
-          detail.style.display = 'none';
-          r.querySelector('.row-chevron').textContent = '▸';
-        }
-      });
-    }
-    function toggleIssueDetail(idx) {
-      var row = document.getElementById('issue-detail-' + idx);
-      var chevron = document.getElementById('issue-chevron-' + idx);
-      if (!row) return;
-      var showing = row.style.display !== 'none';
-      row.style.display = showing ? 'none' : 'table-row';
-      if (chevron) chevron.textContent = showing ? '▸' : '▾';
-    }
-    </script>
+    ${getIssueTableScript()}
   `;
 }
 
@@ -210,30 +219,13 @@ function renderIssueDetail(
     <div>
       <div style="font-size:var(--font-size-xs);font-weight:var(--font-weight-semibold);color:var(--color-text-muted);margin-bottom:4px;">Affected pages (${count})</div>
       <div style="display:flex;flex-direction:column;gap:2px;">
-        ${examples
-          .slice(0, VISIBLE)
-          .map(
-            (ex) =>
-              `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
-          )
-          .join('')}
-        ${
-          examples.length > VISIBLE
-            ? `
-          <div id="issue-more-${idx}" style="display:none;">
-            ${examples
-              .slice(VISIBLE)
-              .map(
-                (ex) =>
-                  `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
-              )
-              .join('')}
-          </div>
-          <button onclick="event.stopPropagation();var el=document.getElementById('issue-more-${idx}');var s=el.style.display!=='none';el.style.display=s?'none':'block';this.textContent=s?'Show all ${examples.length}...':'Show less';" style="background:none;border:none;color:var(--color-info);cursor:pointer;font-size:var(--font-size-xs);padding:2px 0;text-align:left;">Show all ${examples.length}...</button>
-        `
-            : ''
-        }
-        ${count > examples.length ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${count} total, ${examples.length} shown</div>` : ''}
+        ${renderExpandableList(
+          examples,
+          (ex) => `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
+          `issue-detail-more-${idx}`,
+          VISIBLE,
+          count,
+        )}
       </div>
     </div>
   `
@@ -255,11 +247,8 @@ interface ComparisonIssueEntry extends IssueEntry {
 }
 
 function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison: ComparisonData) {
-  const originAnalysis = extractAnalysis(jsonData);
-  const originDetails = (originAnalysis.details ?? {}) as Record<string, AnalysisDetail>;
-
-  const compareAnalysis = extractAnalysis(comparison.compareJsonData);
-  const compareDetails = (compareAnalysis.details ?? {}) as Record<string, AnalysisDetail>;
+  const originDetails = extractDetails(jsonData);
+  const compareDetails = extractDetails(comparison.compareJsonData);
 
   const fixes = ScoreCalculator.getFixRecommendations();
 
@@ -308,11 +297,7 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
     return b.impactScore - a.impactScore;
   });
 
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
-  for (const issue of issues) {
-    const sev = issue.detail.severity as keyof typeof counts;
-    if (sev in counts) counts[sev]++;
-  }
+  const counts = countBySeverity(issues);
 
   const fixedCount = issues.filter((i) => i.status === 'fixed').length;
   const newCount = issues.filter((i) => i.status === 'new').length;
@@ -369,29 +354,7 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
       </table>
     </div>
 
-    <script>
-    function filterIssueSev(sev, btn) {
-      document.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      document.querySelectorAll('.issues-table-row').forEach(function(r) {
-        var show = sev === 'all' || r.dataset.severity === sev;
-        r.style.display = show ? '' : 'none';
-        var detail = r.nextElementSibling;
-        if (detail && detail.classList.contains('issue-detail-row')) {
-          detail.style.display = 'none';
-          r.querySelector('.row-chevron').textContent = '▸';
-        }
-      });
-    }
-    function toggleIssueDetail(idx) {
-      var row = document.getElementById('issue-detail-' + idx);
-      var chevron = document.getElementById('issue-chevron-' + idx);
-      if (!row) return;
-      var showing = row.style.display !== 'none';
-      row.style.display = showing ? 'none' : 'table-row';
-      if (chevron) chevron.textContent = showing ? '▸' : '▾';
-    }
-    </script>
+    ${getIssueTableScript()}
   `;
 }
 

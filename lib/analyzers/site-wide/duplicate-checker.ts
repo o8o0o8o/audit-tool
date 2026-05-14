@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { formatUrlList, escapeHtml, truncateText } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -55,8 +55,8 @@ class DuplicateChecker {
 
         const urlList = formatUrlList(urls);
         issues.push({
-          title: `Duplicate page titles found`,
-          description: `The title "${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
+          message: `Duplicate page titles found`,
+          detail: `The title "${escapeHtml(title)}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -74,8 +74,8 @@ class DuplicateChecker {
 
         const urlList = formatUrlList(urls);
         issues.push({
-          title: `Duplicate meta descriptions found`,
-          description: `The description "${description.substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;')}${description.length > 100 ? '...' : ''}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
+          message: `Duplicate meta descriptions found`,
+          detail: `The description "${escapeHtml(truncateText(description, 100))}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
           severity: SEVERITY.MEDIUM,
         });
       }

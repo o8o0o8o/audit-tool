@@ -9,7 +9,7 @@ import * as path from 'path';
 // Import modularized components
 import type { NetworkCondition, CpuCondition, SEODataOptions } from './types';
 import { SEVERITY, THRESHOLDS, NETWORK_CONDITIONS, CPU_CONDITIONS } from './constants';
-import { validateUrl, formatElapsedTime } from './utils';
+import { validateUrl, formatElapsedTime, removeTrailingSlash } from './utils';
 import { sanitizeDomainName } from '../validators';
 import { FileManager } from './storage/file-manager';
 import { ScoreCalculator } from './scoring/score-calculator';
@@ -85,7 +85,7 @@ class SEOData {
     this.#incomingLinksTracking = new Map();
 
     if (validatedUrl) {
-      this.origin = validatedUrl.replace(/\s/g, '').replace(/\/$/, '');
+      this.origin = removeTrailingSlash(validatedUrl.replace(/\s/g, ''));
     } else {
       // Origin will be derived from sitemap URLs in #parseSitemapFile()
       this.origin = null;

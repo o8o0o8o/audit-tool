@@ -6,6 +6,7 @@
 
 import { ErrorAggregator } from '../utils/error-aggregator';
 import type { PageInfo } from '../types';
+import { formatBytes } from '../utils';
 import type { FileManager } from '../storage/file-manager';
 
 interface BatchInfo {
@@ -228,7 +229,7 @@ class ProgressManager {
       const estimatedSize = JSON.stringify(pageData).length;
 
       if (estimatedSize > MAX_PAGE_SIZE_BYTES) {
-        console.warn(`⚠️  Page data for ${url} is large (${Math.round(estimatedSize / 1024)}KB), truncating...`);
+        console.warn(`⚠️  Page data for ${url} is large (${formatBytes(estimatedSize)}), truncating...`);
 
         // Truncate large arrays to reduce size
         const truncatedPage = this.#truncateLargeArrays(pageData, MAX_ARRAY_LENGTH) as PageInfo;
@@ -940,7 +941,7 @@ class ProgressManager {
         missingHeaders: page.security.missingHeaders?.slice(0, 5),
         mixedContent: page.security.mixedContent,
         insecureCookies: page.security.insecureCookies,
-        issues: page.security.issues.slice(0, 10),
+        issues: page.security.issues?.slice(0, 10),
       };
     }
 

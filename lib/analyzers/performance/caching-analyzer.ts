@@ -1,4 +1,5 @@
 import type { ChromePage, NetworkRequest } from '../../types';
+import { getHeader, truncateText } from '../../utils';
 
 class CachingAnalyzer {
   static async analyzeCaching(
@@ -59,9 +60,9 @@ class CachingAnalyzer {
     // 2. Check HTML page caching
     const pageResponse = (requests as Record<string, NetworkRequest>)[url];
     if (pageResponse?.headers) {
-      const cacheControl = pageResponse.headers['cache-control'] || '';
-      const expires = pageResponse.headers['expires'];
-      const etag = pageResponse.headers['etag'];
+      const cacheControl = getHeader(pageResponse.headers, 'cache-control') ?? '';
+      const expires = getHeader(pageResponse.headers, 'expires');
+      const etag = getHeader(pageResponse.headers, 'etag');
 
       cachingAnalysis.htmlCacheable =
         !!(cacheControl.includes('max-age') || cacheControl.includes('public') || expires || etag) &&
@@ -90,9 +91,9 @@ class CachingAnalyzer {
 
       if (isStatic) {
         const headers = (reqData as NetworkRequest).headers ?? {};
-        const cacheControl = headers['cache-control'] || '';
-        const expires = headers['expires'];
-        const etag = headers['etag'];
+        const cacheControl = getHeader(headers, 'cache-control') ?? '';
+        const expires = getHeader(headers, 'expires');
+        const etag = getHeader(headers, 'etag');
 
         const isCached =
           ((cacheControl && (cacheControl.includes('max-age') || cacheControl.includes('public'))) ||
@@ -106,7 +107,7 @@ class CachingAnalyzer {
         } else {
           cachingAnalysis.staticUncached++;
           if (cachingAnalysis.staticUncached <= 5) {
-            cachingAnalysis.issues.push(`Uncached: ${reqUrl.substring(0, 50)}...`);
+            cachingAnalysis.issues.push(`Uncached: ${truncateText(reqUrl, 50)}`);
           }
         }
       }

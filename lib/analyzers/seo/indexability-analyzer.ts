@@ -1,4 +1,4 @@
-import { getHeader, normalizeUrlForComparison } from '../../utils';
+import { getHeader, normalizeUrlForComparison, hasRobotsDirective } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
 
 class IndexabilityAnalyzer {
@@ -34,16 +34,16 @@ class IndexabilityAnalyzer {
     indexabilityData.metaRobots = contentValue || null;
 
     if (contentValue) {
-      if (contentValue.includes('noindex')) {
+      if (hasRobotsDirective(contentValue, 'noindex')) {
         indexabilityData.isIndexable = false;
         indexabilityData.hasNoindexTag = true;
         indexabilityData.blockingFactors.push('Meta robots: noindex');
       }
-      if (contentValue.includes('nofollow')) {
+      if (hasRobotsDirective(contentValue, 'nofollow')) {
         indexabilityData.hasNofollowTag = true;
         indexabilityData.warnings.push("Meta robots: nofollow (links won't be followed)");
       }
-      if (contentValue.includes('none')) {
+      if (hasRobotsDirective(contentValue, 'none')) {
         indexabilityData.isIndexable = false;
         indexabilityData.hasNoindexTag = true;
         indexabilityData.hasNofollowTag = true;
@@ -58,12 +58,12 @@ class IndexabilityAnalyzer {
     if (xRobotsTag) {
       indexabilityData.xRobotsTag = xRobotsTag.toLowerCase();
 
-      if (xRobotsTag.toLowerCase().includes('noindex')) {
+      if (hasRobotsDirective(xRobotsTag, 'noindex')) {
         indexabilityData.isIndexable = false;
         indexabilityData.hasNoindexTag = true;
         indexabilityData.blockingFactors.push('X-Robots-Tag: noindex');
       }
-      if (xRobotsTag.toLowerCase().includes('nofollow')) {
+      if (hasRobotsDirective(xRobotsTag, 'nofollow')) {
         indexabilityData.hasNofollowTag = true;
         indexabilityData.warnings.push('X-Robots-Tag: nofollow');
       }

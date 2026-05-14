@@ -1,3 +1,4 @@
+import { detectImportantPageLinks } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
 
 class AnalyticsTrackingAnalyzer {
@@ -195,9 +196,9 @@ class AnalyticsTrackingAnalyzer {
       }
     }
 
-    // 12. Check for Privacy Policy link
-    const privacyLinks = parsedPage.querySelectorAll('a[href*="privacy"]');
-    if (privacyLinks.length > 0) {
+    // 12. Check for Privacy Policy link (uses shared utility)
+    const importantLinks = detectImportantPageLinks(parsedPage);
+    if (importantLinks.hasPrivacyPolicy) {
       analyticsData.hasPrivacyPolicy = true;
     }
 

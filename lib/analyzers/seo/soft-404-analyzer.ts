@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { hasRobotsDirective, formatSampleList } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class Soft404Analyzer {
@@ -153,7 +154,7 @@ class Soft404Analyzer {
 
     // 6. Check meta robots for noindex (often set on soft 404s)
     const metaRobots = pageData.metaMap?.robots ?? '';
-    if (metaRobots.toLowerCase().includes('noindex') && signals.length > 0) {
+    if (hasRobotsDirective(metaRobots, 'noindex') && signals.length > 0) {
       signals.push('Page has noindex combined with error signals');
       confidence += 10;
     }
@@ -263,7 +264,7 @@ class Soft404Analyzer {
     if (soft404Count > 0) {
       issues.push({
         message: `${soft404Count} soft 404 pages detected`,
-        detail: `These pages return HTTP 200 but display "not found" content. This wastes crawl budget. Consider returning proper 404 status or redirecting: ${soft404Urls.slice(0, 5).join(', ')}${soft404Urls.length > 5 ? ` and ${soft404Urls.length - 5} more` : ''}`,
+        detail: `These pages return HTTP 200 but display "not found" content. This wastes crawl budget. Consider returning proper 404 status or redirecting: ${formatSampleList(soft404Urls)}`,
         severity: SEVERITY.HIGH,
       });
     }

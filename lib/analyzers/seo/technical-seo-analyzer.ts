@@ -3,8 +3,9 @@
  * Detects technical SEO issues like meta refresh, JS frameworks, CMS, etc.
  */
 
-import { SEVERITY } from '../../constants';
-import { incrementCounter } from '../../utils';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { incrementCounter, hasSSRIndicators, detectLazyLoading as sharedDetectLazyLoading, hasRobotsDirective, formatBytes } from '../../utils';
+import { TechnologyDetector } from './technology-detector';
 import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class TechnicalSEOAnalyzer {
@@ -58,13 +59,13 @@ class TechnicalSEOAnalyzer {
     }
 
     // 2. Detect JavaScript framework
-    technicalData.jsFramework = this.detectJSFramework(parsedPage);
+    technicalData.jsFramework = TechnologyDetector.quickDetectFramework(parsedPage.toString());
     if (technicalData.jsFramework) {
       const framework = technicalData.jsFramework;
       // Check for potential JS rendering issues
       const frameworkLower = framework.toLowerCase();
       if (['react', 'vue', 'angular'].some((f) => frameworkLower.includes(f))) {
-        const hasSSR = this.checkForSSR(parsedPage);
+        const hasSSR = hasSSRIndicators(parsedPage);
         if (!hasSSR) {
           warnings.push({
             message: `${framework} detected - verify server-side rendering`,
@@ -76,7 +77,7 @@ class TechnicalSEOAnalyzer {
     }
 
     // 3. Detect CMS
-    technicalData.cms = this.detectCMS(parsedPage);
+    technicalData.cms = TechnologyDetector.quickDetectCMS(parsedPage.toString());
     technicalData.generator = this.getGenerator(parsedPage);
 
     // 4. Check for AMP
@@ -100,21 +101,21 @@ class TechnicalSEOAnalyzer {
     }
 
     // 7. Check for lazy loading implementation
-    technicalData.lazyLoading = this.detectLazyLoading(parsedPage);
+    technicalData.lazyLoading = sharedDetectLazyLoading(parsedPage);
 
     // 8. Check for inline CSS/JS that could be external
     const inlineAnalysis = this.analyzeInlineResources(parsedPage);
-    if (inlineAnalysis.inlineCssSize > 50000) {
+    if (inlineAnalysis.inlineCssSize > THRESHOLDS.INLINE_CSS_SIZE_WARNING) {
       warnings.push({
         message: 'Large amount of inline CSS',
-        detail: `${(inlineAnalysis.inlineCssSize / 1024).toFixed(1)}KB of inline CSS. Consider extracting to external files for caching.`,
+        detail: `${formatBytes(inlineAnalysis.inlineCssSize)} of inline CSS. Consider extracting to external files for caching.`,
         severity: SEVERITY.LOW,
       });
     }
-    if (inlineAnalysis.inlineJsSize > 50000) {
+    if (inlineAnalysis.inlineJsSize > THRESHOLDS.INLINE_JS_SIZE_WARNING) {
       warnings.push({
         message: 'Large amount of inline JavaScript',
-        detail: `${(inlineAnalysis.inlineJsSize / 1024).toFixed(1)}KB of inline JS. Consider extracting to external files.`,
+        detail: `${formatBytes(inlineAnalysis.inlineJsSize)} of inline JS. Consider extracting to external files.`,
         severity: SEVERITY.LOW,
       });
     }
@@ -159,132 +160,6 @@ class TechnicalSEOAnalyzer {
         delay: parseInt(match[1], 10),
         url: match[2] || null,
       };
-    }
-
-    return null;
-  }
-
-  /**
-   * Detect JavaScript framework
-   */
-  static detectJSFramework(parsedPage: ParsedPage) {
-    const html = parsedPage.toString();
-
-    // React
-    if (html.includes('__NEXT_DATA__') || html.includes('_next/')) {
-      return 'Next.js (React)';
-    }
-    if (html.includes('data-reactroot') || html.includes('react-root')) {
-      return 'React';
-    }
-
-    // Vue
-    if (html.includes('__NUXT__') || html.includes('/_nuxt/')) {
-      return 'Nuxt.js (Vue)';
-    }
-    if (html.includes('data-v-') || html.includes('v-cloak')) {
-      return 'Vue.js';
-    }
-
-    // Angular
-    if (html.includes('ng-version="') || html.includes('_ngcontent-') || html.includes('_nghost-')) {
-      return 'Angular';
-    }
-
-    // Svelte
-    if (html.includes('__svelte')) {
-      return 'Svelte';
-    }
-
-    // Gatsby
-    if (html.includes('___gatsby')) {
-      return 'Gatsby (React)';
-    }
-
-    // Generic SPA indicators
-    if (parsedPage.querySelector('#app') && html.includes('bundle.js')) {
-      return 'SPA (Unknown Framework)';
-    }
-
-    return null;
-  }
-
-  /**
-   * Check for server-side rendering indicators
-   */
-  static checkForSSR(parsedPage: ParsedPage) {
-    // Check for meaningful content in initial HTML
-    const mainContent = parsedPage.querySelector('main, article, .content, #content');
-    if (mainContent) {
-      const text = mainContent.textContent.trim();
-      if (text.length > 100) {
-        return true;
-      }
-    }
-
-    // Check for SSR frameworks
-    const html = parsedPage.toString();
-    if (html.includes('__NEXT_DATA__') || html.includes('__NUXT__')) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Detect CMS
-   */
-  static detectCMS(parsedPage: ParsedPage) {
-    const html = parsedPage.toString();
-
-    // WordPress
-    if (html.includes('wp-content') || html.includes('wp-includes')) {
-      return 'WordPress';
-    }
-
-    // Shopify
-    if (html.includes('cdn.shopify.com') || html.includes('Shopify.theme')) {
-      return 'Shopify';
-    }
-
-    // Wix
-    if (html.includes('wix.com') || html.includes('wixstatic.com')) {
-      return 'Wix';
-    }
-
-    // Squarespace
-    if (html.includes('squarespace.com') || html.includes('squarespace-cdn.com')) {
-      return 'Squarespace';
-    }
-
-    // Drupal
-    if (html.includes('drupal.org') || html.includes('Drupal.settings')) {
-      return 'Drupal';
-    }
-
-    // Joomla
-    if (html.includes('/media/jui/') || html.includes('Joomla!')) {
-      return 'Joomla';
-    }
-
-    // Magento
-    if (html.includes('mage/') || html.includes('Magento')) {
-      return 'Magento';
-    }
-
-    // Webflow
-    if (html.includes('webflow.com')) {
-      return 'Webflow';
-    }
-
-    // Ghost
-    if (html.includes('ghost.org') || html.includes('ghost-')) {
-      return 'Ghost';
-    }
-
-    // HubSpot
-    if (html.includes('hubspot.com') || html.includes('hs-scripts')) {
-      return 'HubSpot';
     }
 
     return null;
@@ -357,28 +232,6 @@ class TechnicalSEOAnalyzer {
     }
 
     return { preload, prefetch, dnsPrefetch };
-  }
-
-  /**
-   * Detect lazy loading implementation
-   */
-  static detectLazyLoading(parsedPage: ParsedPage) {
-    // Check for native lazy loading
-    const lazyImages = parsedPage.querySelectorAll('img[loading="lazy"]');
-    if (lazyImages.length > 0) {
-      return { type: 'native', count: lazyImages.length };
-    }
-
-    // Check for common lazy loading libraries
-    const html = parsedPage.toString();
-    if (html.includes('data-src') || html.includes('data-lazy')) {
-      return { type: 'library', pattern: 'data-src' };
-    }
-    if (html.includes('lazyload') || html.includes('lazy-load')) {
-      return { type: 'library', pattern: 'class-based' };
-    }
-
-    return null;
   }
 
   /**
@@ -498,13 +351,13 @@ class TechnicalSEOAnalyzer {
     if (htmlSize > 3 * 1024 * 1024) {
       issues.push({
         message: 'HTML document exceeds 3MB',
-        detail: `<a href="${url}">${url}</a> HTML is ${(htmlSize / 1024 / 1024).toFixed(1)}MB. Very large HTML slows parsing, wastes crawl budget, and may hit Google's 15MB rendering limit.`,
+        detail: `<a href="${url}">${url}</a> HTML is ${formatBytes(htmlSize)}. Very large HTML slows parsing, wastes crawl budget, and may hit Google's 15MB rendering limit.`,
         severity: SEVERITY.HIGH,
       });
     } else if (htmlSize > 1 * 1024 * 1024) {
       warnings.push({
         message: 'Large HTML document',
-        detail: `<a href="${url}">${url}</a> HTML is ${(htmlSize / 1024).toFixed(0)}KB. Consider reducing HTML size by removing unnecessary inline resources.`,
+        detail: `<a href="${url}">${url}</a> HTML is ${formatBytes(htmlSize)}. Consider reducing HTML size by removing unnecessary inline resources.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -521,10 +374,10 @@ class TechnicalSEOAnalyzer {
 
     if (metaRobots && xRobotsTag) {
       // Check for conflicts
-      const metaNoindex = metaRobots.toLowerCase().includes('noindex');
-      const headerNoindex = xRobotsTag.toLowerCase().includes('noindex');
-      const metaIndex = metaRobots.toLowerCase().includes('index') && !metaNoindex;
-      const headerIndex = xRobotsTag.toLowerCase().includes('index') && !headerNoindex;
+      const metaNoindex = hasRobotsDirective(metaRobots, 'noindex');
+      const headerNoindex = hasRobotsDirective(xRobotsTag, 'noindex');
+      const metaIndex = hasRobotsDirective(metaRobots, 'index') && !metaNoindex;
+      const headerIndex = hasRobotsDirective(xRobotsTag, 'index') && !headerNoindex;
 
       if ((metaNoindex && headerIndex) || (metaIndex && headerNoindex)) {
         issues.push({

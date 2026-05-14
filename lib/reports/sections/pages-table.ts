@@ -16,6 +16,7 @@ import {
   getTextLengthTooltip,
 } from '../html-utils';
 import { extractComparisonLabels } from '../comparison-helpers';
+import { removeTrailingSlash } from '../../utils';
 import type {
   PageInfo,
   ReportSectionData,
@@ -1346,7 +1347,7 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
     return Object.values(pages).find((p) => {
       try {
         const pathname = new URL(p.url).pathname.toLowerCase();
-        return pathname.replace(/\/$/, '') === path || pathname === path;
+        return removeTrailingSlash(pathname) === path || pathname === path;
       } catch {
         return false;
       }

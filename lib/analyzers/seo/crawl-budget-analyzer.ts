@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getLetterGrade, hasRobotsDirective } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class CrawlBudgetAnalyzer {
@@ -154,12 +155,7 @@ class CrawlBudgetAnalyzer {
         efficiencyPenalties.nonIndexable,
     );
 
-    // Assign grade
-    if (stats.efficiency.score >= 90) stats.efficiency.grade = 'A';
-    else if (stats.efficiency.score >= 80) stats.efficiency.grade = 'B';
-    else if (stats.efficiency.score >= 70) stats.efficiency.grade = 'C';
-    else if (stats.efficiency.score >= 60) stats.efficiency.grade = 'D';
-    else stats.efficiency.grade = 'F';
+    stats.efficiency.grade = getLetterGrade(stats.efficiency.score);
 
     // Generate issues and recommendations
     // Redirects
@@ -251,7 +247,7 @@ class CrawlBudgetAnalyzer {
    */
   static isPageIndexable(pageData: PageInfo) {
     // Check noindex
-    if (pageData.noindex || pageData.metaRobots?.includes('noindex')) {
+    if (pageData.noindex || (pageData.metaRobots && hasRobotsDirective(pageData.metaRobots, 'noindex'))) {
       return false;
     }
 

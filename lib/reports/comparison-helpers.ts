@@ -3,6 +3,9 @@
  * Shared utilities for dual-origin report rendering
  */
 
+import { calcPercent, stripWww } from '../utils';
+import { getScoreClass } from './html-utils';
+
 /**
  * Get color based on whether delta represents improvement or regression
  * @param delta - The numeric difference (positive = increase)
@@ -76,10 +79,12 @@ function formatDualValue(
 /**
  * Format two scores with a visual delta
  */
+const SCORE_HEX_COLORS: Record<string, string> = { good: '#10b981', warning: '#f59e0b', bad: '#ef4444' };
+
 function formatDualScore(origin: number, compare: number, originLabel: string, compareLabel: string): string {
   const delta = compare - origin;
   const deltaColor = getDeltaColor(-delta, true); // higher score = better, so lowerIsBetter=false inverted
-  const scoreColor = (s: number) => (s >= 80 ? '#10b981' : s >= 60 ? '#f59e0b' : '#ef4444');
+  const scoreColor = (s: number) => SCORE_HEX_COLORS[getScoreClass(s)];
   const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '';
   const deltaText = delta !== 0 ? `${arrow} ${Math.abs(delta)}` : '—';
 
@@ -105,8 +110,7 @@ function getComparisonHeader(
   matchStats: { matched: number; originOnly: number; compareOnly: number },
 ): string {
   const total = matchStats.matched + matchStats.originOnly + matchStats.compareOnly;
-  const matchPct =
-    total > 0 ? Math.round((matchStats.matched / (matchStats.matched + matchStats.originOnly)) * 100) : 0;
+  const matchPct = calcPercent(matchStats.matched, matchStats.matched + matchStats.originOnly);
 
   return `<div class="comparison-header">
   <div class="comparison-header-sites">
@@ -126,7 +130,7 @@ function getComparisonHeader(
  * Short domain label (strip www. prefix)
  */
 function shortDomain(domain: string): string {
-  return domain.replace(/^www\./, '');
+  return stripWww(domain);
 }
 
 /**
@@ -168,6 +172,31 @@ function extractComparisonLabels(comparison: { originDomainName: string; compare
   };
 }
 
+/**
+ * Format a metric delta with sign, class, and unit for comparison reports.
+ * Computes the delta between two string/number values and returns the HTML span.
+ * @param oldVal - Old metric value (string or number)
+ * @param newVal - New metric value (string or number)
+ * @param unit - Unit string (e.g., 'ms', '')
+ * @param decimals - Number of decimal places (default: 0)
+ */
+function formatMetricDelta(oldVal: string | number, newVal: string | number, unit = 'ms', decimals = 0): string {
+  const delta = parseFloat(String(newVal)) - parseFloat(String(oldVal));
+  return formatDeltaSpan(delta, unit, decimals);
+}
+
+/**
+ * Format a pre-computed delta value as a styled span with sign, CSS class, and unit.
+ * @param delta - The numeric delta (positive = increase)
+ * @param unit - Unit string (e.g., 'ms', '')
+ * @param decimals - Number of decimal places (default: 0)
+ * @param lowerIsBetter - If true (default), positive delta is bad (latency, errors)
+ */
+function formatDeltaSpan(delta: number, unit = 'ms', decimals = 0, lowerIsBetter = true): string {
+  const cls = lowerIsBetter ? deltaClass(-delta) : deltaClass(delta);
+  return `<span class="delta ${cls}">${deltaSymbol(delta)}${delta.toFixed(decimals)}${unit}</span>`;
+}
+
 export {
   getDeltaColor,
   getDeltaCssColor,
@@ -180,4 +209,6 @@ export {
   extractComparisonLabels,
   deltaClass,
   deltaSymbol,
+  formatMetricDelta,
+  formatDeltaSpan,
 };

@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { getOrigin, incrementCounter } from '../../utils';
+import { getOrigin, incrementCounter, getFileNameFromUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ResourceHint {
@@ -61,7 +61,7 @@ class ResourceHintsAnalyzer {
         });
         issues.push({
           message: 'LCP image not preloaded',
-          detail: `The Largest Contentful Paint element (${this.getFileName(lcpUrl)}) should be preloaded for faster rendering. Add: <link rel="preload" as="image" href="${lcpUrl}">`,
+          detail: `The Largest Contentful Paint element (${getFileNameFromUrl(lcpUrl)}) should be preloaded for faster rendering. Add: <link rel="preload" as="image" href="${lcpUrl}">`,
           severity: SEVERITY.HIGH,
         });
       }
@@ -79,7 +79,7 @@ class ResourceHintsAnalyzer {
         });
         warnings.push({
           message: 'Critical font not preloaded',
-          detail: `Font "${this.getFileName(font.url)}" is used above the fold but not preloaded. Add: <link rel="preload" as="font" href="${font.url}" crossorigin>`,
+          detail: `Font "${getFileNameFromUrl(font.url)}" is used above the fold but not preloaded. Add: <link rel="preload" as="font" href="${font.url}" crossorigin>`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -124,7 +124,7 @@ class ResourceHintsAnalyzer {
         message: 'Unused preload hints detected',
         detail: `${unusedPreloads.length} preloaded resources not used within 3 seconds: ${unusedPreloads
           .slice(0, 3)
-          .map((p) => this.getFileName(p.href ?? ''))
+          .map((p) => getFileNameFromUrl(p.href ?? ''))
           .join(', ')}. Remove or defer these preloads.`,
         severity: SEVERITY.LOW,
       });
@@ -135,7 +135,7 @@ class ResourceHintsAnalyzer {
       if (!preload.as && typeof preload === 'object') {
         warnings.push({
           message: 'Preload missing "as" attribute',
-          detail: `Preload for "${this.getFileName(preload.href ?? '')}" lacks 'as' attribute. Browser may not prioritize correctly.`,
+          detail: `Preload for "${getFileNameFromUrl(preload.href ?? '')}" lacks 'as' attribute. Browser may not prioritize correctly.`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -146,7 +146,7 @@ class ResourceHintsAnalyzer {
       if (preload.as === 'font' && !preload.crossorigin) {
         warnings.push({
           message: 'Font preload missing crossorigin',
-          detail: `Font preload "${this.getFileName(preload.href ?? '')}" needs crossorigin attribute to work correctly.`,
+          detail: `Font preload "${getFileNameFromUrl(preload.href ?? '')}" needs crossorigin attribute to work correctly.`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -237,17 +237,6 @@ class ResourceHintsAnalyzer {
     return Array.from(origins.values());
   }
 
-  /**
-   * Get filename from URL
-   */
-  static getFileName(url: string) {
-    try {
-      const pathname = new URL(url).pathname;
-      return pathname.split('/').pop() ?? pathname;
-    } catch {
-      return url?.substring(0, 50) ?? 'unknown';
-    }
-  }
 
   /**
    * Analyze resource hints across the site
@@ -301,7 +290,7 @@ class ResourceHintsAnalyzer {
         } else if (/\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(lcpUrl)) {
           stats.pagesWithMissingLcpPreload++;
           // Track common missing hints
-          const key = this.getFileName(lcpUrl);
+          const key = getFileNameFromUrl(lcpUrl);
           incrementCounter(commonMissingHints, key);
         }
       }

@@ -1,4 +1,5 @@
 import { THRESHOLDS, GENERIC_ANCHORS } from '../../constants';
+import { getHostname, calcPercent } from '../../utils';
 import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class LinkQualityAnalyzer {
@@ -69,11 +70,9 @@ class LinkQualityAnalyzer {
         linkAnalysis.externalLinks++;
 
         // Track external domains
-        try {
-          const domain = new URL(link.href).hostname;
+        const domain = getHostname(link.href);
+        if (domain) {
           linkAnalysis.externalDomains[domain] = (linkAnalysis.externalDomains[domain] || 0) + 1;
-        } catch {
-          // Invalid URL, skip
         }
       }
 
@@ -212,7 +211,7 @@ class LinkQualityAnalyzer {
     }
 
     // Check for too many on-page links
-    if (linkAnalysis.totalLinks > 150) {
+    if (linkAnalysis.totalLinks > THRESHOLDS.LINKS_PER_PAGE_WARNING) {
       linkAnalysis.issues.push({
         message: 'Too many on-page links',
         count: linkAnalysis.totalLinks,
@@ -222,9 +221,9 @@ class LinkQualityAnalyzer {
 
     // Calculate link ratios
     if (linkAnalysis.totalLinks > 0) {
-      linkAnalysis.internalLinkRatio = Math.round((linkAnalysis.internalLinks / linkAnalysis.totalLinks) * 100);
-      linkAnalysis.externalLinkRatio = Math.round((linkAnalysis.externalLinks / linkAnalysis.totalLinks) * 100);
-      linkAnalysis.nofollowRatio = Math.round((linkAnalysis.nofollowLinks / linkAnalysis.totalLinks) * 100);
+      linkAnalysis.internalLinkRatio = calcPercent(linkAnalysis.internalLinks, linkAnalysis.totalLinks);
+      linkAnalysis.externalLinkRatio = calcPercent(linkAnalysis.externalLinks, linkAnalysis.totalLinks);
+      linkAnalysis.nofollowRatio = calcPercent(linkAnalysis.nofollowLinks, linkAnalysis.totalLinks);
     }
 
     return linkAnalysis;

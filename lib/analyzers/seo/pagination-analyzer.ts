@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { removeTrailingSlash, hasRobotsDirective } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class PaginationAnalyzer {
@@ -136,7 +137,7 @@ class PaginationAnalyzer {
     const metaRobots = parsedPage.querySelector('meta[name="robots"]');
     if (metaRobots && paginationData.hasPagination && paginationData.currentPage! > 1) {
       const robotsContent = metaRobots.getAttribute('content') ?? '';
-      if (robotsContent.toLowerCase().includes('noindex')) {
+      if (hasRobotsDirective(robotsContent, 'noindex')) {
         warnings.push({
           message: 'Paginated page is noindexed',
           detail: `<a href="${url}">${url}</a> (page ${paginationData.currentPage}) has noindex. Ensure this is intentional and content is accessible elsewhere.`,
@@ -385,8 +386,8 @@ class PaginationAnalyzer {
       const currentUrl = new URL(url);
 
       // Compare without trailing slashes
-      const canonicalPath = canonicalUrl.pathname.replace(/\/$/, '') + canonicalUrl.search;
-      const currentPath = currentUrl.pathname.replace(/\/$/, '') + currentUrl.search;
+      const canonicalPath = removeTrailingSlash(canonicalUrl.pathname) + canonicalUrl.search;
+      const currentPath = removeTrailingSlash(currentUrl.pathname) + currentUrl.search;
 
       return canonicalUrl.origin === currentUrl.origin && canonicalPath === currentPath;
     } catch {

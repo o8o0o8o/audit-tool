@@ -1,5 +1,5 @@
-import { SEVERITY } from '../../constants';
-import { incrementCounter, getTopEntries } from '../../utils';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { incrementCounter, getTopEntries, escapeHtml, getIncomingLinkCount, normalizeToEntries } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface HubPage {
@@ -100,7 +100,7 @@ class LinkStructureAnalyzer {
 
       // Track pages with excessive total links
       const totalPageLinks = (linkData.internalLinks ?? 0) + (linkData.externalLinks ?? 0);
-      if (totalPageLinks > 150) {
+      if (totalPageLinks > THRESHOLDS.LINKS_PER_PAGE_WARNING) {
         linkStats.excessiveLinkPages ??= [];
         linkStats.excessiveLinkPages.push({
           url,
@@ -120,10 +120,7 @@ class LinkStructureAnalyzer {
 
       // Track anchor text diversity
       // Handle both Map (fresh data) and plain object (restored from JSON)
-      const anchorTextEntries =
-        linkData.anchorTextMap instanceof Map ? linkData.anchorTextMap : Object.entries(linkData.anchorTextMap ?? {});
-
-      for (const [anchorText, _count] of anchorTextEntries) {
+      for (const [anchorText, _count] of normalizeToEntries(linkData.anchorTextMap as Record<string, number> | Map<string, number> | undefined)) {
         if (!linkStats.anchorTextDiversity.has(anchorText)) {
           linkStats.anchorTextDiversity.set(anchorText, new Set());
         }
@@ -132,12 +129,7 @@ class LinkStructureAnalyzer {
 
       // Track external domains
       // Handle both Map (fresh data) and plain object (restored from JSON)
-      const externalDomainEntries =
-        linkData.externalDomains instanceof Map
-          ? linkData.externalDomains
-          : Object.entries(linkData.externalDomains ?? {});
-
-      for (const [domain, count] of externalDomainEntries) {
+      for (const [domain, count] of normalizeToEntries(linkData.externalDomains as Record<string, number> | Map<string, number> | undefined)) {
         incrementCounter(linkStats.externalDomains, domain, count);
       }
 
@@ -159,8 +151,7 @@ class LinkStructureAnalyzer {
     // Get most linked pages from existing incoming links data
     const mostLinked = [];
     for (const url in allPages) {
-      const raw = incomingLinks[url];
-      const incomingCount = Array.isArray(raw) ? raw.length : (raw ?? 0);
+      const incomingCount = getIncomingLinkCount(incomingLinks as Record<string, unknown>, url);
       if (incomingCount > 0) {
         mostLinked.push({ url, incomingLinks: incomingCount });
       }
@@ -174,12 +165,12 @@ class LinkStructureAnalyzer {
     // Report 1: Site-wide broken links summary
     if (linkStats.totalBrokenLinks > 0) {
       const topBrokenPages = getTopEntries(linkStats.brokenLinksByPage.entries(), 10)
-        .map(([url, count]) => `<li><a href="${url}">${url}</a> (${count} broken links)</li>`)
+        .map(([url, count]) => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a> (${count} broken links)</li>`)
         .join('');
 
       issues.push({
-        title: `Site has broken internal links`,
-        description: `Total of ${linkStats.totalBrokenLinks} broken link(s) found across ${linkStats.pagesWithBrokenLinks} page(s). Pages with most broken links:<ul>${topBrokenPages}</ul>`,
+        message: `Site has broken internal links`,
+        detail: `Total of ${linkStats.totalBrokenLinks} broken link(s) found across ${linkStats.pagesWithBrokenLinks} page(s). Pages with most broken links:<ul>${topBrokenPages}</ul>`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -188,12 +179,12 @@ class LinkStructureAnalyzer {
     if (linkStats.hubPages.length > 10) {
       const topHubs = linkStats.hubPages
         .slice(0, 5)
-        .map((hub: HubPage) => `<li><a href="${hub.url}">${hub.url}</a> (${hub.internalLinks} internal links)</li>`)
+        .map((hub: HubPage) => `<li><a href="${escapeHtml(hub.url)}">${escapeHtml(hub.url)}</a> (${hub.internalLinks} internal links)</li>`)
         .join('');
 
       issues.push({
-        title: `Many hub pages with excessive outbound links`,
-        description: `${linkStats.hubPages.length} page(s) have more than 20 internal links. Consider if these pages are diluting link equity:<ul>${topHubs}</ul>`,
+        message: `Many hub pages with excessive outbound links`,
+        detail: `${linkStats.hubPages.length} page(s) have more than 20 internal links. Consider if these pages are diluting link equity:<ul>${topHubs}</ul>`,
         severity: SEVERITY.LOW,
       });
     }
@@ -201,8 +192,8 @@ class LinkStructureAnalyzer {
     // Report 3: Generic anchor text usage
     if (linkStats.totalGenericAnchors > pagesAnalyzed * 2) {
       issues.push({
-        title: `Excessive use of generic anchor text site-wide`,
-        description: `${linkStats.totalGenericAnchors} links use generic anchor text (click here, read more, etc.) across the site. Use descriptive, keyword-rich anchor text instead.`,
+        message: `Excessive use of generic anchor text site-wide`,
+        detail: `${linkStats.totalGenericAnchors} links use generic anchor text (click here, read more, etc.) across the site. Use descriptive, keyword-rich anchor text instead.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -212,27 +203,27 @@ class LinkStructureAnalyzer {
 
     if (topExternalDomains.length > 0 && topExternalDomains[0][1] > pagesAnalyzed * 0.5) {
       const domainList = topExternalDomains
-        .map(([domain, count]: [string, number]) => `<li>${domain}: ${count} links</li>`)
+        .map(([domain, count]: [string, number]) => `<li>${escapeHtml(domain)}: ${count} links</li>`)
         .join('');
 
       issues.push({
-        title: `High concentration of external links to few domains`,
-        description: `Most external links point to just a few domains. Top external domains:<ul>${domainList}</ul>`,
+        message: `High concentration of external links to few domains`,
+        detail: `Most external links point to just a few domains. Top external domains:<ul>${domainList}</ul>`,
         severity: SEVERITY.LOW,
       });
     }
 
-    // Report 5: Pages with excessive total links (>150)
+    // Report 5: Pages with excessive total links
     if ((linkStats.excessiveLinkPages?.length ?? 0) > 0) {
       const topExcessive = linkStats
         .excessiveLinkPages!.sort((a: ExcessiveLinkPage, b: ExcessiveLinkPage) => b.totalLinks - a.totalLinks)
         .slice(0, 5)
-        .map((p: ExcessiveLinkPage) => `<li><a href="${p.url}">${p.url}</a> (${p.totalLinks} total links)</li>`)
+        .map((p: ExcessiveLinkPage) => `<li><a href="${escapeHtml(p.url)}">${escapeHtml(p.url)}</a> (${p.totalLinks} total links)</li>`)
         .join('');
 
       issues.push({
-        title: `${linkStats.excessiveLinkPages!.length} page(s) have more than 150 links`,
-        description: `Pages with too many links dilute link equity and may signal low quality to search engines:<ul>${topExcessive}</ul>`,
+        message: `${linkStats.excessiveLinkPages!.length} page(s) have more than ${THRESHOLDS.LINKS_PER_PAGE_WARNING} links`,
+        detail: `Pages with too many links dilute link equity and may signal low quality to search engines:<ul>${topExcessive}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -240,8 +231,8 @@ class LinkStructureAnalyzer {
     // Report 6: Internal nofollow links
     if ((linkStats.totalInternalNofollow ?? 0) > 0) {
       issues.push({
-        title: `Internal links using nofollow attribute`,
-        description: `${linkStats.totalInternalNofollow} internal link(s) across ${linkStats.pagesWithInternalNofollow} page(s) use rel="nofollow". Internal nofollow wastes crawl budget and prevents PageRank flow to your own pages. Remove nofollow from internal links unless intentionally blocking low-value pages.`,
+        message: `Internal links using nofollow attribute`,
+        detail: `${linkStats.totalInternalNofollow} internal link(s) across ${linkStats.pagesWithInternalNofollow} page(s) use rel="nofollow". Internal nofollow wastes crawl budget and prevents PageRank flow to your own pages. Remove nofollow from internal links unless intentionally blocking low-value pages.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -260,12 +251,12 @@ class LinkStructureAnalyzer {
     if (overOptimizedAnchors.length > 0) {
       const anchorList = overOptimizedAnchors
         .slice(0, 5)
-        .map((item) => `<li>"${item.anchorText}" (used on ${item.pageCount} pages)</li>`)
+        .map((item) => `<li>"${escapeHtml(item.anchorText)}" (used on ${item.pageCount} pages)</li>`)
         .join('');
 
       issues.push({
-        title: `Potential anchor text over-optimization`,
-        description: `${overOptimizedAnchors.length} anchor text(s) are used on >30% of pages, which may appear unnatural:<ul>${anchorList}</ul>`,
+        message: `Potential anchor text over-optimization`,
+        detail: `${overOptimizedAnchors.length} anchor text(s) are used on >30% of pages, which may appear unnatural:<ul>${anchorList}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }

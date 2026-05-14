@@ -3,6 +3,7 @@
  * Utility for matching pages between two sites by URL path
  */
 
+import { calcPercent } from '../utils';
 import type { PageInfo } from '../types';
 
 interface PageEntry {
@@ -139,9 +140,10 @@ class PageMatcher {
     }
 
     // Sort results by path for consistent ordering
-    result.matched.sort((a, b) => a.path.localeCompare(b.path));
-    result.originOnly.sort((a, b) => a.path.localeCompare(b.path));
-    result.compareOnly.sort((a, b) => a.path.localeCompare(b.path));
+    const byPath = (a: { path: string }, b: { path: string }) => a.path.localeCompare(b.path);
+    result.matched.sort(byPath);
+    result.originOnly.sort(byPath);
+    result.compareOnly.sort(byPath);
 
     return result;
   }
@@ -162,7 +164,7 @@ class PageMatcher {
       matchedCount,
       originOnlyCount: matchResult.originOnly.length,
       compareOnlyCount: matchResult.compareOnly.length,
-      matchPercentage: totalOrigin > 0 ? Math.round((matchedCount / totalOrigin) * 100) : 0,
+      matchPercentage: calcPercent(matchedCount, totalOrigin),
     };
   }
 }

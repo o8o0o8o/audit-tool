@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { removeTrailingSlash, calcPercent } from '../../utils';
 import type { Issue } from '../../types';
 
 interface RouteEntry {
@@ -42,7 +43,7 @@ class RouteSitemapComparator {
         const parsed = new URL(url);
         // Normalize: strip trailing slash unless it's the root path
         const rawPath = parsed.pathname;
-        const urlPath = rawPath === '/' ? '/' : rawPath.replace(/\/$/, '');
+        const urlPath = removeTrailingSlash(rawPath);
         urlPaths.add(urlPath);
       } catch {
         // Skip invalid URLs
@@ -57,7 +58,7 @@ class RouteSitemapComparator {
 
     // Check static routes against sitemap
     for (const route of staticRoutes) {
-      const normalizedPattern = route.pattern.replace(/\/$/, '') || '/';
+      const normalizedPattern = removeTrailingSlash(route.pattern) || '/';
       if (urlPaths.has(normalizedPattern)) {
         coveredRoutes.push(route);
       } else {
@@ -89,8 +90,8 @@ class RouteSitemapComparator {
     // Find sitemap URLs that don't match any route
     const allMatchedPaths = new Set([
       ...staticRoutes
-        .filter((r) => urlPaths.has(r.pattern.replace(/\/$/, '') || '/'))
-        .map((r) => r.pattern.replace(/\/$/, '') || '/'),
+        .filter((r) => urlPaths.has(removeTrailingSlash(r.pattern) || '/'))
+        .map((r) => removeTrailingSlash(r.pattern) || '/'),
       ...matchedByDynamic,
     ]);
 
@@ -143,7 +144,7 @@ class RouteSitemapComparator {
 
     // Unmatched sitemap URLs (only warn if significant number)
     if (unmatchedUrls.length > 0 && routes.length > 0) {
-      const pct = Math.round((unmatchedUrls.length / urlPaths.size) * 100);
+      const pct = calcPercent(unmatchedUrls.length, urlPaths.size);
       if (pct > 20 || unmatchedUrls.length > 50) {
         warnings.push({
           message: 'Sitemap URLs not matching any code route',
@@ -204,7 +205,7 @@ class RouteSitemapComparator {
 
     let regexStr = regexSegments.join('/');
     // Normalize: strip trailing slash unless root
-    regexStr = regexStr.replace(/\/$/, '') || '/';
+    regexStr = removeTrailingSlash(regexStr) || '/';
 
     return new RegExp(`^${regexStr}$`);
   }

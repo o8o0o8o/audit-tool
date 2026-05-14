@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { TRACKING_PARAMS } from '../../utils';
+import { TRACKING_PARAMS, analyzeUrlStructure, getPathSegments } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class UrlArchitectureAnalyzer {
@@ -19,42 +19,16 @@ class UrlArchitectureAnalyzer {
     const issues: { type: string; message: string; detail?: string; severity: string; value?: number | string[] }[] =
       [];
 
+    // Use shared URL analysis for basic structure checks (length, depth, uppercase, underscores, etc.)
+    // The crawler engine already calls analyzeUrlStructure() and stores it in pageData.urlAnalysis,
+    // but we ensure it's available here too.
+    if (!pageData.urlAnalysis) {
+      pageData.urlAnalysis = analyzeUrlStructure(url, origin);
+    }
+
     try {
       const parsedUrl = new URL(url);
       const parsedOrigin = new URL(origin);
-
-      // URL length check
-      const urlLength = url.length;
-      if (urlLength > 200) {
-        issues.push({
-          type: 'url_too_long',
-          message: 'URL exceeds 200 characters',
-          detail: `URL has ${urlLength} characters. Very long URLs are truncated in SERPs and may cause crawling issues`,
-          severity: SEVERITY.HIGH,
-          value: urlLength,
-        });
-      } else if (urlLength > 100) {
-        issues.push({
-          type: 'url_too_long',
-          message: 'URL is too long',
-          detail: `URL has ${urlLength} characters (recommended: <100)`,
-          severity: urlLength > 150 ? SEVERITY.MEDIUM : SEVERITY.LOW,
-          value: urlLength,
-        });
-      }
-
-      // URL depth check (number of path segments)
-      const pathSegments = parsedUrl.pathname.split('/').filter((s) => s.length > 0);
-      const depth = pathSegments.length;
-      if (depth > 4) {
-        issues.push({
-          type: 'url_too_deep',
-          message: 'URL structure is too deep',
-          detail: `URL has ${depth} levels (recommended: ≤4)`,
-          severity: depth > 6 ? SEVERITY.MEDIUM : SEVERITY.LOW,
-          value: depth,
-        });
-      }
 
       // Check for tracking parameters (uses centralized TRACKING_PARAMS from utils)
       const foundTracking: string[] = [];
@@ -87,46 +61,8 @@ class UrlArchitectureAnalyzer {
         }
       }
 
-      // Check for uppercase characters in URL path
-      if (parsedUrl.pathname !== parsedUrl.pathname.toLowerCase()) {
-        issues.push({
-          type: 'uppercase_in_url',
-          message: 'URL contains uppercase characters',
-          detail: `URLs should be lowercase for consistency. Current: ${parsedUrl.pathname}`,
-          severity: SEVERITY.LOW,
-        });
-      }
-
-      // Check for underscores vs hyphens
-      if (parsedUrl.pathname.includes('_')) {
-        issues.push({
-          type: 'underscores_in_url',
-          message: 'URL contains underscores',
-          detail: `Google recommends using hyphens (-) instead of underscores (_) in URLs`,
-          severity: SEVERITY.LOW,
-        });
-      }
-
-      // Check for special characters
-      const specialChars = /[!@#$%^&*()+=\[\]{}|\\:;"'<>,?]/;
-      let decodedPath;
-      try {
-        decodedPath = decodeURIComponent(parsedUrl.pathname);
-      } catch {
-        decodedPath = parsedUrl.pathname;
-      }
-      if (specialChars.test(decodedPath)) {
-        issues.push({
-          type: 'special_chars_in_url',
-          message: 'URL contains special characters',
-          detail: `Special characters in URLs can cause crawling issues`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-
       // Check for multiple consecutive slashes
       if (/\/\/+/.test(parsedUrl.pathname.slice(1))) {
-        // Skip protocol slashes
         issues.push({
           type: 'multiple_slashes',
           message: 'URL contains multiple consecutive slashes',
@@ -173,7 +109,6 @@ class UrlArchitectureAnalyzer {
 
       // Check for hash fragments with content
       if (parsedUrl.hash && parsedUrl.hash.length > 1) {
-        // Check if it's not just an anchor
         if (parsedUrl.hash.includes('/') || parsedUrl.hash.includes('=')) {
           issues.push({
             type: 'hash_based_routing',
@@ -200,22 +135,12 @@ class UrlArchitectureAnalyzer {
         }
       }
 
-      // Store URL metrics in pageData
-      pageData.urlAnalysis = {
-        length: urlLength,
-        depth,
-        hasTrackingParams: foundTracking.length > 0,
-        trackingParams: foundTracking,
-        hasUppercase: parsedUrl.pathname !== parsedUrl.pathname.toLowerCase(),
-        hasUnderscores: parsedUrl.pathname.includes('_'),
-        hasSpaces: parsedUrl.pathname.includes('%20') || parsedUrl.pathname.includes(' '),
-        hasSpecialChars: /[^a-zA-Z0-9\-_/.]/.test(parsedUrl.pathname),
-        hasQueryParams: parsedUrl.searchParams.toString().length > 0,
-        queryParamCount: Array.from(parsedUrl.searchParams.keys()).length,
-        paramCount: Array.from(parsedUrl.searchParams.keys()).length,
-        isHttps: parsedUrl.protocol === 'https:',
-        issues: [],
-      };
+      // Enrich urlAnalysis with tracking param data
+      if (pageData.urlAnalysis) {
+        pageData.urlAnalysis.hasTrackingParams = foundTracking.length > 0;
+        pageData.urlAnalysis.trackingParams = foundTracking;
+        pageData.urlAnalysis.paramCount = pageData.urlAnalysis.queryParamCount;
+      }
     } catch (error: unknown) {
       issues.push({
         type: 'url_parse_error',
@@ -251,7 +176,7 @@ class UrlArchitectureAnalyzer {
         urlLengths.push(url.length);
 
         // Track URL depths
-        const depth = parsed.pathname.split('/').filter((s) => s.length > 0).length;
+        const depth = getPathSegments(parsed.pathname).length;
         urlDepths.push(depth);
 
         // Track trailing slashes

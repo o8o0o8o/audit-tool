@@ -3,7 +3,8 @@
  * Quantifies third-party script impact on page load performance
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
+import { isFirstPartyHost, formatBytes, getHostname } from '../../utils';
 import type { Issue, ChromePage, PageInfo, NetworkRequest, ThirdPartyScript } from '../../types';
 
 interface ThirdPartyCategoryMutable {
@@ -112,7 +113,7 @@ class ThirdPartyAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    const originHost = new URL(origin).hostname;
+    const originHost = getHostname(origin);
     const thirdPartyBuild: {
       scripts: ThirdPartyScript[];
       totalSize: number;
@@ -131,49 +132,46 @@ class ThirdPartyAnalyzer {
 
     // Analyze requests
     for (const [reqUrl, req] of Object.entries(requests) as unknown as [string, NetworkRequestEntry][]) {
-      try {
-        const reqHost = new URL(reqUrl).hostname;
+      const reqHost = getHostname(reqUrl);
+      if (!reqHost) continue; // Invalid URL, skip
 
-        // Skip first-party requests
-        if (this.#isFirstParty(reqHost, originHost)) {
-          continue;
-        }
-
-        const category = this.#categorize(reqHost);
-        const size = req.size ?? 0;
-        const duration = req.duration ?? 0;
-
-        const scriptInfo = {
-          url: reqUrl.substring(0, 150),
-          host: reqHost,
-          category,
-          size,
-          duration,
-          resourceType: (req.resourceType as string) || '',
-          status: (req.status as number) || 0,
-        };
-
-        thirdPartyBuild.scripts.push(scriptInfo);
-        thirdPartyBuild.totalSize += size;
-        thirdPartyBuild.totalTime += duration;
-        thirdPartyBuild.count++;
-
-        // Track by category
-        if (!thirdPartyBuild.byCategory[category]) {
-          thirdPartyBuild.byCategory[category] = {
-            count: 0,
-            size: 0,
-            time: 0,
-            hosts: new Set(),
-          };
-        }
-        thirdPartyBuild.byCategory[category].count++;
-        thirdPartyBuild.byCategory[category].size += size;
-        thirdPartyBuild.byCategory[category].time += duration;
-        thirdPartyBuild.byCategory[category].hosts.add(reqHost);
-      } catch {
-        // Invalid URL, skip
+      // Skip first-party requests
+      if (isFirstPartyHost(reqHost, originHost)) {
+        continue;
       }
+
+      const category = this.#categorize(reqHost);
+      const size = req.size ?? 0;
+      const duration = req.duration ?? 0;
+
+      const scriptInfo = {
+        url: reqUrl.substring(0, 150),
+        host: reqHost,
+        category,
+        size,
+        duration,
+        resourceType: (req.resourceType as string) || '',
+        status: (req.status as number) || 0,
+      };
+
+      thirdPartyBuild.scripts.push(scriptInfo);
+      thirdPartyBuild.totalSize += size;
+      thirdPartyBuild.totalTime += duration;
+      thirdPartyBuild.count++;
+
+      // Track by category
+      if (!thirdPartyBuild.byCategory[category]) {
+        thirdPartyBuild.byCategory[category] = {
+          count: 0,
+          size: 0,
+          time: 0,
+          hosts: new Set(),
+        };
+      }
+      thirdPartyBuild.byCategory[category].count++;
+      thirdPartyBuild.byCategory[category].size += size;
+      thirdPartyBuild.byCategory[category].time += duration;
+      thirdPartyBuild.byCategory[category].hosts.add(reqHost);
     }
 
     // Check for render-blocking third-party scripts
@@ -202,18 +200,16 @@ class ThirdPartyAnalyzer {
     // Generate issues
 
     // Too much third-party payload
-    if (thirdPartyData.totalSize > 1000000) {
-      // 1MB
+    if (thirdPartyData.totalSize > THRESHOLDS.THIRD_PARTY_SIZE_CRITICAL) {
       issues.push({
         message: 'Excessive third-party payload',
-        detail: `<a href="${url}">${url}</a> loads ${(thirdPartyData.totalSize / 1024).toFixed(0)}KB from third parties. This significantly impacts load time.`,
+        detail: `<a href="${url}">${url}</a> loads ${formatBytes(thirdPartyData.totalSize)} from third parties. This significantly impacts load time.`,
         severity: SEVERITY.HIGH,
       });
-    } else if (thirdPartyData.totalSize > 500000) {
-      // 500KB
+    } else if (thirdPartyData.totalSize > THRESHOLDS.THIRD_PARTY_SIZE_WARNING) {
       warnings.push({
         message: 'Large third-party payload',
-        detail: `<a href="${url}">${url}</a> loads ${(thirdPartyData.totalSize / 1024).toFixed(0)}KB from third parties.`,
+        detail: `<a href="${url}">${url}</a> loads ${formatBytes(thirdPartyData.totalSize)} from third parties.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -244,7 +240,7 @@ class ThirdPartyAnalyzer {
     if (adCategory && adCategory.size > 300000) {
       warnings.push({
         message: 'Heavy advertising scripts',
-        detail: `Advertising scripts total ${(adCategory.size / 1024).toFixed(0)}KB. Consider lazy-loading ads below the fold.`,
+        detail: `Advertising scripts total ${formatBytes(adCategory.size)}. Consider lazy-loading ads below the fold.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -262,14 +258,6 @@ class ThirdPartyAnalyzer {
     return { issues, warnings, thirdPartyData };
   }
 
-  /**
-   * Check if host is first-party
-   * @private
-   */
-  static #isFirstParty(reqHost: string, originHost: string) {
-    // Same domain or subdomain
-    return reqHost === originHost || reqHost.endsWith('.' + originHost) || originHost.endsWith('.' + reqHost);
-  }
 
   /**
    * Categorize a third-party host

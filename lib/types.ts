@@ -11,8 +11,6 @@ export interface Issue {
   message?: string;
   detail?: string;
   severity: SeverityLevel;
-  title?: string;
-  description?: string;
 }
 
 // ─── Analyzer Results ────────────────────────────────────────────────────────

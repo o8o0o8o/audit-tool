@@ -8,6 +8,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getHeader } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ParsedLink {
@@ -58,7 +59,7 @@ class ResponseHeaderAnalyzer {
     };
 
     // Analyze Vary header
-    const vary = headers['vary'];
+    const vary = getHeader(headers, 'vary');
     if (vary) {
       info.vary = vary;
       info.varyDirectives = vary.split(',').map((d: string) => d.trim().toLowerCase());
@@ -79,7 +80,7 @@ class ResponseHeaderAnalyzer {
     }
 
     // Analyze Link header (RFC 8288)
-    const linkHeader = headers['link'];
+    const linkHeader = getHeader(headers, 'link');
     if (linkHeader) {
       info.linkHeader = linkHeader;
       info.parsedLinks = ResponseHeaderAnalyzer.#parseLinkHeader(linkHeader);
@@ -104,7 +105,7 @@ class ResponseHeaderAnalyzer {
     }
 
     // Analyze X-Robots-Tag
-    const xRobotsTag = headers['x-robots-tag'];
+    const xRobotsTag = getHeader(headers, 'x-robots-tag');
     if (xRobotsTag) {
       info.xRobotsTag = xRobotsTag;
       // Directives may have user-agent prefix like "googlebot: noindex, nofollow"
@@ -143,7 +144,7 @@ class ResponseHeaderAnalyzer {
     }
 
     // Analyze Content-Language
-    const contentLanguage = headers['content-language'];
+    const contentLanguage = getHeader(headers, 'content-language');
     if (contentLanguage) {
       info.contentLanguage = contentLanguage;
 
@@ -163,7 +164,7 @@ class ResponseHeaderAnalyzer {
     }
 
     // Check for missing security-related SEO headers
-    if (!headers['x-content-type-options']) {
+    if (!getHeader(headers, 'x-content-type-options')) {
       info.missingXContentTypeOptions = true;
     }
 
@@ -197,16 +198,16 @@ class ResponseHeaderAnalyzer {
 
     if (pagesWithXRobotsNoindex > 0) {
       issues.push({
-        title: `${pagesWithXRobotsNoindex} page(s) blocked via X-Robots-Tag: noindex`,
-        description: `These pages are blocked from indexing via HTTP response headers rather than meta tags. Verify this is intentional.`,
+        message: `${pagesWithXRobotsNoindex} page(s) blocked via X-Robots-Tag: noindex`,
+        detail: `These pages are blocked from indexing via HTTP response headers rather than meta tags. Verify this is intentional.`,
         severity: SEVERITY.HIGH,
       });
     }
 
     if (pagesWithDynamicServing > 0) {
       warnings.push({
-        title: `${pagesWithDynamicServing} page(s) use Vary: User-Agent (dynamic serving)`,
-        description: `Dynamic serving detected. Ensure Google can access both mobile and desktop versions.`,
+        message: `${pagesWithDynamicServing} page(s) use Vary: User-Agent (dynamic serving)`,
+        detail: `Dynamic serving detected. Ensure Google can access both mobile and desktop versions.`,
         severity: SEVERITY.LOW,
       });
     }
@@ -215,8 +216,8 @@ class ResponseHeaderAnalyzer {
     const varyKeys = Object.keys(varyPatterns).filter((k) => k !== 'none');
     if (varyKeys.length > 2) {
       warnings.push({
-        title: 'Inconsistent Vary header patterns across pages',
-        description: `Found ${varyKeys.length} different Vary header configurations. This may cause inconsistent caching behavior.`,
+        message: 'Inconsistent Vary header patterns across pages',
+        detail: `Found ${varyKeys.length} different Vary header configurations. This may cause inconsistent caching behavior.`,
         severity: SEVERITY.LOW,
       });
     }

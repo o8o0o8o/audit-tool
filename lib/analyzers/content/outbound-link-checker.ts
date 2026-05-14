@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { getHostname } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 import * as https from 'https';
 import * as http from 'http';
@@ -44,10 +45,8 @@ class OutboundLinkChecker {
     const links: { href?: string; url?: string }[] = Array.isArray(pageData.links)
       ? (pageData.links as { href?: string; url?: string }[])
       : [];
-    let originHost;
-    try {
-      originHost = new URL(origin).hostname;
-    } catch {
+    const originHost = getHostname(origin);
+    if (!originHost) {
       return { info, issues, warnings };
     }
 
@@ -162,8 +161,8 @@ class OutboundLinkChecker {
         .join('');
 
       issues.push({
-        title: `${allBroken.size} broken outbound link(s) found across the site`,
-        description: `External links returning errors:<ul>${list}</ul>${sorted.length > 10 ? `<p>...and ${sorted.length - 10} more</p>` : ''}<p>Broken outbound links hurt user trust and may negatively signal to search engines.</p>`,
+        message: `${allBroken.size} broken outbound link(s) found across the site`,
+        detail: `External links returning errors:<ul>${list}</ul>${sorted.length > 10 ? `<p>...and ${sorted.length - 10} more</p>` : ''}<p>Broken outbound links hurt user trust and may negatively signal to search engines.</p>`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -184,10 +183,8 @@ class OutboundLinkChecker {
     }
 
     // Rate limit per domain
-    let hostname;
-    try {
-      hostname = new URL(urlToCheck).hostname;
-    } catch {
+    const hostname = getHostname(urlToCheck);
+    if (!hostname) {
       return null;
     }
 

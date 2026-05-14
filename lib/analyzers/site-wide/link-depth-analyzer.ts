@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { shortenUrl } from '../../utils';
+import { shortenUrl, removeTrailingSlash, getIncomingLinkCount, formatSampleList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class LinkDepthAnalyzer {
@@ -35,8 +35,7 @@ class LinkDepthAnalyzer {
 
     for (const url of pageUrls) {
       const page = pages[url];
-      const incoming = incomingLinks[url] ?? [];
-      const incomingCount = Array.isArray(incoming) ? incoming.length : 0;
+      const incomingCount = getIncomingLinkCount(incomingLinks as Record<string, unknown>, url);
 
       // Orphan page detection
       if (incomingCount === 0 && url !== origin && url !== origin + '/') {
@@ -76,10 +75,9 @@ class LinkDepthAnalyzer {
 
     // Report orphan pages
     if (orphanPages.length > 0) {
-      const sampleOrphans = orphanPages.slice(0, 5);
       issues.push({
         message: `${orphanPages.length} orphan pages detected (no internal links pointing to them)`,
-        detail: `Example orphan pages: ${sampleOrphans.map((u) => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}${orphanPages.length > 5 ? ` and ${orphanPages.length - 5} more` : ''}`,
+        detail: `Example orphan pages: ${formatSampleList(orphanPages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -89,10 +87,9 @@ class LinkDepthAnalyzer {
       const percent = ((deadEndPages.length / totalPages) * 100).toFixed(1);
       if (deadEndPages.length > totalPages * 0.1) {
         // More than 10%
-        const sampleDeadEnds = deadEndPages.slice(0, 5);
         issues.push({
           message: `${deadEndPages.length} dead-end pages (${percent}%) have no outgoing internal links`,
-          detail: `Dead-end pages don't pass link equity. Examples: ${sampleDeadEnds.map((u) => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}`,
+          detail: `Dead-end pages don't pass link equity. Examples: ${formatSampleList(deadEndPages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -106,7 +103,7 @@ class LinkDepthAnalyzer {
 
       warnings.push({
         message: `${deepPages.length} pages are more than 4 clicks from homepage`,
-        detail: `Maximum depth: ${maxDepth} clicks. Deep pages may be crawled less frequently. Examples: ${sampleDeep.map((p) => `<a href="${p.url}">${this.shortenUrl(p.url)}</a> (${p.depth} clicks)`).join(', ')}`,
+        detail: `Maximum depth: ${maxDepth} clicks. Deep pages may be crawled less frequently. Examples: ${sampleDeep.map((p) => `<a href="${p.url}">${shortenUrl(p.url)}</a> (${p.depth} clicks)`).join(', ')}`,
         severity: SEVERITY.LOW,
       });
     }
@@ -114,10 +111,9 @@ class LinkDepthAnalyzer {
     // Check for unreachable pages
     const unreachablePages = pageUrls.filter((url) => !depths.has(url) && url !== origin && url !== origin + '/');
     if (unreachablePages.length > 0) {
-      const sampleUnreachable = unreachablePages.slice(0, 5);
       issues.push({
         message: `${unreachablePages.length} pages are unreachable from homepage via internal links`,
-        detail: `These pages can only be accessed via sitemap or external links. Examples: ${sampleUnreachable.map((u) => `<a href="${u}">${this.shortenUrl(u)}</a>`).join(', ')}`,
+        detail: `These pages can only be accessed via sitemap or external links. Examples: ${formatSampleList(unreachablePages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -211,7 +207,7 @@ class LinkDepthAnalyzer {
     const queue: Array<{ url: string; depth: number }> = [];
 
     // Start from homepage (both with and without trailing slash)
-    const homepages = [origin, origin + '/', origin.replace(/\/$/, '')];
+    const homepages = [origin, origin + '/', removeTrailingSlash(origin)];
 
     for (const homepage of homepages) {
       if (graph.has(homepage) && !visited.has(homepage)) {
@@ -237,8 +233,6 @@ class LinkDepthAnalyzer {
     return depths;
   }
 
-  /** @deprecated Use shortenUrl from lib/utils.ts */
-  static shortenUrl = (url: string) => shortenUrl(url, 40);
 }
 
 export { LinkDepthAnalyzer };

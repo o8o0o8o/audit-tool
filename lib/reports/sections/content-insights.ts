@@ -13,6 +13,7 @@
 
 import { escapeHtml } from '../html-utils';
 import { extractComparisonLabels, formatPercentDelta } from '../comparison-helpers';
+import { calcPercent, formatBytes } from '../../utils';
 import type { PageInfo, ReportSectionData, ComparisonData } from '../../types';
 
 /**
@@ -27,9 +28,7 @@ function getContentInsights(data: ReportSectionData) {
     return getComparisonContentInsights(jsonData, comparison);
   }
 
-  const pageData = (jsonData.pageData ?? {}) as Record<string, unknown>;
-  const pages = (pageData.pages ?? {}) as Record<string, PageInfo>;
-  const pagesArray: PageInfo[] = Object.values(pages);
+  const pagesArray = extractPages(jsonData);
 
   if (pagesArray.length === 0) return '';
 
@@ -157,8 +156,8 @@ function getComparisonCodeCoverageSection(
       unusedCSS += page.codeCoverage?.css?.unused ?? 0;
     }
     return {
-      jsRatio: totalJS > 0 ? Math.round((unusedJS / totalJS) * 100) : 0,
-      cssRatio: totalCSS > 0 ? Math.round((unusedCSS / totalCSS) * 100) : 0,
+      jsRatio: calcPercent(unusedJS, totalJS),
+      cssRatio: calcPercent(unusedCSS, totalCSS),
       count: withCoverage.length,
     };
   };
@@ -333,7 +332,7 @@ function getPageRankSection(pages: PageInfo[]) {
       if (shortUrl.length > 50) shortUrl = '...' + shortUrl.slice(-47);
       const prVal = p.internalPageRank ?? 0;
       const topVal = top10[0].internalPageRank ?? 0;
-      const barWidth = topVal > 0 ? Math.round((prVal / topVal) * 100) : 0;
+      const barWidth = calcPercent(prVal, topVal);
       return `
       <tr>
         <td style="padding: 6px 8px; font-size: var(--font-size-xs); color: var(--color-text-disabled);">${i + 1}</td>
@@ -564,8 +563,8 @@ function getCodeCoverageSection(pages: PageInfo[]) {
     unusedCSS += page.codeCoverage?.css?.unused ?? 0;
   }
 
-  const jsRatio = totalJS > 0 ? Math.round((unusedJS / totalJS) * 100) : 0;
-  const cssRatio = totalCSS > 0 ? Math.round((unusedCSS / totalCSS) * 100) : 0;
+  const jsRatio = calcPercent(unusedJS, totalJS);
+  const cssRatio = calcPercent(unusedCSS, totalCSS);
   const jsColor = jsRatio > 60 ? 'var(--color-error)' : jsRatio > 40 ? 'var(--color-warning)' : 'var(--color-success)';
   const cssColor =
     cssRatio > 70 ? 'var(--color-error)' : cssRatio > 50 ? 'var(--color-warning)' : 'var(--color-success)';
@@ -578,7 +577,7 @@ function getCodeCoverageSection(pages: PageInfo[]) {
         <div style="background: var(--color-bg-surface); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
           <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: 10px;">JavaScript</div>
           <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: ${jsColor};">${jsRatio}% unused</div>
-          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px;">${(unusedJS / 1024).toFixed(0)}KB unused of ${(totalJS / 1024).toFixed(0)}KB total</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px;">${formatBytes(unusedJS)} unused of ${formatBytes(totalJS)} total</div>
           <div style="height: 8px; background: var(--color-border-default); border-radius: var(--radius-sm); margin-top: 10px; overflow: hidden;">
             <div style="width: ${100 - jsRatio}%; height: 100%; background: #10b981; border-radius: var(--radius-sm);"></div>
           </div>
@@ -589,7 +588,7 @@ function getCodeCoverageSection(pages: PageInfo[]) {
         <div style="background: var(--color-bg-surface); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
           <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: 10px;">CSS</div>
           <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: ${cssColor};">${cssRatio}% unused</div>
-          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px;">${(unusedCSS / 1024).toFixed(0)}KB unused of ${(totalCSS / 1024).toFixed(0)}KB total</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px;">${formatBytes(unusedCSS)} unused of ${formatBytes(totalCSS)} total</div>
           <div style="height: 8px; background: var(--color-border-default); border-radius: var(--radius-sm); margin-top: 10px; overflow: hidden;">
             <div style="width: ${100 - cssRatio}%; height: 100%; background: #3b82f6; border-radius: var(--radius-sm);"></div>
           </div>
@@ -724,7 +723,7 @@ function getWordCountBreakdown(pages: PageInfo[]) {
   if (total === 0) return '';
 
   const boilerplate = totals.nav + totals.header + totals.footer;
-  const boilerplateRatio = Math.round((boilerplate / total) * 100);
+  const boilerplateRatio = calcPercent(boilerplate, total);
 
   const segments = [
     { label: 'Main Content', value: totals.main, color: 'var(--color-success)' },

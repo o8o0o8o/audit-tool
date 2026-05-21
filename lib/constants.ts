@@ -31,6 +31,9 @@ export const CRAWL_SETTINGS = {
   CHECKPOINT_SAVE_INTERVAL: 5,
   CIRCUIT_BREAKER_THRESHOLD: 10,
   CIRCUIT_BREAKER_COOLDOWN_MS: 60000,
+  // Abort the entire crawl after this many consecutive 404 responses.
+  // Why: catches broken pagination where a page links to /page/N for N beyond the real last page.
+  CONSECUTIVE_404_THRESHOLD: 10,
   BACKOFF_RESET_TIMEOUT_MS: 300000,
   BACKOFF_BASE_DELAY_MS: 1000,
   BACKOFF_MAX_DELAY_MS: 30000,

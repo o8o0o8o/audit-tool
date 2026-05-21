@@ -36,6 +36,8 @@ export interface FailureTracker {
   lastFailureTime: number;
   circuitOpen: boolean;
   circuitOpenTime: number;
+  consecutive404Count: number;
+  last404Url?: string;
 }
 
 export interface BackoffState {
@@ -117,6 +119,11 @@ export interface CrawlResults {
     byError: Record<string, string[] | number>;
     attempts: Record<string, number>;
     incomingLinks?: Record<string, string[]>;
+    crawlAborted?: {
+      reason: string;
+      threshold: number;
+      lastUrl?: string;
+    };
   };
   cruxData?: CrUXFieldData | null;
 }

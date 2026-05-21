@@ -177,6 +177,7 @@ class CrawlerEngine {
       lastFailureTime: 0,
       circuitOpen: false,
       circuitOpenTime: 0,
+      consecutive404Count: 0,
     };
 
     // Initialize backoff state per error type
@@ -605,6 +606,27 @@ class CrawlerEngine {
             console.error(`Unexpected batch error: ${error.message}`);
             // The URL is not directly available from rejected promise, but page is already marked as failed
           }
+        }
+
+        // Abort crawl on broken-pagination signal: too many consecutive 404 responses
+        if (this.#failureTracker.consecutive404Count >= CRAWL_SETTINGS.CONSECUTIVE_404_THRESHOLD) {
+          const count = this.#failureTracker.consecutive404Count;
+          const lastUrl = this.#failureTracker.last404Url;
+          const reason = `Crawl stopped: ${count} consecutive 404 responses detected (likely broken pagination)`;
+          console.warn(`\n⚠️  ${reason}${lastUrl ? ` — last URL: ${lastUrl}` : ''}`);
+          results.pageData.crawlAborted = {
+            reason,
+            threshold: CRAWL_SETTINGS.CONSECUTIVE_404_THRESHOLD,
+            lastUrl,
+          };
+          this.#callbacks.saveError(
+            'Crawl aborted: broken pagination detected',
+            `${escapeHtml(count.toString())} consecutive 404 responses were detected${
+              lastUrl ? ` (last: <a href="${escapeHtml(lastUrl)}">${escapeHtml(lastUrl)}</a>)` : ''
+            }. The crawl was stopped to avoid wasting time on a broken pagination series. Verify the site's pagination links point to existing pages.`,
+            SEVERITY.HIGH,
+          );
+          abortRequested = true;
         }
 
         // Save checkpoint frequently to flush pages to disk and free memory
@@ -1039,10 +1061,22 @@ class CrawlerEngine {
       (results.pageData.byError[statusKey] as string[]).push(url);
       results.pageData.byError[`total${statusKey}`] = (results.pageData.byError[`total${statusKey}`] as number) + 1;
 
+      // Track consecutive 404s to detect broken pagination
+      if (status === 404) {
+        this.#failureTracker.consecutive404Count++;
+        this.#failureTracker.last404Url = url;
+      } else {
+        // Any other non-200 status (e.g. 500, 301) breaks the 404 streak
+        this.#failureTracker.consecutive404Count = 0;
+      }
+
       results.pageData.processedPages.add(url);
 
       return { isMultiLang: false, failed: false };
     }
+
+    // Successful load resets the consecutive-404 streak
+    this.#failureTracker.consecutive404Count = 0;
 
     results.pageData.totalWithoutError += 1;
 

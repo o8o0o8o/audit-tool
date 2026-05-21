@@ -8,7 +8,7 @@ import { CATEGORY_CONFIG } from '../metrics-metadata';
 import { formatDeltaBadge, extractComparisonLabels, getDeltaCssColor } from '../comparison-helpers';
 import { getScoreColor, getScoreClass } from '../html-utils';
 import { extractSummary, extractPageInsights } from '../data-processor';
-import { getLetterGrade, estimateScoreAfterFixes } from '../../utils';
+import { getLetterGrade, estimateScoreAfterFixes, escapeHtml } from '../../utils';
 import { SCORING } from '../../constants';
 import type { PageInfo, ReportSectionData, CategoryScores, ComparisonData } from '../../types';
 
@@ -36,6 +36,8 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
 
   const letterGrade = getLetterGrade(overallScore);
 
+  const crawlAbortedBanner = getCrawlAbortedBanner(jsonData);
+
   const categoryHealthHtml =
     Object.keys(categoryScores).length > 0
       ? `
@@ -49,6 +51,8 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
   return `
     <div class="executive-summary">
       <h2>📊 Executive Summary</h2>
+
+      ${crawlAbortedBanner}
 
       <div class="summary-score">
         <div class="score-circle" style="position: relative;">
@@ -372,6 +376,28 @@ function getDualCategoryBars(
     `;
     })
     .join('');
+}
+
+/**
+ * Render a banner when the crawl was aborted early (e.g. broken pagination).
+ * Reads `pageData.crawlAborted` written by CrawlerEngine.
+ */
+function getCrawlAbortedBanner(jsonData: Record<string, unknown>): string {
+  const pageData = jsonData.pageData as { crawlAborted?: { reason: string; threshold: number; lastUrl?: string } } | undefined;
+  const aborted = pageData?.crawlAborted;
+  if (!aborted) return '';
+
+  const lastUrlHtml = aborted.lastUrl
+    ? `<div style="margin-top: var(--space-2); font-size: var(--font-size-xs); opacity: 0.85;">Last 404 URL: <a href="${escapeHtml(aborted.lastUrl)}" style="color: inherit; text-decoration: underline;">${escapeHtml(aborted.lastUrl)}</a></div>`
+    : '';
+
+  return `
+    <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: #fecaca;">
+      <div style="font-weight: var(--font-weight-bold); font-size: var(--font-size-base); margin-bottom: var(--space-1);">⚠️ Crawl stopped early</div>
+      <div style="font-size: var(--font-size-sm); opacity: 0.95;">${escapeHtml(aborted.reason)}. Results below may be incomplete — verify the site's pagination links and re-run.</div>
+      ${lastUrlHtml}
+    </div>
+  `;
 }
 
 export { getExecutiveSummary };

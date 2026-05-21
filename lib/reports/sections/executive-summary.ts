@@ -379,23 +379,47 @@ function getDualCategoryBars(
 }
 
 /**
- * Render a banner when the crawl was aborted early (e.g. broken pagination).
- * Reads `pageData.crawlAborted` written by CrawlerEngine.
+ * Render a banner when the crawl was aborted early (e.g. broken pagination)
+ * or when one or more paginated URL series were truncated at the discovery cap.
  */
 function getCrawlAbortedBanner(jsonData: Record<string, unknown>): string {
-  const pageData = jsonData.pageData as { crawlAborted?: { reason: string; threshold: number; lastUrl?: string } } | undefined;
+  const pageData = jsonData.pageData as
+    | {
+        crawlAborted?: { reason: string; threshold: number; lastUrl?: string };
+        truncatedPaginationSeries?: Record<string, number>;
+      }
+    | undefined;
   const aborted = pageData?.crawlAborted;
-  if (!aborted) return '';
+  const truncated = pageData?.truncatedPaginationSeries;
+  if (!aborted && (!truncated || Object.keys(truncated).length === 0)) return '';
 
-  const lastUrlHtml = aborted.lastUrl
-    ? `<div style="margin-top: var(--space-2); font-size: var(--font-size-xs); opacity: 0.85;">Last 404 URL: <a href="${escapeHtml(aborted.lastUrl)}" style="color: inherit; text-decoration: underline;">${escapeHtml(aborted.lastUrl)}</a></div>`
-    : '';
-
-  return `
-    <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: #fecaca;">
+  let abortBlock = '';
+  if (aborted) {
+    const lastUrlHtml = aborted.lastUrl
+      ? `<div style="margin-top: var(--space-2); font-size: var(--font-size-xs); opacity: 0.85;">Last 404 URL: <a href="${escapeHtml(aborted.lastUrl)}" style="color: inherit; text-decoration: underline;">${escapeHtml(aborted.lastUrl)}</a></div>`
+      : '';
+    abortBlock = `
       <div style="font-weight: var(--font-weight-bold); font-size: var(--font-size-base); margin-bottom: var(--space-1);">⚠️ Crawl stopped early</div>
       <div style="font-size: var(--font-size-sm); opacity: 0.95;">${escapeHtml(aborted.reason)}. Results below may be incomplete — verify the site's pagination links and re-run.</div>
       ${lastUrlHtml}
+    `;
+  }
+
+  let truncatedBlock = '';
+  if (truncated && Object.keys(truncated).length > 0) {
+    const items = Object.entries(truncated)
+      .map(([key, count]) => `<li><code>${escapeHtml(key)}</code> — capped at ${count} pages</li>`)
+      .join('');
+    truncatedBlock = `
+      <div style="font-weight: var(--font-weight-bold); font-size: var(--font-size-base); margin-bottom: var(--space-1); ${abortBlock ? 'margin-top: var(--space-3);' : ''}">⚠️ Pagination series truncated</div>
+      <div style="font-size: var(--font-size-sm); opacity: 0.95;">Stopped discovering URLs from the following series (likely broken pagination):</div>
+      <ul style="font-size: var(--font-size-sm); margin-top: var(--space-1); padding-left: var(--space-5);">${items}</ul>
+    `;
+  }
+
+  return `
+    <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: #fecaca;">
+      ${abortBlock}${truncatedBlock}
     </div>
   `;
 }

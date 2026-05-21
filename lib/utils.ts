@@ -1040,6 +1040,38 @@ function normalizeToEntries<V>(data: Map<string, V> | Record<string, V> | null |
 /**
  * Format a sample list showing first N items with a "and X more" suffix.
  */
+// Pagination URL patterns (captures the page-number portion as group 2 for replacement).
+// Deliberately excludes bare /\d+/$ — too ambiguous with article/product IDs and dates.
+const PAGINATION_SERIES_PATTERNS: ReadonlyArray<{ regex: RegExp; sub: string }> = [
+  { regex: /([?&]page=)(\d+)/i, sub: '$1{N}' },
+  { regex: /([?&]p=)(\d+)/i, sub: '$1{N}' },
+  { regex: /([?&]paged=)(\d+)/i, sub: '$1{N}' },
+  { regex: /([?&]offset=)(\d+)/i, sub: '$1{N}' },
+  { regex: /(\/page\/)(\d+)/i, sub: '$1{N}' },
+  { regex: /(\/p\/)(\d+)/i, sub: '$1{N}' },
+  { regex: /(-page-)(\d+)/i, sub: '$1{N}' },
+  { regex: /(_page_)(\d+)/i, sub: '$1{N}' },
+];
+
+/**
+ * If `url` looks like a paginated URL, return a canonical "series key" with
+ * the page number replaced by `{N}` (so all pages in the same series share a
+ * key). Otherwise return null.
+ *
+ * Examples:
+ *   /insights/page/100              → /insights/page/{N}
+ *   /insights/page/100?postType=x   → /insights/page/{N}?postType=x
+ *   /list?page=5&sort=asc           → /list?page={N}&sort=asc
+ */
+function getPaginationSeriesKey(url: string): string | null {
+  for (const { regex, sub } of PAGINATION_SERIES_PATTERNS) {
+    if (regex.test(url)) {
+      return url.replace(regex, sub);
+    }
+  }
+  return null;
+}
+
 function formatSampleList(items: string[], limit = 5, separator = ', '): string {
   const shown = items.slice(0, limit).join(separator);
   const remaining = items.length - limit;
@@ -1101,6 +1133,7 @@ export {
   getIncomingLinkCount,
   normalizeToEntries,
   formatSampleList,
+  getPaginationSeriesKey,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

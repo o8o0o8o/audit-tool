@@ -424,6 +424,7 @@ class CrawlerEngine {
       const uniqueDescriptions = new Set<string>();
       const failedPages: string[] = [];
       const discoveredLinksSource = new Map<string, string>();
+      const paginationSeriesCounts = new Map<string, number>();
 
       let isMultiLang = false;
       let saveCounter = 0; // Track saves to reduce frequency
@@ -548,6 +549,7 @@ class CrawlerEngine {
               discoveredLinksSource,
               uniqueTitles,
               uniqueDescriptions,
+              paginationSeriesCounts,
             });
             const duration = Date.now() - startTime;
 
@@ -675,6 +677,7 @@ class CrawlerEngine {
               discoveredLinksSource,
               uniqueTitles,
               uniqueDescriptions,
+              paginationSeriesCounts,
             });
             const duration = Date.now() - startTime;
 
@@ -825,6 +828,7 @@ class CrawlerEngine {
       discoveredLinksSource,
       uniqueTitles,
       uniqueDescriptions,
+      paginationSeriesCounts,
     } = params;
 
     const chromePage = await context.newPage();
@@ -871,6 +875,7 @@ class CrawlerEngine {
         discoveredLinksSource,
         uniqueTitles,
         uniqueDescriptions,
+        paginationSeriesCounts,
       });
 
       isMultiLang = processResult.isMultiLang;
@@ -908,6 +913,7 @@ class CrawlerEngine {
       discoveredLinksSource,
       uniqueTitles,
       uniqueDescriptions,
+      paginationSeriesCounts,
     } = params;
 
     const {
@@ -1106,6 +1112,7 @@ class CrawlerEngine {
         addMissing,
         discoveredLinksSource,
         sitemapUrls,
+        paginationSeriesCounts,
       },
       this.#options.origin,
       this.#options.queryParams,

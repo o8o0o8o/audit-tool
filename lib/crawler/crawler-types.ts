@@ -124,6 +124,7 @@ export interface CrawlResults {
       threshold: number;
       lastUrl?: string;
     };
+    truncatedPaginationSeries?: Record<string, number>;
   };
   cruxData?: CrUXFieldData | null;
 }
@@ -141,6 +142,7 @@ export interface CrawlSinglePageParams {
   discoveredLinksSource: Map<string, string>;
   uniqueTitles: Set<string>;
   uniqueDescriptions: Set<string>;
+  paginationSeriesCounts: Map<string, number>;
 }
 
 export interface ProcessPageDataParams {
@@ -157,6 +159,7 @@ export interface ProcessPageDataParams {
   discoveredLinksSource: Map<string, string>;
   uniqueTitles: Set<string>;
   uniqueDescriptions: Set<string>;
+  paginationSeriesCounts: Map<string, number>;
 }
 
 export interface CollectLinksParams {
@@ -170,6 +173,7 @@ export interface CollectLinksParams {
   addMissing: boolean;
   discoveredLinksSource: Map<string, string>;
   sitemapUrls: Record<string, SitemapUrl>;
+  paginationSeriesCounts: Map<string, number>;
 }
 
 export interface LinkEntry {

@@ -28,7 +28,7 @@ import {
   normalizeTextForComparison,
   CRAWL_SETTINGS,
 } from '../constants';
-import { normalizeUrl, createSafeFilename, truncateText } from '../utils';
+import { normalizeUrl, createSafeFilename, truncateText, getPaginationSeriesKey } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import type { ChromePage } from '../types';
 
@@ -377,6 +377,7 @@ export function collectLinks(
   const {
     parsedPage,
     url,
+    results,
     incomingLinksTracking,
     collectedURLs,
     uniquePages,
@@ -384,7 +385,9 @@ export function collectLinks(
     addMissing,
     discoveredLinksSource,
     sitemapUrls,
+    paginationSeriesCounts,
   } = params;
+  const paginationSeriesCap = CRAWL_SETTINGS.MAX_PAGINATED_URLS_PER_SERIES ?? 20;
 
   const links: LinkEntry[] = [];
   let httpLinksCount = 0;
@@ -431,7 +434,33 @@ export function collectLinks(
       // Handle URL discovery with limit to prevent unbounded growth
       const maxDiscoveredUrls = CRAWL_SETTINGS.MAX_DISCOVERED_URLS ?? 100000;
 
-      if (addMissing) {
+      // Cap discovery from a single pagination series (e.g. /page/N). Catches
+      // sites that link to absurd page numbers (broken pagination) where each
+      // page is a valid 200 but content-wise an empty listing.
+      let paginationCapped = false;
+      const seriesKey = getPaginationSeriesKey(normalizedHref);
+      if (seriesKey && !collectedURLs.has(normalizedHref)) {
+        const currentCount = paginationSeriesCounts.get(seriesKey) ?? 0;
+        if (currentCount >= paginationSeriesCap) {
+          paginationCapped = true;
+          // Record + report truncation exactly once per series (the first time
+          // we cross the cap). Subsequent capped URLs are skipped silently.
+          if (currentCount === paginationSeriesCap) {
+            results.pageData.truncatedPaginationSeries ??= {};
+            results.pageData.truncatedPaginationSeries[seriesKey] = currentCount;
+            reportIssue(
+              'Pagination series truncated',
+              `Stopped discovering URLs from <code>${escapeHtml(seriesKey)}</code> after ${currentCount} pages. This may indicate broken pagination linking to nonexistent pages.`,
+              SEVERITY.MEDIUM,
+            );
+            paginationSeriesCounts.set(seriesKey, currentCount + 1);
+          }
+        } else {
+          paginationSeriesCounts.set(seriesKey, currentCount + 1);
+        }
+      }
+
+      if (addMissing && !paginationCapped) {
         if (!collectedURLs.has(normalizedHref)) {
           // Check limit before adding new URLs
           if (pagesToCrawl.length < maxDiscoveredUrls) {
@@ -445,7 +474,7 @@ export function collectLinks(
           }
           // Silently skip URLs beyond the limit to prevent OOM
         }
-      } else if (!uniquePages.has(normalizedHref)) {
+      } else if (!paginationCapped && !uniquePages.has(normalizedHref)) {
         // Only track in collectedURLs if under limit
         if (collectedURLs.size < maxDiscoveredUrls) {
           collectedURLs.add(normalizedHref);

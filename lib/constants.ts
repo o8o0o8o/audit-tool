@@ -34,6 +34,11 @@ export const CRAWL_SETTINGS = {
   // Abort the entire crawl after this many consecutive 404 responses.
   // Why: catches broken pagination where a page links to /page/N for N beyond the real last page.
   CONSECUTIVE_404_THRESHOLD: 10,
+  // Cap auto-discovered URLs from a single pagination series (e.g. /page/N).
+  // Why: catches "empty pagination" cases where a site links to page/2..page/N
+  // for absurd N, but every page beyond the real last renders an empty listing
+  // (status 200, no "not found" text) — so neither hard nor soft 404 detection fires.
+  MAX_PAGINATED_URLS_PER_SERIES: 20,
   BACKOFF_RESET_TIMEOUT_MS: 300000,
   BACKOFF_BASE_DELAY_MS: 1000,
   BACKOFF_MAX_DELAY_MS: 30000,

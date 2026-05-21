@@ -28,20 +28,24 @@ class SecurityAnalyzer {
 
     const isHttps = url.startsWith('https://');
 
-    // 1. Check security headers (use pre-captured headers to avoid navigation)
+    // 1. Check security headers (use pre-captured headers to avoid navigation).
+    // Per-header deduction values follow Mozilla HTTP Observatory's published rubric:
+    // https://github.com/mozilla/http-observatory/blob/main/httpobs/docs/scoring.md
     const headers = responseHeaders || {};
 
-    const securityHeaders = {
-      'content-security-policy': 'Content-Security-Policy',
-      'x-frame-options': 'X-Frame-Options',
-      'x-content-type-options': 'X-Content-Type-Options',
-      'strict-transport-security': 'Strict-Transport-Security',
-      'referrer-policy': 'Referrer-Policy',
-    };
+    const securityHeaderDeductions: Array<{ header: string; name: string; deduction: number }> = [
+      { header: 'content-security-policy', name: 'Content-Security-Policy', deduction: 25 },
+      { header: 'strict-transport-security', name: 'Strict-Transport-Security', deduction: 20 },
+      { header: 'x-frame-options', name: 'X-Frame-Options', deduction: 20 },
+      { header: 'referrer-policy', name: 'Referrer-Policy', deduction: 5 },
+      { header: 'x-content-type-options', name: 'X-Content-Type-Options', deduction: 5 },
+    ];
 
-    for (const [header, name] of Object.entries(securityHeaders)) {
+    let headerDeductionTotal = 0;
+    for (const { header, name, deduction } of securityHeaderDeductions) {
       if (!getHeader(headers, header)) {
         (securityIssues.missingHeaders as string[]).push(name);
+        headerDeductionTotal += deduction;
       }
     }
 
@@ -125,14 +129,18 @@ class SecurityAnalyzer {
     const inlineScripts = parsedPage.querySelectorAll('script:not([src])');
     securityIssues.inlineScripts = inlineScripts.length;
 
-    // Calculate security score (0-100)
+    // Calculate security score (0-100) using Mozilla HTTP Observatory deductions.
+    // Per-header deduction is summed above; cookies/mixed-content/CSRF follow the
+    // same rubric. Inline scripts are kept as a soft signal (Observatory doesn't
+    // score them directly).
     let score = 100;
-    score -= securityIssues.missingHeaders.length * 10; // -10 per missing header
-    score -= securityIssues.insecureCookies * 5; // -5 per insecure cookie
-    score -= securityIssues.sameSiteIssues * 4; // -4 per SameSite issue
-    score -= securityIssues.mixedContent * 3; // -3 per mixed content
-    score -= securityIssues.formsWithoutCSRF * 8; // -8 per form without CSRF
-    score -= Math.min(securityIssues.inlineScripts, 10) * 2; // -2 per inline script (max 10)
+    score -= isHttps ? 0 : 50; // Observatory: HTTPS not in use → severe penalty
+    score -= headerDeductionTotal;
+    score -= Math.min(securityIssues.mixedContent, 1) * 20; // any mixed content → -20
+    score -= securityIssues.insecureCookies * 5;
+    score -= securityIssues.sameSiteIssues * 10; // SameSite=None+sensitive or without Secure
+    score -= securityIssues.formsWithoutCSRF * 5;
+    score -= Math.min(securityIssues.inlineScripts, 10) * 2;
     securityIssues.securityScore = Math.max(0, score);
 
     return securityIssues;

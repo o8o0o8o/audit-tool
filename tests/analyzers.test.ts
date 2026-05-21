@@ -217,20 +217,14 @@ void describe('OutboundLinkChecker', () => {
 });
 
 // ============================================================
-// Score Calculator - new patterns
+// Score Calculator
 // ============================================================
-void describe('ScoreCalculator - new patterns', () => {
-  // Need at least one page to avoid early return
+void describe('ScoreCalculator', () => {
   const dummyPages: Record<string, Record<string, unknown>> = { 'https://example.com/': {} };
 
-  void it('categorizes language-related issues to SEO', () => {
+  void it('Error-tier SEO issue reduces SEO score (Ahrefs URL-pass)', () => {
     const analysisData = {
-      bySeverity: {
-        critical: [],
-        high: ['Detected content language does not match declared language'],
-        medium: [],
-        low: [],
-      },
+      bySeverity: { critical: [], high: ['Hreflang conflicts'], medium: [], low: [] },
       details: {},
     };
     const scores = ScoreCalculator.calculateCategoryScores(
@@ -240,14 +234,34 @@ void describe('ScoreCalculator - new patterns', () => {
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
 
-  void it('categorizes unused JavaScript to performance', () => {
+  void it('Warning-tier SEO issue does NOT reduce SEO score', () => {
+    // Ahrefs methodology: only Errors move the score. Warnings are reported separately.
     const analysisData = {
-      bySeverity: {
-        critical: [],
-        high: [],
-        medium: ['High percentage of unused JavaScript'],
-        low: [],
-      },
+      bySeverity: { critical: [], high: [], medium: ['Some pages have missing or empty meta description'], low: [] },
+      details: {},
+    };
+    const scores = ScoreCalculator.calculateCategoryScores(
+      analysisData,
+      dummyPages as unknown as Record<string, PageInfo>,
+    );
+    assert.strictEqual(scores.seo, 100, `Expected seo=100 (warnings don't count), got ${scores.seo}`);
+  });
+
+  void it('X-Robots-Tag block is classified as SEO error (catalog)', () => {
+    const analysisData = {
+      bySeverity: { critical: [], high: ['Pages blocked via X-Robots-Tag header'], medium: [], low: [] },
+      details: {},
+    };
+    const scores = ScoreCalculator.calculateCategoryScores(
+      analysisData,
+      dummyPages as unknown as Record<string, PageInfo>,
+    );
+    assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
+  });
+
+  void it('Performance issue without metrics uses URL-pass fallback', () => {
+    const analysisData = {
+      bySeverity: { critical: [], high: [], medium: ['High percentage of unused JavaScript'], low: [] },
       details: {},
     };
     const scores = ScoreCalculator.calculateCategoryScores(
@@ -257,26 +271,19 @@ void describe('ScoreCalculator - new patterns', () => {
     assert.ok(scores.performance < 100, `Expected performance < 100, got ${scores.performance}`);
   });
 
-  void it('categorizes x-robots-tag to SEO (matches "robots" pattern)', () => {
-    const analysisData = {
-      bySeverity: {
-        critical: [],
-        high: ['Pages blocked via X-Robots-Tag header'],
-        medium: [],
-        low: [],
-      },
-      details: {},
-    };
-    const scores = ScoreCalculator.calculateCategoryScores(
-      analysisData,
-      dummyPages as unknown as Record<string, PageInfo>,
-    );
-    // "x-robots-tag" matches "robots" pattern → categorized as SEO
-    assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
+  void it('Performance score uses log-normal CDF on per-page metrics', () => {
+    // A page with LCP=1220 (p10) should score ~90 for LCP.
+    const fastPages = { 'https://example.com/': { LCP: 1220, INP: 50, CLS: 0.025, FCP: 934, TTFB: 200 } };
+    const slowPages = { 'https://example.com/': { LCP: 4000, INP: 500, CLS: 0.25, FCP: 3000, TTFB: 1800 } };
+    const empty = { bySeverity: { critical: [], high: [], medium: [], low: [] }, details: {} };
+
+    const fast = ScoreCalculator.calculateCategoryScores(empty, fastPages as unknown as Record<string, PageInfo>);
+    const slow = ScoreCalculator.calculateCategoryScores(empty, slowPages as unknown as Record<string, PageInfo>);
+    assert.ok(fast.performance > 80, `Expected fast performance > 80, got ${fast.performance}`);
+    assert.ok(slow.performance < 30, `Expected slow performance < 30, got ${slow.performance}`);
   });
 
-  void it('scales penalty by affected page count from details', () => {
-    // 2% affected vs 80% affected on same total should differ
+  void it('SEO score scales with breadth of affected pages', () => {
     const pages100: Record<string, Record<string, unknown>> = {};
     for (let i = 0; i < 100; i++) pages100[`https://example.com/${i}`] = {};
 
@@ -303,37 +310,30 @@ void describe('ScoreCalculator - new patterns', () => {
     );
     assert.ok(
       scoresMany.seo < scoresFew.seo,
-      `Expected many-affected penalty (${scoresMany.seo}) < few-affected penalty (${scoresFew.seo})`,
+      `Expected many-affected score (${scoresMany.seo}) < few-affected score (${scoresFew.seo})`,
     );
   });
 
-  void it('reads security score from page.security.securityScore', () => {
+  void it('security score is mean of per-page securityScore', () => {
     const pages = {
       'https://example.com/': { security: { securityScore: 60 } },
       'https://example.com/about': { security: { securityScore: 40 } },
     };
-    const analysisData = {
-      bySeverity: { critical: [], high: [], medium: [], low: [] },
-      details: {},
-    };
+    const analysisData = { bySeverity: { critical: [], high: [], medium: [], low: [] }, details: {} };
     const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as unknown as Record<string, PageInfo>);
-    assert.strictEqual(scores.security, 50, `Expected security=50 (avg of 60,40), got ${scores.security}`);
+    assert.strictEqual(scores.security, 50);
   });
 
-  void it('reads accessibility from formData.accessibilityScore and violations', () => {
+  void it('accessibility score uses a11yScore + formData when both present', () => {
     const pages = {
       'https://example.com/': {
         formData: { accessibilityScore: 80 },
         accessibility: { violationCount: 2 }, // 100 - 2*10 = 80
       },
     };
-    const analysisData = {
-      bySeverity: { critical: [], high: [], medium: [], low: [] },
-      details: {},
-    };
+    const analysisData = { bySeverity: { critical: [], high: [], medium: [], low: [] }, details: {} };
     const scores = ScoreCalculator.calculateCategoryScores(analysisData, pages as unknown as Record<string, PageInfo>);
-    // Average of 80 (formData) and 80 (violations) = 80
-    assert.strictEqual(scores.accessibility, 80, `Expected accessibility=80, got ${scores.accessibility}`);
+    assert.strictEqual(scores.accessibility, 80);
   });
 
   void it('identifies structural issues as quick wins', () => {

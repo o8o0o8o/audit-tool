@@ -165,9 +165,19 @@ export const THRESHOLDS = {
   SITEMAP_LIMIT: 50000,
 } as const;
 
-// Scoring weights and thresholds for ScoreCalculator
+/**
+ * Scoring constants.
+ *
+ * Per-category methodology (see lib/scoring/methodologies.ts):
+ *   • Performance   — Lighthouse log-normal CDF + weighted average of metrics
+ *   • Accessibility — mean of per-page a11yScore (analyzer-computed)
+ *   • Security      — mean of per-page securityScore (Observatory deductions)
+ *   • SEO           — Ahrefs URL-pass on error-tier issues
+ *   • Technical     — Ahrefs URL-pass on error-tier issues
+ *   • Overall       — weighted average of category scores
+ */
 export const SCORING = {
-  // Overall score: weighted average of category scores
+  /** Overall = Σ CATEGORY_WEIGHTS[k] · categoryScores[k]. Sums to 1. */
   CATEGORY_WEIGHTS: {
     seo: 0.3,
     performance: 0.25,
@@ -176,48 +186,47 @@ export const SCORING = {
     security: 0.1,
   } as Record<string, number>,
 
-  // Penalty weight per issue severity
-  SEVERITY_WEIGHTS: {
-    critical: 5,
-    high: 3,
-    medium: 1,
-    low: 0.3,
+  /**
+   * Per-metric weights for the Performance composite (Core Web Vitals + lab).
+   * Mirrors Lighthouse 10 weighting with TBT swapped for INP (per Web Vitals).
+   * Sums to 100 so the result is a percentage.
+   */
+  PERFORMANCE_METRIC_WEIGHTS: {
+    LCP: 25,
+    INP: 30,
+    CLS: 25,
+    FCP: 10,
+    TTFB: 10,
   } as Record<string, number>,
 
-  // Impact score base values per severity (for quick wins)
-  IMPACT_BASE_SCORES: {
-    critical: 100,
-    high: 70,
-    medium: 40,
-    low: 20,
-  } as Record<string, number>,
+  /**
+   * Log-normal CDF control points per metric.
+   * `p10` (top-decile site value) → score 90; `median` → score 50.
+   * Numbers from web.dev / HTTPArchive (the same source Lighthouse uses).
+   * https://web.dev/articles/defining-core-web-vitals-thresholds
+   */
+  PERFORMANCE_CONTROL_POINTS: {
+    LCP: { p10: 1220, median: 2500 },
+    INP: { p10: 50, median: 200 },
+    CLS: { p10: 0.025, median: 0.1 },
+    FCP: { p10: 934, median: 1800 },
+    TTFB: { p10: 200, median: 800 },
+  } as Record<string, { p10: number; median: number }>,
 
-  // Default scores for categories lacking page-level data
-  DEFAULT_CATEGORY_SCORES: {
-    accessibility: 70,
-    security: 70,
-  },
-
-  // Log penalty scales per category (higher = steeper penalty curve)
-  LOG_PENALTY_SCALE: {
-    seo: 8,
-    performance: 9,
-    technical: 9,
-  },
-
-  // Breadth multiplier: scales penalty by proportion of affected pages
-  BREADTH_MULTIPLIER_FACTOR: 4,
-  BREADTH_MULTIPLIER_MAX: 5,
-
-  // Page multiplier for impact score: max 3x based on affected count / 10
-  IMPACT_PAGE_DIVISOR: 10,
-  IMPACT_PAGE_MULTIPLIER_MAX: 3,
-  IMPACT_PAGE_BOOST_FACTOR: 0.3,
-
-  // Quick win thresholds
+  /**
+   * Quick-win classification thresholds (impact score 0-100, effort in
+   * minutes). Used only by identifyQuickWins(); not part of category scoring.
+   */
   QUICK_WIN_MIN_IMPACT: 40,
   QUICK_WIN_MAX_EFFORT_MINUTES: 30,
   QUICK_WIN_MAX_RESULTS: 10,
+
+  /** Tier→impact-score for quick-win sorting (Ahrefs only counts errors). */
+  TIER_IMPACT_BASE: {
+    error: 80,
+    warning: 40,
+    notice: 15,
+  } as Record<string, number>,
 } as const;
 
 /**

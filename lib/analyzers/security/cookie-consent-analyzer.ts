@@ -181,10 +181,13 @@ class CookieConsentAnalyzer {
       method: null,
     };
 
-    // Method 1: Check for known consent platform scripts/styles
-    for (const req of requests) {
+    // Method 1: Check for known consent platform scripts/styles.
+    // `requests` is shaped as Record<url, RequestInfo> by the crawler, despite the
+    // NetworkRequest[] type annotation — iterate by URL key.
+    for (const reqUrl of Object.keys(requests)) {
+      const lowerUrl = reqUrl.toLowerCase();
       for (const platform of this.#consentPlatforms) {
-        if (platform.patterns.some((p) => req.url.toLowerCase().includes(p))) {
+        if (platform.patterns.some((p) => lowerUrl.includes(p))) {
           result.detected = true;
           result.platform = platform.name;
           result.method = 'script-detection';

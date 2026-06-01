@@ -437,12 +437,19 @@ async function audit() {
         });
         console.log(`📄 Curated report: ${pdfPath}`);
       } catch (e: unknown) {
-        console.debug('Phase 2 report generation skipped:', (e as Error).message);
+        // Surface this loudly: the audit itself succeeded, but the curated
+        // PDF the user expects is missing. A swallowed debug line here means a
+        // silently absent report. Show the cause and how to regenerate.
+        console.log('⚠️  Phase 2 curated report failed:', (e as Error).message);
+        console.log(
+          `   Regenerate with: npx tsx -e "import {runPhase2} from './lib/phase2/phase2-runner'; runPhase2('${seo.fileManager.resultsDir}',{verbose:true}).then(p=>console.log(p))"`,
+        );
+        if (args.verbose === true) console.error((e as Error).stack);
       }
     }
 
     // Extract summary once to avoid repeated deep property access
-    const summary = seo.data.analysis?.summary ?? {} as Record<string, unknown>;
+    const summary = seo.data.analysis?.summary ?? ({} as Record<string, unknown>);
     const score = (summary.overallScore as number) ?? 0;
     const totalIssues = (summary.totalIssues as number) ?? 0;
     const totalPages = Object.keys(seo.data.pageData?.pages ?? {}).length;
@@ -497,9 +504,13 @@ async function audit() {
     // Send Slack notification if configured
     if (args.slack) {
       const emoji = score >= 80 ? ':white_check_mark:' : score >= 60 ? ':warning:' : ':x:';
-      postJson(args.slack, JSON.stringify({
-        text: `${emoji} *SEO Audit Complete: ${seo.domainName}*\nScore: *${score}/100* | Issues: ${totalIssues}\nCritical: ${(summary.criticalCount as number) ?? 0} | High: ${(summary.highCount as number) ?? 0}`,
-      }), 'Slack notification');
+      postJson(
+        args.slack,
+        JSON.stringify({
+          text: `${emoji} *SEO Audit Complete: ${seo.domainName}*\nScore: *${score}/100* | Issues: ${totalIssues}\nCritical: ${(summary.criticalCount as number) ?? 0} | High: ${(summary.highCount as number) ?? 0}`,
+        }),
+        'Slack notification',
+      );
     }
 
     // Send webhook notification if configured

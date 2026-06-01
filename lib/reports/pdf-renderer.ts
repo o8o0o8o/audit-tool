@@ -224,9 +224,7 @@ function extractTitle(markdown: string): string | null {
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
-  );
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
 /**
@@ -250,20 +248,30 @@ export async function renderMarkdownToPdf(
 
   // Use page.goto(file://) instead of setContent so file:// image URLs are
   // permitted (setContent runs in an about:blank context which blocks them).
-  const browser = await chromium.launch();
-  try {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.goto(`file://${path.resolve(htmlPath)}`, { waitUntil: 'networkidle' });
-    await page.pdf({
-      path: outputPath,
-      format: options.format ?? 'A4',
-      printBackground: true,
-      margin: { top: '22mm', bottom: '22mm', left: '18mm', right: '18mm' },
-    });
-  } finally {
-    await browser.close();
+  //
+  // Launching Chromium can fail transiently when this runs at the tail of an
+  // audit, while the crawler's own browser is tearing down (resource/port
+  // contention). Retry once before giving up so a one-off hiccup doesn't
+  // silently lose the report.
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const browser = await chromium.launch();
+    try {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(`file://${path.resolve(htmlPath)}`, { waitUntil: 'networkidle' });
+      await page.pdf({
+        path: outputPath,
+        format: options.format ?? 'A4',
+        printBackground: true,
+        margin: { top: '22mm', bottom: '22mm', left: '18mm', right: '18mm' },
+      });
+      return outputPath;
+    } catch (e: unknown) {
+      lastError = e;
+    } finally {
+      await browser.close();
+    }
   }
-
-  return outputPath;
+  throw lastError;
 }

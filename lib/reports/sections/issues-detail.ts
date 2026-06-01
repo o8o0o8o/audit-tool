@@ -194,7 +194,7 @@ function renderIssueRow(issue: IssueEntry, idx: number) {
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
       <td style="font-weight:var(--font-weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:var(--amber-100);color:var(--color-warning-text);padding:1px 6px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);vertical-align:middle;">QUICK WIN</span>' : ''}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums;">${count}</td>
-      <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
+      <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? ScoreCalculator.effortLevel(fix.effort) : '—'}</td>
     </tr>
     <tr class="issue-detail-row" id="issue-detail-${idx}" style="display:none;">
       <td colspan="5" style="padding:0;">
@@ -405,7 +405,7 @@ function renderComparisonIssueRow(issue: ComparisonIssueEntry, idx: number) {
       <td style="text-align:right;font-variant-numeric:tabular-nums;${status === 'new' ? 'color:var(--color-text-disabled);' : ''}">${status === 'new' ? '—' : originCount}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums;${status === 'fixed' ? 'color:var(--color-text-disabled);' : ''}">${status === 'fixed' ? '—' : compareCount}</td>
       <td style="text-align:center;">${statusBadge}</td>
-      <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? escapeHtml(fix.effort) : '—'}</td>
+      <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? ScoreCalculator.effortLevel(fix.effort) : '—'}</td>
     </tr>
     <tr class="issue-detail-row" id="issue-detail-${idx}" style="display:none;">
       <td colspan="7" style="padding:0;">

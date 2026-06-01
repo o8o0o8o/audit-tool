@@ -83,6 +83,7 @@ function parseArgs(args: string[]): ParsedArgs {
     phase2: true, // Generate Phase 2 curated PDF report (--no-phase2 to skip)
     llmNarrative: false, // Use Claude to rewrite per-section Analysis prose
     llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
+    llmVerify: false, // Use Claude to revalidate findings + drop confirmed duplicates/false positives before the final report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
     warnings: [] as string[], // Collect validation warnings
@@ -121,6 +122,13 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.llmNarrative = true;
     } else if (arg === '--llm-findings') {
       parsed.llmFindings = true;
+    } else if (arg === '--llm-verify') {
+      parsed.llmVerify = true;
+    } else if (arg === '--llm') {
+      // Umbrella flag — enable the full AI pass set (narrative + findings + verify).
+      parsed.llmNarrative = true;
+      parsed.llmFindings = true;
+      parsed.llmVerify = true;
     } else if (arg === '--no-evidence') {
       parsed.evidence = false;
     } else if (arg === '--evidence') {

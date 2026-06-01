@@ -293,48 +293,32 @@ class PaginationAnalyzer {
    * Detect infinite scroll implementation
    * @private
    */
-  static async #detectInfiniteScroll(chromePage: ChromePage, parsedPage: ParsedPage) {
+  static async #detectInfiniteScroll(chromePage: ChromePage, _parsedPage: ParsedPage) {
     try {
-      // Check for common infinite scroll indicators
+      // Only deliberate loading hooks count. Two heuristics were removed because
+      // they produced false positives (flagging product/home pages that have no
+      // listing at all):
+      //   • `[class*="infinite"]` — a substring match that also caught
+      //     decorative "infinite" marquee/animation classes.
+      //   • a raw-HTML regex scan for /infinite[-_]?scroll/ — which matched the
+      //     string anywhere in bundled slider/carousel library code.
+      // Both flagged the *word* "infinite", not an actual infinite-scrolled
+      // content list. We now require an explicit infinite-scroll container or a
+      // JS sentinel/trigger element — the unambiguous signals that list content
+      // is loaded on scroll.
       const result = await chromePage.evaluate(() => {
-        // Check for IntersectionObserver usage (common in infinite scroll)
-        const hasIntersectionObserver = typeof IntersectionObserver !== 'undefined';
+        const hasContainer = document.querySelector('[data-infinite-scroll]') !== null;
 
-        // Check for scroll event listeners that might trigger loading
-        // This is a heuristic - can't directly check listeners
-        const indicators = [
-          // Common infinite scroll libraries/patterns
-          document.querySelector('[data-infinite-scroll]'),
-          document.querySelector('.infinite-scroll'),
-          document.querySelector('[class*="infinite"]'),
-          // Waypoint indicators
-          document.querySelector('.waypoint'),
-          document.querySelector('[data-waypoint]'),
-        ];
-
-        const hasIndicator = indicators.some((el) => el !== null);
-
-        // Check for sentinel elements (end-of-list markers)
+        // Sentinel / trigger elements are the reliable marker: a deliberate hook
+        // an IntersectionObserver watches to load the next batch of list items.
         const sentinels = document.querySelectorAll(
           '.load-more-sentinel, .scroll-sentinel, [data-sentinel], .infinite-scroll-trigger',
         );
 
-        return {
-          detected: hasIndicator || sentinels.length > 0,
-          hasIntersectionObserver,
-          sentinelCount: sentinels.length,
-        };
+        return { detected: hasContainer || sentinels.length > 0 };
       });
 
-      // Also check HTML for common patterns
-      const html = parsedPage.toString();
-      const infinitePatterns = [/infinite[-_]?scroll/i, /endless[-_]?scroll/i, /load[-_]?more[-_]?on[-_]?scroll/i];
-
-      const htmlHasPattern = infinitePatterns.some((p) => p.test(html));
-
-      return {
-        detected: result.detected || htmlHasPattern,
-      };
+      return { detected: result.detected };
     } catch {
       return { detected: false };
     }

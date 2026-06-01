@@ -34,6 +34,8 @@ export interface PageInfo {
   url: string;
   status?: number;
   statusCode?: number;
+  /** Stable SHA-256 of the normalised HTML; used by the audit-diff classifier. */
+  contentHash?: string;
   title?: string;
   titleLength?: number;
   description?: string;
@@ -1081,6 +1083,25 @@ export interface PaginationData {
   infiniteScrollDetected: boolean;
   loadMoreDetected: boolean;
   issues: Issue[];
+  /** Resolved href of the "next" control, if one was found. */
+  nextUrl?: string | null;
+  /** True when a "next" control exists but has no usable static href (JS-driven). */
+  nextIsJsControl?: boolean;
+  /** Result of the active JS-"next" probe (Part B). Null when not probed. */
+  nextProbe?: PaginationProbeResult | null;
+}
+
+export interface PaginationProbeResult {
+  /** Number of times "next" was successfully clicked. */
+  clicks: number;
+  /** Whether page content changed across the clicks. */
+  contentChanged: boolean;
+  /** Whether the "next" control was still present/enabled after the last click. */
+  controlPersists: boolean;
+  /** Whether the listing became empty after clicking. */
+  emptyAfterClick: boolean;
+  /** Heuristic verdict: "next" advances into empty/duplicate content forever. */
+  suspectedInfinite: boolean;
 }
 
 export interface AeoData {
@@ -1611,6 +1632,11 @@ export interface ParsedArgs {
   brandName: string | null;
   ci: number | null;
   json: boolean;
+  phase2: boolean;
+  llmNarrative: boolean;
+  llmFindings: boolean;
+  evidence: boolean;
+  evidenceCap: number;
   warnings: string[];
 }
 
@@ -1624,6 +1650,10 @@ export interface SEODataOptions {
   dryRun?: boolean;
   cruxApiKey?: string | null;
   screenshots?: boolean;
+  /** When false, skip representative-page evidence capture (screenshots, axe, PSI). */
+  evidence?: boolean;
+  /** Cap on representative-page samples (default 10). */
+  evidenceCap?: number;
 }
 
 // ─── History Types ──────────────────────────────────────────────────────────
@@ -1676,6 +1706,8 @@ export interface AuditSnapshot {
   technologies: string[];
   insights: InsightsSummary | null;
   quickWins: Array<{ issue: string; affectedPages: number; severity: SeverityLevel }>;
+  /** url → contentHash, for the diff classifier's "site changed" signal. */
+  pageHashes?: Record<string, string>;
 }
 
 export interface AuditHistory {
@@ -1707,6 +1739,34 @@ export interface AuditComparison {
     cls: number;
   };
   insightDeltas?: Record<string, number>;
+  /**
+   * Classifier output: each finding change bucketed by trustworthiness.
+   *   real         — structural change or volatile metric exceeded noise floor
+   *   noise        — volatile-finding count moved within the noise floor
+   *   siteChanged  — context, not a per-finding bucket: how many pages
+   *                  actually changed content between runs
+   */
+  classified?: {
+    real: AuditDiffEntry[];
+    noise: AuditDiffEntry[];
+    siteChanged: {
+      pagesCompared: number;
+      pagesChanged: number;
+      pagesUnchanged: number;
+      pagesUnique: number; // present only on one side
+    };
+  };
+}
+
+export interface AuditDiffEntry {
+  slug: string;
+  message: string;
+  kind: 'new' | 'fixed' | 'count';
+  oldCount: number;
+  newCount: number;
+  severity?: SeverityLevel | string;
+  /** True when matched via a volatile-finding heuristic. */
+  volatile: boolean;
 }
 
 export interface IssueTrend {
@@ -1756,6 +1816,10 @@ export interface CrawlerEngineOptions {
   cpuConditions: Record<string, CpuCondition>;
   verbose: boolean;
   cruxApiKey: string | null;
+  /** Base directory where per-page evidence (screenshots, HAR) is written. */
+  evidenceDir?: string;
+  /** Max number of representative-page samples (default 10). */
+  evidenceCap?: number;
 }
 
 export interface CrawlerCallbacks {

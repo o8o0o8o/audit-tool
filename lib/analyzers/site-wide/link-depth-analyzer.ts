@@ -4,7 +4,12 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { shortenUrl, removeTrailingSlash, getIncomingLinkCount, formatSampleList } from '../../utils';
+import {
+  shortenUrl,
+  getIncomingLinkCount,
+  formatSampleList,
+  normalizeUrlForComparison,
+} from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class LinkDepthAnalyzer {
@@ -22,8 +27,11 @@ class LinkDepthAnalyzer {
     const pageUrls = Object.keys(pages);
     const totalPages = pageUrls.length;
 
-    // Build link graph for depth calculation
-    const linkGraph = this.buildLinkGraph(pages, origin);
+    // Build link graph for depth calculation. Seeded from both per-page link
+    // arrays and the authoritative incomingLinks map (inverted) so reachability
+    // survives the link-stripping that the memory optimizer applies to
+    // page.links — without it, almost every page looks "unreachable".
+    const linkGraph = this.buildLinkGraph(pages, origin, incomingLinks);
 
     // Calculate link depth from homepage
     const depths = this.calculateLinkDepths(linkGraph, origin);
@@ -108,14 +116,34 @@ class LinkDepthAnalyzer {
       });
     }
 
-    // Check for unreachable pages
-    const unreachablePages = pageUrls.filter((url) => !depths.has(url) && url !== origin && url !== origin + '/');
+    // Check for unreachable pages. Compare on normalized URLs so a trailing
+    // slash difference between the page key and a graph node isn't mistaken
+    // for unreachability.
+    const originNorm = normalizeUrlForComparison(origin);
+    const unreachablePages = pageUrls.filter(
+      (url) => !depths.has(normalizeUrlForComparison(url)) && normalizeUrlForComparison(url) !== originNorm,
+    );
     if (unreachablePages.length > 0) {
-      issues.push({
-        message: `${unreachablePages.length} pages are unreachable from homepage via internal links`,
-        detail: `These pages can only be accessed via sitemap or external links. Examples: ${formatSampleList(unreachablePages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
-        severity: SEVERITY.HIGH,
-      });
+      // Guard against a degraded link graph: if the homepage's outgoing links
+      // weren't captured (SPA / client-rendered nav), BFS reaches almost
+      // nothing and the whole site looks orphaned. When the unreachable share
+      // is implausibly high we can't trust the signal, so we report it as a
+      // low-severity caveat rather than a high-severity site defect.
+      const unreachableFraction = totalPages > 0 ? unreachablePages.length / totalPages : 0;
+      const likelyDegraded = unreachableFraction > 0.5;
+      if (likelyDegraded) {
+        warnings.push({
+          message: `Internal link graph could not be fully resolved`,
+          detail: `${unreachablePages.length} of ${totalPages} pages were not reachable from the homepage in the captured link graph. This usually means client-rendered navigation wasn't captured rather than a genuine orphan problem — verify internal linking manually.`,
+          severity: SEVERITY.LOW,
+        });
+      } else {
+        issues.push({
+          message: `${unreachablePages.length} pages are unreachable from homepage via internal links`,
+          detail: `These pages can only be accessed via sitemap or external links. Examples: ${formatSampleList(unreachablePages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
+          severity: SEVERITY.HIGH,
+        });
+      }
     }
 
     // Calculate metrics
@@ -151,44 +179,55 @@ class LinkDepthAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Map} Link graph (url -> Set of linked urls)
    */
-  static buildLinkGraph(pages: Record<string, PageInfo>, origin: string) {
-    const graph = new Map();
+  static buildLinkGraph(
+    pages: Record<string, PageInfo>,
+    origin: string,
+    incomingLinks: Record<string, string[] | unknown> = {},
+  ) {
+    const graph = new Map<string, Set<string>>();
     const originHost = new URL(origin).host;
+
+    // All graph nodes/edges are keyed on the normalized form (hash + trailing
+    // slash stripped) so the page key, link target, and incomingLinks entries
+    // line up regardless of trailing-slash inconsistencies.
+    const edge = (from: string, to: string) => {
+      if (!graph.has(from)) graph.set(from, new Set());
+      graph.get(from)!.add(to);
+    };
+    const internalNorm = (href: string, base: string): string | null => {
+      try {
+        const u = new URL(href, base);
+        if (u.host !== originHost) return null;
+        return normalizeUrlForComparison(u.origin + u.pathname + u.search);
+      } catch {
+        return null;
+      }
+    };
+
     for (const [url, page] of Object.entries(pages)) {
-      const links = new Set();
+      const fromNorm = normalizeUrlForComparison(url);
+      if (!graph.has(fromNorm)) graph.set(fromNorm, new Set());
 
-      // After data stripping, page.links may only contain problematic links (no text).
-      // Try to use the full links array first, but if it looks stripped (few entries
-      // but page reports many links), we can't build an accurate graph for this page.
-
+      // After data stripping, page.links may only contain problematic links;
+      // the incomingLinks pass below backfills the missing edges.
       if (Array.isArray(page.links)) {
         for (const link of page.links) {
-          try {
-            const linkUrl = new URL(link.href, url);
-            // Only include internal links
-            if (linkUrl.host === originHost) {
-              // Normalize URL (remove hash, trailing slash consistency)
-              let normalizedUrl = linkUrl.origin + linkUrl.pathname;
-              if (normalizedUrl.endsWith('/') && normalizedUrl !== origin + '/') {
-                normalizedUrl = normalizedUrl.slice(0, -1);
-              }
-              links.add(normalizedUrl);
-            }
-          } catch {
-            // Invalid URL, skip
-          }
+          const to = internalNorm(link.href, url);
+          if (to) edge(fromNorm, to);
         }
       }
-
-      graph.set(url, links);
     }
 
-    // Second pass: use incoming links data to fill gaps
-    // If page A links to page B, then B should appear in A's outgoing links
-    // This helps when page A's links were stripped
-    for (const [url, page] of Object.entries(pages)) {
-      if (page.hasIncomingLinks && !graph.has(url)) {
-        graph.set(url, new Set());
+    // Second pass: invert the authoritative incomingLinks map. An entry
+    // { target: [source, …] } means each source links to target, i.e. an
+    // edge source → target. This is the reliable graph source after stripping.
+    for (const [target, sources] of Object.entries(incomingLinks)) {
+      if (!Array.isArray(sources)) continue;
+      const toNorm = normalizeUrlForComparison(target);
+      if (!graph.has(toNorm)) graph.set(toNorm, new Set());
+      for (const source of sources as string[]) {
+        if (typeof source !== 'string') continue;
+        edge(normalizeUrlForComparison(source), toNorm);
       }
     }
 
@@ -206,15 +245,12 @@ class LinkDepthAnalyzer {
     const visited = new Set();
     const queue: Array<{ url: string; depth: number }> = [];
 
-    // Start from homepage (both with and without trailing slash)
-    const homepages = [origin, origin + '/', removeTrailingSlash(origin)];
-
-    for (const homepage of homepages) {
-      if (graph.has(homepage) && !visited.has(homepage)) {
-        queue.push({ url: homepage, depth: 0 });
-        visited.add(homepage);
-        depths.set(homepage, 0);
-      }
+    // Graph nodes are normalized; seed BFS from the normalized homepage.
+    const homepage = normalizeUrlForComparison(origin);
+    if (graph.has(homepage)) {
+      queue.push({ url: homepage, depth: 0 });
+      visited.add(homepage);
+      depths.set(homepage, 0);
     }
 
     while (queue.length > 0) {

@@ -176,6 +176,14 @@ class AnchorTextAnalyzer {
       });
     }
 
+    // Anchor these per-page findings to the page so the report's "Affected
+    // pages" list shows which URL each occurrence is on, instead of repeating
+    // the same generic sentence with no page identity.
+    const pageRef = `<a href="${url}">${url}</a>`;
+    for (const issue of [...issues, ...warnings]) {
+      issue.detail = `${pageRef} — ${issue.detail}`;
+    }
+
     return { issues, warnings, info };
   }
 

@@ -278,9 +278,15 @@ class CodeCoverageAnalyzer {
               .join('') +
             '</ul>'
           : '';
+      // When the unused share is this large, the actionable fix is critical-CSS
+      // extraction: inline the above-the-fold rules in the document head and
+      // load the rest async. Tools like `beasties` (Next.js) or `critters`
+      // automate this.
+      const criticalCssHint =
+        '<br><em>Recommendation:</em> extract critical CSS (above-the-fold rules) and inline it in <code>&lt;head&gt;</code>; defer the rest. See <code>beasties</code> / <code>critters</code>.';
       issues.push({
         message: 'High percentage of unused CSS',
-        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${formatBytes(info.css.unused)} of ${formatBytes(info.css.total)}).${cssFileList}`,
+        detail: `<a href="${url}">${url}</a>: ${info.css.ratio}% of CSS is unused (${formatBytes(info.css.unused)} of ${formatBytes(info.css.total)}).${cssFileList}${criticalCssHint}`,
         severity: SEVERITY.MEDIUM,
       });
     }

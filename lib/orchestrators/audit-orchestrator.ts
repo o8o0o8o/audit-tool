@@ -32,6 +32,9 @@ interface AnalyzeContext {
       isMultiLang: boolean;
       failedPages: string[];
     }>;
+    capturePSIForSampled?: () => Promise<{ attempted: number; succeeded: number }>;
+    getSampledUrls?: () => string[];
+    finalizeIncomingLinks: (results: unknown, incomingLinksTracking: Map<string, Set<string>>) => void;
   };
   incomingLinksTracking: Map<string, Set<string>>;
   saveError: SaveErrorFn;
@@ -50,6 +53,7 @@ interface PageDataForValidation {
   linkingStats?: unknown;
   dnsData?: unknown;
   externalLinkVerification?: unknown;
+  truncatedPaginationSeries?: Record<string, number>;
 }
 
 type SaveErrorFn = (
@@ -84,6 +88,7 @@ import { KeywordCannibalisationAnalyzer } from '../analyzers/site-wide/keyword-c
 import { Soft404Analyzer } from '../analyzers/seo/soft-404-analyzer';
 import { ConsoleErrorAnalyzer } from '../analyzers/seo/console-error-analyzer';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
+import { BrokenPaginationAnalyzer } from '../analyzers/site-wide/broken-pagination-analyzer';
 import { MediaSEOAnalyzer } from '../analyzers/seo/media-seo-analyzer';
 import { WebComponentAnalyzer } from '../analyzers/seo/web-component-analyzer';
 import { FontLoadingAnalyzer } from '../analyzers/performance/font-loading-analyzer';
@@ -191,8 +196,27 @@ class AuditOrchestrator {
       results.pageData.pages[url].isMultiLang = isMultiLang;
     }
 
+    // Finalise incoming links once, after all crawl passes have populated the
+    // shared tracking Map. Doing this inside crawlPages would discard earlier
+    // passes' data, because the discovered-URL pass would reset the result. The
+    // persisted incomingLinks map is the authoritative source the report reads.
+    crawlerEngine.finalizeIncomingLinks(results, incomingLinksTracking);
+
     // Identify orphaned pages
     AuditOrchestrator.#reportOrphanedPages(results, saveError);
+
+    // Reconcile sitemap URLs against crawl status codes (A1.4).
+    AuditOrchestrator.#reconcileSitemapStatusCodes(results, saveError);
+
+    // Per-URL PSI lab data for representative pages (A4). No-op when --perf is
+    // off, evidence capture is disabled, or no pages were sampled.
+    if (crawlerEngine.capturePSIForSampled) {
+      try {
+        await crawlerEngine.capturePSIForSampled();
+      } catch (error: unknown) {
+        console.warn(`⚠️  PSI lab capture failed: ${(error as Error).message}`);
+      }
+    }
 
     // Write failed pages file asynchronously to avoid blocking event loop
     if (failedPages.length) {
@@ -356,6 +380,88 @@ class AuditOrchestrator {
   }
 
   /**
+   * Reconcile sitemap URLs against crawl status codes.
+   * Emits one aggregated finding per outcome bucket (4xx, 5xx, 3xx, not-crawled).
+   * @private
+   */
+  static #reconcileSitemapStatusCodes(results: AnalyzeContext['results'], saveError: SaveErrorFn) {
+    const sitemapUrls = Object.keys(results.sitemaps.urls);
+    if (sitemapUrls.length === 0) return;
+
+    const buckets = {
+      redirect: [] as string[], // 3xx
+      notFound: [] as string[], // 4xx
+      serverError: [] as string[], // 5xx
+      notCrawled: [] as string[], // never made it into pageData.pages or no status
+    };
+
+    for (const url of sitemapUrls) {
+      const page = results.pageData.pages[url];
+      const status = page?.statusCode ?? page?.status;
+      if (!status || typeof status !== 'number') {
+        buckets.notCrawled.push(url);
+        continue;
+      }
+      if (status >= 200 && status < 300) continue;
+      if (status >= 300 && status < 400) buckets.redirect.push(url);
+      else if (status >= 400 && status < 500) buckets.notFound.push(url);
+      else if (status >= 500) buckets.serverError.push(url);
+    }
+
+    const formatExamples = (urls: string[], limit = 5) => {
+      const list = urls.slice(0, limit).map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`).join('');
+      const more = urls.length > limit ? ` (showing ${limit} of ${urls.length})` : '';
+      return { list, more };
+    };
+
+    if (buckets.notFound.length > 0) {
+      const { list, more } = formatExamples(buckets.notFound);
+      saveError(
+        `Sitemap contains URLs that return 4xx`,
+        `${buckets.notFound.length} URL(s) in the sitemap return a 4xx status${more}. The sitemap should not include broken pages — it wastes crawl budget and signals low quality:<ul>${list}</ul>`,
+        SEVERITY.HIGH,
+      );
+    }
+
+    if (buckets.serverError.length > 0) {
+      const { list, more } = formatExamples(buckets.serverError);
+      saveError(
+        `Sitemap contains URLs that return 5xx`,
+        `${buckets.serverError.length} URL(s) in the sitemap return a 5xx status${more}. Fix the underlying server errors or remove these URLs from the sitemap:<ul>${list}</ul>`,
+        SEVERITY.HIGH,
+      );
+    }
+
+    if (buckets.redirect.length > 0) {
+      const { list, more } = formatExamples(buckets.redirect);
+      saveError(
+        `Sitemap contains URLs that redirect`,
+        `${buckets.redirect.length} URL(s) in the sitemap return a 3xx redirect${more}. Sitemap entries should be the final canonical URLs:<ul>${list}</ul>`,
+        SEVERITY.MEDIUM,
+      );
+    }
+
+    if (buckets.notCrawled.length > 0) {
+      const { list, more } = formatExamples(buckets.notCrawled);
+      saveError(
+        `Sitemap URLs were not successfully crawled`,
+        `${buckets.notCrawled.length} URL(s) from the sitemap were not crawled (network error, timeout, or skipped)${more}. These may need a re-run or investigation:<ul>${list}</ul>`,
+        SEVERITY.LOW,
+      );
+    }
+
+    const ok =
+      sitemapUrls.length -
+      buckets.notFound.length -
+      buckets.serverError.length -
+      buckets.redirect.length -
+      buckets.notCrawled.length;
+    console.log(
+      `Sitemap reconciliation: ${ok}/${sitemapUrls.length} OK, ${buckets.notFound.length} 4xx, ${buckets.serverError.length} 5xx, ${buckets.redirect.length} 3xx, ${buckets.notCrawled.length} not-crawled`,
+    );
+  }
+
+  /**
    * Report orphaned pages (pages without incoming links)
    * @private
    */
@@ -392,6 +498,7 @@ class AuditOrchestrator {
     origin: string,
     isMultiLang: boolean,
     saveError: SaveErrorFn,
+    sitemapUrls: Record<string, unknown> = {},
   ) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
@@ -415,7 +522,7 @@ class AuditOrchestrator {
       },
       {
         name: 'Indexability & Crawlability',
-        run: () => IndexabilityValidator.validateIndexabilityCrawlability(pageData.pages),
+        run: () => IndexabilityValidator.validateIndexabilityCrawlability(pageData.pages, sitemapUrls),
       },
       {
         name: 'Link Structure',
@@ -468,6 +575,13 @@ class AuditOrchestrator {
       {
         name: 'Pagination SEO (Site-Wide)',
         run: () => PaginationAnalyzer.analyzeSiteWide(pageData.pages),
+      },
+      {
+        name: 'Broken Pagination (Site-Wide)',
+        run: () =>
+          BrokenPaginationAnalyzer.analyzeSiteWide(pageData.pages, {
+            truncatedSeries: pageData.truncatedPaginationSeries,
+          }),
       },
       {
         name: 'Media SEO (Site-Wide)',

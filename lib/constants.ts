@@ -39,6 +39,19 @@ export const CRAWL_SETTINGS = {
   // for absurd N, but every page beyond the real last renders an empty listing
   // (status 200, no "not found" text) — so neither hard nor soft 404 detection fires.
   MAX_PAGINATED_URLS_PER_SERIES: 20,
+  // Broken-pagination (infinite "next") detection.
+  // Why: a "next" link that keeps returning HTTP 200 empty/duplicate listings
+  // past the real last page makes crawlers follow it indefinitely, wasting
+  // crawl budget. We flag a series once its trailing pages look broken.
+  // Minimum number of contiguous broken trailing pages before we flag a series.
+  BROKEN_PAGINATION_MIN_TAIL: 2,
+  // Word count at/below which a listing page counts as "empty/thin".
+  BROKEN_PAGINATION_THIN_WORDS: 50,
+  // Active JS-"next" probe: max clicks to follow, total time budget, and the
+  // max number of distinct series probed per audit (keeps cost bounded).
+  BROKEN_PAGINATION_MAX_PROBE_CLICKS: 3,
+  BROKEN_PAGINATION_PROBE_TIMEOUT_MS: 6000,
+  BROKEN_PAGINATION_MAX_PROBES: 5,
   BACKOFF_RESET_TIMEOUT_MS: 300000,
   BACKOFF_BASE_DELAY_MS: 1000,
   BACKOFF_MAX_DELAY_MS: 30000,
@@ -59,6 +72,12 @@ export const VIEWPORT = {
   WIDTH: 414,
   HEIGHT: 896,
   DEVICE_SCALE_FACTOR: 1,
+} as const;
+
+/** Desktop viewport used for representative-page evidence captures. */
+export const DESKTOP_VIEWPORT = {
+  WIDTH: 1280,
+  HEIGHT: 800,
 } as const;
 
 // Performance and SEO thresholds
@@ -142,6 +161,10 @@ export const THRESHOLDS = {
   SSL_EXPIRY_WARNING: 30,
   SSL_EXPIRY_CRITICAL: 7,
 
+  // Cookie lifespan (days). Regulators consider >13 months excessive for
+  // analytics/marketing cookies; we use 365 as a round, defensible threshold.
+  COOKIE_LIFESPAN_WARNING_DAYS: 365,
+
   // Above-Fold / Font / Third-Party (bytes)
   ABOVE_FOLD_IMAGE_SIZE: 500_000,
   ABOVE_FOLD_IMAGE_AVG: 300_000,
@@ -185,6 +208,15 @@ export const SCORING = {
     accessibility: 0.15,
     security: 0.1,
   } as Record<string, number>,
+
+  /**
+   * Overall blends the weighted mean with the WORST category score so a
+   * failing category (e.g. SEO 30, Security 29) can't be masked by strong
+   * ones: overall = mean·OVERALL_MEAN_WEIGHT + min·(1 − OVERALL_MEAN_WEIGHT).
+   * A pure mean reported siro.ai (SEO 30 / Sec 29 / rest ~94) as a reassuring
+   * 69; this blend pulls it down to ~51, which is honest for an audit.
+   */
+  OVERALL_MEAN_WEIGHT: 0.55,
 
   /**
    * Per-metric weights for the Performance composite (Core Web Vitals + lab).

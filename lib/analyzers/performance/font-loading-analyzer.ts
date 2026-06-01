@@ -154,6 +154,24 @@ class FontLoadingAnalyzer {
       });
     }
 
+    // Legacy woff format mixed with woff2. woff2 is ~30% smaller; serving woff
+    // alongside woff2 wastes bandwidth. Only flag when a non-trivial share of
+    // fonts is legacy.
+    const legacyFonts = fontData.fonts.filter(
+      (f) => f.format === 'woff' || f.format === 'truetype' || f.format === 'opentype' || f.format === 'embedded-opentype',
+    );
+    if (fontData.fonts.length >= 2 && legacyFonts.length > 0 && legacyFonts.length / fontData.fonts.length >= 0.25) {
+      const examples = legacyFonts
+        .slice(0, 3)
+        .map((f) => `${f.url.substring(f.url.lastIndexOf('/') + 1)} (${f.format})`)
+        .join(', ');
+      warnings.push({
+        message: 'Fonts served in older formats instead of WOFF2',
+        detail: `<a href="${url}">${url}</a>: ${legacyFonts.length} of ${fontData.fonts.length} fonts are in legacy formats (woff/ttf/otf/eot). woff2 is ~30% smaller and supported by every modern browser. Examples: ${examples}`,
+        severity: SEVERITY.LOW,
+      });
+    }
+
     return { issues, warnings, fontData };
   }
 

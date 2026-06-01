@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList, calcPercent, escapeHtml } from '../../utils';
+import { formatUrlList, calcPercent, escapeHtml, normalizeUrlForComparison } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -34,6 +34,15 @@ class IndexabilityValidator {
     };
 
     const issues: Issue[] = [];
+
+    // Normalized sitemap membership test. Sitemap entries and crawled page
+    // keys can differ only by a trailing slash (or hash); comparing raw strings
+    // wrongly reports every page as "missing from sitemap". An empty sitemap
+    // map (e.g. caller didn't supply one) disables the not-in-sitemap report
+    // rather than flagging the whole site.
+    const sitemapSet = new Set(Object.keys(sitemapUrls).map(normalizeUrlForComparison));
+    const haveSitemap = sitemapSet.size > 0;
+    const inSitemap = (u: string): boolean => sitemapSet.has(normalizeUrlForComparison(u));
 
     // Analyze each page
     for (const url in allPages) {
@@ -113,7 +122,7 @@ class IndexabilityValidator {
     console.log(`Non-indexable: ${stats.nonIndexable} pages`);
 
     // Report 1: Pages with noindex in sitemap (critical issue)
-    const noindexInSitemap = stats.noindexPages.filter((p) => sitemapUrls[p.url]);
+    const noindexInSitemap = stats.noindexPages.filter((p) => inSitemap(p.url));
 
     if (noindexInSitemap.length > 0) {
       const urlList = noindexInSitemap
@@ -129,12 +138,15 @@ class IndexabilityValidator {
       });
     }
 
-    // Report 2: Indexable pages not in sitemap
+    // Report 2: Indexable pages not in sitemap. Skipped entirely when no
+    // sitemap was supplied — otherwise we'd report 100% of pages as missing.
     let indexableNotInSitemap = 0;
-    for (const url in allPages) {
-      const page = allPages[url];
-      if (page.indexability?.isIndexable && !sitemapUrls[url]) {
-        indexableNotInSitemap++;
+    if (haveSitemap) {
+      for (const url in allPages) {
+        const page = allPages[url];
+        if (page.indexability?.isIndexable && !inSitemap(url)) {
+          indexableNotInSitemap++;
+        }
       }
     }
 

@@ -302,10 +302,12 @@ function getScripts(data: ReportSectionData) {
     };
   }
 
-  // Limit incoming links data to first 10 per page
+  // Limit incoming links data per page (bounded to keep the HTML payload sane;
+  // the modal notes when the list is truncated against the true count).
+  const INCOMING_LINKS_MODAL_LIMIT = 50;
   const limitedIncomingLinks: Record<string, string[]> = {};
   for (const [url, links] of Object.entries(pageData.incomingLinks ?? {}) as [string, string[]][]) {
-    limitedIncomingLinks[url] = (links || []).slice(0, 10);
+    limitedIncomingLinks[url] = (links || []).slice(0, INCOMING_LINKS_MODAL_LIMIT);
   }
 
   return `
@@ -763,8 +765,11 @@ function getScripts(data: ReportSectionData) {
               }
           });
 
-          // Add click handlers to pages table cells with title attribute (not other tables)
-          document.querySelectorAll('#pagesTable td[title]:not([title=""])').forEach(cell => {
+          // Add click handlers to pages table cells with title attribute (not other tables).
+          // Exclude the incoming-links cell — it has its own handler that lists the
+          // actual links; the generic one would otherwise show its tooltip text
+          // ("Click to see N incoming link(s)") as the modal body.
+          document.querySelectorAll('#pagesTable td[title]:not([title=""]):not(.incoming-links-cell)').forEach(cell => {
               cell.addEventListener('click', function(e) {
                   // Don't open modal if clicking a link
                   if (e.target.tagName === 'A') return;
@@ -833,10 +838,16 @@ function getScripts(data: ReportSectionData) {
                       return;
                   }
 
+                  // True total comes from the cell's data-count (the stored list
+                  // may be truncated for payload size).
+                  const totalCount = count;
+                  const shown = incomingLinks.length;
+
                   // Create formatted list of incoming links as HTML
                   let html = '<div class="metric-section">';
                   html += '<h4>Pages Linking Here</h4>';
-                  html += '<p>' + incomingLinks.length + ' page(s) link to this URL:</p>';
+                  html += '<p>' + totalCount + ' page(s) link to this URL'
+                      + (shown < totalCount ? ' (showing first ' + shown + ')' : '') + ':</p>';
                   html += '<div style="margin-top: 12px; max-height: 400px; overflow-y: auto;">';
                   incomingLinks.forEach((link, index) => {
                       html += '<div style="padding: 8px; margin: 4px 0; background: var(--color-bg-page); border-radius: var(--radius-sm); font-size: var(--font-size-xs); word-break: break-all;">';
@@ -847,7 +858,7 @@ function getScripts(data: ReportSectionData) {
                   html += '</div>';
                   html += '</div>';
 
-                  showModal('Incoming Links (' + incomingLinks.length + ')', pageUrl, html, true);
+                  showModal('Incoming Links (' + totalCount + ')', pageUrl, html, true);
               });
           });
       })();

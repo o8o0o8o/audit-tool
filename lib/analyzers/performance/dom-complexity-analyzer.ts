@@ -16,7 +16,7 @@ const THRESHOLDS = {
 };
 
 class DOMComplexityAnalyzer {
-  static async analyze(chromePage: ChromePage, _url: string) {
+  static async analyze(chromePage: ChromePage, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -127,11 +127,16 @@ class DOMComplexityAnalyzer {
       return { issues, warnings, info };
     }
 
-    // Report issues based on Lighthouse thresholds
+    // Report issues based on Lighthouse thresholds. Messages are kept stable
+    // (the page-specific count lives in the detail, not the title) so the same
+    // finding across pages aggregates into one entry with a correct count and
+    // page examples — instead of fragmenting into "(312 elements)", "(287
+    // elements)", … one row per page.
+    const pageRef = `<a href="${url}">${url}</a>`;
     if (info.totalNodes > THRESHOLDS.TOTAL_NODES_FAILURE) {
       issues.push({
-        message: `Excessive DOM size (${info.totalNodes} elements)`,
-        detail: `Page has ${info.totalNodes} DOM elements (Lighthouse threshold: ${THRESHOLDS.TOTAL_NODES_FAILURE}). Large DOMs increase memory usage, slow style calculations, and cause layout thrashing. Most common elements: ${Object.entries(
+        message: `Excessive DOM size`,
+        detail: `${pageRef} has ${info.totalNodes} DOM elements (Lighthouse threshold: ${THRESHOLDS.TOTAL_NODES_FAILURE}). Large DOMs increase memory usage, slow style calculations, and cause layout thrashing. Most common elements: ${Object.entries(
           info.elementCounts,
         )
           .slice(0, 5)
@@ -141,24 +146,24 @@ class DOMComplexityAnalyzer {
       });
     } else if (info.totalNodes > THRESHOLDS.TOTAL_NODES_WARNING) {
       warnings.push({
-        message: `Large DOM size (${info.totalNodes} elements)`,
-        detail: `Page has ${info.totalNodes} DOM elements (warning threshold: ${THRESHOLDS.TOTAL_NODES_WARNING}). Consider simplifying the page structure.`,
+        message: `Large DOM size`,
+        detail: `${pageRef} has ${info.totalNodes} DOM elements (warning threshold: ${THRESHOLDS.TOTAL_NODES_WARNING}). Consider simplifying the page structure.`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     if (info.maxDepth > THRESHOLDS.MAX_DEPTH_WARNING) {
       warnings.push({
-        message: `Deep DOM nesting (${info.maxDepth} levels)`,
-        detail: `Maximum DOM depth is ${info.maxDepth} levels (threshold: ${THRESHOLDS.MAX_DEPTH_WARNING}). Deepest path: ${info.deepestElement}. Deep nesting increases selector matching time and layout costs.`,
+        message: `Deep DOM nesting`,
+        detail: `${pageRef} has a maximum DOM depth of ${info.maxDepth} levels (threshold: ${THRESHOLDS.MAX_DEPTH_WARNING}). Deepest path: ${info.deepestElement}. Deep nesting increases selector matching time and layout costs.`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     if (info.maxChildren > THRESHOLDS.MAX_CHILDREN_WARNING) {
       warnings.push({
-        message: `Element with too many children (${info.maxChildren})`,
-        detail: `Element "${info.widestElement}" has ${info.maxChildren} child elements (threshold: ${THRESHOLDS.MAX_CHILDREN_WARNING}). Consider virtualization or pagination for long lists.`,
+        message: `Element with too many children`,
+        detail: `${pageRef}: element "${info.widestElement}" has ${info.maxChildren} child elements (threshold: ${THRESHOLDS.MAX_CHILDREN_WARNING}). Consider virtualization or pagination for long lists.`,
         severity: SEVERITY.MEDIUM,
       });
     }

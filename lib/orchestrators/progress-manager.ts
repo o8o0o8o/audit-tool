@@ -4,6 +4,8 @@
  * Uses multi-file format: manifest + metadata + analysis + page batches
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { ErrorAggregator } from '../utils/error-aggregator';
 import type { PageInfo } from '../types';
 import { formatBytes } from '../utils';
@@ -550,6 +552,11 @@ class ProgressManager {
           urls: b.urls,
         })),
       },
+
+      // Index of per-page evidence captured for representative pages.
+      // Built by walking <runDir>/evidence/<safe-filename>/ and reading the
+      // self-describing _meta.json each directory contains.
+      evidence: ProgressManager.#indexEvidenceDir(path.join(this.fileManager.runDir, 'evidence')),
     };
 
     this.fileManager.writeManifest(manifest);
@@ -979,6 +986,56 @@ class ProgressManager {
     }
 
     return page;
+  }
+
+  /**
+   * Walk an evidence directory and build a manifest index.
+   * Returns a map keyed by the per-page subdirectory name, each entry holding
+   * the source URL (read from _meta.json) and the list of evidence files.
+   * Returns null when the directory doesn't exist or contains no pages.
+   * @private
+   */
+  static #indexEvidenceDir(evidenceDir: string): null | Record<string, { url: string | null; files: string[] }> {
+    if (!fs.existsSync(evidenceDir)) return null;
+
+    let pageDirs: string[];
+    try {
+      pageDirs = fs
+        .readdirSync(evidenceDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      return null;
+    }
+
+    if (pageDirs.length === 0) return null;
+
+    const index: Record<string, { url: string | null; files: string[] }> = {};
+    for (const dirName of pageDirs) {
+      const pageDir = path.join(evidenceDir, dirName);
+      let files: string[];
+      try {
+        files = fs
+          .readdirSync(pageDir, { withFileTypes: true })
+          .filter((d) => d.isFile() && d.name !== '_meta.json')
+          .map((d) => d.name)
+          .sort();
+      } catch {
+        continue;
+      }
+
+      let url: string | null = null;
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(pageDir, '_meta.json'), 'utf8')) as { url?: string };
+        url = meta.url ?? null;
+      } catch {
+        // _meta.json missing or unreadable — index the files anyway
+      }
+
+      index[dirName] = { url, files };
+    }
+
+    return Object.keys(index).length > 0 ? index : null;
   }
 }
 

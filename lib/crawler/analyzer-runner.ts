@@ -463,6 +463,23 @@ export async function runAnalyzers(
   pageData.soft404 = soft404Result.soft404Data;
   reportIssues(soft404Result, reportIssue);
 
+  // Active JS-"next" pagination probe. Decoupled from the Group-1 timeout so it
+  // never eats that budget; uses its own isolated page. Bounded per-audit by
+  // PaginationAnalyzer's probe budget. Only runs for JS-driven "next" controls
+  // (static-href series are covered post-crawl by BrokenPaginationAnalyzer).
+  if (pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
+    const probeResult = await withTimeout(
+      PaginationAnalyzer.probeJsNext(chromePage, url),
+      CRAWL_SETTINGS.BROKEN_PAGINATION_PROBE_TIMEOUT_MS + 2000,
+      `Pagination probe timeout for ${url}`,
+    ).catch((e) => {
+      if (options.verbose) console.warn(`[pagination-probe] failed for ${url}: ${e instanceof Error ? e.message : e}`);
+      return { nextProbe: null, issues: [], warnings: [] };
+    });
+    pageData.paginationData.nextProbe = probeResult.nextProbe;
+    reportIssues(probeResult, reportIssue);
+  }
+
   // Synchronous analyzers - run in parallel since they only read pageData
   // Using Promise.allSettled to prevent single analyzer failure from crashing the crawl
   const group2Fallbacks = [

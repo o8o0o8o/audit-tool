@@ -9,6 +9,7 @@ import { FileManager } from '../storage/file-manager';
 import { HistoryManager } from '../../historyManager';
 import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyzer';
 import { PageMatcher } from '../comparison/page-matcher';
+import { normalizeUrl } from '../utils';
 import type { PageInfo, PageData, AnalysisDetail, FailedBatch, ComparisonData } from '../types';
 
 class ReportDataProcessor {
@@ -137,6 +138,12 @@ class ReportDataProcessor {
       console.debug('Could not load repo analysis:', (e as Error).message);
     }
 
+    // Derive per-page incoming-link counts from the authoritative map. The
+    // per-page incomingLinksCount field cannot be persisted in the batch files
+    // (pages are streamed to disk and evicted from memory before crawl-wide
+    // incoming-link totals are known), so the report must compute it here.
+    ReportDataProcessor.#populateIncomingLinksCounts(pages, incomingLinks);
+
     // Reconstruct the data structure expected by report generators
     return {
       robots: metadata.robots,
@@ -160,6 +167,26 @@ class ReportDataProcessor {
         summary: analysis.summary,
       },
     };
+  }
+
+  /**
+   * Populate `incomingLinksCount` / `hasIncomingLinks` on each page from the
+   * authoritative incoming-links map. The map is keyed by normalised target
+   * URLs, so page URLs are normalised before lookup (with a raw-key fallback
+   * for already-normalised keys). Mutates the pages object in place.
+   * @private
+   */
+  static #populateIncomingLinksCounts(
+    pages: Record<string, PageInfo>,
+    incomingLinks: Record<string, string[] | number> | undefined,
+  ) {
+    if (!incomingLinks || !pages) return;
+    for (const url in pages) {
+      const entry = incomingLinks[url] ?? incomingLinks[normalizeUrl(url)];
+      const count = Array.isArray(entry) ? entry.length : typeof entry === 'number' ? entry : 0;
+      pages[url].incomingLinksCount = count;
+      pages[url].hasIncomingLinks = count > 0;
+    }
   }
 
   /**
@@ -195,6 +222,12 @@ class ReportDataProcessor {
       }
 
       console.log(`✓ All archived pages loaded. Total pages: ${Object.keys(jsonData.pageData.pages).length}\n`);
+    }
+
+    // Derive per-page incoming-link counts from the authoritative map (see the
+    // multi-file path for rationale).
+    if (jsonData.pageData?.pages) {
+      ReportDataProcessor.#populateIncomingLinksCounts(jsonData.pageData.pages, jsonData.pageData.incomingLinks);
     }
 
     return jsonData;

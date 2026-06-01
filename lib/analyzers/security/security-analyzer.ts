@@ -33,12 +33,16 @@ class SecurityAnalyzer {
     // https://github.com/mozilla/http-observatory/blob/main/httpobs/docs/scoring.md
     const headers = responseHeaders || {};
 
+    // Calibrated so a public marketing site shipping HTTPS + no mixed content
+    // can land in the 60-70 range even if it ships none of these
+    // defense-in-depth headers. CSP / HSTS / X-Frame are still the biggest
+    // signals, but their absence isn't a 100→25 cliff.
     const securityHeaderDeductions: Array<{ header: string; name: string; deduction: number }> = [
-      { header: 'content-security-policy', name: 'Content-Security-Policy', deduction: 25 },
-      { header: 'strict-transport-security', name: 'Strict-Transport-Security', deduction: 20 },
-      { header: 'x-frame-options', name: 'X-Frame-Options', deduction: 20 },
-      { header: 'referrer-policy', name: 'Referrer-Policy', deduction: 5 },
-      { header: 'x-content-type-options', name: 'X-Content-Type-Options', deduction: 5 },
+      { header: 'content-security-policy', name: 'Content-Security-Policy', deduction: 10 },
+      { header: 'strict-transport-security', name: 'Strict-Transport-Security', deduction: 10 },
+      { header: 'x-frame-options', name: 'X-Frame-Options', deduction: 10 },
+      { header: 'referrer-policy', name: 'Referrer-Policy', deduction: 3 },
+      { header: 'x-content-type-options', name: 'X-Content-Type-Options', deduction: 3 },
     ];
 
     let headerDeductionTotal = 0;
@@ -133,14 +137,23 @@ class SecurityAnalyzer {
     // Per-header deduction is summed above; cookies/mixed-content/CSRF follow the
     // same rubric. Inline scripts are kept as a soft signal (Observatory doesn't
     // score them directly).
+    // Caps on stacking deductions: a site with N third-party analytics
+    // cookies missing `Secure` isn't N times less secure than a site with
+    // one such cookie. Same logic for SameSite issues and forms-without-CSRF.
+    const insecureCookieDeduction = Math.min(securityIssues.insecureCookies * 3, 15);
+    const sameSiteDeduction = Math.min(securityIssues.sameSiteIssues * 5, 15);
+    const csrfDeduction = Math.min(securityIssues.formsWithoutCSRF * 5, 15);
+
     let score = 100;
     score -= isHttps ? 0 : 50; // Observatory: HTTPS not in use → severe penalty
     score -= headerDeductionTotal;
     score -= Math.min(securityIssues.mixedContent, 1) * 20; // any mixed content → -20
-    score -= securityIssues.insecureCookies * 5;
-    score -= securityIssues.sameSiteIssues * 10; // SameSite=None+sensitive or without Secure
-    score -= securityIssues.formsWithoutCSRF * 5;
-    score -= Math.min(securityIssues.inlineScripts, 10) * 2;
+    score -= insecureCookieDeduction;
+    score -= sameSiteDeduction;
+    score -= csrfDeduction;
+    // Inline scripts: Observatory does NOT score these directly, so keep the
+    // penalty token (max −5) — enough to nudge, not enough to tank a category.
+    score -= Math.min(securityIssues.inlineScripts, 5) * 1;
     securityIssues.securityScore = Math.max(0, score);
 
     return securityIssues;

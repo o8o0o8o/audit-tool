@@ -1,6 +1,17 @@
-# SEO Audit Tool
+# Audit Tool
 
-An automated SEO audit tool that analyzes websites for SEO compliance, performance metrics, and best practices.
+Automated website audit. Crawls a site, runs ~50 SEO / performance / accessibility / security / privacy analyzers, captures evidence for representative pages (screenshots, axe-core, network logs, Lighthouse scores), and produces a curated PDF report styled after the audits a human consultant would write.
+
+## Pipeline
+
+```
+URL ──▶ Phase 1: mechanical crawl ──▶ artifacts/ ──▶ Phase 2: curated PDF
+                                                    (optional LLM narrative)
+```
+
+**Phase 1** is fully deterministic — Playwright crawl + analyzers + evidence capture for sampled pages. No LLM, no judgement calls.
+
+**Phase 2** consumes the Phase 1 artifacts and produces `audit-report.pdf` in the human-audit style: cover, summary with Top 3 Priority Issues + Quick Wins + Long-term Recommendations, six sections (Performance / SEO / Privacy / Accessibility / UX / Technical), and an appendix with screenshots + PSI Lighthouse scores per representative page. Template-driven by default; opt into Claude prose with `--llm-narrative`.
 
 ## Installation
 
@@ -9,59 +20,141 @@ yarn
 npx playwright install
 ```
 
-## Usage
+## Quick start
 
-### Basic Audit
+### Minimal audit
 
 ```bash
 npx tsx start.ts --origin=https://example.com
 ```
 
-### With Options
+Output: `audit-results/example.com/<timestamp>/audit-report.pdf`
+
+### Full audit (recommended)
 
 ```bash
-# Enable performance metrics collection (LCP, CLS, TTFB)
-npx tsx start.ts --origin=https://example.com --perf
+export ANTHROPIC_API_KEY=sk-ant-...   # required only for --llm-narrative
+export CRUX_API_KEY=AIza...           # optional — unblocks PSI rate limits
 
-# Resume from saved progress
-npx tsx start.ts --origin=https://example.com --proceed
-
-# Save HTML snapshots of each page
-npx tsx start.ts --origin=https://example.com --save-html
-
-# Set parallel crawling (faster audits)
-npx tsx start.ts --origin=https://example.com --concurrency=10
-
-# Combine options
-npx tsx start.ts --origin=https://example.com --perf --save-html --proceed --concurrency=10
+npx tsx start.ts \
+  --origin=https://example.com \
+  --perf \
+  --repo=/path/to/local/source \
+  --llm-narrative
 ```
 
-**Options:**
+This runs the whole flow: crawl + Lighthouse field data + PSI lab scores per representative page + source-code analysis + Claude-generated narrative prose.
 
-- `--origin=<url>` (required) - Website URL to audit
-- `--perf` (optional) - Enable performance metrics collection (LCP, CLS, TTFB)
-- `--proceed` (optional) - Resume from saved progress after interruption
-- `--save-html` (optional) - Save full HTML snapshots of each crawled page
-- `--concurrency=<number>` (optional) - Number of pages to crawl in parallel (1-20, default: 5)
-- `--config=<path>` (optional) - Path to custom config file
-- `--init-config` (optional) - Generate sample `.seoauditrc` config file
+## CLI flags
 
-**Notes:**
+| Flag | Default | Purpose |
+|---|---|---|
+| `--origin=<url>` | (required) | Website to audit |
+| `--perf` | off | Capture Core Web Vitals + per-URL PSI Lighthouse scores (mobile + desktop) for sampled pages |
+| `--repo=<path>` | off | Run source-code analysis against a local repo (framework detection, Next.js anti-patterns, package.json hygiene) |
+| `--llm-narrative` | off | Use Claude to rewrite the per-section "Analysis" paragraphs. Requires `ANTHROPIC_API_KEY`. Disk-cached so re-renders are free. ~$0.02–$0.03 per audit at Sonnet pricing. |
+| `--llm-findings` | off | Use Claude (vision + signals) to find emergent functional/UX bugs the rule-based analyzers miss — dead buttons, CTAs to 404s, never-terminating pagination, forms posting nowhere, visually broken layout. Reasons over each representative page's screenshot + structured signals; findings merge into their section tagged "🔍 AI-discovered". Requires `ANTHROPIC_API_KEY`. Disk-cached. ~$0.02–$0.05 per sampled page. |
+| `--concurrency=<n>` | 5 | Parallel page workers (1–20) |
+| `--limit=<n>` | none | Stop after N pages (useful for large sites) |
+| `--save-html` | off | Save full HTML snapshot of every crawled page |
+| `--evidence-cap=<n>` | 10 | Cap on representative-page samples (1–100) |
+| `--no-evidence` | — | Skip the evidence pass entirely (no screenshots, no axe-core, no PSI) |
+| `--no-phase2` | — | Skip curated PDF generation |
+| `--proceed` | — | Resume from the most recent checkpoint |
+| `--exclude=<pattern>` | none | Skip URLs matching a glob |
+| `--config=<path>` | `.seoauditrc` | Custom config file |
+| `--init-config` | — | Write a sample `.seoauditrc` and exit |
+| `--ci[=<threshold>]` | — | Exit code 1 if overall score < threshold (default 70) |
+| `--json` | — | Output a machine-readable summary to stdout |
+| `--verbose` / `-v` | — | Verbose logging |
 
-- Performance metrics collection is disabled by default for faster audits
-- HTML snapshots are not saved by default to reduce disk usage
-- Higher concurrency uses more system resources but completes audits faster
+## Output layout
 
-### Configuration File
+```
+audit-results/
+└── example.com/
+    ├── audit-history.json.gz          # snapshots for trend tracking
+    └── <YYYY-MM-DD_HH-MM-SS>/
+        ├── audit-report.pdf            # Phase 2 curated PDF
+        ├── audit-report.md             # source markdown
+        ├── audit-report.html           # styled HTML (renderer input)
+        ├── example.com.html            # Phase 1 engineer-facing data dump
+        ├── manifest.json.gz            # index + evidence section
+        ├── analysis.json.gz            # site-wide findings + summary
+        ├── metadata.json.gz            # robots / sitemap / CrUX / timing
+        ├── incoming-links.json.gz
+        ├── repo-analysis.json.gz       # only with --repo
+        ├── pages/                      # per-batch raw page JSON
+        └── evidence/                   # per-page evidence for sampled URLs
+            └── <safe-filename>/
+                ├── _meta.json
+                ├── screenshot.mobile.png
+                ├── screenshot.desktop.png
+                ├── axe.json
+                ├── requests.json
+                ├── accessibility.json
+                ├── psi.mobile.json     # only with --perf
+                └── psi.desktop.json
+```
 
-Create a `.seoauditrc` file to customize thresholds and settings:
+## What gets checked
+
+**Performance.** Core Web Vitals (LCP / CLS / INP / FCP / TTFB) lab + field, render-blocking resources, font strategy (woff/woff2, font-display, preload coverage), image optimization (srcset correctness, DPR-aware sizing, format), JS/CSS coverage with critical-CSS recommendation, third-party payload, caching.
+
+**SEO.** Meta tags, headings, canonicals, hreflang reciprocity (Google's "must list itself" + fully-qualified URL rules), structured data, sitemap quality (404s, 3xx redirects, `changefreq=always`+`priority=1.0` abuse, trailing-slash duplicates), internal linking, PageRank, broken outbound links, AI search readiness (llms.txt, GPTBot/ClaudeBot rules).
+
+**Privacy / GDPR.** Consent banner detection, tracking scripts before consent, cookie lifespan (>365 days), third-party cookies without consent, privacy policy presence.
+
+**Accessibility.** axe-core 4.x scan on every sampled page + hand-rolled heuristics: ARIA, color contrast, focus states, form labels, semantic landmarks, keyboard navigation, touch targets.
+
+**Security.** HTTPS, CSP, X-Frame-Options, HSTS, mixed content, SRI, cookies, permissions-policy.
+
+**UX / UI.** Responsive layout, mobile viewport, form accessibility, CTA detection.
+
+**Source code (with `--repo`).** Framework + version detection (Next.js / Nuxt / Gatsby / Astro). For Next.js: `cache: "no-store"` fetcher anti-pattern, `ssr: false` dynamic imports of main content, `force-dynamic` exports on static-looking routes, full-lib `lodash` imports, CSS inlined in `_app.tsx`. Package.json: wildcard semver ranges, Next/React major-version mismatch, multiple styling solutions.
+
+**Site-wide.** Duplicate titles/descriptions, near-duplicate content (Jaccard similarity), keyword cannibalisation, orphan pages, content gap analysis, link depth.
+
+## Programmatic usage
+
+```typescript
+import { SEOData } from './lib/seo-data';
+import { runPhase2 } from './lib/phase2/phase2-runner';
+
+const seo = new SEOData('https://example.com', false, true, false, 5, null, {
+  evidence: true,
+  evidenceCap: 10,
+  cruxApiKey: process.env.CRUX_API_KEY ?? null,
+});
+
+await seo.audit();
+
+const pdfPath = await runPhase2(seo.fileManager.resultsDir, {
+  llmNarrative: !!process.env.ANTHROPIC_API_KEY,
+});
+
+console.log('Audit done:', pdfPath);
+```
+
+## Other commands
 
 ```bash
-# Generate sample config
-npx tsx start.ts --init-config
+# Export to CSV
+npx tsx generateCSV.ts audit-results/example.com/<timestamp>/SEOAnalysis__example.com.json.gz
+
+# List audit history for a domain
+npx tsx historyManager.ts list example.com
+
+# Save audit to history
+npx tsx historyManager.ts save audit-results/example.com/<timestamp>/SEOAnalysis__example.com.json.gz
+
+# Compare two audits
+npx tsx generateComparison.ts example.com 0 1
 ```
 
-Example `.seoauditrc`:
+## Configuration file
+
+`--init-config` writes a sample `.seoauditrc`. Override any threshold or crawl setting:
 
 ```json
 {
@@ -70,9 +163,7 @@ Example `.seoauditrc`:
     "LCP": 3000,
     "CLS": 0.15,
     "TITLE_MIN": 40,
-    "TITLE_MAX": 70,
-    "DESCRIPTION_MIN": 100,
-    "DESCRIPTION_MAX": 180
+    "TITLE_MAX": 70
   },
   "crawl": {
     "concurrency": 10,
@@ -82,140 +173,36 @@ Example `.seoauditrc`:
 }
 ```
 
-### Export to CSV
+## Wall time and cost
+
+| Site size | Crawl time | LLM cost (with `--llm-narrative`) |
+|---|---|---|
+| 50 pages | ~5 min | ~$0.03 |
+| 500 pages | ~30 min | ~$0.03 |
+| 5 000 pages | ~3–5 hr | ~$0.03 |
+
+PSI Lighthouse calls dominate wall time when `--perf` is on without a `CRUX_API_KEY` (anonymous rate limit ≈ 1 req/sec). With a key, generous quota (25 000/day).
+
+## Graceful degradation
+
+Every optional step degrades silently if its dependency is unavailable:
+
+- `--llm-narrative` without `ANTHROPIC_API_KEY` → falls back to templated prose with top-3 finding names
+- `--perf` when PSI quota is exhausted → PSI files skipped, audit completes normally
+- `--repo` with an invalid path → repo section omitted
+- `--evidence-cap=N` exceeding what the sampler can find → captures what it can
+
+You always get a PDF.
+
+## Resuming after interruption
+
+If the process crashes or you hit Ctrl-C, `start.ts` auto-restarts up to 3 times with `--proceed`. You can also resume manually:
 
 ```bash
-npx tsx generateCSV.ts audit-results/domain.com/2024-01-15_10-30-00/SEOAnalysis__domain.com.json.gz
+npx tsx start.ts --origin=https://example.com --proceed
 ```
 
-Creates CSV files in `domain.com_csv_exports/`:
-
-- `pages_overview.csv` - All metrics per page
-- `issues_breakdown.csv` - Issues by severity
-- `performance_metrics.csv` - Performance data
-- `quick_wins.csv` - Prioritized action items
-- `summary.csv` - High-level statistics
-
-### Compare Audits
-
-```bash
-# List available audit history
-npx tsx historyManager.ts list domain.com
-
-# Compare two audits (by index from list)
-npx tsx generateComparison.ts domain.com 0 1
-```
-
-Creates `domain.com_comparison_0_vs_1.html` with side-by-side comparison.
-
-### History Management
-
-```bash
-# Save current audit to history
-npx tsx historyManager.ts save audit-results/domain.com/2024-01-15_10-30-00/SEOAnalysis__domain.com.json.gz
-
-# List all audits for a domain
-npx tsx historyManager.ts list domain.com
-
-# Compare two historical audits
-npx tsx historyManager.ts compare domain.com 0 1
-```
-
-### Programmatic Usage
-
-```typescript
-import { SEOData } from './robots';
-
-// Create audit instance
-const seo = new SEOData(
-  'https://example.com', // origin
-  false, // proceed (resume from checkpoint)
-  true, // perf (collect performance metrics)
-  false, // saveHtml (save HTML snapshots)
-  5, // concurrency
-);
-
-// Run audit
-await seo.audit();
-
-// Access results
-console.log(seo.data); // Full results object
-console.log(seo.domainName); // 'example.com'
-console.log(seo.file); // Path to JSON results
-```
-
-## Output Files
-
-All results are stored in `audit-results/domain.com/YYYY-MM-DD_HH-MM-SS/`:
-
-- `SEOAnalysis__domain.com.json.gz` - Audit data (gzip compressed)
-- `domain.com.html` - Interactive HTML report
-- `*__archive_part*.json.gz` - Archive files for large sites (>5000 pages)
-
-Other files:
-
-- `audit-results/domain.com/audit-history.json` - Historical audit snapshots
-- `audit-results/failedPages.json` - Failed URLs list
-- `audit_domain.com/` - HTML snapshots (only with `--save-html`)
-
-## What Gets Checked
-
-### Robots.txt
-
-- Existence and structure
-- Sitemap presence
-- Crawlability rules
-
-### Sitemap
-
-- Duplicate URLs
-- Trailing slash consistency
-- Origin consistency
-- Size limits (50,000 URLs)
-
-### Page Analysis
-
-- Title (presence, uniqueness, length)
-- Meta description (presence, uniqueness, length)
-- Canonical URLs
-- Alternate language links (hreflang)
-- Heading structure (h1-h6)
-- Open Graph and Twitter meta tags
-- Structured data (Schema.org)
-
-### Performance (with `--perf`)
-
-- TTFB (threshold: 800ms)
-- LCP (threshold: 2500ms)
-- CLS (threshold: 0.1)
-- Page size (threshold: 6MB)
-- Request count (threshold: 20)
-
-### Security
-
-- HTTPS enforcement
-- Security headers (CSP, X-Frame-Options, etc.)
-
-### Accessibility
-
-- WCAG 2.1 compliance checks
-- Mobile-friendly viewport
-
-## Space Optimizations
-
-- All JSON files are automatically gzip compressed (70-80% reduction)
-- Incoming links stored as counts, not arrays
-- Automatic archiving for sites with 5000+ pages
-- Backward compatible with legacy uncompressed files
-
-## Large Website Support
-
-For sites with thousands of pages:
-
-- Automatic archiving splits processed pages into separate files
-- Progress files stay manageable (<100MB)
-- Resume with `--proceed` loads all archive files automatically
-- No manual intervention required
+Resume loads checkpoint + archive files automatically.
 
 ## License
 

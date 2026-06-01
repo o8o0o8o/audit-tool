@@ -29,10 +29,12 @@ import type {
   CrawlSinglePageParams,
   ProcessPageDataParams,
   CrawlPageResult,
+  CrawlResults,
 } from './crawler-types';
 
 import { SEVERITY, THRESHOLDS, VIEWPORT, CRAWL_SETTINGS } from '../constants';
 import { analyzeUrlStructure } from '../utils';
+import { computeContentHash } from '../utils/content-hash';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
 import { ProgressReporter } from '../utils/progress-reporter';
@@ -59,9 +61,12 @@ import {
   optimizePageDataMemory,
   saveHtmlSnapshot,
   saveScreenshot,
+  captureRepresentativeEvidence,
   populateIncomingLinksCount,
 } from './page-data-builder';
 import { runAnalyzers, ConsoleErrorAnalyzer, CodeCoverageAnalyzer } from './analyzer-runner';
+import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
+import { RepresentativeSampler } from './representative-sampler';
 
 import type { Issue } from '../types';
 
@@ -70,6 +75,77 @@ class CrawlerEngine {
   #callbacks: CrawlerCallbacks;
   #failureTracker: FailureTracker;
   #backoffState: Map<string, BackoffState>;
+  /** Decides which URLs get full evidence capture (screenshots, HAR). Cap defaults to 10; the constructor overrides with options.evidenceCap when supplied. */
+  #sampler: RepresentativeSampler = new RepresentativeSampler();
+
+  /** URLs the sampler authorised for evidence capture. Read after crawl completes. */
+  getSampledUrls(): string[] {
+    return this.#sampler.getSampledUrls();
+  }
+
+  /**
+   * Call PageSpeed Insights for each sampled URL in both mobile and desktop
+   * strategies, writing the lab summary to `evidence/<page>/psi.<strategy>.json`.
+   *
+   * No-op when `--perf` is off, when no `evidenceDir` is configured, or when
+   * the sampler captured no pages. Failures (network, non-200, throttled) are
+   * swallowed silently so they don't block the audit.
+   */
+  async capturePSIForSampled(): Promise<{ attempted: number; succeeded: number }> {
+    if (!this.#options.perf || !this.#options.evidenceDir) {
+      return { attempted: 0, succeeded: 0 };
+    }
+    const sampled = this.#sampler.getSampledUrls();
+    if (sampled.length === 0) return { attempted: 0, succeeded: 0 };
+
+    const apiKey = process.env.CRUX_API_KEY ?? this.#options.cruxApiKey ?? null;
+    const strategies: Array<'mobile' | 'desktop'> = ['mobile', 'desktop'];
+    const tasks: Array<{ url: string; strategy: 'mobile' | 'desktop' }> = [];
+    for (const url of sampled) for (const strategy of strategies) tasks.push({ url, strategy });
+
+    console.log(`\n📈 Fetching PSI lab scores for ${sampled.length} representative page(s) × 2 strategies…`);
+
+    let attempted = 0;
+    let succeeded = 0;
+    const concurrency = 4;
+    const fs = await import('fs');
+    const path = await import('path');
+    const { createSafeFilename } = await import('../utils');
+    const { CrUXAPI } = await import('./crux-api');
+
+    // Simple worker pool
+    let index = 0;
+    const next = async (): Promise<void> => {
+      while (index < tasks.length) {
+        const task = tasks[index++];
+        attempted++;
+        const summary = await CrUXAPI.fetchPSILabSummary(task.url, { strategy: task.strategy, apiKey });
+        if (summary) {
+          succeeded++;
+          const evidenceDir = this.#options.evidenceDir;
+          if (!evidenceDir) continue;
+          const pageDir = path.join(evidenceDir, createSafeFilename(task.url));
+          try {
+            fs.mkdirSync(pageDir, { recursive: true });
+            // Self-describing meta in case captureRepresentativeEvidence didn't run.
+            const metaPath = path.join(pageDir, '_meta.json');
+            if (!fs.existsSync(metaPath)) {
+              fs.writeFileSync(metaPath, JSON.stringify({ url: task.url, capturedAt: new Date().toISOString() }, null, 2));
+            }
+            fs.writeFileSync(path.join(pageDir, `psi.${task.strategy}.json`), JSON.stringify(summary, null, 2));
+          } catch (error: unknown) {
+            if (this.#options.verbose) {
+              console.error(`Failed to write psi.${task.strategy}.json for ${task.url}: ${(error as Error).message}`);
+            }
+          }
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => next()));
+
+    console.log(`   ✓ PSI lab data captured: ${succeeded}/${attempted} call(s) succeeded`);
+    return { attempted, succeeded };
+  }
 
   /**
    * Create a CrawlerEngine
@@ -109,6 +185,8 @@ class CrawlerEngine {
       verbose: options.verbose || false,
       userAgent: ((config.crawl as Record<string, unknown> | undefined)?.userAgent as string | null) ?? null,
       cruxApiKey: options.cruxApiKey ?? null,
+      evidenceDir: options.evidenceDir,
+      evidenceCap: options.evidenceCap,
       queryParams: options.queryParams ??
         (config.queryParams as unknown as QueryParamConfig | undefined) ?? {
           mode: 'strip_tracking',
@@ -182,6 +260,11 @@ class CrawlerEngine {
 
     // Initialize backoff state per error type
     this.#backoffState = new Map<string, BackoffState>();
+
+    // Override sampler cap when caller supplied one (default 10 is in the sampler)
+    if (typeof options.evidenceCap === 'number' && options.evidenceCap > 0) {
+      this.#sampler = new RepresentativeSampler(options.evidenceCap);
+    }
   }
 
   /**
@@ -425,6 +508,7 @@ class CrawlerEngine {
       const failedPages: string[] = [];
       const discoveredLinksSource = new Map<string, string>();
       const paginationSeriesCounts = new Map<string, number>();
+      PaginationAnalyzer.resetProbeState(); // reset per-audit JS-"next" probe budget
 
       let isMultiLang = false;
       let saveCounter = 0; // Track saves to reduce frequency
@@ -747,51 +831,13 @@ class CrawlerEngine {
         }
       }
 
-      // Final save before converting data structures
+      // Final save of crawled pages for this pass. The incoming-links Map is
+      // intentionally NOT converted here: crawlPages can be invoked more than
+      // once (sitemap pass + discovered-URL pass), and each pass keeps adding
+      // to the same Map. Converting/clearing per pass would discard earlier
+      // passes' data. The orchestrator calls finalizeIncomingLinks() once after
+      // all passes complete.
       await this.#callbacks.saveData();
-
-      // Convert incomingLinksTracking Map to results.pageData.incomingLinks
-      // Process in chunks to prevent memory spikes on large sites
-      const MAX_INCOMING_LINKS = CRAWL_SETTINGS.MAX_INCOMING_LINKS;
-      const CHUNK_SIZE = 1000;
-
-      results.pageData.incomingLinks = {};
-      let processedCount = 0;
-      let skippedCount = 0;
-      let gcCounter = 0;
-
-      // Iterate Map directly instead of copying to array (saves ~2x memory on large sites)
-      for (const [target, sources] of incomingLinksTracking) {
-        if (processedCount >= MAX_INCOMING_LINKS) {
-          skippedCount++;
-          continue;
-        }
-        // Limit sources per target to prevent memory explosion
-        const sourcesArray = Array.from(sources);
-        results.pageData.incomingLinks[target] =
-          sourcesArray.length > CRAWL_SETTINGS.INCOMING_LINKS_PER_TARGET_MAX
-            ? sourcesArray.slice(0, CRAWL_SETTINGS.INCOMING_LINKS_PER_TARGET_MAX)
-            : sourcesArray;
-        processedCount++;
-
-        // Allow garbage collection periodically
-        gcCounter++;
-        if (gcCounter % (CHUNK_SIZE * 10) === 0 && global.gc) {
-          global.gc();
-        }
-      }
-
-      if (skippedCount > 0) {
-        console.log(
-          `  ⚠️  Truncated incoming links: kept ${processedCount}, skipped ${skippedCount} (limit: ${MAX_INCOMING_LINKS})`,
-        );
-      }
-
-      // Clear the tracking map to free memory
-      incomingLinksTracking.clear();
-
-      // After all pages are crawled, populate incoming links count for each page
-      populateIncomingLinksCount(results);
 
       return { alternatesErrors, isMultiLang, failedPages };
     } catch (error: unknown) {
@@ -808,6 +854,61 @@ class CrawlerEngine {
         }
       }
     }
+  }
+
+  /**
+   * Convert the accumulated incoming-links tracking Map into the serialisable
+   * `results.pageData.incomingLinks` object and populate per-page counts.
+   *
+   * Must be called exactly once, after all crawl passes complete. The tracking
+   * Map is keyed by normalised target URLs and accumulates across every
+   * crawlPages() invocation; this method finalises it and frees the Map.
+   */
+  finalizeIncomingLinks(results: CrawlResults, incomingLinksTracking: Map<string, Set<string>>): void {
+    // Process in chunks to prevent memory spikes on large sites
+    const MAX_INCOMING_LINKS = CRAWL_SETTINGS.MAX_INCOMING_LINKS;
+    const CHUNK_SIZE = 1000;
+
+    results.pageData.incomingLinks = {};
+    let processedCount = 0;
+    let skippedCount = 0;
+    let gcCounter = 0;
+
+    // Iterate Map directly instead of copying to array (saves ~2x memory on large sites)
+    for (const [target, sources] of incomingLinksTracking) {
+      if (processedCount >= MAX_INCOMING_LINKS) {
+        skippedCount++;
+        continue;
+      }
+      // Limit sources per target to prevent memory explosion
+      const sourcesArray = Array.from(sources);
+      results.pageData.incomingLinks[target] =
+        sourcesArray.length > CRAWL_SETTINGS.INCOMING_LINKS_PER_TARGET_MAX
+          ? sourcesArray.slice(0, CRAWL_SETTINGS.INCOMING_LINKS_PER_TARGET_MAX)
+          : sourcesArray;
+      processedCount++;
+
+      // Allow garbage collection periodically
+      gcCounter++;
+      if (gcCounter % (CHUNK_SIZE * 10) === 0 && global.gc) {
+        global.gc();
+      }
+    }
+
+    if (skippedCount > 0) {
+      console.log(
+        `  ⚠️  Truncated incoming links: kept ${processedCount}, skipped ${skippedCount} (limit: ${MAX_INCOMING_LINKS})`,
+      );
+    }
+
+    // Clear the tracking map to free memory
+    incomingLinksTracking.clear();
+
+    // Populate incoming-links counts on any pages still in memory. Note: pages
+    // flushed to disk during the crawl are evicted from memory, so the report
+    // derives counts from the persisted incomingLinks map at render time. This
+    // in-memory pass keeps still-resident pages (and orphan detection) correct.
+    populateIncomingLinksCount(results, this.#options.queryParams);
   }
 
   /**
@@ -1093,11 +1194,21 @@ class CrawlerEngine {
     const pageContent = await chromePage.content();
     const parsedPage = parse(pageContent);
 
+    // Stable content hash — used by the comparison classifier to tell apart
+    // "the site changed" from "measurement noise". Normalised so cache-busters,
+    // CSRF tokens, and timestamps don't trigger spurious diffs.
+    pageData.contentHash = computeContentHash(pageContent);
+
     // Save HTML snapshot if enabled
     saveHtmlSnapshot(pageContent, url, this.#options);
 
     // Save viewport screenshot if enabled
     await saveScreenshot(chromePage, url, this.#options);
+
+    // Decide once per page whether this URL gets the full evidence capture
+    // (screenshots, request log, accessibility dump). The actual capture
+    // happens after runAnalyzers so accessibility data is available.
+    const captureEvidence = !!this.#options.evidenceDir && this.#sampler.shouldSample(url);
 
     // Collect links and track incoming links
     const linksResult = collectLinks(
@@ -1148,6 +1259,12 @@ class CrawlerEngine {
         `Some analyzers failed for <a href="${escapeHtml(url)}">${escapeHtml(url)}</a>: ${escapeHtml(err.message)}`,
         SEVERITY.MEDIUM,
       );
+    }
+
+    // Representative-page evidence capture (after analyzers so accessibility
+    // data and the final request log are available).
+    if (captureEvidence) {
+      await captureRepresentativeEvidence(chromePage, url, this.#options, requests, pageData.accessibility);
     }
 
     // Update the consecutive-404 streak using soft-404 detection from analyzers.

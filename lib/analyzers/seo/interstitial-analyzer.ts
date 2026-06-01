@@ -52,6 +52,11 @@ class InterstitialAnalyzer {
             continue;
           }
 
+          // Skip elements that don't intercept interaction (purely decorative overlays)
+          if (style.pointerEvents === 'none') {
+            continue;
+          }
+
           const position = style.position;
           const zIndex = parseInt(style.zIndex, 10) || 0;
 
@@ -61,11 +66,29 @@ class InterstitialAnalyzer {
           }
 
           const rect = el.getBoundingClientRect();
-          const area = rect.width * rect.height;
-          const coveragePercent = (area / viewportArea) * 100;
 
-          // Only flag elements covering >30% of viewport
+          // Measure how much of the VIEWPORT is actually covered, using the
+          // intersection of the element with the viewport. This excludes
+          // off-canvas elements (e.g. mobile menus translated off-screen,
+          // top:-9999px) whose raw width*height is large but visible area is 0.
+          const visibleWidth = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
+          const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+          const visibleArea = visibleWidth * visibleHeight;
+          const coveragePercent = (visibleArea / viewportArea) * 100;
+
+          // Only flag elements covering >30% of the viewport
           if (coveragePercent < 30) continue;
+
+          // Confirm the element actually blocks content: it (or a descendant)
+          // must be the topmost element at the center of its visible region.
+          // This rejects large positioned layout containers that sit beneath
+          // the real content in the stacking/hit-test order.
+          const centerX = Math.min(Math.max((Math.max(rect.left, 0) + Math.min(rect.right, viewportWidth)) / 2, 1), viewportWidth - 1);
+          const centerY = Math.min(Math.max((Math.max(rect.top, 0) + Math.min(rect.bottom, viewportHeight)) / 2, 1), viewportHeight - 1);
+          const topEl = document.elementFromPoint(centerX, centerY);
+          if (!topEl || (topEl !== el && !el.contains(topEl) && !topEl.contains(el))) {
+            continue;
+          }
 
           // Check if it's a cookie banner (acceptable exception)
           const text = (el.textContent || '').toLowerCase();

@@ -276,6 +276,46 @@ class SitemapParser {
       });
     }
 
+    // Check for trailing-slash duplicate pairs (e.g. /foo and /foo/ both present)
+    const slashPairs: Array<{ withSlash: string; withoutSlash: string }> = [];
+    const locSet = new Set(unique);
+    for (const site of withoutTrailingSlash) {
+      if (locSet.has(`${site}/`)) {
+        slashPairs.push({ withSlash: `${site}/`, withoutSlash: site });
+      }
+    }
+    if (slashPairs.length > 0) {
+      const examples = slashPairs
+        .slice(0, 5)
+        .map((p) => `${p.withSlash} & ${p.withoutSlash}`)
+        .join('; ');
+      result.errors.push({
+        message: `Trailing-slash duplicate URL pairs in sitemap ${currentSitemap}`,
+        detail: `${slashPairs.length} URL(s) appear both with and without a trailing slash. Examples: ${examples}`,
+        severity: SEVERITY.MEDIUM,
+      });
+    }
+
+    // Check for changefreq=always + priority=1.0 abuse pattern
+    // Some sitemaps emit these values for every URL, which dilutes the signal to crawlers.
+    let abuseCount = 0;
+    for (const loc of locs) {
+      const u = processedUrls[loc];
+      const changefreq = u.changefreq?.toLowerCase();
+      const priorityNum = u.priority !== undefined ? parseFloat(u.priority) : NaN;
+      if (changefreq === 'always' && priorityNum === 1.0) {
+        abuseCount++;
+      }
+    }
+    // Only flag if the sitemap is non-trivial AND the pattern is pervasive
+    if (locs.length >= 10 && abuseCount / locs.length >= 0.8) {
+      result.errors.push({
+        message: `Excessive use of changefreq=always + priority=1.0 in sitemap ${currentSitemap}`,
+        detail: `${abuseCount} of ${locs.length} URLs use changefreq="always" with priority=1.0. These signals are largely ignored by Google, but emitting them uniformly is a sitemap-hygiene smell. Reserve priority=1.0 for the most important pages and pick a realistic changefreq.`,
+        severity: SEVERITY.LOW,
+      });
+    }
+
     // Store sitemap data
     result.sitemaps[currentSitemap] = {
       total: locs.length,

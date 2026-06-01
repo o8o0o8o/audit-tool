@@ -80,6 +80,7 @@ audit-tool/
 │   │   ├── site-wide/
 │   │   │   ├── analytics-validator.ts       # Cross-site tracking
 │   │   │   ├── content-similarity-analyzer.ts # Near-duplicate content via Jaccard similarity
+│   │   │   ├── broken-pagination-analyzer.ts # Infinite/broken "next" pagination (crawl-budget waste)
 │   │   │   ├── duplicate-checker.ts         # Duplicate content
 │   │   │   ├── indexability-validator.ts    # Site-wide indexability
 │   │   │   ├── international-seo-validator.ts  # Language consistency
@@ -358,10 +359,36 @@ audit-results/
 └── domain.com/
     ├── audit-history.json              # Historical snapshots
     └── YYYY-MM-DD_HH-MM-SS/
-        ├── SEOAnalysis__domain.com.json.gz        # Main results
-        ├── SEOAnalysis__domain.com__archive_part1.json.gz  # Large site archives
-        └── domain.com.html                        # HTML report
+        ├── manifest.json.gz             # Multi-file format index + evidence index
+        ├── metadata.json.gz             # robots, sitemaps, CrUX, timing
+        ├── analysis.json.gz             # Site-wide issues + summary
+        ├── incoming-links.json.gz
+        ├── pages/                       # Per-batch page JSONs
+        ├── audit-report.md               # Phase 2 curated markdown
+        ├── audit-report.html             # Phase 2 styled HTML (renderer input)
+        ├── audit-report.pdf              # Phase 2 final curated PDF
+        ├── evidence/                    # Per-page evidence for sampled URLs
+        │   └── <safe-filename>/
+        │       ├── _meta.json           # { url, capturedAt } — self-describing
+        │       ├── screenshot.mobile.png
+        │       ├── screenshot.desktop.png
+        │       ├── requests.json        # Network log
+        │       ├── accessibility.json   # Heuristic checks
+        │       ├── axe.json             # axe-core 4.x findings
+        │       ├── psi.mobile.json      # PageSpeed Insights lab (when --perf)
+        │       └── psi.desktop.json
+        └── domain.com.html              # HTML report
 ```
+
+**Representative-page sampling.** Evidence is captured only for a small bucketed sample (`/`, `/section`, `/section/*`), capped at 10 pages by default. See `lib/crawler/representative-sampler.ts`. The manifest's `evidence` section indexes which URL → which evidence directory; `null` if no pages were sampled. Use `--no-evidence` to skip capture entirely, or `--evidence-cap=N` to change the limit (1–100).
+
+**PSI lab capture** is gated on `--perf`. Runs mobile + desktop strategies for each sampled URL at concurrency 4. Honours `CRUX_API_KEY` env var; works keyless at reduced rate limits.
+
+**Phase 2 — curated PDF report.** After the crawl, `lib/phase2/phase2-runner.ts` reads the manifest + analysis artifacts, routes findings into sections (Performance / SEO / Privacy / Accessibility / UX / Technical) using keyword categorisation, caps each section at 12 findings, and produces a styled PDF resembling the human audit-report examples. Template-driven by default; add `--no-phase2` to skip. PDF rendering is via Playwright `page.pdf()` with a custom stylesheet in `lib/reports/pdf-renderer.ts`.
+
+**Optional LLM narrative.** `--llm-narrative` rewrites each section's `**Analysis.**` paragraph from generic counts ("26 distinct findings…") into 2–3 sentences anchored in the actual findings list. Requires `ANTHROPIC_API_KEY` env var. Disk-cached per audit so re-runs are free. Falls back to templated prose silently when the key is missing or the call fails. Typical cost: ~$0.02–$0.03 per audit at Sonnet pricing.
+
+**Optional LLM anomaly detection.** `--llm-findings` (`lib/phase2/llm-anomaly.ts`) reasons over each representative page's evidence — the desktop screenshot (vision) plus structured signals (buttons, links + HTTP statuses, forms, pagination state incl. `infiniteScrollDetected`/`totalPages`, failed network requests) — to surface *emergent* functional/UX bugs the deterministic analyzers can't enumerate: dead buttons, CTAs to 404s, never-terminating pagination, forms posting nowhere, visually broken layout, placeholder content. Each finding is merged into its section as a synthetic finding tagged `🔍 AI-discovered` (with an **Evidence** block and the model's recommendation as the **Fix**), never mixed silently with deterministic results. Same client pattern as the narrative pass: dependency-free HTTPS, disk-cached per page (incl. image bytes), gated on `ANTHROPIC_API_KEY`, returns `[]` on any failure or when evidence/screenshots are absent (e.g. `--no-evidence`). Bounded to the representative-page sample; ~$0.02–$0.05 per page.
 
 ### JSON Results Structure
 
@@ -433,9 +460,41 @@ audit-results/
 
 - Duplicate URLs
 - Trailing slash inconsistencies
+- Trailing-slash duplicate pairs (`/foo` and `/foo/` both present)
+- `changefreq=always`+`priority=1.0` abuse (>80% of URLs)
+- 4xx / 5xx URLs in sitemap (reconciled post-crawl against actual status codes)
+- 3xx redirects in sitemap
 - Incorrect origin
 - Exceeds 50,000 URLs
 - Missing in robots.txt
+
+### Pagination / Crawl-Budget Issues
+
+- **Broken / infinite pagination** — a "next" link that keeps advancing past the real last page into empty, duplicate, or soft-404 listings (HTTP 200, no real content). Wastes crawl budget. Detected two ways:
+  - *Post-crawl (`broken-pagination-analyzer.ts`)* — groups crawled pages by series key (`/page/{N}`, `?page=N`, …), finds a contiguous broken tail (soft-404 OR thin + near-duplicate), and reports a HIGH finding. Corroborated by `truncatedPaginationSeries` (series that hit the discovery cap).
+  - *Active probe (`pagination-analyzer.ts`)* — for JS-driven "next" controls with no static href, opens an isolated page and clicks "next" up to a bounded number of times; flags when the control stays enabled while content stops changing or empties out. Budget-capped per audit (`BROKEN_PAGINATION_MAX_PROBES`).
+
+### International / Hreflang Issues
+
+- Hreflang alternates that are not fully-qualified URLs (relative or protocol-relative)
+- Self-referential hreflang missing
+- Bidirectional hreflang reciprocity violations
+- Duplicate hreflang assignments within a language group
+
+### Privacy Issues
+
+- Tracking cookies without consent banner
+- Third-party cookies without consent
+- Cookies with lifespan >365 days
+
+### Image / Performance Issues
+
+- Oversized images (raw size or natural-vs-display ratio)
+- srcset candidate over-fetch (browser picked >1.5× display target)
+- srcset under-resolution (browser picked <0.8× display target)
+- w-descriptor srcset without `sizes` attribute
+- Legacy font formats mixed with woff2 (≥25%)
+- High percentage of unused CSS (with critical-CSS extraction hint)
 
 ## Configuration
 

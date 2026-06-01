@@ -141,13 +141,16 @@ class KeywordCannibalisationAnalyzer {
     titleConflicts = this.deduplicateSubsumedPhrases(titleConflicts);
     for (const [keyword, pages] of titleConflicts) {
       if (this.isSignificantKeyword(keyword, pages.length) && !this.isBrandKeyword(keyword, brandWords)) {
+        // Stable message so every conflicting keyword aggregates into ONE
+        // finding (the keyword lives in the detail and renders as its own
+        // cluster) instead of fragmenting into one finding per keyword.
         issues.push({
-          message: `Multiple pages targeting keyword: "${keyword}"`,
-          detail: `${pages.length} pages have this keyword in title: ${pages
-            .slice(0, 3)
+          message: `Multiple pages target the same keyword in their titles`,
+          detail: `Keyword "${keyword}" appears in the title of ${pages.length} pages: ${pages
+            .slice(0, 8)
             .map((p: ConflictPage) => `<a href="${p.url}">${shortenUrl(p.url)}</a>`)
-            .join(', ')}${pages.length > 3 ? ` (+${pages.length - 3} more)` : ''}`,
-          severity: pages.length > 3 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
+            .join(', ')}${pages.length > 8 ? ` (+${pages.length - 8} more)` : ''}`,
+          severity: SEVERITY.MEDIUM,
         });
       }
     }
@@ -162,9 +165,9 @@ class KeywordCannibalisationAnalyzer {
         !this.isBrandKeyword(keyword, brandWords)
       ) {
         warnings.push({
-          message: `Multiple pages with similar H1 keyword: "${keyword}"`,
-          detail: `${pages.length} pages target this in H1: ${pages
-            .slice(0, 3)
+          message: `Multiple pages target the same keyword in their H1`,
+          detail: `Keyword "${keyword}" appears in the H1 of ${pages.length} pages: ${pages
+            .slice(0, 8)
             .map((p: ConflictPage) => `<a href="${p.url}">${shortenUrl(p.url)}</a>`)
             .join(', ')}`,
           severity: SEVERITY.MEDIUM,

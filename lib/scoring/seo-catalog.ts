@@ -80,7 +80,7 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   'High percentage of unused JavaScript': { tier: 'warning', category: 'performance' },
   'High percentage of unused CSS': { tier: 'warning', category: 'performance' },
   'Large amount of unused code': { tier: 'warning', category: 'performance' },
-  'Some pages have oversized images': { tier: 'warning', category: 'performance' },
+  'Pages have image files larger than recommended': { tier: 'warning', category: 'performance' },
   'LCP image not preloaded': { tier: 'notice', category: 'performance' },
   'Excessive DOM size': { tier: 'warning', category: 'performance' },
   'Some pages have excessive third-party payload': { tier: 'warning', category: 'performance' },
@@ -107,16 +107,57 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
 };
 
 /**
+ * Pattern-based overrides for findings whose titles are dynamic (embed a
+ * keyword, count, or URL) and so can't be exact-matched in ISSUE_CATALOG.
+ * Checked after the exact catalog, before the severity fallback. Without
+ * these, a high-severity per-page variant inflates the Error tier and
+ * collapses the category's URL-pass score for issues that are really
+ * diagnostics (keyword overlap) or belong to another category (autoplay).
+ */
+const TITLE_PATTERN_OVERRIDES: Array<{ rx: RegExp; descriptor: IssueDescriptor }> = [
+  // Keyword cannibalisation is a diagnostic, not a hard error (Ahrefs/Semrush
+  // treat it as a warning). It also fragments into one finding per n-gram.
+  { rx: /^multiple pages targeting keyword/i, descriptor: { tier: 'warning', category: 'seo' } },
+  { rx: /multiple pages target the same keyword/i, descriptor: { tier: 'warning', category: 'seo' } },
+  { rx: /multiple pages with similar h1 keyword/i, descriptor: { tier: 'warning', category: 'seo' } },
+  { rx: /keyword cannibal/i, descriptor: { tier: 'warning', category: 'seo' } },
+  // Thin content (per-page and percentage variants) — warning, mirroring the
+  // catalogued "Some pages have very thin content".
+  { rx: /\bvery thin content\b/i, descriptor: { tier: 'warning', category: 'seo' } },
+  // Autoplay/missing media controls is an accessibility/UX concern, not an SEO error.
+  { rx: /autoplay (video|media)|without pause controls/i, descriptor: { tier: 'notice', category: 'accessibility' } },
+];
+
+/**
  * Classify an issue. Falls back to severity-based tier + keyword-based
  * category when not catalogued.
  */
 export function classifyIssue(title: string, severity?: SeverityLevel | string): IssueDescriptor {
   const exact = ISSUE_CATALOG[title];
   if (exact) return exact;
+  for (const { rx, descriptor } of TITLE_PATTERN_OVERRIDES) {
+    if (rx.test(title)) return descriptor;
+  }
   return {
     tier: severityToTier(severity),
     category: inferCategory(title),
   };
+}
+
+/**
+ * True only when a finding is *vetted* as error-tier by the catalog (an exact
+ * entry or a pattern override) — i.e. a known-serious issue, not one that
+ * merely inherited error-tier from a high/critical analyzer severity fallback.
+ * Used by severity moderation to protect genuine errors from being demoted
+ * when their category otherwise scores well.
+ */
+export function isCataloguedErrorTier(title: string): boolean {
+  const exact = ISSUE_CATALOG[title];
+  if (exact) return exact.tier === 'error';
+  for (const { rx, descriptor } of TITLE_PATTERN_OVERRIDES) {
+    if (rx.test(title)) return descriptor.tier === 'error';
+  }
+  return false;
 }
 
 const CATEGORY_PATTERNS: Array<{ category: IssueCategory; rx: RegExp }> = [

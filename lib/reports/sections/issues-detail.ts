@@ -7,6 +7,8 @@
 import { isCrawlerError, SEVERITY_ORDER } from '../../constants';
 import { escapeHtml, renderExpandableList } from '../html-utils';
 import { extractDetails } from '../data-processor';
+import { mergeNumericVariants } from '../../scoring/merge-variants';
+import { nextjsOverrideFor, isNextjsAudit } from '../../scoring/nextjs-recommendations';
 import { ScoreCalculator } from '../../scoring/score-calculator';
 import { extractComparisonLabels } from '../comparison-helpers';
 import type { ReportSectionData, AnalysisDetail, FixRecommendation, ComparisonData } from '../../types';
@@ -81,8 +83,15 @@ function getIssuesDetail(data: ReportSectionData) {
   }
 
   const { jsonData } = data;
-  const details = extractDetails(jsonData);
+  // Group numeric-variant findings (e.g. "Element with too many children (87)"
+  // / "(65)") into one row with the summed count and merged examples, instead
+  // of one row per variant.
+  const details = mergeNumericVariants(extractDetails(jsonData));
   const fixes = ScoreCalculator.getFixRecommendations();
+  const isNextjs = isNextjsAudit(
+    (jsonData.repoAnalysis as { framework?: string } | undefined)?.framework,
+    Object.values(details).flatMap((d) => d.examples ?? []),
+  );
 
   // Build issue list
   const issues: IssueEntry[] = [];
@@ -91,7 +100,11 @@ function getIssuesDetail(data: ReportSectionData) {
     const count = detail.count ?? detail.examples?.length ?? 0;
     if (count === 0) continue;
 
-    const fix = fixes[key] ?? null;
+    // When the site is Next.js, swap generic examples/advice for the idiomatic
+    // Next.js equivalent (next/image, Metadata API, next.config redirects, …).
+    const baseFix = fixes[key] ?? null;
+    const override = isNextjs ? nextjsOverrideFor(key) : undefined;
+    const fix = override ? ({ ...(baseFix ?? {}), ...override } as FixRecommendation) : baseFix;
     const impactScore = ScoreCalculator.calculateImpactScore(detail.severity, count);
     const effortMinutes = fix?.effort ? ScoreCalculator.parseEffort(fix.effort) : 999;
 
@@ -247,10 +260,14 @@ interface ComparisonIssueEntry extends IssueEntry {
 }
 
 function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison: ComparisonData) {
-  const originDetails = extractDetails(jsonData);
-  const compareDetails = extractDetails(comparison.compareJsonData);
+  const originDetails = mergeNumericVariants(extractDetails(jsonData));
+  const compareDetails = mergeNumericVariants(extractDetails(comparison.compareJsonData));
 
   const fixes = ScoreCalculator.getFixRecommendations();
+  const isNextjs = isNextjsAudit(
+    (jsonData.repoAnalysis as { framework?: string } | undefined)?.framework,
+    Object.values(originDetails).flatMap((d) => d.examples ?? []),
+  );
 
   // Merge issues from both origins
   const allKeys = new Set([...Object.keys(originDetails), ...Object.keys(compareDetails)]);
@@ -268,7 +285,9 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
     if (originCount === 0 && compareCount === 0) continue;
 
     const detail = originDetail ?? compareDetail;
-    const fix = fixes[key] ?? null;
+    const baseFix = fixes[key] ?? null;
+    const override = isNextjs ? nextjsOverrideFor(key) : undefined;
+    const fix = override ? ({ ...(baseFix ?? {}), ...override } as FixRecommendation) : baseFix;
     const impactScore = ScoreCalculator.calculateImpactScore(detail.severity, Math.max(originCount, compareCount));
     const effortMinutes = fix?.effort ? ScoreCalculator.parseEffort(fix.effort) : 999;
 

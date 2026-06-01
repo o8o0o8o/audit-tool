@@ -3,9 +3,9 @@
  * Analyzes pagination implementation for SEO best practices
  */
 
-import { SEVERITY } from '../../constants';
-import { removeTrailingSlash, hasRobotsDirective } from '../../utils';
-import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
+import { CRAWL_SETTINGS, SEVERITY } from '../../constants';
+import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey } from '../../utils';
+import type { ChromePage, ParsedPage, Issue, PageInfo, PaginationProbeResult } from '../../types';
 
 class PaginationAnalyzer {
   /**
@@ -33,6 +33,9 @@ class PaginationAnalyzer {
       infiniteScrollDetected: false,
       loadMoreDetected: false,
       issues: [] as Issue[],
+      nextUrl: null as string | null,
+      nextIsJsControl: false,
+      nextProbe: null as PaginationProbeResult | null,
     };
 
     // 1. Check for rel="prev" and rel="next" (deprecated but still used)
@@ -82,6 +85,15 @@ class PaginationAnalyzer {
       const canonicalHref = canonical.getAttribute('href');
       paginationData.canonicalPointsToSelf = this.#canonicalMatchesUrl(canonicalHref ?? null, url);
     }
+
+    // 7. Detect the "next" control and whether it is JS-driven (no static href).
+    //    Cheap DOM read only — the active probe (clicking) runs as a separate
+    //    decoupled step so it never eats the per-page analyzer time budget.
+    const nextControl = await this.#detectNextControl(chromePage);
+    paginationData.nextUrl = relLinks.next ?? nextControl.href;
+    // JS-driven only when a control exists but neither rel=next nor a usable
+    // static href is present (so crawlers can't enumerate the series via URLs).
+    paginationData.nextIsJsControl = nextControl.found && !relLinks.next && !nextControl.href;
 
     // Generate issues
 
@@ -371,6 +383,272 @@ class PaginationAnalyzer {
       });
     } catch {
       return { detected: false };
+    }
+  }
+
+  /**
+   * Detect a "next" pagination control and resolve its target href.
+   * Returns `found` (a next control exists) and `href` (a usable, navigable
+   * static URL, or null for JS-driven controls like buttons / `href="#"`).
+   * @private
+   */
+  static async #detectNextControl(
+    chromePage: ChromePage,
+  ): Promise<{ found: boolean; href: string | null }> {
+    try {
+      return await chromePage.evaluate(() => {
+        // Ordered by specificity. rel=next is handled separately by the caller.
+        const selectors = [
+          'a[rel="next"]',
+          '[class*="pagination"] a.next',
+          '[class*="pagination"] .next a',
+          'a.next',
+          'a[aria-label*="next" i]',
+          'button[aria-label*="next" i]',
+          'a[rel="nofollow"][class*="next"]',
+        ];
+
+        const isNextText = (t: string) => {
+          const s = t.trim().toLowerCase();
+          return (
+            s === 'next' ||
+            s === 'next page' ||
+            s === 'older' ||
+            s === 'older posts' ||
+            s === '›' ||
+            s === '»' ||
+            s === '→'
+          );
+        };
+
+        let el: Element | null = null;
+        for (const sel of selectors) {
+          try {
+            const found = document.querySelector(sel);
+            if (found) {
+              el = found;
+              break;
+            }
+          } catch {
+            // invalid selector — skip
+          }
+        }
+
+        // Fall back to text-based matching on anchors / buttons.
+        if (!el) {
+          const candidates = document.querySelectorAll('a, button');
+          for (const c of candidates) {
+            if (isNextText(c.textContent || '') || isNextText(c.getAttribute('aria-label') || '')) {
+              el = c;
+              break;
+            }
+          }
+        }
+
+        if (!el) return { found: false, href: null };
+
+        // Disabled controls don't waste crawl budget.
+        const ariaDisabled = el.getAttribute('aria-disabled') === 'true';
+        const isDisabled = (el as HTMLButtonElement).disabled === true || ariaDisabled;
+        if (isDisabled) return { found: false, href: null };
+
+        const rawHref = el.getAttribute('href');
+        const resolved = (el as HTMLAnchorElement).href || '';
+        const usable =
+          !!rawHref &&
+          rawHref.trim() !== '' &&
+          !rawHref.startsWith('#') &&
+          !rawHref.toLowerCase().startsWith('javascript:');
+
+        return { found: true, href: usable ? resolved : null };
+      });
+    } catch {
+      return { found: false, href: null };
+    }
+  }
+
+  // Series probed this run, plus a global probe budget — keeps the active
+  // probe from running on every listing page of a large site.
+  static #probedSeries = new Set<string>();
+  static #probeCount = 0;
+
+  /** Reset per-audit probe state (call at the start of a crawl). */
+  static resetProbeState(): void {
+    this.#probedSeries.clear();
+    this.#probeCount = 0;
+  }
+
+  /**
+   * Whether a JS-"next" probe should run for `url`: only when within the global
+   * probe budget and this series (or page, for URL-less JS pagination) has not
+   * been probed yet.
+   */
+  static shouldProbeNext(url: string): boolean {
+    if (this.#probeCount >= CRAWL_SETTINGS.BROKEN_PAGINATION_MAX_PROBES) return false;
+    // For JS pagination the URL usually doesn't change, so fall back to a
+    // path-based key to dedupe near-identical listing pages.
+    let key = getPaginationSeriesKey(url);
+    if (!key) {
+      try {
+        key = new URL(url).pathname;
+      } catch {
+        key = url;
+      }
+    }
+    if (this.#probedSeries.has(key)) return false;
+    this.#probedSeries.add(key);
+    // Consume budget here (same JS turn as the check) so concurrent crawl
+    // batches can't all pass the gate before the probe runs and increments.
+    this.#probeCount++;
+    return true;
+  }
+
+  /**
+   * Active probe for JS-driven "next" pagination. Opens an ISOLATED page in the
+   * same browser context (never the shared analysis page), clicks "next" up to
+   * a bounded number of times, and decides whether it advances into empty /
+   * duplicate content forever. Always closes the isolated page.
+   *
+   * Returns issues to merge plus the structured probe result. Returns an empty
+   * result on any failure — best-effort, never throws.
+   */
+  static async probeJsNext(
+    chromePage: ChromePage,
+    url: string,
+  ): Promise<{ nextProbe: PaginationProbeResult | null; issues: Issue[]; warnings: Issue[] }> {
+    const issues: Issue[] = [];
+    const warnings: Issue[] = [];
+    const maxClicks = CRAWL_SETTINGS.BROKEN_PAGINATION_MAX_PROBE_CLICKS;
+    const deadline = Date.now() + CRAWL_SETTINGS.BROKEN_PAGINATION_PROBE_TIMEOUT_MS;
+
+    let probePage: ChromePage | null = null;
+    try {
+      const context = chromePage.context();
+      probePage = await context.newPage();
+      await probePage.goto(url, { waitUntil: 'domcontentloaded', timeout: 5000 });
+
+      // Signature = visible listing size. Reused after each click to detect
+      // "content stopped changing" (duplicate) and "content emptied out".
+      const signature = async () =>
+        probePage!.evaluate(() => {
+          const main = document.querySelector('main, [role="main"], .content, #content') || document.body;
+          const text = (main as HTMLElement)?.innerText || '';
+          const items = document.querySelectorAll(
+            'article, li, .card, [class*="item"], [class*="result"], [class*="post"]',
+          ).length;
+          return { len: text.replace(/\s+/g, ' ').trim().length, items };
+        });
+
+      const nextEnabled = async () =>
+        probePage!.evaluate(() => {
+          const sels = ['a[rel="next"]', 'a.next', '[class*="pagination"] a.next', 'a[aria-label*="next" i]', 'button[aria-label*="next" i]'];
+          for (const s of sels) {
+            try {
+              const el = document.querySelector(s) as HTMLElement | null;
+              if (el) {
+                const disabled = (el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true';
+                if (!disabled) return true;
+              }
+            } catch {
+              /* skip */
+            }
+          }
+          // Text fallback
+          for (const el of document.querySelectorAll('a, button')) {
+            const t = (el.textContent || '').trim().toLowerCase();
+            if (t === 'next' || t === '›' || t === '»' || t === '→' || t === 'older') {
+              const disabled = (el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true';
+              if (!disabled) return true;
+            }
+          }
+          return false;
+        });
+
+      const clickNext = async () =>
+        probePage!.evaluate(() => {
+          const sels = ['a[rel="next"]', 'a.next', '[class*="pagination"] a.next', 'a[aria-label*="next" i]', 'button[aria-label*="next" i]'];
+          let el: HTMLElement | null = null;
+          for (const s of sels) {
+            try {
+              el = document.querySelector(s) as HTMLElement | null;
+              if (el) break;
+            } catch {
+              /* skip */
+            }
+          }
+          if (!el) {
+            for (const c of document.querySelectorAll('a, button')) {
+              const t = (c.textContent || '').trim().toLowerCase();
+              if (t === 'next' || t === '›' || t === '»' || t === '→' || t === 'older') {
+                el = c as HTMLElement;
+                break;
+              }
+            }
+          }
+          if (!el) return false;
+          el.click();
+          return true;
+        });
+
+      let prev = await signature();
+      let clicks = 0;
+      let contentChanged = false;
+      let duplicateStreak = 0;
+      let emptyAfterClick = false;
+
+      for (let i = 0; i < maxClicks; i++) {
+        if (Date.now() > deadline) break;
+        if (!(await nextEnabled())) break; // terminated cleanly — finite pagination
+        if (!(await clickNext())) break;
+        clicks++;
+        // Give the click time to fetch/render (bounded).
+        await probePage.waitForTimeout(800).catch(() => {});
+        const cur = await signature();
+
+        // "Emptied out" = the main content text collapsed to near-nothing.
+        // Don't key off item-element count: a div-based listing whose item
+        // classes don't match our selectors reads items===0 on every page,
+        // including healthy ones, which would false-positive.
+        if (cur.len < 30) emptyAfterClick = true;
+        const changed = Math.abs(cur.len - prev.len) > 20 || cur.items !== prev.items;
+        if (changed) {
+          contentChanged = true;
+          duplicateStreak = 0;
+        } else {
+          duplicateStreak++;
+        }
+        prev = cur;
+      }
+
+      const controlPersists = await nextEnabled();
+      // Broken: after exhausting our clicks the "next" control is STILL enabled
+      // while content has stopped changing or gone empty. Require strong
+      // evidence — emptied out, never changed at all, or two consecutive
+      // duplicate loads — so genuine JS pagination isn't flagged.
+      const suspectedInfinite =
+        clicks > 0 && controlPersists && (emptyAfterClick || !contentChanged || duplicateStreak >= 2);
+
+      const nextProbe: PaginationProbeResult = {
+        clicks,
+        contentChanged,
+        controlPersists,
+        emptyAfterClick,
+        suspectedInfinite,
+      };
+
+      if (suspectedInfinite) {
+        issues.push({
+          message: 'Broken "next" pagination wastes crawl budget',
+          detail: `<a href="${url}">${url}</a> has a "next" control that stays clickable while loading empty or duplicate content. Crawlers can follow it indefinitely, wasting crawl budget. Disable/remove "next" on the last page of results.`,
+          severity: SEVERITY.HIGH,
+        });
+      }
+
+      return { nextProbe, issues, warnings };
+    } catch {
+      return { nextProbe: null, issues, warnings };
+    } finally {
+      if (probePage) await probePage.close().catch(() => {});
     }
   }
 

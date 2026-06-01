@@ -17,6 +17,7 @@
 
 import { SCORING } from '../constants';
 import { stripIssueSeverity } from '../utils';
+import { EXTENDED_FIX_RECOMMENDATIONS } from './fix-recommendations-extended';
 import { logNormalScore, urlPassScore, mean } from './methodologies';
 import { classifyIssue, type IssueTier, type IssueCategory } from './seo-catalog';
 import type {
@@ -33,7 +34,19 @@ interface EnrichedIssue {
   title: string;
   tier: IssueTier;
   category: IssueCategory;
+  /** Occurrence count from the analyzer. May exceed totalPages because the
+   *  same URL can be counted multiple times by one finding. */
   affected: number;
+  /** Unique URLs that this finding flagged, extracted from detail.examples.
+   *  Used by URL-pass scoring to count UNIQUE pages with at least one error,
+   *  not the sum of (potentially overlapping) occurrence counts. */
+  urls: string[];
+}
+
+/** Pull each https?:// URL out of an analyzer example string. */
+function extractUrlsFromExample(example: string): string[] {
+  const matches = example.match(/https?:\/\/[^\s<>"'`]+/g);
+  return matches ? matches : [];
 }
 
 class ScoreCalculator {
@@ -69,11 +82,19 @@ class ScoreCalculator {
     _pages: Record<string, PageInfo>,
     categoryScores: CategoryScores,
   ): number {
-    let score = 0;
+    let weightedMean = 0;
+    const values: number[] = [];
     for (const [category, weight] of Object.entries(SCORING.CATEGORY_WEIGHTS)) {
-      score += (categoryScores[category as keyof CategoryScores] || 0) * weight;
+      const value = categoryScores[category as keyof CategoryScores] || 0;
+      weightedMean += value * weight;
+      values.push(value);
     }
-    return Math.round(Math.max(0, Math.min(100, score)));
+    // Blend the weighted mean with the worst category so a single failing
+    // category drags the overall down instead of being averaged away.
+    const worst = values.length ? Math.min(...values) : weightedMean;
+    const w = SCORING.OVERALL_MEAN_WEIGHT;
+    const blended = weightedMean * w + worst * (1 - w);
+    return Math.round(Math.max(0, Math.min(100, blended)));
   }
 
   static calculateCategoryScores(
@@ -151,7 +172,9 @@ class ScoreCalculator {
   }
 
   static getFixRecommendations(): Record<string, FixRecommendation> {
-    return FIX_RECOMMENDATIONS;
+    // Original curated entries take precedence over extended ones when keys
+    // collide. Both are normalized at lookup time in phase2-runner.
+    return { ...EXTENDED_FIX_RECOMMENDATIONS, ...FIX_RECOMMENDATIONS };
   }
 }
 
@@ -171,7 +194,17 @@ function enrichIssues(analysisData: {
 
   for (const [title, detail] of Object.entries(analysisData.details ?? {})) {
     const { tier, category } = classifyIssue(title, detail.severity);
-    issues.push({ title, tier, category, affected: detail.count || detail.examples?.length || 1 });
+    const urls: string[] = [];
+    for (const example of detail.examples ?? []) {
+      urls.push(...extractUrlsFromExample(example));
+    }
+    issues.push({
+      title,
+      tier,
+      category,
+      affected: detail.count || detail.examples?.length || 1,
+      urls,
+    });
     seen.add(title);
   }
 
@@ -181,7 +214,7 @@ function enrichIssues(analysisData: {
       const title = stripIssueSeverity(labelled);
       if (seen.has(title)) continue;
       const { tier, category } = classifyIssue(title, severity);
-      issues.push({ title, tier, category, affected: 1 });
+      issues.push({ title, tier, category, affected: 1, urls: [] });
       seen.add(title);
     }
   }
@@ -189,12 +222,28 @@ function enrichIssues(analysisData: {
   return issues;
 }
 
-/** Ahrefs URL-pass on Error-tier issues in `category`. */
+/**
+ * Ahrefs URL-pass: count UNIQUE URLs touched by any error-tier finding in
+ * the category, divide by totalPages × 100. Falls back to occurrence-count
+ * semantics for findings whose examples don't carry URLs (defensive).
+ */
 function scoreFromUrlPass(issues: EnrichedIssue[], category: IssueCategory, totalPages: number): number {
-  const errorAffected = issues
-    .filter((i) => i.category === category && i.tier === 'error')
-    .reduce((sum, i) => sum + i.affected, 0);
-  return urlPassScore(errorAffected, totalPages);
+  const errorIssues = issues.filter((i) => i.category === category && i.tier === 'error');
+
+  // Primary path: union of distinct URLs across all error-tier findings.
+  const urlSet = new Set<string>();
+  let fallbackCount = 0;
+  for (const issue of errorIssues) {
+    if (issue.urls.length > 0) {
+      for (const u of issue.urls) urlSet.add(u);
+    } else {
+      // Finding had no URL examples (e.g. site-level finding) — credit it as
+      // affecting one URL conservatively, so we don't silently drop it.
+      fallbackCount += Math.min(issue.affected, totalPages);
+    }
+  }
+  const pagesWithErrors = Math.min(urlSet.size + fallbackCount, totalPages);
+  return urlPassScore(pagesWithErrors, totalPages);
 }
 
 /**
@@ -303,6 +352,12 @@ const FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
   'Some pages are missing canonical URL': {
     effort: '10 minutes',
     fix: 'Add canonical link tags to prevent duplicate content issues. Point to the preferred version of the page.',
+    example: '<link rel="canonical" href="https://example.com/page">',
+    resources: [{ text: 'Canonical URL Guide', url: 'https://moz.com/learn/seo/canonicalization' }],
+  },
+  'Canonicals are not set for some pages': {
+    effort: '10 minutes',
+    fix: 'Add a self-referencing canonical link tag to every indexable page. On paginated and parameterised URLs (e.g. ?postType=…), point the canonical at the preferred version so search engines consolidate ranking signals instead of treating each variant as duplicate content.',
     example: '<link rel="canonical" href="https://example.com/page">',
     resources: [{ text: 'Canonical URL Guide', url: 'https://moz.com/learn/seo/canonicalization' }],
   },
@@ -447,7 +502,7 @@ const FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     example: 'Move inline CSS to external stylesheets. Paginate long lists. Use API-driven content loading.',
     resources: [],
   },
-  'Some pages have oversized images': {
+  'Pages have image files larger than recommended': {
     effort: '20 minutes',
     fix: 'Resize images to their display dimensions. Use modern formats (WebP/AVIF). Compress images to reduce file size.',
     example:

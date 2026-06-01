@@ -1072,6 +1072,27 @@ function getPaginationSeriesKey(url: string): string | null {
   return null;
 }
 
+/**
+ * If `url` looks like a paginated URL, return its page number (the `{N}` part
+ * captured by the series patterns). Otherwise return null. Used to order pages
+ * within a single series when detecting a broken pagination tail.
+ *
+ * Examples:
+ *   /insights/page/100   → 100
+ *   /list?page=5&sort=a  → 5
+ *   /products            → null
+ */
+function getPaginationPageNumber(url: string): number | null {
+  for (const { regex } of PAGINATION_SERIES_PATTERNS) {
+    const match = url.match(regex);
+    if (match) {
+      const n = parseInt(match[2], 10);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  return null;
+}
+
 function formatSampleList(items: string[], limit = 5, separator = ', '): string {
   const shown = items.slice(0, limit).join(separator);
   const remaining = items.length - limit;
@@ -1134,6 +1155,7 @@ export {
   normalizeToEntries,
   formatSampleList,
   getPaginationSeriesKey,
+  getPaginationPageNumber,
   LOG_PREFIX,
   TRACKING_PARAMS,
 };

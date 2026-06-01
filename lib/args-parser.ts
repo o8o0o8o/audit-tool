@@ -80,6 +80,11 @@ function parseArgs(args: string[]): ParsedArgs {
     brandName: null, // Custom brand name for report
     ci: null, // CI mode: exit code 1 if score < threshold
     json: false, // Output JSON summary to stdout
+    phase2: true, // Generate Phase 2 curated PDF report (--no-phase2 to skip)
+    llmNarrative: false, // Use Claude to rewrite per-section Analysis prose
+    llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
+    evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
+    evidenceCap: 10, // Max representative pages to capture (default 10)
     warnings: [] as string[], // Collect validation warnings
   };
 
@@ -108,6 +113,25 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.ci = 70; // Default threshold
     } else if (arg === '--json') {
       parsed.json = true;
+    } else if (arg === '--no-phase2') {
+      parsed.phase2 = false;
+    } else if (arg === '--phase2') {
+      parsed.phase2 = true;
+    } else if (arg === '--llm-narrative') {
+      parsed.llmNarrative = true;
+    } else if (arg === '--llm-findings') {
+      parsed.llmFindings = true;
+    } else if (arg === '--no-evidence') {
+      parsed.evidence = false;
+    } else if (arg === '--evidence') {
+      parsed.evidence = true;
+    } else if (arg.startsWith('--evidence-cap=')) {
+      const val = parseInt(arg.substring('--evidence-cap='.length), 10);
+      if (isNaN(val) || val < 1) {
+        parsed.warnings.push(`Invalid --evidence-cap value "${arg.substring('--evidence-cap='.length)}" — must be a positive integer. Ignoring.`);
+      } else {
+        parsed.evidenceCap = Math.min(val, 100); // safety ceiling
+      }
     } else if (arg.startsWith('--origin=')) {
       parsed.origin = arg.substring('--origin='.length);
     } else if (arg.startsWith('--compare=')) {

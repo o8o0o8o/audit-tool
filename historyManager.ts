@@ -6,6 +6,7 @@ import type {
   AuditHistory,
   AuditSnapshot,
   AuditComparison,
+  AuditDiffEntry,
   IssueSummary,
   PerformanceSummary,
   InsightsSummary,
@@ -19,6 +20,7 @@ import { FileManager } from './lib/storage/file-manager';
 import { extractPageInsights } from './lib/reports/data-processor';
 import { sanitizeDomainName } from './validators';
 import { statAvg, statPercentile } from './lib/utils';
+import { slugifyFinding, isVolatileFinding } from './lib/utils/finding-id';
 
 /**
  * Audit History Manager
@@ -191,6 +193,7 @@ class HistoryManager {
         affectedPages: qw.affectedPages,
         severity: (qw.severity ?? 'medium') as SeverityLevel,
       })),
+      pageHashes: this.#extractPageHashes(auditData),
     };
 
     history.audits.push(snapshot);
@@ -375,7 +378,130 @@ class HistoryManager {
       }
     });
 
+    // Classifier: build real / noise / siteChanged buckets using stable IDs
+    // and the volatile-finding heuristic. This gives the reader a way to tell
+    // apart "the site changed" from "the measurement drifted".
+    comparison.classified = HistoryManager.#classifyDiff(oldAudit, newAudit);
+
     return comparison;
+  }
+
+  /**
+   * Build the three-bucket diff classifier output.
+   * @private
+   */
+  static #classifyDiff(oldAudit: AuditSnapshot, newAudit: AuditSnapshot) {
+    // Group old + new issues by stable slug
+    const bySlug: Map<string, { slug: string; oldMsg?: string; newMsg?: string; oldCount: number; newCount: number; severity?: string }> = new Map();
+    const indexSide = (issues: Record<string, IssueSummary>, side: 'old' | 'new') => {
+      for (const [msg, data] of Object.entries(issues ?? {})) {
+        const slug = slugifyFinding(msg);
+        if (!bySlug.has(slug)) {
+          bySlug.set(slug, { slug, oldCount: 0, newCount: 0 });
+        }
+        const entry = bySlug.get(slug)!;
+        // Sum counts across variants that collapse to the same slug
+        if (side === 'old') {
+          entry.oldCount += data.count ?? 0;
+          entry.oldMsg = entry.oldMsg ?? msg;
+        } else {
+          entry.newCount += data.count ?? 0;
+          entry.newMsg = entry.newMsg ?? msg;
+        }
+        entry.severity = entry.severity ?? data.severity;
+      }
+    };
+    indexSide(oldAudit.issues ?? {}, 'old');
+    indexSide(newAudit.issues ?? {}, 'new');
+
+    // Volatile-count noise floor: a volatile finding's count must move >25%
+    // (and by ≥2 pages absolute) to count as a real change.
+    const isNoise = (entry: { oldCount: number; newCount: number }, volatile: boolean) => {
+      if (!volatile) return false;
+      const abs = Math.abs(entry.newCount - entry.oldCount);
+      const base = Math.max(entry.oldCount, entry.newCount, 1);
+      return abs < 2 || abs / base < 0.25;
+    };
+
+    const real: AuditDiffEntry[] = [];
+    const noise: AuditDiffEntry[] = [];
+
+    for (const entry of bySlug.values()) {
+      if (entry.oldCount === entry.newCount) continue; // unchanged → don't list
+      const message = entry.newMsg ?? entry.oldMsg ?? entry.slug;
+      const volatile = isVolatileFinding(message);
+      const kind: AuditDiffEntry['kind'] =
+        entry.oldCount === 0 ? 'new' : entry.newCount === 0 ? 'fixed' : 'count';
+      const diff: AuditDiffEntry = {
+        slug: entry.slug,
+        message,
+        kind,
+        oldCount: entry.oldCount,
+        newCount: entry.newCount,
+        severity: entry.severity,
+        volatile,
+      };
+      // "new" / "fixed" appearances of volatile findings still count as real —
+      // a finding flipping from "present on 7 pages" to "gone entirely" is
+      // structurally significant. Only `count` deltas can be noise.
+      if (kind === 'count' && isNoise(entry, volatile)) {
+        noise.push(diff);
+      } else {
+        real.push(diff);
+      }
+    }
+
+    // Sort each bucket by severity then absolute delta
+    const sevRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    const sort = (arr: AuditDiffEntry[]) =>
+      arr.sort((a, b) => {
+        const sa = sevRank[(a.severity ?? '').toString().toLowerCase()] ?? 9;
+        const sb = sevRank[(b.severity ?? '').toString().toLowerCase()] ?? 9;
+        if (sa !== sb) return sa - sb;
+        return Math.abs(b.newCount - b.oldCount) - Math.abs(a.newCount - a.oldCount);
+      });
+    sort(real);
+    sort(noise);
+
+    // "Site changed": compare per-page hashes
+    const oldHashes = oldAudit.pageHashes ?? {};
+    const newHashes = newAudit.pageHashes ?? {};
+    const sharedUrls = Object.keys(oldHashes).filter((u) => newHashes[u] !== undefined);
+    const pagesChanged = sharedUrls.filter((u) => oldHashes[u] !== newHashes[u]).length;
+    const pagesUnchanged = sharedUrls.length - pagesChanged;
+    const pagesUnique =
+      Object.keys(oldHashes).filter((u) => newHashes[u] === undefined).length +
+      Object.keys(newHashes).filter((u) => oldHashes[u] === undefined).length;
+
+    return {
+      real,
+      noise,
+      siteChanged: {
+        pagesCompared: sharedUrls.length,
+        pagesChanged,
+        pagesUnchanged,
+        pagesUnique,
+      },
+    };
+  }
+
+  /**
+   * Collect per-page contentHash into a url → hash map.
+   * Skips pages without a hash (older audits, or content-fetch failures).
+   * @private
+   */
+  #extractPageHashes(auditData: Partial<AuditResults>): Record<string, string> | undefined {
+    const pages = auditData.pageData?.pages ?? {};
+    const out: Record<string, string> = {};
+    let n = 0;
+    for (const [url, page] of Object.entries(pages) as Array<[string, PageInfo]>) {
+      const hash = (page as PageInfo).contentHash;
+      if (typeof hash === 'string' && hash.length > 0) {
+        out[url] = hash;
+        n++;
+      }
+    }
+    return n > 0 ? out : undefined;
   }
 
   generateTrendData() {

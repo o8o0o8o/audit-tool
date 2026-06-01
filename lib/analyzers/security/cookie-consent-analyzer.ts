@@ -3,7 +3,7 @@
  * Checks for cookie consent implementation and basic compliance patterns
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
 import { detectImportantPageLinks } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, ConsentData, NetworkRequest } from '../../types';
 
@@ -115,6 +115,21 @@ class CookieConsentAnalyzer {
     // 5. Check for tracking cookies before consent
     const trackingCookies = this.#checkTrackingCookies(cookieAnalysis.cookies);
     consentData.cookiesBeforeConsent = trackingCookies;
+
+    // 6. Detect cookies with excessive lifespan (>365 days). Hygiene-level finding.
+    const longLivedCookies = this.#findLongLivedCookies(cookieAnalysis.cookies);
+    if (longLivedCookies.length > 0) {
+      const examples = longLivedCookies
+        .slice(0, 5)
+        .map((c) => `${c.name} (${c.days} days, ${c.domain})`)
+        .join(', ');
+      const more = longLivedCookies.length > 5 ? ` (+${longLivedCookies.length - 5} more)` : '';
+      warnings.push({
+        message: 'Cookies with excessive lifespan',
+        detail: `<a href="${url}">${url}</a> sets ${longLivedCookies.length} cookie(s) lasting more than ${THRESHOLDS.COOKIE_LIFESPAN_WARNING_DAYS} days. Consider shortening their expiry: ${examples}${more}.`,
+        severity: SEVERITY.LOW,
+      });
+    }
 
     // Generate issues
 
@@ -297,6 +312,31 @@ class CookieConsentAnalyzer {
     } catch {
       return { total: 0, thirdParty: 0, cookies: [] };
     }
+  }
+
+  /**
+   * Return cookies whose expiry is more than COOKIE_LIFESPAN_WARNING_DAYS in the future.
+   * Session cookies (expires === -1) are excluded.
+   * @private
+   */
+  static #findLongLivedCookies(cookies: CookieInfo[]) {
+    const nowSeconds = Date.now() / 1000;
+    const thresholdSeconds = THRESHOLDS.COOKIE_LIFESPAN_WARNING_DAYS * 86400;
+    const result: Array<{ name: string; domain: string; days: number }> = [];
+    for (const c of cookies) {
+      if (typeof c.expires !== 'number' || c.expires <= 0) continue; // session or unknown
+      const lifeSeconds = c.expires - nowSeconds;
+      if (lifeSeconds > thresholdSeconds) {
+        result.push({
+          name: c.name,
+          domain: c.domain,
+          days: Math.round(lifeSeconds / 86400),
+        });
+      }
+    }
+    // Longest-lived first so example list is more informative
+    result.sort((a, b) => b.days - a.days);
+    return result;
   }
 
   /**

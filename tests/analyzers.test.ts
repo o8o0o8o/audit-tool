@@ -1583,3 +1583,32 @@ void describe('score-impact', () => {
     assert.strictEqual(sectionScoreSuffix(['seo'], buildScoreImpact(undefined, {})), '');
   });
 });
+
+import { stampPageUrl } from '../lib/crawler/analyzer-runner';
+
+void describe('stampPageUrl', () => {
+  const URL = 'https://example.com/pricing';
+
+  void it('appends the page URL (as an anchor) to a URL-less analyzer detail', () => {
+    const out = stampPageUrl('182.4 KB of inline CSS. Critical CSS should be ~14KB or less.', URL);
+    assert.ok(out.includes(`<a href="${URL}">${URL}</a>`), out);
+    // Original detail text is preserved ahead of the URL.
+    assert.ok(out.startsWith('182.4 KB of inline CSS.'), out);
+  });
+
+  void it('makes two same-detail occurrences distinct by their page URL', () => {
+    const detail = '182.4 KB of inline CSS. Critical CSS should be ~14KB or less.';
+    const a = stampPageUrl(detail, 'https://example.com/a');
+    const b = stampPageUrl(detail, 'https://example.com/b');
+    assert.notStrictEqual(a, b);
+  });
+
+  void it('leaves a detail that already references this page untouched', () => {
+    const detail = `Title is missing for this page <a href="${URL}">${URL}</a>`;
+    assert.strictEqual(stampPageUrl(detail, URL), detail);
+  });
+
+  void it('uses the page URL as the example when the detail is empty', () => {
+    assert.strictEqual(stampPageUrl('   ', URL), `<a href="${URL}">${URL}</a>`);
+  });
+});

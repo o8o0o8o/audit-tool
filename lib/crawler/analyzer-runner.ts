@@ -14,6 +14,7 @@ import type {
 import type { RequestInfo, AnalyzerResult, ReportIssueFn, CrawlerInternalOptions } from './crawler-types';
 import { CRAWL_SETTINGS } from '../constants';
 import { withTimeout } from './resilience';
+import { escapeHtml } from '../reports/html-utils';
 
 // SEO analyzers
 import { HeadingAnalyzer } from '../analyzers/seo/heading-analyzer';
@@ -111,14 +112,37 @@ function extractSettledResults(results: PromiseSettledResult<unknown>[], fallbac
 }
 
 /**
- * Report issues and warnings from analyzer result
+ * Stamp the originating page URL onto a per-page analyzer detail so the
+ * aggregated "Affected pages" list can map each occurrence back to its page.
+ *
+ * Page-level analyzers (unlike the page-data-builder checks) usually emit a
+ * generic detail with no URL — e.g. "182.4 KB of inline CSS. Critical CSS
+ * should be ~14KB…". Aggregated across the crawl these collapse into a column
+ * of identical, unactionable bullets. Appending the page URL (as an anchor,
+ * matching page-data-builder's style) makes every occurrence distinct and
+ * navigable. Skipped when the detail already references this page's URL.
  */
-function reportIssues(result: AnalyzerResult, reportIssue: ReportIssueFn): void {
+export function stampPageUrl(detail: string, url: string): string {
+  const escapedUrl = escapeHtml(url);
+  const anchor = `<a href="${escapedUrl}">${escapedUrl}</a>`;
+  // Detail with no body of its own — surface the page URL as the example.
+  if (!detail.trim()) return anchor;
+  // Already names this page (page-data-builder-style details, self-referential
+  // analyzers) — leave it untouched.
+  if (detail.includes(url) || detail.includes(escapedUrl)) return detail;
+  return `${detail} — ${anchor}`;
+}
+
+/**
+ * Report issues and warnings from analyzer result, stamping each with the
+ * page URL so aggregated examples remain page-attributable.
+ */
+function reportIssues(result: AnalyzerResult, reportIssue: ReportIssueFn, url: string): void {
   for (const issue of result.issues ?? []) {
-    reportIssue(issue.message ?? '', issue.detail ?? '', issue.severity);
+    reportIssue(issue.message ?? '', stampPageUrl(issue.detail ?? '', url), issue.severity);
   }
   for (const warning of result.warnings ?? []) {
-    reportIssue(warning.message ?? '', warning.detail ?? '', warning.severity);
+    reportIssue(warning.message ?? '', stampPageUrl(warning.detail ?? '', url), warning.severity);
   }
 }
 
@@ -444,7 +468,7 @@ export async function runAnalyzers(
     infoDisclosureResult,
     openRedirectResult,
     spellingResult,
-  ].forEach((result) => reportIssues(result as AnalyzerResult, reportIssue));
+  ].forEach((result) => reportIssues(result as AnalyzerResult, reportIssue, url));
 
   // ============================================================
   // GROUP 2: Data-based analyzers (depend on Group 1 results)
@@ -461,7 +485,7 @@ export async function runAnalyzers(
     return { soft404Data: null, issues: [], warnings: [] };
   });
   pageData.soft404 = soft404Result.soft404Data;
-  reportIssues(soft404Result, reportIssue);
+  reportIssues(soft404Result, reportIssue, url);
 
   // Active JS-"next" pagination probe. Decoupled from the Group-1 timeout so it
   // never eats that budget; uses its own isolated page. Bounded per-audit by
@@ -477,7 +501,7 @@ export async function runAnalyzers(
       return { nextProbe: null, issues: [], warnings: [] };
     });
     pageData.paginationData.nextProbe = probeResult.nextProbe;
-    reportIssues(probeResult, reportIssue);
+    reportIssues(probeResult, reportIssue, url);
   }
 
   // Synchronous analyzers - run in parallel since they only read pageData
@@ -572,20 +596,20 @@ export async function runAnalyzers(
   pageData.crossOriginPolicyData = crossOriginResult.info as typeof pageData.crossOriginPolicyData;
 
   // Report issues from Group 2
-  syncResults.forEach((result) => reportIssues(result as AnalyzerResult, reportIssue));
+  syncResults.forEach((result) => reportIssues(result as AnalyzerResult, reportIssue, url));
 
   // Console error analysis (independent)
   if (consoleData) {
     const consoleResult = ConsoleErrorAnalyzer.analyze(consoleData, url);
     pageData.consoleAnalysis = consoleResult.consoleAnalysis;
-    reportIssues(consoleResult, reportIssue);
+    reportIssues(consoleResult, reportIssue, url);
   }
 
   // JavaScript rendering analysis (only if raw HTML available)
   if (pageData.rawHtml) {
     const jsRenderResult = JavaScriptRenderingAnalyzer.analyze(pageData, url);
     pageData.jsRenderingData = jsRenderResult.info;
-    reportIssues(jsRenderResult, reportIssue);
+    reportIssues(jsRenderResult, reportIssue, url);
   }
 
   // Code coverage analysis (requires perf flag, uses Coverage API started before navigation)
@@ -597,7 +621,7 @@ export async function runAnalyzers(
         `Coverage analyzer timeout for ${url}`,
       );
       pageData.codeCoverage = coverageResult.info as CodeCoverageData;
-      reportIssues(coverageResult, reportIssue);
+      reportIssues(coverageResult, reportIssue, url);
     } catch {
       pageData.codeCoverage = null;
     }
@@ -611,7 +635,7 @@ export async function runAnalyzers(
       `Outbound link checker timeout for ${url}`,
     );
     pageData.outboundLinkHealth = outboundResult.info as OutboundLinkHealthData;
-    reportIssues(outboundResult, reportIssue);
+    reportIssues(outboundResult, reportIssue, url);
   } catch {
     pageData.outboundLinkHealth = null;
   }

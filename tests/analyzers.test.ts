@@ -608,6 +608,125 @@ void describe('categorize (Phase 2 routing)', () => {
 });
 
 // ============================================================
+// Phase 2 consolidation / de-duplication
+// ============================================================
+import { consolidateFindings, findingGroupKey } from '../lib/phase2/consolidate';
+import type { IssueDetail } from '../lib/phase2/types';
+
+const det = (over: Partial<IssueDetail> = {}): IssueDetail => ({
+  severity: 'medium',
+  count: 1,
+  examples: [],
+  ...over,
+});
+
+void describe('consolidateFindings (Phase 2 de-dup)', () => {
+  void it('folds the unreachable-pages finding into the orphan-pages finding', () => {
+    const out = consolidateFindings({
+      '8 orphan pages detected (no internal links pointing to them)': det({ severity: 'high', count: 8 }),
+      '9 pages are unreachable from homepage via internal links': det({ severity: 'medium', count: 9 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.some((k) => /orphan pages detected/.test(k)));
+    assert.ok(!keys.some((k) => /unreachable from homepage/.test(k)), 'unreachable should be folded away');
+    // Kept entry escalates to the most-severe and broadest count.
+    const orphan = out['8 orphan pages detected (no internal links pointing to them)'];
+    assert.strictEqual(orphan.severity, 'high');
+    assert.strictEqual(orphan.count, 9);
+  });
+
+  void it('folds "inconsistent cookie consent" into the tracking-cookies finding', () => {
+    const out = consolidateFindings({
+      'Multiple tracking cookies set before consent': det({ severity: 'medium', count: 3 }),
+      'Inconsistent cookie consent implementation': det({ severity: 'high', count: 5 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.includes('Multiple tracking cookies set before consent'));
+    assert.ok(!keys.includes('Inconsistent cookie consent implementation'));
+    assert.strictEqual(out['Multiple tracking cookies set before consent'].severity, 'high');
+  });
+});
+
+void describe('findingGroupKey (cross-list identity)', () => {
+  void it('maps differently-worded duplicate-title findings to one identity', () => {
+    assert.strictEqual(
+      findingGroupKey('Duplicate page titles found'),
+      findingGroupKey('Some pages have identical titles'),
+    );
+  });
+
+  void it('maps orphan and unreachable findings to one identity', () => {
+    assert.strictEqual(
+      findingGroupKey('8 orphan pages detected (no internal links pointing to them)'),
+      findingGroupKey('9 pages are unreachable from homepage via internal links'),
+    );
+  });
+
+  void it('keeps unrelated findings distinct', () => {
+    assert.notStrictEqual(
+      findingGroupKey('Canonicals are not set for some pages'),
+      findingGroupKey('Duplicate page titles found'),
+    );
+  });
+});
+
+// ============================================================
+// Phase 2 benchmarks (threshold + why for comparative findings)
+// ============================================================
+import { benchmarkFor } from '../lib/phase2/benchmarks';
+
+void describe('benchmarkFor', () => {
+  void it('returns a benchmark anchored to the real threshold', () => {
+    const b = benchmarkFor('Some pages have too many requests');
+    assert.ok(b && /≤20 requests/.test(b), `expected request threshold, got: ${b}`);
+  });
+
+  void it('covers render-blocking, unused CSS/JS, and third-party payload', () => {
+    assert.ok(/≤5 render-blocking/.test(benchmarkFor('Some pages have too many render-blocking resources') ?? ''));
+    assert.ok(/80%/.test(benchmarkFor('High percentage of unused CSS') ?? ''));
+    assert.ok(/70%/.test(benchmarkFor('High percentage of unused JavaScript') ?? ''));
+    assert.ok(/third-party payload/i.test(benchmarkFor('Excessive third-party payload') ?? ''));
+  });
+
+  void it('every benchmark states both a target and a rationale', () => {
+    const samples = [
+      'Some pages have titles that are too long',
+      'Some pages have descriptions that are too short',
+      'Element with too many children',
+      'Large HTML document',
+    ];
+    for (const s of samples) {
+      const b = benchmarkFor(s);
+      assert.ok(b && b.length > 20, `missing benchmark for: ${s}`);
+    }
+  });
+
+  void it('returns undefined for non-comparative findings', () => {
+    assert.strictEqual(benchmarkFor('Some pages are missing canonical URL'), undefined);
+    assert.strictEqual(benchmarkFor('Invalid JSON-LD schema'), undefined);
+  });
+});
+
+void describe('ScoreCalculator.effortLevel', () => {
+  void it('maps minute estimates to low and hour estimates to medium/high', () => {
+    assert.strictEqual(ScoreCalculator.effortLevel('5 minutes'), 'low');
+    assert.strictEqual(ScoreCalculator.effortLevel('30 minutes'), 'low');
+    assert.strictEqual(ScoreCalculator.effortLevel('1 hour'), 'medium');
+    assert.strictEqual(ScoreCalculator.effortLevel('2 hours'), 'medium');
+    assert.strictEqual(ScoreCalculator.effortLevel('4-8 hours'), 'high');
+  });
+
+  void it('prefers a pre-parsed effortMinutes when supplied', () => {
+    assert.strictEqual(ScoreCalculator.effortLevel('ignored', 10), 'low');
+    assert.strictEqual(ScoreCalculator.effortLevel('ignored', 200), 'high');
+  });
+
+  void it('defaults to medium when effort is unknown', () => {
+    assert.strictEqual(ScoreCalculator.effortLevel(undefined), 'medium');
+  });
+});
+
+// ============================================================
 // PackageAnalyzer — Phase 1 (repo)
 // ============================================================
 import { PackageAnalyzer } from '../lib/analyzers/repo/package-analyzer';
@@ -1181,6 +1300,48 @@ void describe('parseAnomalies', () => {
     assert.strictEqual(parseAnomalies('[]', URL).length, 0);
     assert.strictEqual(parseAnomalies('not json at all', URL).length, 0);
     assert.strictEqual(parseAnomalies('[broken', URL).length, 0);
+  });
+});
+
+// LLM verification pass — defensive JSON parsing
+import { parseVerifyResult } from '../lib/phase2/llm-verify';
+
+void describe('parseVerifyResult', () => {
+  const VALID = [0, 1, 2, 3];
+
+  void it('parses drop decisions and keeps only valid indices', () => {
+    const out = parseVerifyResult(
+      '{"drop":[{"index":1,"kind":"duplicate","reason":"same as #0"},{"index":9,"kind":"false-positive","reason":"oob"}]}',
+      VALID,
+    );
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].index, 1);
+    assert.strictEqual(out[0].kind, 'duplicate');
+  });
+
+  void it('normalizes an unknown kind to duplicate and supplies a default reason', () => {
+    const out = parseVerifyResult('{"drop":[{"index":2,"kind":"weird"}]}', VALID);
+    assert.strictEqual(out[0].kind, 'duplicate');
+    assert.ok(out[0].reason.length > 0);
+  });
+
+  void it('de-duplicates repeated indices', () => {
+    const out = parseVerifyResult('{"drop":[{"index":3,"kind":"duplicate"},{"index":3,"kind":"false-positive"}]}', VALID);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].index, 3);
+  });
+
+  void it('extracts the object even when wrapped in prose/fences', () => {
+    const out = parseVerifyResult('Sure:\n```json\n{"drop":[{"index":0,"kind":"false-positive","reason":"r"}]}\n```', VALID);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].index, 0);
+  });
+
+  void it('returns [] for an empty drop list, junk, or no object', () => {
+    assert.strictEqual(parseVerifyResult('{"drop":[]}', VALID).length, 0);
+    assert.strictEqual(parseVerifyResult('not json', VALID).length, 0);
+    assert.strictEqual(parseVerifyResult('{broken', VALID).length, 0);
+    assert.strictEqual(parseVerifyResult('', VALID).length, 0);
   });
 });
 

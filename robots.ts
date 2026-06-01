@@ -432,6 +432,7 @@ async function audit() {
         const pdfPath = await runPhase2(seo.fileManager.resultsDir, {
           llmNarrative: args.llmNarrative === true,
           llmFindings: args.llmFindings === true,
+          llmVerify: args.llmVerify === true,
           verbose: args.verbose === true,
         });
         console.log(`📄 Curated report: ${pdfPath}`);

@@ -234,7 +234,15 @@ function byImportance(a: [string, IssueDetail], b: [string, IssueDetail]): numbe
   const sa = SEV_BAND[(a[1].severity ?? 'medium').toLowerCase()] ?? 2;
   const sb = SEV_BAND[(b[1].severity ?? 'medium').toLowerCase()] ?? 2;
   if (sa !== sb) return sa - sb;
-  return impactScore(b[0], b[1]) - impactScore(a[0], a[1]);
+  const ia = impactScore(a[0], a[1]);
+  const ib = impactScore(b[0], b[1]);
+  if (ia !== ib) return ib - ia;
+  // Final tiebreaker: the message key is unique and stable, so tied findings
+  // order identically across runs regardless of concurrent crawl-completion
+  // order (the order `analysis.details` keys were inserted). Without it, JS's
+  // stable sort would leak that non-deterministic insertion order into the
+  // report — different machines/runs could rank tied findings differently.
+  return a[0].localeCompare(b[0]);
 }
 
 /**
@@ -249,7 +257,12 @@ function byQuickWinImportance(a: QuickWin, b: QuickWin): number {
   const ca = SECTION_RANK[categorize(a.issue)] ?? 99;
   const cb = SECTION_RANK[categorize(b.issue)] ?? 99;
   if (ca !== cb) return ca - cb;
-  return (b.impactScore ?? 0) - (a.impactScore ?? 0);
+  const ia = a.impactScore ?? 0;
+  const ib = b.impactScore ?? 0;
+  if (ia !== ib) return ib - ia;
+  // Deterministic final tiebreaker (see byImportance) — order by the stable
+  // issue text so tied quick wins never depend on crawl-completion order.
+  return a.issue.localeCompare(b.issue);
 }
 
 /** Severity ordering, weakest → strongest, for capping. */
@@ -624,7 +637,7 @@ function buildSummary(
   // before slicing so dropping an already-listed finding doesn't shrink the list.
   const richQuickwins = (summary.quickWins ?? [])
     .filter((q) => (q.effortMinutes ?? 999) <= 30 && !seen.has(summaryIdentity(q.issue)))
-    .sort((a, b) => (a.effortMinutes ?? 999) - (b.effortMinutes ?? 999))
+    .sort((a, b) => (a.effortMinutes ?? 999) - (b.effortMinutes ?? 999) || a.issue.localeCompare(b.issue))
     .slice(0, 5);
 
   if (richQuickwins.length >= 1) {
@@ -790,7 +803,10 @@ function buildFindingBlock(
   if (examples.length > 0) {
     lines.push(detail.aiDiscovered ? '**Evidence**' : '**Affected pages**');
     lines.push('');
-    const shown = examples.slice(0, EXAMPLES_PER_FINDING);
+    // Sort lexicographically before slicing so the shown sample is identical
+    // every run — `examples` are appended in concurrent crawl-completion order,
+    // which is not deterministic on its own.
+    const shown = [...examples].sort((x, y) => x.localeCompare(y)).slice(0, EXAMPLES_PER_FINDING);
     const PAGES_PER_CLUSTER = 12;
     for (const ex of shown) {
       // AI findings carry cited evidence ("<what was seen> — <url>"); keep it
@@ -807,7 +823,7 @@ function buildFindingBlock(
       if (urls.length > 1) {
         const label = clusterLabel(ex);
         lines.push(`- ${label || 'Shared value'}`);
-        for (const u of urls.slice(0, PAGES_PER_CLUSTER)) lines.push(`    - ${u}`);
+        for (const u of urls.slice(0, PAGES_PER_CLUSTER)) lines.push(`    - ${mdLink(u, u)}`);
         if (urls.length > PAGES_PER_CLUSTER) {
           lines.push(
             `    - *…and ${urls.length - PAGES_PER_CLUSTER} more page${urls.length - PAGES_PER_CLUSTER === 1 ? '' : 's'}*`,
@@ -815,12 +831,11 @@ function buildFindingBlock(
         }
       } else {
         // Single-page example. When the analyzer attached a measured value
-        // ("… has 8 render-blocking resources", "… 73% of CSS is unused"), keep
-        // that lead clause so the reader sees the actual number — not just the
-        // URL. Fall back to the bare URL when there's nothing else.
-        const summary = exampleSummary(ex);
-        const beyondUrl = summary.replace(/https?:\/\/[^\s)]+/g, '').replace(/[\s:.,;–—-]+/g, '');
-        lines.push(`- ${beyondUrl.length > 0 ? summary : (urls[0] ?? summary)}`);
+        // ("… has 8 render-blocking resources", "… 73% of CSS is unused"), the
+        // lead clause keeps the actual number; inlineExample preserves the page
+        // anchor as a clickable markdown link. When the example is nothing but a
+        // URL it yields a bare link too.
+        lines.push(`- ${inlineExample(ex)}`);
       }
     }
     const remaining = Math.max(0, (detail.count ?? examples.length) - shown.length);
@@ -1094,16 +1109,41 @@ function extractAllUrls(s: string): string[] {
 }
 
 /**
- * The lead clause of a single-page example, as plain text. Analyzers often
- * append rich HTML after the measured value — a `<br>` then a `<ul>` of
- * offending files plus an inline "Recommendation:" (the report already has a
- * Fix section). We keep only the part before that markup so the bullet shows
- * the URL + the number ("… 94% of CSS is unused (946.8 KB of 1011.2 KB)")
- * without the HTML blob or a duplicated recommendation.
+ * A markdown link. The destination is angle-bracketed when it contains
+ * characters that would otherwise break `[text](url)` parsing (spaces or
+ * parentheses), which CommonMark/`marked` allow inside `<…>`.
  */
-function exampleSummary(ex: string): string {
+function mdLink(label: string, href: string): string {
+  const dest = /[()\s]/.test(href) ? `<${href}>` : href;
+  return `[${label}](${dest})`;
+}
+
+/**
+ * Render a single-page example as inline markdown, preserving the analyzer's
+ * anchor as a real markdown link so the affected page stays clickable in the
+ * HTML/PDF report. A plain `stripHtml` would have flattened the anchor to its
+ * visible text — and analyzers often use a shortened, relative label (e.g.
+ * "/company/") that `marked` cannot autolink, so the page link was lost.
+ * Keeps only the lead clause (analyzers append rich HTML after the measured
+ * value — a `<br>`/`<ul>` of offending files plus an inline recommendation the
+ * Fix section already covers) and drops any other surviving tags.
+ */
+export function inlineExample(ex: string): string {
   const lead = ex.split(/<br\s*\/?>|<ul\b|<ol\b|<\/p>|\n/i)[0];
-  return stripHtml(lead);
+  return (
+    lead
+      // Strip every tag EXCEPT anchors first, so the angle-bracket destination
+      // emitted below (e.g. `<https://…(1)>`) isn't itself mistaken for a tag.
+      .replace(/<(?!\/?a\b)[^>]*>/gi, '')
+      // Anchor → markdown link.
+      .replace(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, text: string) =>
+        mdLink(text.trim() || href, href),
+      )
+      // Drop any anchor tag the conversion didn't match (e.g. missing href).
+      .replace(/<\/?a\b[^>]*>/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 /**

@@ -1,0 +1,123 @@
+# Report Rules — Ranking, Severity, Categorization & Determinism
+
+These are the rules that govern how the curated Phase 2 report (markdown + PDF)
+turns raw analyzer findings into a ranked, client-facing document. They live in
+**code** so every run produces the same report for everyone — nothing here
+depends on who runs the audit, on what machine, or in what order pages happen to
+crawl.
+
+If you change ranking, severity, or categorization behavior, update both the
+code and this document, and add/adjust a test in `tests/analyzers.test.ts`.
+
+## 0. Audience & tone — the report is a client-facing deliverable
+
+The Phase 2 report is read by the **site owner**, not a developer. Optimise for
+that reader and for honesty over flattery:
+
+- **No internal/dev jargon.** No CLI flags (`--perf`), no source paths
+  (`lib/analyzers/…`), no "URL template" or tooling internals in the report.
+- **No filler.** Low-signal boilerplate checks (web-app manifest, service
+  worker, theme-color, Apple touch icon, noscript, Shadow DOM, …) collapse into
+  a compact "Minor & informational" list rather than headline findings.
+  Screenshots are captured to `evidence/` (they feed `--llm-findings`) but are
+  **not** padded into the report body.
+- **Honest scores.** The overall score is min-aware
+  (`mean·0.55 + worst·0.45`, `SCORING.OVERALL_MEAN_WEIGHT`) so a failing category
+  can't be masked by a weighted mean. Severity must match reality — a missing
+  meta description is MEDIUM, not CRITICAL (see section 3).
+- **Impact-first prose.** Analysis paragraphs lead with the single
+  highest-impact finding and its reach, not a generic count.
+
+## 1. Category priority
+
+Findings are grouped and ranked by category before anything else. Priority order
+(highest first):
+
+```
+SEO  >  Performance  >  UX  >  Privacy/Security  >  Accessibility  >  Technical
+```
+
+- Defined by `SECTION_ORDER` → `SECTION_RANK` in `lib/phase2/phase2-runner.ts`.
+- `privacy` maps to the **Security** score (GDPR/cookie gaps are what the
+  security score penalises).
+- This order leads in **every** ranked list — the per-section bodies *and* the
+  cross-section summary lists (Top Priority / Quick Wins / Long-term). A
+  widespread low-priority finding (e.g. a CSS-level accessibility issue on every
+  page) must never outrank a higher-priority SEO/security finding.
+
+## 2. Ranking within a list
+
+The comparator is `byImportance` (and `byQuickWinImportance` for quick-win
+items). Keys, in order:
+
+1. **Category rank** (section 1).
+2. **Severity band** — critical → high → medium → low.
+3. **Impact score** — `severity × catalog-tier × category-value × breadth`
+   (`impactScore`). Breadth (pages affected) saturates logarithmically.
+4. **Stable message/issue text** (`localeCompare`) — the final tiebreaker.
+
+Never rank a report list by raw occurrence `count`. Count-only ranking surfaces
+whatever is most *widespread* rather than most *important*. Occurrence count
+only decides the **"systemic"** label on a finding, never its position.
+
+## 3. Severity moderation
+
+A single analyzer signal must not read as critical/high when its category
+objectively scored well. `moderateSeverities` caps (never raises) severity
+against the measured `categoryScores`:
+
+- category score ≥ 90 → cap at **medium**
+- category score ≥ 75 → cap at **high** (no critical)
+
+Findings the catalog vets as error-tier (`isCataloguedErrorTier`: mixed content,
+noindex-in-sitemap, …) are exempt — known-serious regardless of the average.
+
+## 4. Categorization
+
+`categorize()` in `lib/phase2/categorize.ts` routes a finding to its section by
+keyword. Mis-routing defeats the priority order, so when a finding ranks lower
+than expected, check its category first. Notably, these are **SEO**, not the
+`technical` catch-all: thin/insufficient content, E-E-A-T / author / YMYL
+signals, and crawl-budget waste.
+
+## 5. De-duplication
+
+The same underlying issue is sometimes reported two ways — a per-page analyzer
+finding and a site-wide validator restatement (e.g. `Form inputs missing labels`
+vs `52 form inputs across site missing labels`). These must fold to one entry
+via `DEDUP_GROUPS` in `lib/phase2/consolidate.ts`; otherwise the same issue
+appears twice across summary sub-sections.
+
+## 6. Determinism contract
+
+**Goal: the same crawl data produces a byte-identical report for everyone.**
+
+Pages crawl concurrently, so the order findings are collected in — the insertion
+order of `analysis.details` keys and of each finding's `examples` array — is
+**not** deterministic. Three rules keep that non-determinism out of the report:
+
+1. **Every output-affecting sort is a total order.** All comparators end in a
+   stable string tiebreaker (`byImportance`, `byQuickWinImportance`, the
+   quick-win effort sort, and `ScoreCalculator.identifyQuickWins`). Without it,
+   JS's stable sort leaks the insertion order into tied findings.
+2. **Example samples are sorted before slicing.** The "Affected pages" list and
+   the quick-win `examples` are sorted lexicographically before the first N are
+   taken, so the shown sample is the same every run.
+3. **Example *retention* is deterministic.** `ErrorAggregator.addError` keeps the
+   lexicographically-smallest examples once it hits `MAX_EXAMPLES_PER_ISSUE`
+   (100), not the first-arriving ones — so even findings on >100 pages retain a
+   stable sample (same memory bound).
+
+### What is *not* deterministic (by nature)
+
+- **Live performance metrics** (TTFB, LCP, CLS, …) depend on the network and
+  machine running the crawl. The *findings and ranking* derived from them are
+  stable given the same measurements, but the raw numbers will differ.
+- **Optional LLM passes** (`--llm-narrative`, `--llm-findings`, `--llm-verify`)
+  are model-driven and not bit-reproducible. They are opt-in; the default
+  template-driven report is deterministic. Results are disk-cached per audit so
+  re-runs of the *same* audit are stable.
+
+Determinism is covered by tests in `tests/analyzers.test.ts`
+(`buildReportMarkdown determinism`, `ErrorAggregator example retention
+determinism`).

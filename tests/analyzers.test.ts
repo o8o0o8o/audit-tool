@@ -708,6 +708,95 @@ void describe('findingGroupKey (cross-list identity)', () => {
 });
 
 // ============================================================
+// Determinism — same audit data must produce the same report for
+// everyone, regardless of the concurrent crawl-completion order that
+// `analysis.details` keys and `examples` arrays were collected in.
+// ============================================================
+import { buildReportMarkdown } from '../lib/phase2/phase2-runner';
+import type { AuditArtifacts, IssueDetail as P2IssueDetail } from '../lib/phase2/types';
+import { ErrorAggregator } from '../lib/utils/error-aggregator';
+
+function mkArtifacts(detailKeys: string[], examples: Record<string, string[]> = {}): AuditArtifacts {
+  const details: Record<string, P2IssueDetail> = {};
+  for (const k of detailKeys) {
+    details[k] = { severity: 'high', count: 5, examples: [...(examples[k] ?? [])] };
+  }
+  return {
+    runDir: '/tmp/determinism-test',
+    manifest: {
+      version: 1,
+      format: 'multi',
+      domain: 'example.com',
+      created: '2026-01-01T00:00:00.000Z',
+      progress: { processedPages: [], totalWithoutError: 0, totalWithError: 0, byError: {}, attempts: {} },
+      files: { metadata: '', analysis: '', incomingLinks: '', pageBatches: [] },
+      evidence: null,
+    },
+    analysis: {
+      overall: detailKeys,
+      details,
+      bySeverity: {},
+      summary: {
+        totalIssues: detailKeys.length,
+        criticalCount: 0,
+        highCount: detailKeys.length,
+        mediumCount: 0,
+        lowCount: 0,
+        categoryScores: { seo: 50, performance: 50, accessibility: 50, security: 50 },
+        overallScore: 50,
+        passRate: 0,
+        quickWins: [],
+      },
+    },
+    metadata: {},
+    repoAnalysis: null,
+  };
+}
+
+void describe('buildReportMarkdown determinism', () => {
+  void it('produces identical output regardless of details key-insertion order', () => {
+    // Three findings that tie on category/severity/impact — only the stable
+    // message tiebreaker can order them. If insertion order leaked through,
+    // forward vs reversed would differ.
+    const keys = ['Alpha unknown finding', 'Bravo unknown finding', 'Charlie unknown finding'];
+    const fwd = buildReportMarkdown(mkArtifacts(keys));
+    const rev = buildReportMarkdown(mkArtifacts([...keys].reverse()));
+    assert.strictEqual(fwd, rev);
+  });
+
+  void it('produces identical affected-pages samples regardless of example order', () => {
+    const fwd = buildReportMarkdown(
+      mkArtifacts(['Alpha unknown finding'], {
+        'Alpha unknown finding': ['https://e.com/z', 'https://e.com/a', 'https://e.com/m'],
+      }),
+    );
+    const rev = buildReportMarkdown(
+      mkArtifacts(['Alpha unknown finding'], {
+        'Alpha unknown finding': ['https://e.com/a', 'https://e.com/m', 'https://e.com/z'],
+      }),
+    );
+    assert.strictEqual(fwd, rev);
+  });
+});
+
+void describe('ErrorAggregator example retention determinism', () => {
+  void it('retains the same (smallest) examples regardless of arrival order', () => {
+    const urls = Array.from({ length: 150 }, (_, i) => `https://e.com/page-${String(i).padStart(3, '0')}`);
+    const forward = new ErrorAggregator();
+    for (const u of urls) forward.addError('Some issue', u, 'high');
+    const reversed = new ErrorAggregator();
+    for (const u of [...urls].reverse()) reversed.addError('Some issue', u, 'high');
+
+    const ex = (agg: ErrorAggregator) => [...agg.getData().details['Some issue'].examples].sort();
+    const a = ex(forward);
+    const b = ex(reversed);
+    assert.deepStrictEqual(a, b, 'retained example set must not depend on arrival order');
+    // Total count is tracked accurately even though examples are capped.
+    assert.strictEqual(forward.getData().details['Some issue'].count, 150);
+  });
+});
+
+// ============================================================
 // Phase 2 benchmarks (threshold + why for comparative findings)
 // ============================================================
 import { benchmarkFor } from '../lib/phase2/benchmarks';
@@ -870,7 +959,7 @@ void describe('parseSrcset', () => {
 // ============================================================
 // normalizeMessage / mergeNumericVariants — Phase 2 dedup
 // ============================================================
-import { normalizeMessage, mergeNumericVariants, sanitizeProse } from '../lib/phase2/phase2-runner';
+import { normalizeMessage, mergeNumericVariants, sanitizeProse, inlineExample } from '../lib/phase2/phase2-runner';
 import { normalizeMessageForLookup } from '../lib/utils/finding-id';
 
 void describe('sanitizeProse', () => {
@@ -1610,5 +1699,31 @@ void describe('stampPageUrl', () => {
 
   void it('uses the page URL as the example when the detail is empty', () => {
     assert.strictEqual(stampPageUrl('   ', URL), `<a href="${URL}">${URL}</a>`);
+  });
+});
+
+void describe('inlineExample', () => {
+  void it('preserves the analyzer anchor as a clickable markdown link', () => {
+    // Thin-content style: full href, shortened relative label.
+    const ex = '<a href="https://example.com/company/">/company/</a> has only 54 words (minimum: 100)';
+    assert.strictEqual(inlineExample(ex), '[/company/](https://example.com/company/) has only 54 words (minimum: 100)');
+  });
+
+  void it('keeps only the lead clause, dropping trailing HTML the Fix section covers', () => {
+    const ex =
+      '<a href="https://example.com/x">https://example.com/x</a> has 8 render-blocking resources<br><ul><li>a.css</li></ul>Recommendation: defer';
+    assert.strictEqual(
+      inlineExample(ex),
+      '[https://example.com/x](https://example.com/x) has 8 render-blocking resources',
+    );
+  });
+
+  void it('angle-brackets a destination containing parentheses so markdown does not break', () => {
+    const ex = '<a href="https://example.com/p?a=(1)">/p</a> flagged';
+    assert.strictEqual(inlineExample(ex), '[/p](<https://example.com/p?a=(1)>) flagged');
+  });
+
+  void it('leaves a bare URL (no anchor) for marked to autolink', () => {
+    assert.strictEqual(inlineExample('https://example.com/bare'), 'https://example.com/bare');
   });
 });

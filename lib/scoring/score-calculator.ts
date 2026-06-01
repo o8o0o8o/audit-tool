@@ -139,13 +139,18 @@ class ScoreCalculator {
           example: recommendation.example,
           resources: recommendation.resources ?? [],
           impactScore,
-          examples: (data.examples ?? []).slice(0, 3),
+          // Sort before slicing so the retained examples don't depend on the
+          // concurrent crawl-completion order they were collected in.
+          examples: [...(data.examples ?? [])].sort((a, b) => a.localeCompare(b)).slice(0, 3),
         });
       }
     }
 
-    quickWins.sort((a, b) =>
-      b.impactScore !== a.impactScore ? b.impactScore - a.impactScore : a.effortMinutes - b.effortMinutes,
+    // Final `issue` tiebreaker keeps ordering deterministic when impact and
+    // effort tie — without it, equal items would fall back to the
+    // crawl-completion insertion order, which varies run to run.
+    quickWins.sort(
+      (a, b) => b.impactScore - a.impactScore || a.effortMinutes - b.effortMinutes || a.issue.localeCompare(b.issue),
     );
     return quickWins.slice(0, SCORING.QUICK_WIN_MAX_RESULTS);
   }
@@ -306,9 +311,7 @@ function scorePerformance(pages: PageInfo[], issues: EnrichedIssue[], totalPages
   if (perPageScores.length > 0) return mean(perPageScores);
 
   // Fallback when no perf metrics were collected.
-  const allPerfOccurrences = issues
-    .filter((i) => i.category === 'performance')
-    .reduce((sum, i) => sum + i.affected, 0);
+  const allPerfOccurrences = issues.filter((i) => i.category === 'performance').reduce((sum, i) => sum + i.affected, 0);
   if (allPerfOccurrences === 0) return null;
   return urlPassScore(allPerfOccurrences, totalPages);
 }
@@ -335,9 +338,7 @@ function scoreAccessibility(pages: PageInfo[]): number | null {
 
 /** Security: mean of per-page securityScore (Observatory-style deductions). */
 function scoreSecurity(pages: PageInfo[]): number | null {
-  const samples = pages
-    .map((p) => p.security?.securityScore)
-    .filter((s): s is number => typeof s === 'number');
+  const samples = pages.map((p) => p.security?.securityScore).filter((s): s is number => typeof s === 'number');
   return mean(samples);
 }
 
@@ -483,9 +484,7 @@ const FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'Audit and reduce third-party scripts. Defer non-critical scripts, use facade patterns for heavy embeds (YouTube, maps).',
     example:
       '<script src="analytics.js" defer></script>\n<!-- Use lite-youtube-embed instead of full YouTube embed -->',
-    resources: [
-      { text: 'Third-Party Performance', url: 'https://web.dev/articles/optimizing-third-party-javascript' },
-    ],
+    resources: [{ text: 'Third-Party Performance', url: 'https://web.dev/articles/optimizing-third-party-javascript' }],
   },
   'Some pages have render-blocking third-party scripts': {
     effort: '15 minutes',

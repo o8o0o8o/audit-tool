@@ -122,11 +122,20 @@ class ErrorAggregator {
 
       const details = this.#analysis.details[generalError];
 
-      // Only store up to MAX_EXAMPLES to save memory
+      // Only store up to MAX_EXAMPLES to save memory. Once at the cap, keep the
+      // lexicographically-smallest set rather than the first-arriving one: pages
+      // crawl concurrently, so "first arriving" is non-deterministic and would
+      // make the retained sample (and thus the report) differ run to run. The
+      // smallest-by-string subset is stable regardless of completion order.
       if (details.examples.length < MAX_EXAMPLES) {
         details.examples.push(detailedError);
       } else {
         details.truncated ??= true; // Mark that we've hit the limit
+        let maxIdx = 0;
+        for (let i = 1; i < details.examples.length; i++) {
+          if (details.examples[i] > details.examples[maxIdx]) maxIdx = i;
+        }
+        if (detailedError < details.examples[maxIdx]) details.examples[maxIdx] = detailedError;
       }
 
       // Always increment count to track total occurrences accurately

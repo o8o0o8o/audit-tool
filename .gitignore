@@ -45,3 +45,6 @@ failedPages.json
 audit-results
 
 *.xml
+
+# local fix/review patch notes
+.patches

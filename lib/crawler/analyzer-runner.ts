@@ -160,6 +160,7 @@ export async function runAnalyzers(
   consoleData: unknown,
   options: CrawlerInternalOptions,
   reportIssue: ReportIssueFn,
+  servedHtml?: string,
 ): Promise<void> {
   const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
   // Cast requests for analyzer compatibility (analyzers use broader parameter types)
@@ -267,7 +268,7 @@ export async function runAnalyzers(
       ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
 
       // Advanced
-      PaginationAnalyzer.analyze(chromePage, parsedPage, url),
+      PaginationAnalyzer.analyze(chromePage, parsedPage, url, servedHtml),
       MediaSEOAnalyzer.analyze(chromePage, parsedPage, pageData, url),
       WebComponentAnalyzer.analyze(chromePage, parsedPage, url),
 

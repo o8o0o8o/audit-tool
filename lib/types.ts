@@ -1080,7 +1080,14 @@ export interface PaginationData {
   paginationLinks: { page: number; href: string }[];
   currentPage: number | null;
   totalPages: number | null;
+  /** True when an infinite-scroll *mechanism* (sentinel/trigger/container) is present. Descriptive only. */
   infiniteScrollDetected: boolean;
+  /**
+   * True when the page's list content is discoverable without client-side scroll —
+   * i.e. there is no real scrolled list, or the list is already present in the
+   * served HTML. When true, infinite scroll is NOT an SEO discoverability problem.
+   */
+  infiniteScrollContentCrawlable?: boolean;
   loadMoreDetected: boolean;
   issues: Issue[];
   /** Resolved href of the "next" control, if one was found. */

@@ -52,6 +52,18 @@ export const CRAWL_SETTINGS = {
   BROKEN_PAGINATION_MAX_PROBE_CLICKS: 3,
   BROKEN_PAGINATION_PROBE_TIMEOUT_MS: 6000,
   BROKEN_PAGINATION_MAX_PROBES: 5,
+  // Infinite-scroll discoverability check.
+  // Why: an infinite-scroll *mechanism* (sentinel/trigger) is only an SEO problem
+  // when the list content it loads is NOT already in the served HTML (so a crawler
+  // can't see it) AND there's no static fallback. These gate the finding so a
+  // server-rendered list that's merely revealed on scroll is never flagged.
+  // Minimum repeated list items (in the rendered DOM, near a sentinel) before a
+  // page is considered to have a genuine scrolled content list.
+  INFINITE_SCROLL_MIN_LIST_ITEMS: 5,
+  // Fraction of the rendered item count that must also be present in the served
+  // HTML for the content to count as crawlable (server-rendered). Below this, the
+  // list is treated as JS-injected.
+  INFINITE_SCROLL_SERVED_FRACTION: 0.5,
   BACKOFF_RESET_TIMEOUT_MS: 300000,
   BACKOFF_BASE_DELAY_MS: 1000,
   BACKOFF_MAX_DELAY_MS: 30000,

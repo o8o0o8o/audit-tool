@@ -94,6 +94,8 @@ export interface BasicTestResult {
   consoleData: unknown;
   url?: string;
   blockers?: unknown;
+  /** Served HTML (pre-JS response body), when capturable. */
+  servedHtml?: string;
 }
 
 export interface PerformanceMetrics {

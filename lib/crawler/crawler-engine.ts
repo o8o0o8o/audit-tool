@@ -446,6 +446,16 @@ class CrawlerEngine {
       responseHeaders['expires'] = headers['expires'];
     }
 
+    // Capture the served HTML (pre-JS response body) — the floor of what every
+    // crawler sees. Used by the pagination analyzer to tell server-rendered list
+    // content (crawlable) apart from content injected client-side on scroll.
+    let servedHtml: string | undefined;
+    try {
+      servedHtml = await response?.text();
+    } catch {
+      // Body unavailable (e.g. already consumed / non-text) — leave undefined.
+    }
+
     return {
       ...vitals,
       status,
@@ -455,6 +465,7 @@ class CrawlerEngine {
       redirectChain,
       responseHeaders,
       consoleData,
+      servedHtml,
     };
   }
 
@@ -1046,6 +1057,7 @@ class CrawlerEngine {
       redirectChain,
       responseHeaders,
       consoleData,
+      servedHtml,
     } = page;
 
     // Defensive check for corrupted state
@@ -1245,6 +1257,7 @@ class CrawlerEngine {
         consoleData,
         this.#options,
         this.#reportIssue,
+        servedHtml,
       );
     } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page

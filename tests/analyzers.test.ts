@@ -9,6 +9,7 @@ import { CodeCoverageAnalyzer } from '../lib/analyzers/performance/code-coverage
 import { CTADetectorAnalyzer } from '../lib/analyzers/content/cta-detector-analyzer';
 import { OutboundLinkChecker } from '../lib/analyzers/content/outbound-link-checker';
 import { BrokenPaginationAnalyzer } from '../lib/analyzers/site-wide/broken-pagination-analyzer';
+import { PaginationAnalyzer } from '../lib/analyzers/seo/pagination-analyzer';
 import { ScoreCalculator } from '../lib/scoring/score-calculator';
 import { scoredCategoryOf, buildScoreImpact, sectionScoreSuffix } from '../lib/phase2/score-impact';
 import { DEFAULT_CONFIG } from '../lib/config-loader';
@@ -1601,6 +1602,76 @@ void describe('BrokenPaginationAnalyzer', () => {
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
     assert.strictEqual(result.issues.length, 0);
+  });
+});
+
+// ============================================================
+// Pagination Analyzer — infinite-scroll discoverability
+// ============================================================
+void describe('PaginationAnalyzer.decideInfiniteScrollProblem', () => {
+  const decide = (over: Partial<Parameters<typeof PaginationAnalyzer.decideInfiniteScrollProblem>[0]> = {}) =>
+    PaginationAnalyzer.decideInfiniteScrollProblem({
+      mechanismPresent: true,
+      renderedItemCount: 20,
+      servedItemCount: 0,
+      hasPaginationLinks: false,
+      hasRelPrevNext: false,
+      ...over,
+    });
+
+  void it('does NOT flag a server-rendered list merely revealed on scroll (items present in served HTML)', () => {
+    // The user's case: server returns all items in HTML, client just hides them.
+    assert.strictEqual(decide({ renderedItemCount: 20, servedItemCount: 20 }), false);
+  });
+
+  void it('does NOT flag a decorative sentinel on a page with no real list', () => {
+    // lunacy.audio regression: homepage / product pages — mechanism present, no list.
+    assert.strictEqual(decide({ renderedItemCount: 0, servedItemCount: 0 }), false);
+    assert.strictEqual(decide({ renderedItemCount: 3, servedItemCount: 0 }), false);
+  });
+
+  void it('does NOT flag JS-loaded content when a static fallback exists', () => {
+    assert.strictEqual(decide({ servedItemCount: 0, hasPaginationLinks: true }), false);
+    assert.strictEqual(decide({ servedItemCount: 0, hasRelPrevNext: true }), false);
+  });
+
+  void it('does NOT flag when there is no infinite-scroll mechanism', () => {
+    assert.strictEqual(decide({ mechanismPresent: false, servedItemCount: 0 }), false);
+  });
+
+  void it('flags a real JS-injected list with no crawlable fallback', () => {
+    assert.strictEqual(decide({ renderedItemCount: 20, servedItemCount: 0 }), true);
+    // Partial server-rendering below the fraction threshold still counts as a problem.
+    assert.strictEqual(decide({ renderedItemCount: 20, servedItemCount: 3 }), true);
+  });
+});
+
+void describe('PaginationAnalyzer.analyzeSiteWide — infinite scroll', () => {
+  const pageWith = (paginationData: Partial<NonNullable<PageInfo['paginationData']>>): PageInfo =>
+    ({ paginationData: { hasPagination: true, ...paginationData } }) as unknown as PageInfo;
+
+  void it('does not emit a finding when infinite-scroll content is crawlable', () => {
+    const pages = {
+      'https://ex.com/a': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: true }),
+    };
+    const result = PaginationAnalyzer.analyzeSiteWide(pages as Record<string, PageInfo>);
+    assert.strictEqual(
+      result.issues.some((i) => /infinite scroll without pagination fallback/i.test(i.message ?? '')),
+      false,
+    );
+  });
+
+  void it('emits a HIGH finding only for pages where content is not crawlable', () => {
+    const pages = {
+      'https://ex.com/feed': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: false }),
+      'https://ex.com/list': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: false }),
+      // crawlable one should not be counted
+      'https://ex.com/home': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: true }),
+    };
+    const result = PaginationAnalyzer.analyzeSiteWide(pages as Record<string, PageInfo>);
+    const finding = result.issues.find((i) => /infinite scroll without pagination fallback/i.test(i.message ?? ''));
+    assert.ok(finding, 'expected an infinite-scroll finding');
+    assert.match(finding!.message ?? '', /^2 pages/);
   });
 });
 

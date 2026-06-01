@@ -3,6 +3,7 @@
  * Analyzes pagination implementation for SEO best practices
  */
 
+import { parse } from 'node-html-parser';
 import { CRAWL_SETTINGS, SEVERITY } from '../../constants';
 import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo, PaginationProbeResult } from '../../types';
@@ -13,9 +14,11 @@ class PaginationAnalyzer {
    * @param {Object} chromePage - Playwright page object
    * @param {Object} parsedPage - Parsed HTML page
    * @param {string} url - Page URL
+   * @param {string} [servedHtml] - Served HTML (pre-JS response body), used to tell
+   *   server-rendered (crawlable) list content apart from client-injected content.
    * @returns {Object} Analysis results
    */
-  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string) {
+  static async analyze(chromePage: ChromePage, parsedPage: ParsedPage, url: string, servedHtml?: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -31,6 +34,7 @@ class PaginationAnalyzer {
       currentPage: null as number | null,
       totalPages: null as number | null,
       infiniteScrollDetected: false,
+      infiniteScrollContentCrawlable: true,
       loadMoreDetected: false,
       issues: [] as Issue[],
       nextUrl: null as string | null,
@@ -62,9 +66,12 @@ class PaginationAnalyzer {
       paginationData.totalPages = uiPagination.totalPages;
     }
 
-    // 4. Detect infinite scroll
-    const infiniteScroll = await this.#detectInfiniteScroll(chromePage, parsedPage);
-    if (infiniteScroll.detected) {
+    // 4. Detect infinite scroll. A sentinel/trigger element only signals a
+    //    *mechanism*; whether it's an SEO problem depends on whether the list
+    //    content is already in the served HTML (crawlable) and whether a static
+    //    fallback exists. We resolve that below.
+    const infiniteScroll = await this.#detectInfiniteScroll(chromePage);
+    if (infiniteScroll.mechanismPresent) {
       paginationData.hasPagination = true;
       paginationData.infiniteScrollDetected = true;
       paginationData.type = 'infinite-scroll';
@@ -95,19 +102,35 @@ class PaginationAnalyzer {
     // static href is present (so crawlers can't enumerate the series via URLs).
     paginationData.nextIsJsControl = nextControl.found && !relLinks.next && !nextControl.href;
 
+    // Resolve whether the infinite-scroll mechanism is actually a discoverability
+    // problem. Count how many of the rendered list items are already present in
+    // the served HTML (what every crawler sees without executing JS).
+    const hasStaticLinks = paginationData.paginationLinks.length > 0 || paginationData.hasRelPrevNext;
+    const servedItemCount =
+      infiniteScroll.mechanismPresent && infiniteScroll.listSignature
+        ? this.#countServedItems(servedHtml, infiniteScroll.listSignature)
+        : 0;
+    const isInfiniteScrollProblem = this.decideInfiniteScrollProblem({
+      mechanismPresent: infiniteScroll.mechanismPresent,
+      renderedItemCount: infiniteScroll.renderedItemCount,
+      servedItemCount,
+      hasPaginationLinks: paginationData.paginationLinks.length > 0,
+      hasRelPrevNext: paginationData.hasRelPrevNext,
+    });
+    paginationData.infiniteScrollContentCrawlable = !isInfiniteScrollProblem;
+
     // Generate issues
 
-    // Infinite scroll without SEO fallback
+    // Infinite scroll without SEO fallback — only when the content is genuinely
+    // undiscoverable (a real scrolled list, not in the served HTML, no fallback).
     if (paginationData.infiniteScrollDetected) {
-      const hasStaticLinks = paginationData.paginationLinks.length > 0 || paginationData.hasRelPrevNext;
-
-      if (!hasStaticLinks) {
+      if (isInfiniteScrollProblem) {
         issues.push({
           message: 'Infinite scroll without pagination fallback',
-          detail: `<a href="${url}">${url}</a> uses infinite scroll but has no static pagination links. Search engines may not discover all content. Add paginated links or a sitemap covering all items.`,
+          detail: `<a href="${url}">${url}</a> loads list content via infinite scroll that is not present in the server-rendered HTML and has no static pagination links. Search engines may not discover all content. Add paginated links or ensure all items are server-rendered or covered by the sitemap.`,
           severity: SEVERITY.HIGH,
         });
-      } else {
+      } else if (hasStaticLinks) {
         warnings.push({
           message: 'Infinite scroll detected - verify SEO implementation',
           detail: `<a href="${url}">${url}</a> uses infinite scroll. Ensure all content is accessible via static URLs.`,
@@ -290,38 +313,130 @@ class PaginationAnalyzer {
   }
 
   /**
-   * Detect infinite scroll implementation
+   * Detect an infinite-scroll *mechanism* and measure the repeated content list
+   * around it. This deliberately does NOT decide whether there's an SEO problem —
+   * it returns raw signals so the decision (which also needs the served HTML and
+   * static-fallback state) is made in the pure {@link decideInfiniteScrollProblem}.
+   *
+   * Returns:
+   *   • mechanismPresent — an explicit infinite-scroll container or sentinel/trigger
+   *     element exists (decorative "infinite" class names are intentionally NOT
+   *     matched — they previously caused false positives).
+   *   • listSignature — `tag` or `tag.class` of the dominant repeated item group
+   *     sitting in the container / beside a sentinel (the list being scrolled), or
+   *     null when no repeated group exists (e.g. a sentinel on a page with no list).
+   *   • renderedItemCount — size of that dominant group in the rendered DOM.
    * @private
    */
-  static async #detectInfiniteScroll(chromePage: ChromePage, _parsedPage: ParsedPage) {
+  static async #detectInfiniteScroll(chromePage: ChromePage): Promise<{
+    mechanismPresent: boolean;
+    listSignature: string | null;
+    renderedItemCount: number;
+  }> {
     try {
-      // Only deliberate loading hooks count. Two heuristics were removed because
-      // they produced false positives (flagging product/home pages that have no
-      // listing at all):
-      //   • `[class*="infinite"]` — a substring match that also caught
-      //     decorative "infinite" marquee/animation classes.
-      //   • a raw-HTML regex scan for /infinite[-_]?scroll/ — which matched the
-      //     string anywhere in bundled slider/carousel library code.
-      // Both flagged the *word* "infinite", not an actual infinite-scrolled
-      // content list. We now require an explicit infinite-scroll container or a
-      // JS sentinel/trigger element — the unambiguous signals that list content
-      // is loaded on scroll.
-      const result = await chromePage.evaluate(() => {
-        const hasContainer = document.querySelector('[data-infinite-scroll]') !== null;
-
-        // Sentinel / trigger elements are the reliable marker: a deliberate hook
-        // an IntersectionObserver watches to load the next batch of list items.
-        const sentinels = document.querySelectorAll(
-          '.load-more-sentinel, .scroll-sentinel, [data-sentinel], .infinite-scroll-trigger',
+      return await chromePage.evaluate(() => {
+        const container = document.querySelector('[data-infinite-scroll]');
+        const sentinels = Array.from(
+          document.querySelectorAll('.load-more-sentinel, .scroll-sentinel, [data-sentinel], .infinite-scroll-trigger'),
         );
+        const mechanismPresent = container !== null || sentinels.length > 0;
+        if (!mechanismPresent) {
+          return { mechanismPresent: false, listSignature: null, renderedItemCount: 0 };
+        }
 
-        return { detected: hasContainer || sentinels.length > 0 };
+        // The list being scrolled lives inside the container, or as siblings of a
+        // sentinel. Group those candidate elements by tag + first class token and
+        // take the largest group — that's the repeated content list. A decorative
+        // sentinel (e.g. a homepage hero) has no such repeated neighbour group.
+        // NOTE: a sentinel whose parent is <body>/a generic wrapper will group its
+        // layout children; MIN_LIST_ITEMS + the served-HTML check keep that from
+        // flagging non-list pages.
+        const scopes: Element[] = [];
+        if (container) scopes.push(container);
+        for (const s of sentinels) if (s.parentElement) scopes.push(s.parentElement);
+
+        // The signature is later used as a `tag.class` selector against the served
+        // HTML, so the class must be a plain CSS identifier. Tailwind/utility classes
+        // (`md:flex`, `w-1/2`) and other non-identifier tokens would make that
+        // selector throw/misparse — fall back to a tag-only signature for those.
+        const isSafeClass = (c: string) => /^[A-Za-z_-][\w-]*$/.test(c);
+
+        let bestSignature: string | null = null;
+        let bestCount = 0;
+        for (const scope of scopes) {
+          const groups = new Map<string, number>();
+          for (const el of Array.from(scope.children)) {
+            const tag = el.tagName.toLowerCase();
+            const firstClass = el.classList && el.classList.length > 0 ? el.classList[0] : '';
+            const sig = firstClass && isSafeClass(firstClass) ? `${tag}.${firstClass}` : tag;
+            groups.set(sig, (groups.get(sig) ?? 0) + 1);
+          }
+          for (const [sig, count] of groups) {
+            if (count > bestCount) {
+              bestCount = count;
+              bestSignature = sig;
+            }
+          }
+        }
+
+        return { mechanismPresent: true, listSignature: bestSignature, renderedItemCount: bestCount };
       });
-
-      return { detected: result.detected };
     } catch {
-      return { detected: false };
+      return { mechanismPresent: false, listSignature: null, renderedItemCount: 0 };
     }
+  }
+
+  /**
+   * Count how many elements matching `listSignature` (a `tag` or `tag.class`
+   * selector) appear in the served HTML — i.e. content a crawler sees without
+   * executing JavaScript. Returns 0 when the served HTML is unavailable.
+   * @private
+   */
+  static #countServedItems(servedHtml: string | undefined, listSignature: string): number {
+    if (!servedHtml) return 0;
+    try {
+      return parse(servedHtml).querySelectorAll(listSignature).length;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Decide whether an infinite-scroll mechanism is a genuine SEO discoverability
+   * problem. Pure and deterministic so it can be unit-tested without a browser.
+   *
+   * It is a problem only when ALL hold:
+   *   • a mechanism is present, and
+   *   • there is a real scrolled list (≥ INFINITE_SCROLL_MIN_LIST_ITEMS rendered items), and
+   *   • that list is NOT adequately present in the served HTML (JS-injected), and
+   *   • there is no static fallback (numbered pagination links or rel=prev/next).
+   *
+   * Server-rendered lists that are merely revealed on scroll, decorative sentinels
+   * on pages with no list, and infinite scroll backed by crawlable links are all
+   * correctly treated as non-problems.
+   */
+  static decideInfiniteScrollProblem({
+    mechanismPresent,
+    renderedItemCount,
+    servedItemCount,
+    hasPaginationLinks,
+    hasRelPrevNext,
+  }: {
+    mechanismPresent: boolean;
+    renderedItemCount: number;
+    servedItemCount: number;
+    hasPaginationLinks: boolean;
+    hasRelPrevNext: boolean;
+  }): boolean {
+    if (!mechanismPresent) return false;
+    // No real scrolled list (e.g. a decorative sentinel on a home/product page).
+    if (renderedItemCount < CRAWL_SETTINGS.INFINITE_SCROLL_MIN_LIST_ITEMS) return false;
+    // List already in the served HTML → crawlable → not a problem.
+    const servedThreshold = Math.max(1, Math.ceil(renderedItemCount * CRAWL_SETTINGS.INFINITE_SCROLL_SERVED_FRACTION));
+    if (servedItemCount >= servedThreshold) return false;
+    // Static fallback lets crawlers enumerate the content regardless of scroll.
+    if (hasPaginationLinks || hasRelPrevNext) return false;
+    return true;
   }
 
   /**
@@ -666,18 +781,20 @@ class PaginationAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    let infiniteScrollPages = 0;
-    let pagesWithRelPrevNext = 0;
+    // Count only pages where infinite scroll is an actual discoverability problem.
+    // `infiniteScrollContentCrawlable === false` already encodes the full per-page
+    // decision (real list, absent from served HTML, no static fallback), so this
+    // stays consistent with the per-page finding instead of a bare mechanism count.
+    let infiniteScrollProblemPages = 0;
     let pagesWithBadCanonical = 0;
 
     for (const [_url, page] of Object.entries(pages)) {
       if (page.paginationData?.hasPagination) {
-        if (page.paginationData.infiniteScrollDetected) {
-          infiniteScrollPages++;
-        }
-
-        if (page.paginationData.hasRelPrevNext) {
-          pagesWithRelPrevNext++;
+        if (
+          page.paginationData.infiniteScrollDetected &&
+          page.paginationData.infiniteScrollContentCrawlable === false
+        ) {
+          infiniteScrollProblemPages++;
         }
 
         if (
@@ -690,11 +807,11 @@ class PaginationAnalyzer {
       }
     }
 
-    if (infiniteScrollPages > 0 && pagesWithRelPrevNext === 0) {
+    if (infiniteScrollProblemPages > 0) {
       issues.push({
-        message: `${infiniteScrollPages} pages use infinite scroll without pagination fallback`,
+        message: `${infiniteScrollProblemPages} pages use infinite scroll without pagination fallback`,
         detail:
-          'Infinite scroll pages should have static pagination links or ensure all content URLs are in the sitemap.',
+          'These pages load list content via infinite scroll that is not in the server-rendered HTML and has no static pagination links. Add paginated links or ensure all content URLs are server-rendered or covered by the sitemap.',
         severity: SEVERITY.HIGH,
       });
     }

@@ -171,6 +171,20 @@ class ScoreCalculator {
     return match[2].toLowerCase().startsWith('h') ? value * 60 : value;
   }
 
+  /**
+   * Coarse effort level for reports. We deliberately do NOT surface time
+   * estimates ("~30 minutes", "1-2 hours") — the heuristic isn't precise enough
+   * to justify them and readers treat a number as a commitment. Show
+   * low / medium / high instead. Thresholds: ≤30 min → low, ≤2 h → medium,
+   * otherwise high. A pre-parsed `effortMinutes` is preferred when supplied.
+   */
+  static effortLevel(effort: string | undefined, effortMinutes?: number): 'low' | 'medium' | 'high' {
+    const mins = typeof effortMinutes === 'number' ? effortMinutes : effort ? this.parseEffort(effort) : 60;
+    if (mins <= 30) return 'low';
+    if (mins <= 120) return 'medium';
+    return 'high';
+  }
+
   static getFixRecommendations(): Record<string, FixRecommendation> {
     // Original curated entries take precedence over extended ones when keys
     // collide. Both are normalized at lookup time in phase2-runner.

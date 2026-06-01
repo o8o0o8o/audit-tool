@@ -5,6 +5,7 @@
 
 import { escapeHtml } from '../html-utils';
 import { extractSummary } from '../data-processor';
+import { ScoreCalculator } from '../../scoring/score-calculator';
 import type { ReportSectionData, QuickWinFull } from '../../types';
 
 /**
@@ -29,7 +30,7 @@ function getQuickWins(data: ReportSectionData) {
       </div>
 
       <p class="text-center mb-7 text-base" style="opacity: 0.95;">
-        High-impact fixes that take less than 30 minutes each
+        High-impact, low-effort fixes
       </p>
 
       ${quickWins.map((win: QuickWinFull, index: number) => getQuickWinCard(win, index)).join('')}
@@ -89,7 +90,7 @@ function getQuickWinCard(win: QuickWinFull, index: number) {
         <div class="win-title">${index + 1}. ${escapeHtml(win.issue)}</div>
         <div class="win-badges">
           <span class="win-badge">${win.impact} Impact</span>
-          <span class="win-badge">⏱️ ${win.effort}</span>
+          <span class="win-badge">Effort: ${ScoreCalculator.effortLevel(win.effort, win.effortMinutes)}</span>
           <span class="win-badge">${win.affectedPages} page${win.affectedPages > 1 ? 's' : ''}</span>
         </div>
       </div>

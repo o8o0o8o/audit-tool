@@ -51,6 +51,12 @@ Options:
   --version, -V             Show version number
   --help, -h                Show this help message
 
+AI passes (require ANTHROPIC_API_KEY; degrade silently without it):
+  --llm-narrative           Rewrite each section's Analysis paragraph
+  --llm-findings            Vision pass for emergent functional/UX bugs
+  --llm-verify              Revalidate findings + drop confirmed duplicates/false positives before the final report
+  --llm                     Enable all of the above (full AI mode)
+
 Comparison mode:
   --compare=<url>           Compare origin with another site (page-by-page)
   --compare-sitemap=<file>  Local sitemap XML for comparison site

@@ -10,6 +10,7 @@ import { CTADetectorAnalyzer } from '../lib/analyzers/content/cta-detector-analy
 import { OutboundLinkChecker } from '../lib/analyzers/content/outbound-link-checker';
 import { BrokenPaginationAnalyzer } from '../lib/analyzers/site-wide/broken-pagination-analyzer';
 import { ScoreCalculator } from '../lib/scoring/score-calculator';
+import { scoredCategoryOf, buildScoreImpact, sectionScoreSuffix } from '../lib/phase2/score-impact';
 import { DEFAULT_CONFIG } from '../lib/config-loader';
 import { METRIC_INFO, SIGNAL_CATEGORIES } from '../lib/reports/metrics-metadata';
 import { getJsonSummary } from '../lib/utils/cli-summary';
@@ -608,6 +609,153 @@ void describe('categorize (Phase 2 routing)', () => {
 });
 
 // ============================================================
+// Phase 2 consolidation / de-duplication
+// ============================================================
+import { consolidateFindings, findingGroupKey } from '../lib/phase2/consolidate';
+import type { IssueDetail } from '../lib/phase2/types';
+
+const det = (over: Partial<IssueDetail> = {}): IssueDetail => ({
+  severity: 'medium',
+  count: 1,
+  examples: [],
+  ...over,
+});
+
+void describe('consolidateFindings (Phase 2 de-dup)', () => {
+  void it('folds the unreachable-pages finding into the orphan-pages finding', () => {
+    const out = consolidateFindings({
+      '8 orphan pages detected (no internal links pointing to them)': det({ severity: 'high', count: 8 }),
+      '9 pages are unreachable from homepage via internal links': det({ severity: 'medium', count: 9 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.some((k) => /orphan pages detected/.test(k)));
+    assert.ok(!keys.some((k) => /unreachable from homepage/.test(k)), 'unreachable should be folded away');
+    // Kept entry escalates to the most-severe and broadest count.
+    const orphan = out['8 orphan pages detected (no internal links pointing to them)'];
+    assert.strictEqual(orphan.severity, 'high');
+    assert.strictEqual(orphan.count, 9);
+  });
+
+  void it('folds "inconsistent cookie consent" into the tracking-cookies finding', () => {
+    const out = consolidateFindings({
+      'Multiple tracking cookies set before consent': det({ severity: 'medium', count: 3 }),
+      'Inconsistent cookie consent implementation': det({ severity: 'high', count: 5 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.includes('Multiple tracking cookies set before consent'));
+    assert.ok(!keys.includes('Inconsistent cookie consent implementation'));
+    assert.strictEqual(out['Multiple tracking cookies set before consent'].severity, 'high');
+  });
+});
+
+void describe('findingGroupKey (cross-list identity)', () => {
+  void it('maps differently-worded duplicate-title findings to one identity', () => {
+    assert.strictEqual(
+      findingGroupKey('Duplicate page titles found'),
+      findingGroupKey('Some pages have identical titles'),
+    );
+  });
+
+  void it('maps orphan and unreachable findings to one identity', () => {
+    assert.strictEqual(
+      findingGroupKey('8 orphan pages detected (no internal links pointing to them)'),
+      findingGroupKey('9 pages are unreachable from homepage via internal links'),
+    );
+  });
+
+  void it('keeps unrelated findings distinct', () => {
+    assert.notStrictEqual(
+      findingGroupKey('Canonicals are not set for some pages'),
+      findingGroupKey('Duplicate page titles found'),
+    );
+  });
+});
+
+// ============================================================
+// Phase 2 benchmarks (threshold + why for comparative findings)
+// ============================================================
+import { benchmarkFor } from '../lib/phase2/benchmarks';
+
+// ============================================================
+// URL architecture — long-URL finding names the offending URLs
+// ============================================================
+import { UrlArchitectureAnalyzer } from '../lib/analyzers/seo/url-architecture-analyzer';
+
+void describe('UrlArchitectureAnalyzer long URLs', () => {
+  void it('lists the actual long URLs in the finding detail, not just a count', () => {
+    const longUrl = 'https://ex.com/' + 'segment-'.repeat(15) + 'end'; // >100 chars
+    assert.ok(longUrl.length > 100);
+    const pages = {
+      'https://ex.com/': {} as PageInfo,
+      'https://ex.com/about': {} as PageInfo,
+      [longUrl]: {} as PageInfo,
+    };
+    const { warnings } = UrlArchitectureAnalyzer.analyzeSiteWide(pages, 'https://ex.com');
+    const finding = warnings.find((w) => w.message === 'Some URLs are too long');
+    assert.ok(finding, 'expected a long-URL finding');
+    assert.ok(finding!.detail?.includes(longUrl), 'detail should name the offending URL');
+    assert.ok(/1 URLs/.test(finding!.detail ?? ''), 'detail should still report the count');
+  });
+
+  void it('does not flag when all URLs are within length', () => {
+    const pages = { 'https://ex.com/': {} as PageInfo, 'https://ex.com/about': {} as PageInfo };
+    const { warnings } = UrlArchitectureAnalyzer.analyzeSiteWide(pages, 'https://ex.com');
+    assert.ok(!warnings.some((w) => w.message === 'Some URLs are too long'));
+  });
+});
+
+void describe('benchmarkFor', () => {
+  void it('returns a benchmark anchored to the real threshold', () => {
+    const b = benchmarkFor('Some pages have too many requests');
+    assert.ok(b && /≤20 requests/.test(b), `expected request threshold, got: ${b}`);
+  });
+
+  void it('covers render-blocking, unused CSS/JS, and third-party payload', () => {
+    assert.ok(/≤5 render-blocking/.test(benchmarkFor('Some pages have too many render-blocking resources') ?? ''));
+    assert.ok(/80%/.test(benchmarkFor('High percentage of unused CSS') ?? ''));
+    assert.ok(/70%/.test(benchmarkFor('High percentage of unused JavaScript') ?? ''));
+    assert.ok(/third-party payload/i.test(benchmarkFor('Excessive third-party payload') ?? ''));
+  });
+
+  void it('every benchmark states both a target and a rationale', () => {
+    const samples = [
+      'Some pages have titles that are too long',
+      'Some pages have descriptions that are too short',
+      'Element with too many children',
+      'Large HTML document',
+    ];
+    for (const s of samples) {
+      const b = benchmarkFor(s);
+      assert.ok(b && b.length > 20, `missing benchmark for: ${s}`);
+    }
+  });
+
+  void it('returns undefined for non-comparative findings', () => {
+    assert.strictEqual(benchmarkFor('Some pages are missing canonical URL'), undefined);
+    assert.strictEqual(benchmarkFor('Invalid JSON-LD schema'), undefined);
+  });
+});
+
+void describe('ScoreCalculator.effortLevel', () => {
+  void it('maps minute estimates to low and hour estimates to medium/high', () => {
+    assert.strictEqual(ScoreCalculator.effortLevel('5 minutes'), 'low');
+    assert.strictEqual(ScoreCalculator.effortLevel('30 minutes'), 'low');
+    assert.strictEqual(ScoreCalculator.effortLevel('1 hour'), 'medium');
+    assert.strictEqual(ScoreCalculator.effortLevel('2 hours'), 'medium');
+    assert.strictEqual(ScoreCalculator.effortLevel('4-8 hours'), 'high');
+  });
+
+  void it('prefers a pre-parsed effortMinutes when supplied', () => {
+    assert.strictEqual(ScoreCalculator.effortLevel('ignored', 10), 'low');
+    assert.strictEqual(ScoreCalculator.effortLevel('ignored', 200), 'high');
+  });
+
+  void it('defaults to medium when effort is unknown', () => {
+    assert.strictEqual(ScoreCalculator.effortLevel(undefined), 'medium');
+  });
+});
+
+// ============================================================
 // PackageAnalyzer — Phase 1 (repo)
 // ============================================================
 import { PackageAnalyzer } from '../lib/analyzers/repo/package-analyzer';
@@ -1184,6 +1332,48 @@ void describe('parseAnomalies', () => {
   });
 });
 
+// LLM verification pass — defensive JSON parsing
+import { parseVerifyResult } from '../lib/phase2/llm-verify';
+
+void describe('parseVerifyResult', () => {
+  const VALID = [0, 1, 2, 3];
+
+  void it('parses drop decisions and keeps only valid indices', () => {
+    const out = parseVerifyResult(
+      '{"drop":[{"index":1,"kind":"duplicate","reason":"same as #0"},{"index":9,"kind":"false-positive","reason":"oob"}]}',
+      VALID,
+    );
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].index, 1);
+    assert.strictEqual(out[0].kind, 'duplicate');
+  });
+
+  void it('normalizes an unknown kind to duplicate and supplies a default reason', () => {
+    const out = parseVerifyResult('{"drop":[{"index":2,"kind":"weird"}]}', VALID);
+    assert.strictEqual(out[0].kind, 'duplicate');
+    assert.ok(out[0].reason.length > 0);
+  });
+
+  void it('de-duplicates repeated indices', () => {
+    const out = parseVerifyResult('{"drop":[{"index":3,"kind":"duplicate"},{"index":3,"kind":"false-positive"}]}', VALID);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].index, 3);
+  });
+
+  void it('extracts the object even when wrapped in prose/fences', () => {
+    const out = parseVerifyResult('Sure:\n```json\n{"drop":[{"index":0,"kind":"false-positive","reason":"r"}]}\n```', VALID);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].index, 0);
+  });
+
+  void it('returns [] for an empty drop list, junk, or no object', () => {
+    assert.strictEqual(parseVerifyResult('{"drop":[]}', VALID).length, 0);
+    assert.strictEqual(parseVerifyResult('not json', VALID).length, 0);
+    assert.strictEqual(parseVerifyResult('{broken', VALID).length, 0);
+    assert.strictEqual(parseVerifyResult('', VALID).length, 0);
+  });
+});
+
 // ============================================================
 // Broken Pagination Analyzer
 // ============================================================
@@ -1256,5 +1446,74 @@ void describe('BrokenPaginationAnalyzer', () => {
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
     assert.strictEqual(result.issues.length, 0);
+  });
+});
+
+void describe('score-impact', () => {
+  void it('routes security headers and cookies to the Security score (not the legacy catalog category)', () => {
+    assert.strictEqual(scoredCategoryOf('Missing Permissions-Policy header'), 'security');
+    assert.strictEqual(scoredCategoryOf('Missing cross-origin isolation headers'), 'security');
+    assert.strictEqual(scoredCategoryOf('External scripts missing Subresource Integrity (SRI)'), 'security');
+    assert.strictEqual(scoredCategoryOf('Source maps exposed in production'), 'security');
+    assert.strictEqual(scoredCategoryOf('Third-party cookies without consent'), 'security');
+    assert.strictEqual(scoredCategoryOf('Multiple tracking cookies set before consent'), 'security');
+  });
+
+  void it('routes SEO, performance, accessibility and JS-error findings correctly', () => {
+    assert.strictEqual(scoredCategoryOf('Canonicals are not set for some pages'), 'seo');
+    assert.strictEqual(scoredCategoryOf('Duplicate page titles found'), 'seo');
+    assert.strictEqual(scoredCategoryOf('Render-blocking third-party scripts'), 'performance');
+    assert.strictEqual(scoredCategoryOf('Some pages have CLS more than 0.1'), 'performance');
+    assert.strictEqual(scoredCategoryOf('Color contrast fails WCAG AA (5 elements)'), 'accessibility');
+    assert.strictEqual(scoredCategoryOf('Form inputs missing labels'), 'accessibility');
+    // JS errors must read as Technical, never Performance.
+    assert.strictEqual(scoredCategoryOf('Critical JavaScript errors detected'), 'technical');
+  });
+
+  void it('projects a higher score and attributes per-finding points within the gap', () => {
+    const impact = buildScoreImpact(
+      { security: 50, seo: 80, performance: 100 },
+      {
+        'Missing Permissions-Policy header': { severity: 'high', count: 52 },
+        'External scripts missing Subresource Integrity (SRI)': { severity: 'medium', count: 12 },
+        'Duplicate page titles found': { severity: 'high', count: 5 },
+      },
+    );
+    const sec = impact.categories.security;
+    assert.ok(sec, 'security status present');
+    assert.strictEqual(sec!.current, 50);
+    // Projection improves but never reaches a perfect 100.
+    assert.ok(sec!.projected > 50 && sec!.projected <= 99, `projected ${sec!.projected}`);
+    assert.strictEqual(sec!.gain, sec!.projected - sec!.current);
+    // The high-severity, broad header finding earns the larger share.
+    const header = impact.findingLift.get('Missing Permissions-Policy header');
+    const sri = impact.findingLift.get('External scripts missing Subresource Integrity (SRI)');
+    assert.ok(header?.category === 'security' && header.points >= 1);
+    assert.ok(sri && sri.points >= 1);
+    assert.ok(header!.points >= sri!.points);
+  });
+
+  void it('emits no lift or projection for a category already at 100', () => {
+    const impact = buildScoreImpact(
+      { technical: 100 },
+      { 'Element with too many children': { severity: 'medium', count: 3 } },
+    );
+    assert.strictEqual(impact.categories.technical?.gain, 0);
+    assert.strictEqual(impact.findingLift.size, 0);
+  });
+
+  void it('builds a headroom-first section suffix and is empty when scores are unknown', () => {
+    const impact = buildScoreImpact(
+      { security: 44, technical: 100 },
+      {
+        'Missing Permissions-Policy header': { severity: 'high', count: 50 },
+        'Element with too many children': { severity: 'medium', count: 3 },
+      },
+    );
+    const suffix = sectionScoreSuffix(['technical', 'security'], impact);
+    // Security (with headroom) must lead Technical (at ceiling).
+    assert.ok(suffix.includes('Security 44/100 → ~'), suffix);
+    assert.ok(suffix.indexOf('Security') < suffix.indexOf('Technical'), suffix);
+    assert.strictEqual(sectionScoreSuffix(['seo'], buildScoreImpact(undefined, {})), '');
   });
 });

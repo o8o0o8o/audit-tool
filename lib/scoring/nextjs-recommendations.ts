@@ -120,7 +120,7 @@ export const NEXTJS_FIX_OVERRIDES: Record<string, Partial<FixRecommendation>> = 
   'Duplicate page titles found': {
     fix: 'Give each route a unique title via the Metadata API. Use a title.template in the root layout and per-route titles (or generateMetadata for dynamic routes) so no two pages share a title.',
     example:
-      "// app/layout.tsx\nexport const metadata = { title: { template: '%s | Siro', default: 'Siro' } };\n// app/pricing/page.tsx\nexport const metadata = { title: 'Pricing' };",
+      "// app/layout.tsx\nexport const metadata = { title: { template: '%s | Your Brand', default: 'Your Brand' } };\n// app/pricing/page.tsx\nexport const metadata = { title: 'Pricing' };",
     resources: [NEXT_DOCS.metadata],
   },
   'Duplicate meta descriptions found': {

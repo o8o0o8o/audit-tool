@@ -14,6 +14,7 @@
  * touched; everything else passes through unchanged.
  */
 
+import { normalizeMessageForLookup } from '../utils/finding-id';
 import type { IssueDetail } from './types';
 
 /** Severity rank for escalation (lower = more severe). */
@@ -53,10 +54,24 @@ const DEDUP_GROUPS: DedupGroup[] = [
     members: [/privacy policy link missing on many pages/i, /many pages lack privacy policy link/i],
   },
   // "Inconsistent consent" with 0% coverage is the same as "tracking without
-  // a consent banner" — keep the per-page finding, escalate severity.
+  // a consent banner" — keep the per-page finding, escalate severity. The
+  // primary matches the analyzer's actual wording ("Multiple tracking cookies
+  // set before consent"); the without-consent variant is a member so whichever
+  // is present becomes the kept entry.
   {
-    primary: /^tracking cookies without consent/i,
-    members: [/inconsistent cookie consent implementation/i],
+    primary: /tracking cookies set before consent/i,
+    members: [
+      /inconsistent cookie consent implementation/i,
+      /^tracking cookies without consent/i,
+    ],
+  },
+  // Orphan pages (no inbound internal links) and pages unreachable from the
+  // homepage via internal links are the same internal-linking discoverability
+  // problem reported by one analyzer two ways. Keep the orphan finding (the
+  // more specific signal); fold the unreachable one in.
+  {
+    primary: /orphan pages detected/i,
+    members: [/pages are unreachable from homepage via internal links/i],
   },
   // Missing <main>: an AEO/semantic finding and an a11y-landmark finding.
   {
@@ -77,6 +92,28 @@ const DEDUP_GROUPS: DedupGroup[] = [
     members: [/^some pages have identical descriptions/i, /^duplicate descriptions detected/i],
   },
 ];
+
+/**
+ * Group-aware de-dup identity for a finding message.
+ *
+ * `consolidateFindings` only folds equivalents inside the `details` map. But
+ * the scoring layer's `quickWins` list is built independently and may name the
+ * same problem differently (e.g. a quick win "Some pages have identical titles"
+ * vs the details entry "Duplicate page titles found"). When de-duplicating the
+ * summary's Top Priority / Quick Wins / Long-term lists against each other we
+ * need those two to share an identity — otherwise the same issue is highlighted
+ * twice. This returns a stable group tag when the message matches a DEDUP_GROUP
+ * (primary OR member), and the normalized-for-lookup form otherwise.
+ */
+export function findingGroupKey(message: string): string {
+  for (let i = 0; i < DEDUP_GROUPS.length; i++) {
+    const g = DEDUP_GROUPS[i];
+    if (g.primary.test(message) || g.members.some((m) => m.test(message))) {
+      return `group:${i}`;
+    }
+  }
+  return normalizeMessageForLookup(message).toLowerCase();
+}
 
 /**
  * Consolidate a details map: drop suppressed findings and collapse equivalent

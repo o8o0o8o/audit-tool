@@ -22,10 +22,19 @@ import { nextjsOverrideFor, isNextjsAudit } from '../scoring/nextjs-recommendati
 import type { FixRecommendation } from '../types';
 import { normalizeMessage as _normalizeMessage, normalizeMessageForLookup } from '../utils/finding-id';
 import { categorize, type Section } from './categorize';
+import { benchmarkFor } from './benchmarks';
 import { mergeNumericVariants } from '../scoring/merge-variants';
-import { consolidateFindings } from './consolidate';
+import { consolidateFindings, findingGroupKey } from './consolidate';
+import {
+  buildScoreImpact,
+  sectionScoreSuffix,
+  findingLiftChip,
+  type ScoreImpact,
+  type ScoredCategory,
+} from './score-impact';
 import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
+import { verifyFindings } from './llm-verify';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -43,6 +52,9 @@ export interface Phase2Options {
   /** When true, run the LLM anomaly pass (vision + signals) over the
    *  representative-page sample and merge findings into the report. */
   llmFindings?: boolean;
+  /** When true, run the LLM verification pass — revalidate findings and drop
+   *  confirmed duplicates / false positives before the final report. */
+  llmVerify?: boolean;
   /** Surface API/cache errors. */
   verbose?: boolean;
 }
@@ -60,22 +72,35 @@ const SECTION_TITLES: Record<Section, string> = {
 // UX first, then the supporting categories.
 const SECTION_ORDER: Section[] = ['seo', 'performance', 'ux', 'privacy', 'accessibility', 'technical'];
 
-/**
- * Cross-section priority multiplier applied during impact ranking. Keeps the
- * "Top Priority Issues" / quick-win lists weighted toward the categories that
- * matter most for this audit (SEO > Performance > UX), so a broad-but-low-value
- * privacy/technical finding can't dominate the headline list. Within a single
- * section every finding shares the same multiplier, so it does not perturb
- * intra-section ordering — only the global cross-section comparison.
- */
-const SECTION_PRIORITY: Record<Section, number> = {
-  seo: 1.4,
-  performance: 1.3,
-  ux: 1.2,
-  accessibility: 0.8,
-  privacy: 0.7,
-  technical: 0.7,
+// The scored category each report section represents, for the header
+// `current → projected` annotation. `privacy` maps to Security (GDPR/cookie
+// gaps are what the Observatory-style security score penalises). `ux` and
+// `technical` are catch-alls with no single owning score — their findings get
+// per-item score chips instead, so the header carries no projection.
+const SECTION_HOME_CATEGORY: Partial<Record<Section, ScoredCategory>> = {
+  seo: 'seo',
+  performance: 'performance',
+  accessibility: 'accessibility',
+  privacy: 'security',
 };
+
+/**
+ * Category priority rank, derived from `SECTION_ORDER` (0 = highest). This is
+ * the PRIMARY ranking key everywhere findings are ordered: a category that
+ * matters more for this audit (SEO > Performance > UX > Privacy > Accessibility
+ * > Technical) always sorts ahead of a lower one, and severity decides the
+ * order *within* a category. So the headline lists read the same way the
+ * document does — all SEO first, then Performance, and so on — rather than
+ * interleaving categories by raw severity. Within a single section every
+ * finding shares the same rank, so it leaves intra-section ordering untouched.
+ */
+const SECTION_RANK: Record<Section, number> = SECTION_ORDER.reduce(
+  (acc, sec, i) => {
+    acc[sec] = i;
+    return acc;
+  },
+  {} as Record<Section, number>,
+);
 
 /** Per-section cap so a noisy analyzer doesn't produce a 30-page section. */
 const SECTION_FINDING_LIMIT = 12;
@@ -170,9 +195,11 @@ const TIER_MULT: Record<string, number> = { error: 1, warning: 0.85, notice: 0.4
 /**
  * Rank a finding by real-world impact: severity × catalog-tier × category
  * value × breadth (how many pages it affects, with diminishing returns).
- * HIGHER = more important. Replaces the old severity-then-count ordering so
- * a systemic high-value issue outranks a contained low-value one and so
- * notice-tier boilerplate sinks below genuine warnings.
+ * HIGHER = more important. Used only as the final tie-breaker once category
+ * rank and severity band are equal — so a systemic finding outranks a contained
+ * one of the same severity, and notice-tier boilerplate sinks below genuine
+ * warnings. Cross-category priority is handled by `SECTION_RANK` in
+ * `byImportance`, not here.
  */
 function impactScore(message: string, detail: IssueDetail): number {
   const { tier, category } = classifyIssue(message, detail.severity);
@@ -180,23 +207,30 @@ function impactScore(message: string, detail: IssueDetail): number {
   const catValue = SCORING.CATEGORY_WEIGHTS[category] ?? 0.15; // 0.10–0.30
   // 1 page → ~1.3, 12 → ~2.1, 120 → ~3.1. Breadth matters but saturates.
   const breadth = 1 + Math.log10(1 + (detail.count ?? 1));
-  // Report-section priority (SEO/Perf/UX first). Constant within a section, so
-  // it only reshapes cross-section ranking, not intra-section ordering.
-  const sectionPriority = SECTION_PRIORITY[categorize(message)] ?? 1;
-  return sev * (TIER_MULT[tier] ?? 0.6) * (0.7 + catValue) * breadth * sectionPriority;
+  return sev * (TIER_MULT[tier] ?? 0.6) * (0.7 + catValue) * breadth;
 }
 
 /** Severity band for ordering (lower = more important). */
 const SEV_BAND: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 /**
- * Compare helper: most important first. Severity band leads (so every
- * critical/high is listed before any medium/low), then real-world impact
- * (breadth × category × …) breaks ties within a band. This guarantees a broad
- * but lower-severity finding can't outrank a genuinely severe one — while
- * still ordering same-severity findings by how much they matter.
+ * Compare helper: most important first. Ordering keys, in order:
+ *   1. Category priority (`SECTION_RANK`) — SEO > Performance > UX > Privacy >
+ *      Accessibility > Technical. This leads so the headline lists group by
+ *      category exactly like the document does, instead of interleaving
+ *      categories by raw severity.
+ *   2. Severity band — within a category, every critical/high precedes any
+ *      medium/low.
+ *   3. Real-world impact (breadth × tier × category value) breaks remaining ties.
+ *
+ * Within a single section the category key is constant, so intra-section
+ * ordering is still severity-then-impact — unchanged. The category key only
+ * reshapes the cross-section lists (Top Priority Issues, fallbacks).
  */
 function byImportance(a: [string, IssueDetail], b: [string, IssueDetail]): number {
+  const ca = SECTION_RANK[categorize(a[0])] ?? 99;
+  const cb = SECTION_RANK[categorize(b[0])] ?? 99;
+  if (ca !== cb) return ca - cb;
   const sa = SEV_BAND[(a[1].severity ?? 'medium').toLowerCase()] ?? 2;
   const sb = SEV_BAND[(b[1].severity ?? 'medium').toLowerCase()] ?? 2;
   if (sa !== sb) return sa - sb;
@@ -255,6 +289,28 @@ function prepareDetails(artifacts: AuditArtifacts): Record<string, IssueDetail> 
     consolidateFindings(mergeNumericVariants(artifacts.analysis.details)),
     artifacts.analysis.summary?.categoryScores,
   );
+}
+
+/**
+ * Remove findings the LLM verification pass flagged as duplicates / false
+ * positives. `suppressed` holds the original message keys. Pure — returns a new
+ * object; a no-op (and the same reference) when nothing is suppressed.
+ */
+function applySuppression(
+  details: Record<string, IssueDetail>,
+  suppressed: ReadonlySet<string>,
+): Record<string, IssueDetail> {
+  if (suppressed.size === 0) return details;
+  const out: Record<string, IssueDetail> = {};
+  for (const [message, detail] of Object.entries(details)) {
+    if (!suppressed.has(message)) out[message] = detail;
+  }
+  return out;
+}
+
+/** Prepared details with verification suppression already applied. */
+function preparedDetails(artifacts: AuditArtifacts, suppressed: ReadonlySet<string>): Record<string, IssueDetail> {
+  return applySuppression(prepareDetails(artifacts), suppressed);
 }
 
 /** Drop HTML tags from analyzer details so the markdown stays clean. */
@@ -430,6 +486,8 @@ function buildPurpose(artifacts: AuditArtifacts): string {
     '',
     'The audit combines a deterministic crawl (Playwright on Chromium) with on-page analyzers and external signals (CrUX / PageSpeed Insights). All findings cited below are anchored in the crawl artifacts collected for this run.',
     '',
+    'Each category section header shows the current 0–100 score and, where there is room to improve, the score we would expect once that category’s issues are addressed across the site (`current → ~projected`). Because a category’s findings can appear in more than one section, the projection is shown once — on the section that owns the score — while individual findings everywhere carry the rough number of points fixing them recovers in their category (`+~N pts`). These projections are estimates — the `~` is deliberate: SEO and Technical scores are direct functions of the findings, while Performance, Accessibility and Security derive from measured per-page signals (Core Web Vitals, axe-core, security headers), so a per-finding figure approximates resolving the class of problem it represents.',
+    '',
   ];
 
   // Run-specific characteristics — gives the reader an at-a-glance picture
@@ -490,13 +548,43 @@ function resolveQuickWin(
   return { fix: q.fix, example: q.example, lang: 'html' };
 }
 
-function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
+/** Effort level for the report — delegates to the shared scoring helper so the
+ *  low/medium/high thresholds stay in one place. */
+const effortLevel = (effort: string | undefined, effortMinutes?: number) =>
+  ScoreCalculator.effortLevel(effort, effortMinutes);
+
+/**
+ * Canonical identity for cross-list de-duplication within the summary. Uses the
+ * group-aware key so equivalents named differently across the details map and
+ * the scoring `quickWins` list (e.g. "identical titles" ≡ "Duplicate page
+ * titles found") collapse to one identity.
+ */
+function summaryIdentity(message: string): string {
+  return findingGroupKey(message);
+}
+
+function buildSummary(
+  artifacts: AuditArtifacts,
+  details: Record<string, IssueDetail>,
+  suppressed: ReadonlySet<string>,
+  isNextjs = false,
+): string {
   const { summary } = artifacts.analysis;
-  const details = prepareDetails(artifacts);
   const lines: string[] = ['## Summary and Recommendations', ''];
 
-  // Top priority issues — rank from the full `details` map by severity × count
-  // (not only `quickWins`, which is often a tiny subset on big audits).
+  // Track what has already been listed so a finding never appears in more than
+  // one of Top Priority / Quick Wins / Long-term. Precedence is list order:
+  // Top Priority claims first, then Quick Wins, then Long-term.
+  //
+  // Seed with the verification-suppressed findings' identities: the Quick Wins /
+  // Long-term lists are built from the scoring layer's `quickWins` (a separate
+  // source from `details`), so without this seed a finding dropped by the
+  // verification pass could still resurface there.
+  const seen = new Set<string>();
+  for (const message of suppressed) seen.add(summaryIdentity(message));
+
+  // Top priority issues — rank from the full `details` map by category then
+  // severity (not only `quickWins`, which is often a tiny subset on big audits).
   const ranked = Object.entries(details ?? {})
     .sort(byImportance)
     .slice(0, 3);
@@ -504,6 +592,7 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
     lines.push('### Top Priority Issues');
     lines.push('');
     ranked.forEach(([message, d], i) => {
+      seen.add(summaryIdentity(message));
       lines.push(
         `${i + 1}. ${sevSpan(d.severity)} — ${stripHtml(message)} *(${d.count} occurrence${d.count === 1 ? '' : 's'})*`,
       );
@@ -512,9 +601,10 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
   }
 
   // Quick wins — short effort, ordered by effortMinutes asc. Falls back to
-  // deriving from `details` when scoring's quickWins list is sparse.
+  // deriving from `details` when scoring's quickWins list is sparse. Filter
+  // before slicing so dropping an already-listed finding doesn't shrink the list.
   const richQuickwins = (summary.quickWins ?? [])
-    .filter((q) => (q.effortMinutes ?? 999) <= 30)
+    .filter((q) => (q.effortMinutes ?? 999) <= 30 && !seen.has(summaryIdentity(q.issue)))
     .sort((a, b) => (a.effortMinutes ?? 999) - (b.effortMinutes ?? 999))
     .slice(0, 5);
 
@@ -522,8 +612,9 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
     lines.push('### Quick Wins');
     lines.push('');
     richQuickwins.forEach((q) => {
+      seen.add(summaryIdentity(q.issue));
       const rw = resolveQuickWin(q, isNextjs);
-      lines.push(`- **${sanitizeProse(q.issue)}** — ${sanitizeProse(rw.fix.split('.').slice(0, 1).join('.'))}. *(~${q.effort})*`);
+      lines.push(`- **${sanitizeProse(q.issue)}** — ${sanitizeProse(rw.fix.split('.').slice(0, 1).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`);
       if (rw.example && rw.example.trim()) {
         lines.push('');
         lines.push(`  \`\`\`${rw.lang}`);
@@ -537,9 +628,9 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
   } else {
     // Fallback: high/critical severity, low occurrence count (contained → easy fix).
     const fallback = Object.entries(details ?? {})
-      .filter(([, d]) => {
+      .filter(([message, d]) => {
         const sev = d.severity?.toLowerCase();
-        return (sev === 'critical' || sev === 'high') && (d.count ?? 0) <= 5;
+        return (sev === 'critical' || sev === 'high') && (d.count ?? 0) <= 5 && !seen.has(summaryIdentity(message));
       })
       .sort(byImportance)
       .slice(0, 5);
@@ -547,6 +638,7 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
       lines.push('### Quick Wins');
       lines.push('');
       fallback.forEach(([message, d]) => {
+        seen.add(summaryIdentity(message));
         lines.push(`- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${d.count} occurrence${d.count === 1 ? '' : 's'} — contained)*`);
       });
       lines.push('');
@@ -555,7 +647,7 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
 
   // Long-term recommendations — higher-effort or systemic items.
   const richLongterm = (summary.quickWins ?? [])
-    .filter((q) => (q.effortMinutes ?? 0) > 30)
+    .filter((q) => (q.effortMinutes ?? 0) > 30 && !seen.has(summaryIdentity(q.issue)))
     .sort((a, b) => (b.impactScore ?? 0) - (a.impactScore ?? 0))
     .slice(0, 5);
 
@@ -563,8 +655,9 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
     lines.push('### Long-term Recommendations');
     lines.push('');
     richLongterm.forEach((q) => {
+      seen.add(summaryIdentity(q.issue));
       const rw = resolveQuickWin(q, isNextjs);
-      lines.push(`- ${sanitizeProse(q.issue)} — ${sanitizeProse(rw.fix.split('.').slice(0, 2).join('.'))}.`);
+      lines.push(`- ${sanitizeProse(q.issue)} — ${sanitizeProse(rw.fix.split('.').slice(0, 2).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`);
       if (rw.example && rw.example.trim()) {
         lines.push('');
         lines.push(`  \`\`\`${rw.lang}`);
@@ -578,9 +671,9 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
   } else {
     // Fallback: high-severity findings with broad occurrence (systemic → real engineering work).
     const fallback = Object.entries(details ?? {})
-      .filter(([, d]) => {
+      .filter(([message, d]) => {
         const sev = d.severity?.toLowerCase();
-        return (sev === 'critical' || sev === 'high') && (d.count ?? 0) > 20;
+        return (sev === 'critical' || sev === 'high') && (d.count ?? 0) > 20 && !seen.has(summaryIdentity(message));
       })
       .sort(([, a], [, b]) => (b.count ?? 0) - (a.count ?? 0))
       .slice(0, 5);
@@ -588,6 +681,7 @@ function buildSummary(artifacts: AuditArtifacts, isNextjs = false): string {
       lines.push('### Long-term Recommendations');
       lines.push('');
       fallback.forEach(([message, d]) => {
+        seen.add(summaryIdentity(message));
         lines.push(`- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${d.count} occurrences — systemic)*`);
       });
       lines.push('');
@@ -614,6 +708,7 @@ function buildFindingBlock(
   detail: IssueDetail,
   isNextjs = false,
   sourceMapping?: Record<string, SourceLocation[]> | null,
+  impact?: ScoreImpact,
 ): string {
   const lines: string[] = [];
   // sanitizeProse (not stripHtml) for the title: stripHtml deletes element
@@ -632,9 +727,28 @@ function buildFindingBlock(
   // Label LLM-discovered findings so they're auditable and clearly distinct
   // from deterministic analyzer output.
   if (detail.aiDiscovered) headerParts.push('🔍 AI-discovered');
-  if (recommendation?.effort) headerParts.push(`effort: ${recommendation.effort}`);
+  if (recommendation?.effort) headerParts.push(`effort: ${effortLevel(recommendation.effort)}`);
+  // Score lever — roughly how many points fixing this recovers, and in which
+  // category. Omitted for AI-discovered findings (no deterministic score model)
+  // and for findings worth < 1 point.
+  const liftChip = !detail.aiDiscovered && impact ? findingLiftChip(message, impact) : null;
+  if (liftChip) headerParts.push(liftChip);
   lines.push(headerParts.join(' · '));
   lines.push('');
+
+  // Benchmark — for threshold-comparative findings ("too many / too long / high
+  // percentage of …"), state what the value SHOULD be and WHY. The value it IS
+  // now is carried per-page in the examples below. Skipped for AI findings,
+  // which supply their own evidence + recommendation.
+  if (!detail.aiDiscovered) {
+    const benchmark = benchmarkFor(stripHtml(message));
+    if (benchmark) {
+      lines.push('**Benchmark**');
+      lines.push('');
+      lines.push(benchmark);
+      lines.push('');
+    }
+  }
 
   // Affected pages — always present so structure is uniform, even when the
   // analyzer only produced a single contextual example string.
@@ -664,8 +778,13 @@ function buildFindingBlock(
           lines.push(`    - *…and ${urls.length - PAGES_PER_CLUSTER} more page${urls.length - PAGES_PER_CLUSTER === 1 ? '' : 's'}*`);
         }
       } else {
-        // Single-page example: prefer the bare URL, else the stripped prose.
-        lines.push(`- ${urls[0] ?? sanitizeProse(ex)}`);
+        // Single-page example. When the analyzer attached a measured value
+        // ("… has 8 render-blocking resources", "… 73% of CSS is unused"), keep
+        // that lead clause so the reader sees the actual number — not just the
+        // URL. Fall back to the bare URL when there's nothing else.
+        const summary = exampleSummary(ex);
+        const beyondUrl = summary.replace(/https?:\/\/[^\s)]+/g, '').replace(/[\s:.,;–—-]+/g, '');
+        lines.push(`- ${beyondUrl.length > 0 ? summary : (urls[0] ?? summary)}`);
       }
     }
     const remaining = Math.max(0, (detail.count ?? examples.length) - shown.length);
@@ -777,6 +896,7 @@ function buildSection(
   narrative?: string | null,
   isNextjs = false,
   sourceMapping?: Record<string, SourceLocation[]> | null,
+  impact?: ScoreImpact,
 ): string {
   if (items.length === 0) return '';
 
@@ -786,8 +906,18 @@ function buildSection(
   const primary = items.filter(([m, d]) => classifyIssue(m, d.severity).tier !== 'notice');
   const minor = items.filter(([m, d]) => classifyIssue(m, d.severity).tier === 'notice');
 
+  // Header score suffix — the category this section represents, with
+  // `current → projected`. A category's projection is an audit-wide fact (its
+  // findings scatter across sections), so we surface it once, on the section
+  // that owns it, rather than repeating it on every section that contains a
+  // stray finding of that category. The UX and Common-Problems sections are
+  // catch-alls with no single home score; their findings still carry per-item
+  // chips, but the header stays clean.
+  const home = SECTION_HOME_CATEGORY[section];
+  const scoreSuffix = impact && home ? sectionScoreSuffix([home], impact) : '';
+
   const lines: string[] = [];
-  lines.push(`## ${SECTION_TITLES[section]}`);
+  lines.push(`## ${SECTION_TITLES[section]}${scoreSuffix}`);
   lines.push('');
 
   // Analysis paragraph: LLM-enhanced prose when available, else the
@@ -809,7 +939,7 @@ function buildSection(
   const hidden = overflow.filter(([m]) => sourceLocationsFor(m, sourceMapping).length === 0);
 
   for (const [message, detail] of [...shown, ...extraMapped]) {
-    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping));
+    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact));
   }
 
   if (hidden.length > 0) {
@@ -841,17 +971,25 @@ export function buildReportMarkdown(
   artifacts: AuditArtifacts,
   narratives: Partial<Record<Section, string | null>> = {},
   anomalies: Anomaly[] = [],
+  suppressed: ReadonlySet<string> = new Set(),
 ): string {
   const isNextjs = detectNextjs(artifacts);
   const sourceMapping = artifacts.repoAnalysis?.sourceMapping ?? null;
-  const buckets = bucketDetails(prepareDetails(artifacts));
+  // One details map drives both the summary and the sections so suppression and
+  // ranking stay identical across them.
+  const details = preparedDetails(artifacts, suppressed);
+  const buckets = bucketDetails(details);
   mergeAnomalies(buckets, anomalies);
+  // Score-impact model: ties every category section and finding to the score it
+  // moves. Built from the same prepared details the sections render, so the
+  // annotations and the findings can never disagree.
+  const impact = buildScoreImpact(artifacts.analysis.summary?.categoryScores, details);
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
   parts.push(buildPurpose(artifacts));
-  parts.push(buildSummary(artifacts, isNextjs));
+  parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of SECTION_ORDER) {
-    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping));
+    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact));
   }
   return parts.filter(Boolean).join('\n');
 }
@@ -864,6 +1002,7 @@ export function buildReportMarkdown(
 async function prepareNarratives(
   artifacts: AuditArtifacts,
   options: Phase2Options,
+  suppressed: ReadonlySet<string>,
 ): Promise<Partial<Record<Section, string | null>>> {
   if (!options.llmNarrative) return {};
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -873,7 +1012,9 @@ async function prepareNarratives(
     return {};
   }
 
-  const buckets = bucketDetails(prepareDetails(artifacts));
+  // Generate prose over the same suppressed set the report will render, so the
+  // narrative never references a finding that was dropped.
+  const buckets = bucketDetails(preparedDetails(artifacts, suppressed));
   const cacheDir = path.join(artifacts.runDir, 'cache', 'llm-narrative');
 
   const out: Partial<Record<Section, string | null>> = {};
@@ -912,6 +1053,19 @@ function extractAllUrls(s: string): string[] {
 }
 
 /**
+ * The lead clause of a single-page example, as plain text. Analyzers often
+ * append rich HTML after the measured value — a `<br>` then a `<ul>` of
+ * offending files plus an inline "Recommendation:" (the report already has a
+ * Fix section). We keep only the part before that markup so the bullet shows
+ * the URL + the number ("… 94% of CSS is unused (946.8 KB of 1011.2 KB)")
+ * without the HTML blob or a duplicated recommendation.
+ */
+function exampleSummary(ex: string): string {
+  const lead = ex.split(/<br\s*\/?>|<ul\b|<ol\b|<\/p>|\n/i)[0];
+  return stripHtml(lead);
+}
+
+/**
  * For a clustered example like `The title "X" is used on N pages: <links…>`,
  * return the descriptive label (the part before the first URL/anchor), with
  * HTML and a trailing colon stripped.
@@ -924,22 +1078,74 @@ function clusterLabel(s: string): string {
 }
 
 /**
+ * LLM verification pass. Returns the set of (original) finding-message keys to
+ * suppress — confirmed duplicates / false positives. Empty set when disabled,
+ * no API key, or on any failure, so the full deterministic set is kept.
+ *
+ * Every drop is logged with its reason so the suppression is auditable.
+ */
+async function prepareSuppression(artifacts: AuditArtifacts, options: Phase2Options): Promise<Set<string>> {
+  const empty = new Set<string>();
+  if (!options.llmVerify) return empty;
+  if (!process.env.ANTHROPIC_API_KEY) {
+    if (options.verbose) {
+      console.warn('--llm-verify requested but ANTHROPIC_API_KEY is not set; keeping all findings.');
+    }
+    return empty;
+  }
+
+  // Verify over the same prepared (consolidated + ranked) set the report uses.
+  const entries = Object.entries(prepareDetails(artifacts));
+  const findings = entries.map(([message, detail], index) => ({
+    index,
+    section: categorize(message),
+    severity: detail.severity ?? 'medium',
+    count: detail.count ?? 0,
+    message: stripHtml(message),
+  }));
+
+  const drops = await verifyFindings({
+    findings,
+    domain: artifacts.manifest.domain,
+    cacheDir: path.join(artifacts.runDir, 'cache', 'llm-verify'),
+    verbose: options.verbose,
+  });
+
+  const suppressed = new Set<string>();
+  for (const drop of drops) {
+    const entry = entries[drop.index];
+    if (!entry) continue;
+    suppressed.add(entry[0]);
+    console.log(`  ⊘ verify dropped (${drop.kind}): ${stripHtml(entry[0])}${drop.reason ? ` — ${drop.reason}` : ''}`);
+  }
+  if (suppressed.size > 0) {
+    console.log(`✓ Verification pass removed ${suppressed.size} finding(s) before the final report.`);
+  }
+  return suppressed;
+}
+
+/**
  * Generate a curated markdown + PDF report inside the run directory.
  * Writes `audit-report.md` and `audit-report.pdf` next to the existing
  * Phase 1 outputs. Returns the PDF path.
  */
 export async function runPhase2(runDir: string, options: Phase2Options = {}): Promise<string> {
   const artifacts = loadArtifacts(runDir);
-  const narratives = await prepareNarratives(artifacts, options);
+  // Verification first — it decides which findings survive, so the narrative
+  // and the rendered report both work from the suppressed set.
+  const suppressed = await prepareSuppression(artifacts, options);
   // Optional LLM anomaly pass — returns [] when disabled, no API key, or no
-  // evidence. Never blocks report generation.
-  const anomalies = options.llmFindings
-    ? await detectAnomalies(artifacts, {
-        cacheDir: path.join(runDir, 'cache', 'llm-anomaly'),
-        verbose: options.verbose,
-      })
-    : [];
-  const markdown = buildReportMarkdown(artifacts, narratives, anomalies);
+  // evidence. Never blocks report generation. Runs in parallel with narratives.
+  const [narratives, anomalies] = await Promise.all([
+    prepareNarratives(artifacts, options, suppressed),
+    options.llmFindings
+      ? detectAnomalies(artifacts, {
+          cacheDir: path.join(runDir, 'cache', 'llm-anomaly'),
+          verbose: options.verbose,
+        })
+      : Promise.resolve([] as Anomaly[]),
+  ]);
+  const markdown = buildReportMarkdown(artifacts, narratives, anomalies, suppressed);
 
   const mdPath = path.join(runDir, 'audit-report.md');
   fs.writeFileSync(mdPath, markdown);

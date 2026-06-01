@@ -25,6 +25,13 @@ import { categorize, type Section } from './categorize';
 import { benchmarkFor } from './benchmarks';
 import { mergeNumericVariants } from '../scoring/merge-variants';
 import { consolidateFindings, findingGroupKey } from './consolidate';
+import {
+  buildScoreImpact,
+  sectionScoreSuffix,
+  findingLiftChip,
+  type ScoreImpact,
+  type ScoredCategory,
+} from './score-impact';
 import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
@@ -64,6 +71,18 @@ const SECTION_TITLES: Record<Section, string> = {
 // Section order reflects the audit's stated priorities: SEO, Performance and
 // UX first, then the supporting categories.
 const SECTION_ORDER: Section[] = ['seo', 'performance', 'ux', 'privacy', 'accessibility', 'technical'];
+
+// The scored category each report section represents, for the header
+// `current → projected` annotation. `privacy` maps to Security (GDPR/cookie
+// gaps are what the Observatory-style security score penalises). `ux` and
+// `technical` are catch-alls with no single owning score — their findings get
+// per-item score chips instead, so the header carries no projection.
+const SECTION_HOME_CATEGORY: Partial<Record<Section, ScoredCategory>> = {
+  seo: 'seo',
+  performance: 'performance',
+  accessibility: 'accessibility',
+  privacy: 'security',
+};
 
 /**
  * Category priority rank, derived from `SECTION_ORDER` (0 = highest). This is
@@ -467,6 +486,8 @@ function buildPurpose(artifacts: AuditArtifacts): string {
     '',
     'The audit combines a deterministic crawl (Playwright on Chromium) with on-page analyzers and external signals (CrUX / PageSpeed Insights). All findings cited below are anchored in the crawl artifacts collected for this run.',
     '',
+    'Each category section header shows the current 0–100 score and, where there is room to improve, the score we would expect once that category’s issues are addressed across the site (`current → ~projected`). Because a category’s findings can appear in more than one section, the projection is shown once — on the section that owns the score — while individual findings everywhere carry the rough number of points fixing them recovers in their category (`+~N pts`). These projections are estimates — the `~` is deliberate: SEO and Technical scores are direct functions of the findings, while Performance, Accessibility and Security derive from measured per-page signals (Core Web Vitals, axe-core, security headers), so a per-finding figure approximates resolving the class of problem it represents.',
+    '',
   ];
 
   // Run-specific characteristics — gives the reader an at-a-glance picture
@@ -687,6 +708,7 @@ function buildFindingBlock(
   detail: IssueDetail,
   isNextjs = false,
   sourceMapping?: Record<string, SourceLocation[]> | null,
+  impact?: ScoreImpact,
 ): string {
   const lines: string[] = [];
   // sanitizeProse (not stripHtml) for the title: stripHtml deletes element
@@ -706,6 +728,11 @@ function buildFindingBlock(
   // from deterministic analyzer output.
   if (detail.aiDiscovered) headerParts.push('🔍 AI-discovered');
   if (recommendation?.effort) headerParts.push(`effort: ${effortLevel(recommendation.effort)}`);
+  // Score lever — roughly how many points fixing this recovers, and in which
+  // category. Omitted for AI-discovered findings (no deterministic score model)
+  // and for findings worth < 1 point.
+  const liftChip = !detail.aiDiscovered && impact ? findingLiftChip(message, impact) : null;
+  if (liftChip) headerParts.push(liftChip);
   lines.push(headerParts.join(' · '));
   lines.push('');
 
@@ -869,6 +896,7 @@ function buildSection(
   narrative?: string | null,
   isNextjs = false,
   sourceMapping?: Record<string, SourceLocation[]> | null,
+  impact?: ScoreImpact,
 ): string {
   if (items.length === 0) return '';
 
@@ -878,8 +906,18 @@ function buildSection(
   const primary = items.filter(([m, d]) => classifyIssue(m, d.severity).tier !== 'notice');
   const minor = items.filter(([m, d]) => classifyIssue(m, d.severity).tier === 'notice');
 
+  // Header score suffix — the category this section represents, with
+  // `current → projected`. A category's projection is an audit-wide fact (its
+  // findings scatter across sections), so we surface it once, on the section
+  // that owns it, rather than repeating it on every section that contains a
+  // stray finding of that category. The UX and Common-Problems sections are
+  // catch-alls with no single home score; their findings still carry per-item
+  // chips, but the header stays clean.
+  const home = SECTION_HOME_CATEGORY[section];
+  const scoreSuffix = impact && home ? sectionScoreSuffix([home], impact) : '';
+
   const lines: string[] = [];
-  lines.push(`## ${SECTION_TITLES[section]}`);
+  lines.push(`## ${SECTION_TITLES[section]}${scoreSuffix}`);
   lines.push('');
 
   // Analysis paragraph: LLM-enhanced prose when available, else the
@@ -901,7 +939,7 @@ function buildSection(
   const hidden = overflow.filter(([m]) => sourceLocationsFor(m, sourceMapping).length === 0);
 
   for (const [message, detail] of [...shown, ...extraMapped]) {
-    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping));
+    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact));
   }
 
   if (hidden.length > 0) {
@@ -942,12 +980,16 @@ export function buildReportMarkdown(
   const details = preparedDetails(artifacts, suppressed);
   const buckets = bucketDetails(details);
   mergeAnomalies(buckets, anomalies);
+  // Score-impact model: ties every category section and finding to the score it
+  // moves. Built from the same prepared details the sections render, so the
+  // annotations and the findings can never disagree.
+  const impact = buildScoreImpact(artifacts.analysis.summary?.categoryScores, details);
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
   parts.push(buildPurpose(artifacts));
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of SECTION_ORDER) {
-    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping));
+    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact));
   }
   return parts.filter(Boolean).join('\n');
 }

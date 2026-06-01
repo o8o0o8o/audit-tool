@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { TRACKING_PARAMS, analyzeUrlStructure, getPathSegments } from '../../utils';
+import { TRACKING_PARAMS, analyzeUrlStructure, getPathSegments, shortenUrl, formatSampleList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class UrlArchitectureAnalyzer {
@@ -164,6 +164,7 @@ class UrlArchitectureAnalyzer {
     const warnings: Issue[] = [];
 
     const urlLengths: number[] = [];
+    const longUrls: string[] = [];
     const urlDepths: number[] = [];
     const trailingSlashCount = { with: 0, without: 0 };
     const protocolCounts = { http: 0, https: 0 };
@@ -172,8 +173,10 @@ class UrlArchitectureAnalyzer {
       try {
         const parsed = new URL(url);
 
-        // Track URL lengths
+        // Track URL lengths (and the offending URLs themselves, so the finding
+        // can name them instead of only reporting a count).
         urlLengths.push(url.length);
+        if (url.length > 100) longUrls.push(url);
 
         // Track URL depths
         const depth = getPathSegments(parsed.pathname).length;
@@ -236,13 +239,20 @@ class UrlArchitectureAnalyzer {
     // Check average URL length
     if (urlLengths.length > 0) {
       const avgLength = urlLengths.reduce((a, b) => a + b, 0) / urlLengths.length;
-      const longUrls = urlLengths.filter((l) => l > 100).length;
 
-      if (longUrls > 0) {
-        const percent = ((longUrls / urlLengths.length) * 100).toFixed(1);
+      if (longUrls.length > 0) {
+        const percent = ((longUrls.length / urlLengths.length) * 100).toFixed(1);
+        // List the actual offending URLs (the longest first) so the reader can
+        // see which ones to shorten — not just a count.
+        const sample = formatSampleList(
+          [...longUrls]
+            .sort((a, b) => b.length - a.length)
+            .map((u) => `<a href="${u}">${shortenUrl(u)}</a> (${u.length} chars)`),
+          5,
+        );
         warnings.push({
           message: 'Some URLs are too long',
-          detail: `${longUrls} URLs (${percent}%) exceed 100 characters. Average URL length: ${avgLength.toFixed(0)} characters`,
+          detail: `${longUrls.length} URLs (${percent}%) exceed 100 characters. Average URL length: ${avgLength.toFixed(0)} characters. Examples: ${sample}`,
           severity: SEVERITY.LOW,
         });
       }

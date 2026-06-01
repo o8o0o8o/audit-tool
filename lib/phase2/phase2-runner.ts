@@ -105,9 +105,6 @@ const SECTION_RANK: Record<Section, number> = SECTION_ORDER.reduce(
 /** Per-section cap so a noisy analyzer doesn't produce a 30-page section. */
 const SECTION_FINDING_LIMIT = 12;
 
-/** Cap for the compact "Minor & informational" list at the end of a section. */
-const MINOR_FINDING_LIMIT = 10;
-
 /** Number of example URLs shown per finding in the report body. */
 const EXAMPLES_PER_FINDING = 10;
 
@@ -1004,16 +1001,15 @@ function buildSection(
   }
 
   // Minor & informational — compact one-liners, never full finding blocks.
+  // The full list is shown (each is a single line, not an expensive finding
+  // block), so the reader gets a complete inventory of lower-impact issues
+  // rather than a truncated "…and N more".
   if (minor.length > 0) {
-    const shownMinor = minor.slice(0, MINOR_FINDING_LIMIT);
     lines.push('**Minor & informational**');
     lines.push('');
-    for (const [message, detail] of shownMinor) {
+    for (const [message, detail] of minor) {
       const c = detail.count ?? 0;
       lines.push(`- ${stripHtml(message)}${c > 1 ? ` *(${c} pages)*` : ''}`);
-    }
-    if (minor.length > shownMinor.length) {
-      lines.push(`- *…and ${minor.length - shownMinor.length} more*`);
     }
     lines.push('');
   }

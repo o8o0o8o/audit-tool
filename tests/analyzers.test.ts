@@ -675,6 +675,34 @@ void describe('findingGroupKey (cross-list identity)', () => {
 // ============================================================
 import { benchmarkFor } from '../lib/phase2/benchmarks';
 
+// ============================================================
+// URL architecture — long-URL finding names the offending URLs
+// ============================================================
+import { UrlArchitectureAnalyzer } from '../lib/analyzers/seo/url-architecture-analyzer';
+
+void describe('UrlArchitectureAnalyzer long URLs', () => {
+  void it('lists the actual long URLs in the finding detail, not just a count', () => {
+    const longUrl = 'https://ex.com/' + 'segment-'.repeat(15) + 'end'; // >100 chars
+    assert.ok(longUrl.length > 100);
+    const pages = {
+      'https://ex.com/': {} as PageInfo,
+      'https://ex.com/about': {} as PageInfo,
+      [longUrl]: {} as PageInfo,
+    };
+    const { warnings } = UrlArchitectureAnalyzer.analyzeSiteWide(pages, 'https://ex.com');
+    const finding = warnings.find((w) => w.message === 'Some URLs are too long');
+    assert.ok(finding, 'expected a long-URL finding');
+    assert.ok(finding!.detail?.includes(longUrl), 'detail should name the offending URL');
+    assert.ok(/1 URLs/.test(finding!.detail ?? ''), 'detail should still report the count');
+  });
+
+  void it('does not flag when all URLs are within length', () => {
+    const pages = { 'https://ex.com/': {} as PageInfo, 'https://ex.com/about': {} as PageInfo };
+    const { warnings } = UrlArchitectureAnalyzer.analyzeSiteWide(pages, 'https://ex.com');
+    assert.ok(!warnings.some((w) => w.message === 'Some URLs are too long'));
+  });
+});
+
 void describe('benchmarkFor', () => {
   void it('returns a benchmark anchored to the real threshold', () => {
     const b = benchmarkFor('Some pages have too many requests');

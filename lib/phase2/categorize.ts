@@ -71,16 +71,14 @@ const RULES: Array<{ section: Section; patterns: RegExp[] }> = [
       /pagination|rel=["']?next/i,
       /AI (?:bot|crawler)|llms\.txt|AEO/i,
       /freshness|lastmod/i,
+      /thin content|insufficient content/i,
+      /\bYMYL\b|author attribution|author information|E-E-A-T|EEAT|trust signals?|expertise/i,
+      /crawl budget/i,
     ],
   },
   {
     section: 'privacy',
-    patterns: [
-      /cookie/i,
-      /consent/i,
-      /privacy|GDPR|CCPA/i,
-      /tracking/i,
-    ],
+    patterns: [/cookie/i, /consent/i, /privacy|GDPR|CCPA/i, /tracking/i],
   },
   {
     section: 'accessibility',

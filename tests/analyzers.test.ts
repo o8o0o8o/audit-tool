@@ -526,10 +526,7 @@ void describe('RepresentativeSampler', () => {
 import { populateIncomingLinksCount } from '../lib/crawler/page-data-builder';
 
 void describe('populateIncomingLinksCount', () => {
-  const build = (
-    pageUrls: string[],
-    incomingLinks: Record<string, string[]>,
-  ) =>
+  const build = (pageUrls: string[], incomingLinks: Record<string, string[]>) =>
     ({
       pageData: {
         pages: Object.fromEntries(pageUrls.map((u) => [u, { url: u } as PageInfo])),
@@ -603,6 +600,15 @@ void describe('categorize (Phase 2 routing)', () => {
     assert.strictEqual(categorize('Form inputs missing labels'), 'accessibility');
   });
 
+  void it('routes content-quality / E-E-A-T / crawl-budget findings to seo, not the technical catch-all', () => {
+    assert.strictEqual(categorize('Page has very thin content'), 'seo');
+    assert.strictEqual(categorize('37.5% of pages have very thin content'), 'seo');
+    assert.strictEqual(categorize('13 YMYL pages without author attribution'), 'seo');
+    assert.strictEqual(categorize('No author information found'), 'seo');
+    assert.strictEqual(categorize('Low E-E-A-T signals across site'), 'seo');
+    assert.strictEqual(categorize('Significant crawl budget waste detected'), 'seo');
+  });
+
   void it('falls back to technical for unknown', () => {
     assert.strictEqual(categorize('Some completely unknown finding xyz'), 'technical');
   });
@@ -645,6 +651,36 @@ void describe('consolidateFindings (Phase 2 de-dup)', () => {
     assert.ok(keys.includes('Multiple tracking cookies set before consent'));
     assert.ok(!keys.includes('Inconsistent cookie consent implementation'));
     assert.strictEqual(out['Multiple tracking cookies set before consent'].severity, 'high');
+  });
+
+  void it('folds the site-wide infinite-scroll restatement into the per-page finding', () => {
+    const out = consolidateFindings({
+      'Infinite scroll without pagination fallback': det({ severity: 'high', count: 6 }),
+      '6 pages use infinite scroll without pagination fallback': det({ severity: 'high', count: 1 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.includes('Infinite scroll without pagination fallback'));
+    assert.ok(!keys.some((k) => /pages use infinite scroll/.test(k)), 'aggregate restatement should fold away');
+  });
+
+  void it('folds the site-wide missing-labels restatement into the per-page finding', () => {
+    const out = consolidateFindings({
+      'Form inputs missing labels': det({ severity: 'high', count: 52 }),
+      '52 form inputs across site missing labels': det({ severity: 'high', count: 1 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.includes('Form inputs missing labels'));
+    assert.ok(!keys.some((k) => /across site missing labels/.test(k)), 'aggregate restatement should fold away');
+  });
+
+  void it('folds the site-wide thin-content restatement into the per-page finding', () => {
+    const out = consolidateFindings({
+      'Page has very thin content': det({ severity: 'high', count: 6 }),
+      '37.5% of pages have very thin content': det({ severity: 'medium', count: 1 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.includes('Page has very thin content'));
+    assert.ok(!keys.some((k) => /% of pages have very thin content/.test(k)), 'aggregate restatement should fold away');
   });
 });
 
@@ -853,23 +889,20 @@ void describe('sanitizeProse', () => {
   });
 
   void it('leaves plain prose untouched', () => {
-    assert.strictEqual(sanitizeProse('Replace generic divs with semantic elements.'), 'Replace generic divs with semantic elements.');
+    assert.strictEqual(
+      sanitizeProse('Replace generic divs with semantic elements.'),
+      'Replace generic divs with semantic elements.',
+    );
   });
 });
 
 void describe('normalizeMessage', () => {
   void it('strips trailing (N elements) tokens', () => {
-    assert.strictEqual(
-      normalizeMessage('Color contrast fails WCAG AA (24 elements)'),
-      'Color contrast fails WCAG AA',
-    );
+    assert.strictEqual(normalizeMessage('Color contrast fails WCAG AA (24 elements)'), 'Color contrast fails WCAG AA');
   });
 
   void it('strips trailing bare (N) tokens', () => {
-    assert.strictEqual(
-      normalizeMessage('Some pages have too many h2 tags (16)'),
-      'Some pages have too many h2 tags',
-    );
+    assert.strictEqual(normalizeMessage('Some pages have too many h2 tags (16)'), 'Some pages have too many h2 tags');
   });
 
   void it('strips trailing (N units) with hyphenated units', () => {
@@ -877,10 +910,7 @@ void describe('normalizeMessage', () => {
   });
 
   void it('does not strip parenthesised numbers in the middle of the message', () => {
-    assert.strictEqual(
-      normalizeMessage('LCP (2.7s) on the homepage'),
-      'LCP (2.7s) on the homepage',
-    );
+    assert.strictEqual(normalizeMessage('LCP (2.7s) on the homepage'), 'LCP (2.7s) on the homepage');
   });
 
   void it('returns the input unchanged when there is no trailing token', () => {
@@ -908,10 +938,7 @@ void describe('normalizeMessageForLookup', () => {
       normalizeMessageForLookup('12% of pages have near-duplicate content'),
       'pages have near-duplicate content',
     );
-    assert.strictEqual(
-      normalizeMessageForLookup('38% pages have very thin content'),
-      'pages have very thin content',
-    );
+    assert.strictEqual(normalizeMessageForLookup('38% pages have very thin content'), 'pages have very thin content');
   });
 
   void it('still strips trailing (N units) tokens like normalizeMessage', () => {
@@ -1004,7 +1031,7 @@ void describe('SourcePatternAnalyzer', () => {
     assert.ok(find(r.warnings, 'disable the Next.js data cache'));
   });
 
-  void it("flags dynamic import with ssr: false even when callback has its own parens", () => {
+  void it('flags dynamic import with ssr: false even when callback has its own parens', () => {
     const root = fakeRepo(
       'app/page.tsx',
       `import dynamic from 'next/dynamic';\nconst Heavy = dynamic(() => import('./Heavy'), { ssr: false });\nexport default function P() { return <Heavy />; }\n`,
@@ -1027,10 +1054,7 @@ void describe('SourcePatternAnalyzer', () => {
   });
 
   void it('flags full-lib lodash imports', () => {
-    const root = fakeRepo(
-      'app/utils.ts',
-      `import _ from 'lodash';\nexport const d = _.debounce(() => {}, 100);\n`,
-    );
+    const root = fakeRepo('app/utils.ts', `import _ from 'lodash';\nexport const d = _.debounce(() => {}, 100);\n`);
     const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(find(r.warnings, 'lodash imported as a whole library'));
@@ -1071,10 +1095,7 @@ void describe('SourcePatternAnalyzer', () => {
     const nm = path.join(root, 'app', 'node_modules', 'evil');
     fs.mkdirSync(nm, { recursive: true });
     // place a violating pattern inside node_modules
-    fs.writeFileSync(
-      path.join(nm, 'leaked.ts'),
-      `export const dynamic = 'force-dynamic';\n`,
-    );
+    fs.writeFileSync(path.join(nm, 'leaked.ts'), `export const dynamic = 'force-dynamic';\n`);
     const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(!find([...r.issues, ...r.warnings], 'force-dynamic'));
@@ -1306,10 +1327,7 @@ void describe('parseAnomalies', () => {
   });
 
   void it('normalizes unknown section/severity to technical/medium', () => {
-    const out = parseAnomalies(
-      '[{"title":"X","severity":"catastrophic","section":"made-up","evidence":"e"}]',
-      URL,
-    );
+    const out = parseAnomalies('[{"title":"X","severity":"catastrophic","section":"made-up","evidence":"e"}]', URL);
     assert.strictEqual(out[0].severity, 'medium');
     assert.strictEqual(out[0].section, 'technical');
   });
@@ -1320,7 +1338,10 @@ void describe('parseAnomalies', () => {
   });
 
   void it('extracts the array even when wrapped in prose/fences', () => {
-    const out = parseAnomalies('Here you go:\n```json\n[{"title":"T","evidence":"e","severity":"low","section":"seo"}]\n```', URL);
+    const out = parseAnomalies(
+      'Here you go:\n```json\n[{"title":"T","evidence":"e","severity":"low","section":"seo"}]\n```',
+      URL,
+    );
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].section, 'seo');
   });
@@ -1355,13 +1376,19 @@ void describe('parseVerifyResult', () => {
   });
 
   void it('de-duplicates repeated indices', () => {
-    const out = parseVerifyResult('{"drop":[{"index":3,"kind":"duplicate"},{"index":3,"kind":"false-positive"}]}', VALID);
+    const out = parseVerifyResult(
+      '{"drop":[{"index":3,"kind":"duplicate"},{"index":3,"kind":"false-positive"}]}',
+      VALID,
+    );
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].index, 3);
   });
 
   void it('extracts the object even when wrapped in prose/fences', () => {
-    const out = parseVerifyResult('Sure:\n```json\n{"drop":[{"index":0,"kind":"false-positive","reason":"r"}]}\n```', VALID);
+    const out = parseVerifyResult(
+      'Sure:\n```json\n{"drop":[{"index":0,"kind":"false-positive","reason":"r"}]}\n```',
+      VALID,
+    );
     assert.strictEqual(out.length, 1);
     assert.strictEqual(out[0].index, 0);
   });
@@ -1383,12 +1410,27 @@ void describe('BrokenPaginationAnalyzer', () => {
 
   void it('flags a series whose tail is empty + near-duplicate listings', () => {
     const pages = {
-      'https://ex.com/blog/page/1': page({ contentQuality: { wordCount: 900 } as PageInfo['contentQuality'], contentHash: 'a' }),
-      'https://ex.com/blog/page/2': page({ contentQuality: { wordCount: 850 } as PageInfo['contentQuality'], contentHash: 'b' }),
+      'https://ex.com/blog/page/1': page({
+        contentQuality: { wordCount: 900 } as PageInfo['contentQuality'],
+        contentHash: 'a',
+      }),
+      'https://ex.com/blog/page/2': page({
+        contentQuality: { wordCount: 850 } as PageInfo['contentQuality'],
+        contentHash: 'b',
+      }),
       // empty trailing pages: thin + near-identical to each other
-      'https://ex.com/blog/page/3': page({ contentQuality: { wordCount: 10 } as PageInfo['contentQuality'], contentHash: 'empty' }),
-      'https://ex.com/blog/page/4': page({ contentQuality: { wordCount: 10 } as PageInfo['contentQuality'], contentHash: 'empty' }),
-      'https://ex.com/blog/page/5': page({ contentQuality: { wordCount: 12 } as PageInfo['contentQuality'], contentHash: 'empty' }),
+      'https://ex.com/blog/page/3': page({
+        contentQuality: { wordCount: 10 } as PageInfo['contentQuality'],
+        contentHash: 'empty',
+      }),
+      'https://ex.com/blog/page/4': page({
+        contentQuality: { wordCount: 10 } as PageInfo['contentQuality'],
+        contentHash: 'empty',
+      }),
+      'https://ex.com/blog/page/5': page({
+        contentQuality: { wordCount: 12 } as PageInfo['contentQuality'],
+        contentHash: 'empty',
+      }),
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
     assert.ok(result.issues.some((i) => /crawl budget/i.test(i.message ?? '')));
@@ -1396,7 +1438,10 @@ void describe('BrokenPaginationAnalyzer', () => {
 
   void it('flags a series with trailing soft 404s', () => {
     const pages = {
-      'https://ex.com/n?page=1': page({ contentQuality: { wordCount: 600 } as PageInfo['contentQuality'], contentHash: 'x' }),
+      'https://ex.com/n?page=1': page({
+        contentQuality: { wordCount: 600 } as PageInfo['contentQuality'],
+        contentHash: 'x',
+      }),
       'https://ex.com/n?page=2': page({ soft404: { isSoft404: true } as PageInfo['soft404'], contentHash: 'y' }),
       'https://ex.com/n?page=3': page({ soft404: { isSoft404: true } as PageInfo['soft404'], contentHash: 'z' }),
     };
@@ -1406,9 +1451,18 @@ void describe('BrokenPaginationAnalyzer', () => {
 
   void it('does NOT flag a healthy paginated series with real content', () => {
     const pages = {
-      'https://ex.com/blog/page/1': page({ contentQuality: { wordCount: 900 } as PageInfo['contentQuality'], contentHash: 'a' }),
-      'https://ex.com/blog/page/2': page({ contentQuality: { wordCount: 850 } as PageInfo['contentQuality'], contentHash: 'b' }),
-      'https://ex.com/blog/page/3': page({ contentQuality: { wordCount: 780 } as PageInfo['contentQuality'], contentHash: 'c' }),
+      'https://ex.com/blog/page/1': page({
+        contentQuality: { wordCount: 900 } as PageInfo['contentQuality'],
+        contentHash: 'a',
+      }),
+      'https://ex.com/blog/page/2': page({
+        contentQuality: { wordCount: 850 } as PageInfo['contentQuality'],
+        contentHash: 'b',
+      }),
+      'https://ex.com/blog/page/3': page({
+        contentQuality: { wordCount: 780 } as PageInfo['contentQuality'],
+        contentHash: 'c',
+      }),
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
     assert.strictEqual(result.issues.length, 0);
@@ -1418,8 +1472,14 @@ void describe('BrokenPaginationAnalyzer', () => {
     // Realistic: page 19 has real content, page 20 (the cap) is empty. No dup
     // neighbour exists, so this relies on the truncated-series relaxation.
     const pages = {
-      'https://ex.com/c/page/19': page({ contentQuality: { wordCount: 700 } as PageInfo['contentQuality'], contentHash: 'p19' }),
-      'https://ex.com/c/page/20': page({ contentQuality: { wordCount: 8 } as PageInfo['contentQuality'], contentHash: 'p20' }),
+      'https://ex.com/c/page/19': page({
+        contentQuality: { wordCount: 700 } as PageInfo['contentQuality'],
+        contentHash: 'p19',
+      }),
+      'https://ex.com/c/page/20': page({
+        contentQuality: { wordCount: 8 } as PageInfo['contentQuality'],
+        contentHash: 'p20',
+      }),
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>, {
       truncatedSeries: { 'https://ex.com/c/page/{N}': 20 },
@@ -1430,8 +1490,14 @@ void describe('BrokenPaginationAnalyzer', () => {
   void it('does NOT flag a truncated series whose highest page still has real content', () => {
     // A genuinely large catalog: the cap fired but the last page is substantive.
     const pages = {
-      'https://ex.com/shop/page/19': page({ contentQuality: { wordCount: 700 } as PageInfo['contentQuality'], contentHash: 'p19' }),
-      'https://ex.com/shop/page/20': page({ contentQuality: { wordCount: 650 } as PageInfo['contentQuality'], contentHash: 'p20' }),
+      'https://ex.com/shop/page/19': page({
+        contentQuality: { wordCount: 700 } as PageInfo['contentQuality'],
+        contentHash: 'p19',
+      }),
+      'https://ex.com/shop/page/20': page({
+        contentQuality: { wordCount: 650 } as PageInfo['contentQuality'],
+        contentHash: 'p20',
+      }),
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>, {
       truncatedSeries: { 'https://ex.com/shop/page/{N}': 20 },

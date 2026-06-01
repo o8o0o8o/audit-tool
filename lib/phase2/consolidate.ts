@@ -30,10 +30,7 @@ function moreSevere(a: string, b: string): string {
  * the content-bearing variants ("…content in Shadow DOM") are kept and carry
  * the genuine SEO signal.
  */
-const SUPPRESS: RegExp[] = [
-  /^no declarative shadow dom fallback/i,
-  /^heavy shadow dom usage/i,
-];
+const SUPPRESS: RegExp[] = [/^no declarative shadow dom fallback/i, /^heavy shadow dom usage/i];
 
 interface DedupGroup {
   /** The kept ("primary") finding — its message + examples win. */
@@ -60,10 +57,7 @@ const DEDUP_GROUPS: DedupGroup[] = [
   // is present becomes the kept entry.
   {
     primary: /tracking cookies set before consent/i,
-    members: [
-      /inconsistent cookie consent implementation/i,
-      /^tracking cookies without consent/i,
-    ],
+    members: [/inconsistent cookie consent implementation/i, /^tracking cookies without consent/i],
   },
   // Orphan pages (no inbound internal links) and pages unreachable from the
   // homepage via internal links are the same internal-linking discoverability
@@ -90,6 +84,25 @@ const DEDUP_GROUPS: DedupGroup[] = [
   {
     primary: /^duplicate meta descriptions found/i,
     members: [/^some pages have identical descriptions/i, /^duplicate descriptions detected/i],
+  },
+  // Infinite scroll — the per-page analyzer finding and the site-wide validator
+  // restatement ("N pages use infinite scroll without pagination fallback") are
+  // the same crawl-budget issue. Keep the per-page finding; fold the aggregate.
+  {
+    primary: /^infinite scroll without pagination fallback/i,
+    members: [/pages use infinite scroll without pagination fallback/i],
+  },
+  // Missing form labels — per-page finding vs site-wide aggregate ("N form
+  // inputs across site missing labels").
+  {
+    primary: /^form inputs missing labels/i,
+    members: [/form inputs across site missing labels/i],
+  },
+  // Thin content — per-page finding vs site-wide aggregate ("N% of pages have
+  // very thin content").
+  {
+    primary: /^page has very thin content/i,
+    members: [/% of pages have very thin content/i],
   },
 ];
 

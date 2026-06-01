@@ -349,13 +349,15 @@ function stripHtml(s: string): string {
  * backticks so it renders as literal inline code.
  */
 export function sanitizeProse(s: string): string {
-  return s
-    // Unwrap anchors to their inner text (usually the URL itself).
-    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1')
-    // Surviving tag-like mentions are content, not markup — render literally.
-    .replace(/<\/?[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>/g, (m) => `\`${m}\``)
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    s
+      // Unwrap anchors to their inner text (usually the URL itself).
+      .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1')
+      // Surviving tag-like mentions are content, not markup — render literally.
+      .replace(/<\/?[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>/g, (m) => `\`${m}\``)
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 // Re-export the shared utility so existing imports keep working.
@@ -512,9 +514,7 @@ function buildPurpose(artifacts: AuditArtifacts): string {
   const psiCaptured = evidence
     ? Object.values(evidence).filter((e) => e.files.some((f) => f.startsWith('psi.'))).length
     : 0;
-  const axeCaptured = evidence
-    ? Object.values(evidence).filter((e) => e.files.includes('axe.json')).length
-    : 0;
+  const axeCaptured = evidence ? Object.values(evidence).filter((e) => e.files.includes('axe.json')).length : 0;
 
   const stats: string[] = [];
   stats.push(`- **Pages crawled:** ${artifacts.manifest.progress.totalWithoutError}`);
@@ -546,7 +546,7 @@ function buildPurpose(artifacts: AuditArtifacts): string {
 
   if (sampledCount > 0) {
     lines.push(
-      `*Representative-page evidence means we captured detailed diagnostics — a full network request log, an accessibility scan, and (where available) lab performance scores — for a small, structurally representative sample of pages (the homepage and a spread of section and detail pages), rather than for every page on the site. These samples ground the findings below in concrete, reproducible measurements.*`
+      `*Representative-page evidence means we captured detailed diagnostics — a full network request log, an accessibility scan, and (where available) lab performance scores — for a small, structurally representative sample of pages (the homepage and a spread of section and detail pages), rather than for every page on the site. These samples ground the findings below in concrete, reproducible measurements.*`,
     );
     lines.push('');
   }
@@ -559,10 +559,7 @@ function buildPurpose(artifacts: AuditArtifacts): string {
  * override when detected. Returns the fence language (`tsx` for Next.js code,
  * `html` otherwise) so the example renders correctly.
  */
-function resolveQuickWin(
-  q: QuickWin,
-  isNextjs: boolean,
-): { fix: string; example: string | undefined; lang: string } {
+function resolveQuickWin(q: QuickWin, isNextjs: boolean): { fix: string; example: string | undefined; lang: string } {
   const override = isNextjs ? nextjsOverrideFor(q.issue) : undefined;
   if (override) {
     return { fix: override.fix ?? q.fix, example: override.example ?? q.example, lang: 'tsx' };
@@ -636,7 +633,9 @@ function buildSummary(
     richQuickwins.forEach((q) => {
       seen.add(summaryIdentity(q.issue));
       const rw = resolveQuickWin(q, isNextjs);
-      lines.push(`- **${sanitizeProse(q.issue)}** — ${sanitizeProse(rw.fix.split('.').slice(0, 1).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`);
+      lines.push(
+        `- **${sanitizeProse(q.issue)}** — ${sanitizeProse(rw.fix.split('.').slice(0, 1).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`,
+      );
       if (rw.example && rw.example.trim()) {
         lines.push('');
         lines.push(`  \`\`\`${rw.lang}`);
@@ -661,7 +660,9 @@ function buildSummary(
       lines.push('');
       fallback.forEach(([message, d]) => {
         seen.add(summaryIdentity(message));
-        lines.push(`- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${d.count} occurrence${d.count === 1 ? '' : 's'} — contained)*`);
+        lines.push(
+          `- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${d.count} occurrence${d.count === 1 ? '' : 's'} — contained)*`,
+        );
       });
       lines.push('');
     }
@@ -679,7 +680,9 @@ function buildSummary(
     richLongterm.forEach((q) => {
       seen.add(summaryIdentity(q.issue));
       const rw = resolveQuickWin(q, isNextjs);
-      lines.push(`- ${sanitizeProse(q.issue)} — ${sanitizeProse(rw.fix.split('.').slice(0, 2).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`);
+      lines.push(
+        `- ${sanitizeProse(q.issue)} — ${sanitizeProse(rw.fix.split('.').slice(0, 2).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`,
+      );
       if (rw.example && rw.example.trim()) {
         lines.push('');
         lines.push(`  \`\`\`${rw.lang}`);
@@ -691,14 +694,18 @@ function buildSummary(
     });
     lines.push('');
   } else {
-    // Fallback: high-severity findings with broad occurrence (systemic → real
-    // engineering work). The `count > 20` gate marks them systemic, but order
-    // by `byImportance` (category → severity → impact), not raw count, so an
-    // SEO/performance item leads over a high-count accessibility one.
+    // Fallback: the next tier of unshown high/critical findings (Top Priority
+    // already claimed the top few). Order by `byImportance` — category first
+    // (SEO > Performance > UX > Privacy/Security > Accessibility > Technical),
+    // then severity, then impact — so a weak-category SEO/security item leads
+    // over a high-count accessibility one. No occurrence-count gate: site-wide
+    // findings (crawl-budget waste, orphan pages, missing security headers) are
+    // reported once yet are exactly the long-term engineering work this section
+    // should surface. `count > 20` only decides the "systemic" label below.
     const fallback = Object.entries(details ?? {})
       .filter(([message, d]) => {
         const sev = d.severity?.toLowerCase();
-        return (sev === 'critical' || sev === 'high') && (d.count ?? 0) > 20 && !seen.has(summaryIdentity(message));
+        return (sev === 'critical' || sev === 'high') && !seen.has(summaryIdentity(message));
       })
       .sort(byImportance)
       .slice(0, 5);
@@ -707,7 +714,9 @@ function buildSummary(
       lines.push('');
       fallback.forEach(([message, d]) => {
         seen.add(summaryIdentity(message));
-        lines.push(`- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${d.count} occurrences — systemic)*`);
+        const count = d.count ?? 0;
+        const scope = count > 20 ? `${count} occurrences — systemic` : `${count} occurrence${count === 1 ? '' : 's'}`;
+        lines.push(`- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${scope})*`);
       });
       lines.push('');
     }
@@ -800,7 +809,9 @@ function buildFindingBlock(
         lines.push(`- ${label || 'Shared value'}`);
         for (const u of urls.slice(0, PAGES_PER_CLUSTER)) lines.push(`    - ${u}`);
         if (urls.length > PAGES_PER_CLUSTER) {
-          lines.push(`    - *…and ${urls.length - PAGES_PER_CLUSTER} more page${urls.length - PAGES_PER_CLUSTER === 1 ? '' : 's'}*`);
+          lines.push(
+            `    - *…and ${urls.length - PAGES_PER_CLUSTER} more page${urls.length - PAGES_PER_CLUSTER === 1 ? '' : 's'}*`,
+          );
         }
       } else {
         // Single-page example. When the analyzer attached a measured value
@@ -847,7 +858,9 @@ function buildFindingBlock(
       lines.push(`- \`${where}\`${hint}`);
     }
     if (locations.length > WHERE_LIMIT) {
-      lines.push(`- *…and ${locations.length - WHERE_LIMIT} more file${locations.length - WHERE_LIMIT === 1 ? '' : 's'}*`);
+      lines.push(
+        `- *…and ${locations.length - WHERE_LIMIT} more file${locations.length - WHERE_LIMIT === 1 ? '' : 's'}*`,
+      );
     }
     lines.push('');
   }
@@ -911,7 +924,8 @@ function buildAnalysisProse(primary: Array<[string, IssueDetail]>, minorCount: n
     .map(([m]) => `*${stripHtml(m)}*`)
     .join(', ');
   const also = others ? ` Also notable: ${others}.` : '';
-  const minorNote = minorCount > 0 ? ` ${minorCount} minor/informational note${minorCount === 1 ? '' : 's'} follow.` : '';
+  const minorNote =
+    minorCount > 0 ? ` ${minorCount} minor/informational note${minorCount === 1 ? '' : 's'} follow.` : '';
   return `${primary.length} notable finding${primary.length === 1 ? '' : 's'} (${severityTally(primary)}). ${lead}${also}${minorNote}`;
 }
 
@@ -968,7 +982,9 @@ function buildSection(
   }
 
   if (hidden.length > 0) {
-    lines.push(`> *…and ${hidden.length} more lower-priority finding${hidden.length === 1 ? '' : 's'} in this section (${severityTally(hidden)}).*`);
+    lines.push(
+      `> *…and ${hidden.length} more lower-priority finding${hidden.length === 1 ? '' : 's'} in this section (${severityTally(hidden)}).*`,
+    );
     lines.push('');
   }
 

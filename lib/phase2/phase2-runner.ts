@@ -237,6 +237,21 @@ function byImportance(a: [string, IssueDetail], b: [string, IssueDetail]): numbe
   return impactScore(b[0], b[1]) - impactScore(a[0], a[1]);
 }
 
+/**
+ * `byImportance` for the scoring layer's `QuickWin` items, which carry their own
+ * `impactScore` rather than an `IssueDetail`. Same intent: category priority
+ * (`SECTION_RANK`: SEO > Performance > UX > Privacy/Security > Accessibility >
+ * Technical) leads, then the precomputed impact score breaks ties. Keeps the
+ * Long-term list grouped by category like the rest of the report instead of
+ * letting a high-count accessibility item outrank an SEO/performance one.
+ */
+function byQuickWinImportance(a: QuickWin, b: QuickWin): number {
+  const ca = SECTION_RANK[categorize(a.issue)] ?? 99;
+  const cb = SECTION_RANK[categorize(b.issue)] ?? 99;
+  if (ca !== cb) return ca - cb;
+  return (b.impactScore ?? 0) - (a.impactScore ?? 0);
+}
+
 /** Severity ordering, weakest → strongest, for capping. */
 const SEV_ASC = ['low', 'medium', 'high', 'critical'];
 function capSeverity(sev: string, target: 'medium' | 'high'): string {
@@ -529,6 +544,13 @@ function buildPurpose(artifacts: AuditArtifacts): string {
   lines.push(...stats);
   lines.push('');
 
+  if (sampledCount > 0) {
+    lines.push(
+      `*Representative-page evidence means we captured detailed diagnostics — a full network request log, an accessibility scan, and (where available) lab performance scores — for a small, structurally representative sample of pages (the homepage and a spread of section and detail pages), rather than for every page on the site. These samples ground the findings below in concrete, reproducible measurements.*`
+    );
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 
@@ -648,7 +670,7 @@ function buildSummary(
   // Long-term recommendations — higher-effort or systemic items.
   const richLongterm = (summary.quickWins ?? [])
     .filter((q) => (q.effortMinutes ?? 0) > 30 && !seen.has(summaryIdentity(q.issue)))
-    .sort((a, b) => (b.impactScore ?? 0) - (a.impactScore ?? 0))
+    .sort(byQuickWinImportance)
     .slice(0, 5);
 
   if (richLongterm.length >= 1) {
@@ -669,13 +691,16 @@ function buildSummary(
     });
     lines.push('');
   } else {
-    // Fallback: high-severity findings with broad occurrence (systemic → real engineering work).
+    // Fallback: high-severity findings with broad occurrence (systemic → real
+    // engineering work). The `count > 20` gate marks them systemic, but order
+    // by `byImportance` (category → severity → impact), not raw count, so an
+    // SEO/performance item leads over a high-count accessibility one.
     const fallback = Object.entries(details ?? {})
       .filter(([message, d]) => {
         const sev = d.severity?.toLowerCase();
         return (sev === 'critical' || sev === 'high') && (d.count ?? 0) > 20 && !seen.has(summaryIdentity(message));
       })
-      .sort(([, a], [, b]) => (b.count ?? 0) - (a.count ?? 0))
+      .sort(byImportance)
       .slice(0, 5);
     if (fallback.length > 0) {
       lines.push('### Long-term Recommendations');

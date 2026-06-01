@@ -23,6 +23,10 @@ export interface CrawlerInternalOptions {
   queryParams: QueryParamConfig;
   cruxApiKey?: string | null;
   config?: Record<string, unknown>;
+  /** Base directory where per-page evidence (screenshots, HAR) is written. */
+  evidenceDir?: string;
+  /** Max number of representative-page samples (default 10). */
+  evidenceCap?: number;
 }
 
 export interface QueryParamConfig {

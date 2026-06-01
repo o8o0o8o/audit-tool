@@ -328,6 +328,8 @@ async function audit() {
       dryRun: args.dryRun,
       screenshots: args.screenshots,
       cruxApiKey: config.apiKeys?.crux ?? null,
+      evidence: args.evidence,
+      evidenceCap: args.evidenceCap,
     });
     _seoInstance = seo;
 
@@ -414,6 +416,29 @@ async function audit() {
     // Generate HTML report in the same directory as the JSON file
     const htmlOutputPath = seo.fileManager.getHtmlFilePath();
     generateHTML(seo.file, seo.domainName!, htmlOutputPath);
+
+    // Phase 2 — curated markdown + PDF report. Opt-out via --no-phase2.
+    if (args.phase2 !== false) {
+      // Persist the latest analysis state before Phase 2 reads from disk.
+      // Repo-analysis findings (and any other post-audit() saveError calls)
+      // are only in memory until this re-save fires.
+      try {
+        await seo.saveData();
+      } catch (e: unknown) {
+        console.debug('Pre-Phase-2 save skipped:', (e as Error).message);
+      }
+      try {
+        const { runPhase2 } = await import('./lib/phase2/phase2-runner');
+        const pdfPath = await runPhase2(seo.fileManager.resultsDir, {
+          llmNarrative: args.llmNarrative === true,
+          llmFindings: args.llmFindings === true,
+          verbose: args.verbose === true,
+        });
+        console.log(`📄 Curated report: ${pdfPath}`);
+      } catch (e: unknown) {
+        console.debug('Phase 2 report generation skipped:', (e as Error).message);
+      }
+    }
 
     // Extract summary once to avoid repeated deep property access
     const summary = seo.data.analysis?.summary ?? {} as Record<string, unknown>;

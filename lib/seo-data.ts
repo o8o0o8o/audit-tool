@@ -41,6 +41,8 @@ class SEOData {
   #dryRun: boolean;
   #cruxApiKey: string | null;
   #screenshots: boolean;
+  #evidence: boolean;
+  #evidenceCap: number;
 
   origin: string | null;
   domainName: string | null;
@@ -80,6 +82,8 @@ class SEOData {
     this.#dryRun = options.dryRun ?? false;
     this.#cruxApiKey = options.cruxApiKey ?? null;
     this.#screenshots = options.screenshots ?? false;
+    this.#evidence = options.evidence ?? true;
+    this.#evidenceCap = options.evidenceCap ?? 10;
 
     // Initialize incoming links tracking (Map<target, Set<source>>)
     this.#incomingLinksTracking = new Map();
@@ -180,6 +184,8 @@ class SEOData {
         cpuConditions: this.cpuConditions,
         verbose: this.#verbose,
         cruxApiKey: this.#cruxApiKey,
+        evidenceDir: this.#evidence ? path.join(this.resultsDir, 'evidence') : undefined,
+        evidenceCap: this.#evidenceCap,
       },
       {
         saveError: this.saveError.bind(this),
@@ -595,6 +601,7 @@ class SEOData {
       this.origin ?? '',
       this.#results.isMultiLang,
       this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[3],
+      this.#results.sitemaps?.urls ?? {},
     );
 
     // Stop timing

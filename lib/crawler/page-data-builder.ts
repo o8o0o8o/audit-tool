@@ -6,6 +6,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { AxeBuilder } from '@axe-core/playwright';
+import type { Page as PlaywrightPage } from 'playwright';
 import type { PageInfo, SitemapUrl, Issue, HeadingAnalysis, UrlAnalysis } from '../types';
 import type {
   CrawlResults,
@@ -27,8 +29,10 @@ import {
   META_TAGS_CONFIG,
   normalizeTextForComparison,
   CRAWL_SETTINGS,
+  VIEWPORT,
+  DESKTOP_VIEWPORT,
 } from '../constants';
-import { normalizeUrl, createSafeFilename, truncateText, getPaginationSeriesKey } from '../utils';
+import { normalizeUrl, createSafeFilename, truncateText, getPaginationSeriesKey, normalizeUrlForComparison } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import type { ChromePage } from '../types';
 
@@ -103,7 +107,7 @@ function checkMissingMetaTags(pageData: PageInfo, url: string, reportIssue: Repo
         reportIssue(
           `Description meta tag is missing`,
           `Meta description is missing for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
-          SEVERITY.CRITICAL,
+          SEVERITY.MEDIUM,
         );
       }
     }
@@ -216,12 +220,32 @@ function checkAlternateDuplicates(alternates: AlternateEntry[], url: string, rep
 }
 
 /**
+ * Per-sitemap-object memoised lookup keyed by normalized loc (hash + trailing
+ * slash stripped). Built once per sitemap object so the per-page canonical
+ * check stays O(1) instead of O(n) per page.
+ */
+type SitemapUrlMap = Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
+const normalizedSitemapCache = new WeakMap<object, Map<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>>();
+
+function getNormalizedSitemap(sitemapUrls: SitemapUrlMap): Map<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }> {
+  let cached = normalizedSitemapCache.get(sitemapUrls);
+  if (!cached) {
+    cached = new Map();
+    for (const [loc, value] of Object.entries(sitemapUrls)) {
+      cached.set(normalizeUrlForComparison(loc), value);
+    }
+    normalizedSitemapCache.set(sitemapUrls, cached);
+  }
+  return cached;
+}
+
+/**
  * Validate canonical matches sitemap
  */
 function validateCanonicalMatchesSitemap(
   pageData: PageInfo,
   url: string,
-  sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>,
+  sitemapUrls: SitemapUrlMap,
   origin: string,
   reportIssue: ReportIssueFn,
 ): void {
@@ -229,7 +253,21 @@ function validateCanonicalMatchesSitemap(
   const canonical = pageData.canonical ?? '';
   const normalizedCanonical = canonical.startsWith('http') ? canonical : new URL(canonical, origin).href;
   const escapedCanonical = escapeHtml(normalizedCanonical);
-  const matchingCanonical = sitemapUrls[canonical] ?? sitemapUrls[normalizedCanonical];
+  const normalizedSitemap = getNormalizedSitemap(sitemapUrls);
+  // Exact match first, then a trailing-slash/hash-insensitive match so that a
+  // canonical of `…/page/` is reconciled with a sitemap loc of `…/page`.
+  const matchingCanonical =
+    sitemapUrls[canonical] ??
+    sitemapUrls[normalizedCanonical] ??
+    normalizedSitemap.get(normalizeUrlForComparison(normalizedCanonical));
+
+  // Only meaningful for pages that are themselves listed in the sitemap. For a
+  // discovered page absent from the sitemap (e.g. the homepage when the sitemap
+  // only lists sub-pages), a "loc/canonical mismatch" is misleading — the real
+  // issue is "not listed in sitemap", reported elsewhere.
+  if (!matchingCanonical && !normalizedSitemap.has(normalizeUrlForComparison(url))) {
+    return;
+  }
 
   if (matchingCanonical) {
     if (matchingCanonical.alternates) {
@@ -351,15 +389,17 @@ export function processRedirects(
     const escapedChain = redirectChain.map((r) => escapeHtml(r.url)).join(' → ');
     if (redirectCount > 2) {
       reportIssue(
-        `Some pages have too many redirects`,
-        `<a href="${escapedUrl}">${escapedUrl}</a> has ${redirectCount} redirect(s): ${escapedChain}`,
+        `Pages sit behind a long redirect chain`,
+        `<a href="${escapedUrl}">${escapedUrl}</a> goes through ${redirectCount} redirects before resolving: ${escapedChain}. Chains waste crawl budget and slow the first response — collapse them to a single hop.`,
         SEVERITY.HIGH,
       );
     } else if (redirectCount > 0) {
+      // A single redirect is not itself a problem; the actionable point is that
+      // the entry URL (sitemap entry or internal link) isn't the final URL.
       reportIssue(
-        `Some pages have redirects`,
-        `<a href="${escapedUrl}">${escapedUrl}</a> has ${redirectCount} redirect(s): ${escapedChain}`,
-        SEVERITY.MEDIUM,
+        `Requested URLs redirect before serving the page`,
+        `<a href="${escapedUrl}">${escapedUrl}</a> redirects (${redirectCount} hop) to its final URL: ${escapedChain}. Harmless on its own, but point sitemap entries and internal links at the final URL so crawlers and users skip the extra round-trip.`,
+        SEVERITY.LOW,
       );
     }
   }
@@ -1101,11 +1141,162 @@ export async function saveScreenshot(
 }
 
 /**
- * Populate incoming links count for each page
+ * Capture evidence for a representative page:
+ *   • screenshot.mobile.png   — full-page, mobile viewport
+ *   • screenshot.desktop.png  — full-page, desktop viewport (viewport is
+ *                                restored to mobile before returning)
+ *   • requests.json           — the network request log already collected
+ *                                during this page's crawl
+ *
+ * No-op when options.evidenceDir is unset.
+ *
+ * Note: we persist the existing per-page request log instead of a true
+ * Playwright HAR. Playwright's HAR is a context-level setting and can't be
+ * toggled per page after the fact; the request log carries the same
+ * information (url, method, status, timing, size, resourceType) and is what
+ * Phase 2 agents need. A literal HAR-1.2 file can be derived later if needed.
  */
-export function populateIncomingLinksCount(results: CrawlResults): void {
+export async function captureRepresentativeEvidence(
+  chromePage: ChromePage,
+  url: string,
+  options: CrawlerInternalOptions,
+  requests?: Record<string, unknown>,
+  accessibility?: unknown,
+): Promise<void> {
+  const evidenceDir = options.evidenceDir;
+  if (!evidenceDir) return;
+
+  const pageDir = path.join(evidenceDir, createSafeFilename(url));
+  try {
+    fs.mkdirSync(pageDir, { recursive: true });
+  } catch (error: unknown) {
+    if (options.verbose) {
+      console.error(`Failed to create evidence dir ${pageDir}:`, (error as Error).message);
+    }
+    return;
+  }
+
+  // Self-describing _meta.json so the manifest indexer can recover the URL
+  // for each evidence directory.
+  try {
+    fs.writeFileSync(
+      path.join(pageDir, '_meta.json'),
+      JSON.stringify({ url, capturedAt: new Date().toISOString() }, null, 2),
+    );
+  } catch {
+    // best effort
+  }
+
+  // Mobile full-page (current viewport).
+  try {
+    await chromePage.screenshot({
+      path: path.join(pageDir, 'screenshot.mobile.png'),
+      fullPage: true,
+    });
+  } catch (error: unknown) {
+    if (options.verbose) {
+      console.error(`Mobile screenshot failed for ${url}:`, (error as Error).message);
+    }
+  }
+
+  // axe-core scan at mobile viewport. Bounded by a 30s timeout so a hung scan
+  // doesn't block the crawl.
+  try {
+    const axeResults = await Promise.race([
+      new AxeBuilder({ page: chromePage as unknown as PlaywrightPage }).analyze(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 30_000)),
+    ]);
+    if (axeResults) {
+      fs.writeFileSync(
+        path.join(pageDir, 'axe.json'),
+        JSON.stringify(
+          {
+            url,
+            capturedAt: new Date().toISOString(),
+            viewport: 'mobile',
+            engine: axeResults.testEngine,
+            violations: axeResults.violations,
+            incomplete: axeResults.incomplete,
+            passes: axeResults.passes.map((p) => ({ id: p.id, impact: p.impact, tags: p.tags })), // trim node payload for size
+            inapplicable: axeResults.inapplicable.map((p) => p.id),
+          },
+          null,
+          2,
+        ),
+      );
+    } else if (options.verbose) {
+      console.warn(`axe-core scan timed out for ${url}`);
+    }
+  } catch (error: unknown) {
+    if (options.verbose) {
+      console.error(`axe-core scan failed for ${url}:`, (error as Error).message);
+    }
+  }
+
+  // Desktop full-page (temporary viewport switch).
+  try {
+    await chromePage.setViewportSize({ width: DESKTOP_VIEWPORT.WIDTH, height: DESKTOP_VIEWPORT.HEIGHT });
+    await chromePage.screenshot({
+      path: path.join(pageDir, 'screenshot.desktop.png'),
+      fullPage: true,
+    });
+  } catch (error: unknown) {
+    if (options.verbose) {
+      console.error(`Desktop screenshot failed for ${url}:`, (error as Error).message);
+    }
+  } finally {
+    // Restore the crawl viewport so subsequent analyzers see the same context.
+    try {
+      await chromePage.setViewportSize({ width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT });
+    } catch {
+      // best effort
+    }
+  }
+
+  // Network request log.
+  if (requests) {
+    try {
+      fs.writeFileSync(
+        path.join(pageDir, 'requests.json'),
+        JSON.stringify({ url, capturedAt: new Date().toISOString(), requests }, null, 2),
+      );
+    } catch (error: unknown) {
+      if (options.verbose) {
+        console.error(`Failed to write requests.json for ${url}:`, (error as Error).message);
+      }
+    }
+  }
+
+  // Hand-rolled heuristic accessibility output (semantic landmarks, form
+  // labels, etc.) — complementary to the axe-core results written above.
+  // Phase 2 a11y agent can consume both.
+  if (accessibility) {
+    try {
+      fs.writeFileSync(
+        path.join(pageDir, 'accessibility.json'),
+        JSON.stringify({ url, capturedAt: new Date().toISOString(), source: 'heuristics', accessibility }, null, 2),
+      );
+    } catch (error: unknown) {
+      if (options.verbose) {
+        console.error(`Failed to write accessibility.json for ${url}:`, (error as Error).message);
+      }
+    }
+  }
+}
+
+/**
+ * Populate incoming links count for each page.
+ *
+ * The incomingLinks map is keyed by NORMALISED target URLs (see collectLinks),
+ * so page URLs must be normalised the same way before lookup — otherwise pages
+ * whose raw URL differs from its normalised form (e.g. the root `https://x.com`
+ * vs the linked `https://x.com/`, or URLs carrying tracking params) would
+ * always resolve to a count of 0.
+ */
+export function populateIncomingLinksCount(results: CrawlResults, queryParams: QueryParamConfig = {}): void {
+  const incomingLinks = results.pageData.incomingLinks ?? {};
   for (const url in results.pageData.pages) {
-    const incomingLinksArray = results.pageData.incomingLinks?.[url] ?? [];
+    const incomingLinksArray = incomingLinks[url] ?? incomingLinks[normalizeUrl(url, queryParams)] ?? [];
     const incomingLinksCount = Array.isArray(incomingLinksArray) ? incomingLinksArray.length : 0;
     results.pageData.pages[url].incomingLinksCount = incomingLinksCount;
     results.pageData.pages[url].hasIncomingLinks = incomingLinksCount > 0;

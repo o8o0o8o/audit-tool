@@ -39,6 +39,19 @@ export const CRAWL_SETTINGS = {
   // for absurd N, but every page beyond the real last renders an empty listing
   // (status 200, no "not found" text) — so neither hard nor soft 404 detection fires.
   MAX_PAGINATED_URLS_PER_SERIES: 20,
+  // Broken-pagination (infinite "next") detection.
+  // Why: a "next" link that keeps returning HTTP 200 empty/duplicate listings
+  // past the real last page makes crawlers follow it indefinitely, wasting
+  // crawl budget. We flag a series once its trailing pages look broken.
+  // Minimum number of contiguous broken trailing pages before we flag a series.
+  BROKEN_PAGINATION_MIN_TAIL: 2,
+  // Word count at/below which a listing page counts as "empty/thin".
+  BROKEN_PAGINATION_THIN_WORDS: 50,
+  // Active JS-"next" probe: max clicks to follow, total time budget, and the
+  // max number of distinct series probed per audit (keeps cost bounded).
+  BROKEN_PAGINATION_MAX_PROBE_CLICKS: 3,
+  BROKEN_PAGINATION_PROBE_TIMEOUT_MS: 6000,
+  BROKEN_PAGINATION_MAX_PROBES: 5,
   BACKOFF_RESET_TIMEOUT_MS: 300000,
   BACKOFF_BASE_DELAY_MS: 1000,
   BACKOFF_MAX_DELAY_MS: 30000,
@@ -59,6 +72,12 @@ export const VIEWPORT = {
   WIDTH: 414,
   HEIGHT: 896,
   DEVICE_SCALE_FACTOR: 1,
+} as const;
+
+/** Desktop viewport used for representative-page evidence captures. */
+export const DESKTOP_VIEWPORT = {
+  WIDTH: 1280,
+  HEIGHT: 800,
 } as const;
 
 // Performance and SEO thresholds
@@ -142,6 +161,10 @@ export const THRESHOLDS = {
   SSL_EXPIRY_WARNING: 30,
   SSL_EXPIRY_CRITICAL: 7,
 
+  // Cookie lifespan (days). Regulators consider >13 months excessive for
+  // analytics/marketing cookies; we use 365 as a round, defensible threshold.
+  COOKIE_LIFESPAN_WARNING_DAYS: 365,
+
   // Above-Fold / Font / Third-Party (bytes)
   ABOVE_FOLD_IMAGE_SIZE: 500_000,
   ABOVE_FOLD_IMAGE_AVG: 300_000,
@@ -165,9 +188,19 @@ export const THRESHOLDS = {
   SITEMAP_LIMIT: 50000,
 } as const;
 
-// Scoring weights and thresholds for ScoreCalculator
+/**
+ * Scoring constants.
+ *
+ * Per-category methodology (see lib/scoring/methodologies.ts):
+ *   • Performance   — Lighthouse log-normal CDF + weighted average of metrics
+ *   • Accessibility — mean of per-page a11yScore (analyzer-computed)
+ *   • Security      — mean of per-page securityScore (Observatory deductions)
+ *   • SEO           — Ahrefs URL-pass on error-tier issues
+ *   • Technical     — Ahrefs URL-pass on error-tier issues
+ *   • Overall       — weighted average of category scores
+ */
 export const SCORING = {
-  // Overall score: weighted average of category scores
+  /** Overall = Σ CATEGORY_WEIGHTS[k] · categoryScores[k]. Sums to 1. */
   CATEGORY_WEIGHTS: {
     seo: 0.3,
     performance: 0.25,
@@ -176,48 +209,56 @@ export const SCORING = {
     security: 0.1,
   } as Record<string, number>,
 
-  // Penalty weight per issue severity
-  SEVERITY_WEIGHTS: {
-    critical: 5,
-    high: 3,
-    medium: 1,
-    low: 0.3,
+  /**
+   * Overall blends the weighted mean with the WORST category score so a
+   * failing category (e.g. SEO 30, Security 29) can't be masked by strong
+   * ones: overall = mean·OVERALL_MEAN_WEIGHT + min·(1 − OVERALL_MEAN_WEIGHT).
+   * A pure mean reported siro.ai (SEO 30 / Sec 29 / rest ~94) as a reassuring
+   * 69; this blend pulls it down to ~51, which is honest for an audit.
+   */
+  OVERALL_MEAN_WEIGHT: 0.55,
+
+  /**
+   * Per-metric weights for the Performance composite (Core Web Vitals + lab).
+   * Mirrors Lighthouse 10 weighting with TBT swapped for INP (per Web Vitals).
+   * Sums to 100 so the result is a percentage.
+   */
+  PERFORMANCE_METRIC_WEIGHTS: {
+    LCP: 25,
+    INP: 30,
+    CLS: 25,
+    FCP: 10,
+    TTFB: 10,
   } as Record<string, number>,
 
-  // Impact score base values per severity (for quick wins)
-  IMPACT_BASE_SCORES: {
-    critical: 100,
-    high: 70,
-    medium: 40,
-    low: 20,
-  } as Record<string, number>,
+  /**
+   * Log-normal CDF control points per metric.
+   * `p10` (top-decile site value) → score 90; `median` → score 50.
+   * Numbers from web.dev / HTTPArchive (the same source Lighthouse uses).
+   * https://web.dev/articles/defining-core-web-vitals-thresholds
+   */
+  PERFORMANCE_CONTROL_POINTS: {
+    LCP: { p10: 1220, median: 2500 },
+    INP: { p10: 50, median: 200 },
+    CLS: { p10: 0.025, median: 0.1 },
+    FCP: { p10: 934, median: 1800 },
+    TTFB: { p10: 200, median: 800 },
+  } as Record<string, { p10: number; median: number }>,
 
-  // Default scores for categories lacking page-level data
-  DEFAULT_CATEGORY_SCORES: {
-    accessibility: 70,
-    security: 70,
-  },
-
-  // Log penalty scales per category (higher = steeper penalty curve)
-  LOG_PENALTY_SCALE: {
-    seo: 8,
-    performance: 9,
-    technical: 9,
-  },
-
-  // Breadth multiplier: scales penalty by proportion of affected pages
-  BREADTH_MULTIPLIER_FACTOR: 4,
-  BREADTH_MULTIPLIER_MAX: 5,
-
-  // Page multiplier for impact score: max 3x based on affected count / 10
-  IMPACT_PAGE_DIVISOR: 10,
-  IMPACT_PAGE_MULTIPLIER_MAX: 3,
-  IMPACT_PAGE_BOOST_FACTOR: 0.3,
-
-  // Quick win thresholds
+  /**
+   * Quick-win classification thresholds (impact score 0-100, effort in
+   * minutes). Used only by identifyQuickWins(); not part of category scoring.
+   */
   QUICK_WIN_MIN_IMPACT: 40,
   QUICK_WIN_MAX_EFFORT_MINUTES: 30,
   QUICK_WIN_MAX_RESULTS: 10,
+
+  /** Tier→impact-score for quick-win sorting (Ahrefs only counts errors). */
+  TIER_IMPACT_BASE: {
+    error: 80,
+    warning: 40,
+    notice: 15,
+  } as Record<string, number>,
 } as const;
 
 /**

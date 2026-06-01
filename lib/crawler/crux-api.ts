@@ -567,6 +567,155 @@ class CrUXAPI {
     }
     return `${Math.round(value)}ms`;
   }
+
+  /**
+   * Fetch a per-URL PageSpeed Insights lab summary (Lighthouse).
+   *
+   * Returns the four category scores (performance, accessibility,
+   * best-practices, seo) on a 0–100 scale plus the headline lab metrics.
+   * Returns null on any failure (network, non-200, malformed) so callers
+   * can degrade gracefully.
+   */
+  static async fetchPSILabSummary(
+    url: string,
+    options: { strategy?: 'mobile' | 'desktop'; apiKey?: string | null; timeoutMs?: number } = {},
+  ): Promise<PSILabSummary | null> {
+    const strategy = options.strategy ?? 'mobile';
+    const key = options.apiKey ?? process.env.CRUX_API_KEY ?? null;
+    const timeoutMs = options.timeoutMs ?? 30_000;
+
+    let psiUrl =
+      `${this.#PSI_ENDPOINT}?url=${encodeURIComponent(url)}` +
+      `&strategy=${strategy}` +
+      `&category=performance&category=accessibility&category=best-practices&category=seo`;
+    if (key) psiUrl += `&key=${key}`;
+
+    return new Promise((resolve) => {
+      const request = https.get(psiUrl, { timeout: timeoutMs }, (res: IncomingMessage) => {
+        let data = '';
+        res.on('data', (chunk: Buffer | string) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            if (res.statusCode !== 200) {
+              resolve(null);
+              return;
+            }
+            const parsed = JSON.parse(data) as PSIRawLighthouseResponse;
+            resolve(this.#parseLabSummary(parsed, url, strategy));
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+      request.on('error', () => resolve(null));
+      request.on('timeout', () => {
+        request.destroy();
+        resolve(null);
+      });
+    });
+  }
+
+  /**
+   * Extract the lab-summary fields from a PSI/Lighthouse response.
+   * @private
+   */
+  static #parseLabSummary(
+    psi: PSIRawLighthouseResponse,
+    url: string,
+    strategy: 'mobile' | 'desktop',
+  ): PSILabSummary | null {
+    const lh = psi.lighthouseResult;
+    if (!lh) return null;
+
+    const scoreOf = (cat: string): number | null => {
+      const raw = lh.categories?.[cat]?.score;
+      return typeof raw === 'number' ? Math.round(raw * 100) : null;
+    };
+    const auditNumeric = (id: string): number | null => {
+      const v = lh.audits?.[id]?.numericValue;
+      return typeof v === 'number' ? v : null;
+    };
+    const auditDisplay = (id: string): string | null => {
+      const v = lh.audits?.[id]?.displayValue;
+      return typeof v === 'string' ? v : null;
+    };
+
+    return {
+      url,
+      strategy,
+      capturedAt: new Date().toISOString(),
+      scores: {
+        performance: scoreOf('performance'),
+        accessibility: scoreOf('accessibility'),
+        bestPractices: scoreOf('best-practices'),
+        seo: scoreOf('seo'),
+      },
+      metrics: {
+        lcp: auditNumeric('largest-contentful-paint'),
+        cls: auditNumeric('cumulative-layout-shift'),
+        fcp: auditNumeric('first-contentful-paint'),
+        tbt: auditNumeric('total-blocking-time'),
+        si: auditNumeric('speed-index'),
+        tti: auditNumeric('interactive'),
+      },
+      metricsDisplay: {
+        lcp: auditDisplay('largest-contentful-paint'),
+        cls: auditDisplay('cumulative-layout-shift'),
+        fcp: auditDisplay('first-contentful-paint'),
+        tbt: auditDisplay('total-blocking-time'),
+        si: auditDisplay('speed-index'),
+        tti: auditDisplay('interactive'),
+      },
+    };
+  }
+}
+
+// ─── PSI lab-summary types ──────────────────────────────────────────────────
+
+interface PSIRawLighthouseAudit {
+  numericValue?: number;
+  displayValue?: string;
+}
+
+interface PSIRawLighthouseCategory {
+  score?: number | null;
+}
+
+interface PSIRawLighthouseResponse extends PSIRawResponse {
+  lighthouseResult?: {
+    categories?: Record<string, PSIRawLighthouseCategory>;
+    audits?: Record<string, PSIRawLighthouseAudit>;
+  };
+}
+
+export interface PSILabSummary {
+  url: string;
+  strategy: 'mobile' | 'desktop';
+  capturedAt: string;
+  scores: {
+    performance: number | null;
+    accessibility: number | null;
+    bestPractices: number | null;
+    seo: number | null;
+  };
+  metrics: {
+    lcp: number | null;
+    cls: number | null;
+    fcp: number | null;
+    tbt: number | null;
+    si: number | null;
+    tti: number | null;
+  };
+  metricsDisplay: {
+    lcp: string | null;
+    cls: string | null;
+    fcp: string | null;
+    tbt: string | null;
+    si: string | null;
+    tti: string | null;
+  };
 }
 
 export { CrUXAPI };

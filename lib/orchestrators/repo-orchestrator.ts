@@ -8,6 +8,8 @@ import { FrameworkConfigValidator } from '../analyzers/repo/framework-config-val
 import { RouteExtractor } from '../analyzers/repo/route-extractor';
 import { RouteSitemapComparator } from '../analyzers/repo/route-sitemap-comparator';
 import { SourceMapper } from '../analyzers/repo/source-mapper';
+import { PackageAnalyzer } from '../analyzers/repo/package-analyzer';
+import { SourcePatternAnalyzer } from '../analyzers/repo/source-pattern-analyzer';
 import type { Issue, SitemapUrl } from '../types';
 
 interface FrameworkInfo {
@@ -93,6 +95,27 @@ class RepoOrchestrator {
       result.warnings.push(...result.configWarnings);
     } catch (err: unknown) {
       console.error('Repo analysis: config validation failed:', (err as Error).message);
+    }
+
+    // 2a. Package.json hygiene checks
+    try {
+      const pkg = PackageAnalyzer.analyze(frameworkInfo.packageJson);
+      result.issues.push(...pkg.issues);
+      result.warnings.push(...pkg.warnings);
+    } catch (err: unknown) {
+      console.error('Repo analysis: package analyzer failed:', (err as Error).message);
+    }
+
+    // 2b. Source-code anti-patterns (framework-specific)
+    try {
+      const src = SourcePatternAnalyzer.analyze(repoPath, {
+        framework: frameworkInfo.framework,
+        srcDirs: frameworkInfo.srcDirs,
+      });
+      result.issues.push(...src.issues);
+      result.warnings.push(...src.warnings);
+    } catch (err: unknown) {
+      console.error('Repo analysis: source pattern analyzer failed:', (err as Error).message);
     }
 
     // 3. Extract routes

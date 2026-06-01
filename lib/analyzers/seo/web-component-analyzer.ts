@@ -101,11 +101,24 @@ class WebComponentAnalyzer {
       });
     }
 
-    // Custom elements without declarative shadow DOM
-    if (webComponentData.totalShadowRoots > 0 && !webComponentData.hasDeclarativeShadowDom) {
+    // Custom elements without declarative shadow DOM. Only a problem when real
+    // content actually lives in the shadow tree — firing on every page with an
+    // empty/encapsulated widget (e.g. a third-party embed) is noise, so gate on
+    // detected content/significant text rather than on the mere presence of a
+    // shadow root.
+    const hasMeaningfulShadowContent =
+      shadowAnalysis.contentInShadow.headings ||
+      shadowAnalysis.contentInShadow.links ||
+      shadowAnalysis.contentInShadow.images ||
+      shadowTextRatio > 0.2;
+    if (
+      webComponentData.totalShadowRoots > 0 &&
+      !webComponentData.hasDeclarativeShadowDom &&
+      hasMeaningfulShadowContent
+    ) {
       warnings.push({
         message: 'No declarative Shadow DOM fallback',
-        detail: `<a href="${url}">${url}</a> uses Shadow DOM but lacks declarative shadow DOM (template with shadowrootmode). Content may not be visible without JavaScript.`,
+        detail: `<a href="${url}">${url}</a> renders content inside Shadow DOM without a declarative fallback (template with shadowrootmode). That content may not be visible to crawlers without JavaScript.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -320,8 +333,6 @@ class WebComponentAnalyzer {
       }
     }
 
-    const totalPages = Object.keys(pages).length;
-
     if (pagesWithContentInShadow > 0) {
       issues.push({
         message: `${pagesWithContentInShadow} pages have important content in Shadow DOM`,
@@ -331,13 +342,13 @@ class WebComponentAnalyzer {
       });
     }
 
-    if (pagesWithShadowDom > totalPages * 0.5) {
-      warnings.push({
-        message: 'Heavy Shadow DOM usage across site',
-        detail: `${pagesWithShadowDom} of ${totalPages} pages use Shadow DOM. Ensure server-side rendering or declarative shadow DOM is implemented for SEO.`,
-        severity: SEVERITY.MEDIUM,
-      });
-    }
+    // Note: a bare "heavy Shadow DOM usage" count was previously reported here.
+    // It fired on any site using web components regardless of whether content
+    // was actually trapped in the shadow tree, which is noise. The
+    // content-bearing finding above ("pages have important content in Shadow
+    // DOM") carries the genuine SEO signal, so the count is intentionally
+    // dropped. `pagesWithShadowDom` is retained only for the metric below.
+    void pagesWithShadowDom;
 
     return { issues, warnings };
   }

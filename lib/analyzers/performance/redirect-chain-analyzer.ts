@@ -105,17 +105,30 @@ class RedirectChainAnalyzer {
       }
     }
 
-    // Check for redirect loops (same URL appears twice in chain, excluding the expected original→final structure)
-    const urlCounts = new Map();
+    // Check for a true redirect loop: the same URL issues a 3xx redirect more than
+    // once (a genuine cycle). The chain ends in a final non-redirect response, so a
+    // URL that simply reappears as the terminal hop — or a benign revisit like a
+    // login bounce (/dashboard → /login → /dashboard 200) — is a chain, not a loop.
+    // Infinite loops never reach here: the browser aborts with ERR_TOO_MANY_REDIRECTS
+    // and is handled on the error path.
+    const isRedirectStatus = (status: number | string) => {
+      const code = typeof status === 'number' ? status : parseInt(status, 10);
+      return code >= 300 && code < 400;
+    };
+    const redirectingHopCounts = new Map();
     for (const redirect of redirectChain) {
-      incrementCounter(urlCounts, redirect.url);
+      if (isRedirectStatus(redirect.status)) {
+        incrementCounter(redirectingHopCounts, redirect.url);
+      }
     }
-    const loopUrls = [...urlCounts.entries()].filter(([, count]) => count > 1);
+    const loopUrls = [...redirectingHopCounts.entries()].filter(([, count]) => count > 1);
     if (loopUrls.length > 0) {
       const chainStr = redirectChain.map((r) => `${r.url} (${r.status})`).join(' → ');
       issues.push({
         message: 'Redirect loop detected',
-        detail: `Redirect chain: ${chainStr}`,
+        detail: `URL redirects more than once within the same chain: ${loopUrls
+          .map(([u]) => u)
+          .join(', ')}. Chain: ${chainStr}`,
         severity: SEVERITY.CRITICAL,
       });
     }

@@ -250,6 +250,50 @@ class InternationalSEOValidator {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
+    // Pre-pass: detect alternate hrefs that aren't fully qualified URLs.
+    // Google's rule: alternate URLs must include the transport method
+    // (https://example.com/foo — not //example.com/foo or /foo).
+    const malformed: Array<{ pageUrl: string; href: string; hreflang: string }> = [];
+    for (const pageUrl in allPages) {
+      const page = allPages[pageUrl];
+      if (!page.alternates) continue;
+      for (const alt of page.alternates) {
+        if (!alt.href) continue;
+        const href = alt.href.trim();
+        if (!href) continue;
+        // Protocol-relative (starts with //) or path-only (starts with /) → not fully qualified.
+        if (href.startsWith('//') || href.startsWith('/')) {
+          malformed.push({ pageUrl, href, hreflang: alt.hreflang });
+          continue;
+        }
+        // Anything else: try parsing as absolute URL. If it parses with an http(s) protocol, it's fine.
+        try {
+          const parsed = new URL(href);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            malformed.push({ pageUrl, href, hreflang: alt.hreflang });
+          }
+        } catch {
+          malformed.push({ pageUrl, href, hreflang: alt.hreflang });
+        }
+      }
+    }
+
+    if (malformed.length > 0) {
+      const examples = malformed
+        .slice(0, 5)
+        .map(
+          (m) =>
+            `<li><a href="${escapeHtml(m.pageUrl)}">${escapeHtml(m.pageUrl)}</a> → hreflang="${escapeHtml(m.hreflang)}" href="${escapeHtml(m.href)}"</li>`,
+        )
+        .join('');
+      const moreCount = malformed.length > 5 ? ` (showing 5 of ${malformed.length})` : '';
+      issues.push({
+        message: `Hreflang alternate URLs are not fully qualified`,
+        detail: `${malformed.length} alternate href(s) are relative or protocol-relative. Google requires fully-qualified URLs including http(s):${moreCount}<ul>${examples}</ul>`,
+        severity: SEVERITY.HIGH,
+      });
+    }
+
     // Build language groups
     // A language group is a set of pages that should all reference each other
     // We identify groups by collecting all URLs mentioned in alternates + the page itself

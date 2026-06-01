@@ -28,20 +28,28 @@ class SecurityAnalyzer {
 
     const isHttps = url.startsWith('https://');
 
-    // 1. Check security headers (use pre-captured headers to avoid navigation)
+    // 1. Check security headers (use pre-captured headers to avoid navigation).
+    // Per-header deduction values follow Mozilla HTTP Observatory's published rubric:
+    // https://github.com/mozilla/http-observatory/blob/main/httpobs/docs/scoring.md
     const headers = responseHeaders || {};
 
-    const securityHeaders = {
-      'content-security-policy': 'Content-Security-Policy',
-      'x-frame-options': 'X-Frame-Options',
-      'x-content-type-options': 'X-Content-Type-Options',
-      'strict-transport-security': 'Strict-Transport-Security',
-      'referrer-policy': 'Referrer-Policy',
-    };
+    // Calibrated so a public marketing site shipping HTTPS + no mixed content
+    // can land in the 60-70 range even if it ships none of these
+    // defense-in-depth headers. CSP / HSTS / X-Frame are still the biggest
+    // signals, but their absence isn't a 100→25 cliff.
+    const securityHeaderDeductions: Array<{ header: string; name: string; deduction: number }> = [
+      { header: 'content-security-policy', name: 'Content-Security-Policy', deduction: 10 },
+      { header: 'strict-transport-security', name: 'Strict-Transport-Security', deduction: 10 },
+      { header: 'x-frame-options', name: 'X-Frame-Options', deduction: 10 },
+      { header: 'referrer-policy', name: 'Referrer-Policy', deduction: 3 },
+      { header: 'x-content-type-options', name: 'X-Content-Type-Options', deduction: 3 },
+    ];
 
-    for (const [header, name] of Object.entries(securityHeaders)) {
+    let headerDeductionTotal = 0;
+    for (const { header, name, deduction } of securityHeaderDeductions) {
       if (!getHeader(headers, header)) {
         (securityIssues.missingHeaders as string[]).push(name);
+        headerDeductionTotal += deduction;
       }
     }
 
@@ -125,14 +133,27 @@ class SecurityAnalyzer {
     const inlineScripts = parsedPage.querySelectorAll('script:not([src])');
     securityIssues.inlineScripts = inlineScripts.length;
 
-    // Calculate security score (0-100)
+    // Calculate security score (0-100) using Mozilla HTTP Observatory deductions.
+    // Per-header deduction is summed above; cookies/mixed-content/CSRF follow the
+    // same rubric. Inline scripts are kept as a soft signal (Observatory doesn't
+    // score them directly).
+    // Caps on stacking deductions: a site with N third-party analytics
+    // cookies missing `Secure` isn't N times less secure than a site with
+    // one such cookie. Same logic for SameSite issues and forms-without-CSRF.
+    const insecureCookieDeduction = Math.min(securityIssues.insecureCookies * 3, 15);
+    const sameSiteDeduction = Math.min(securityIssues.sameSiteIssues * 5, 15);
+    const csrfDeduction = Math.min(securityIssues.formsWithoutCSRF * 5, 15);
+
     let score = 100;
-    score -= securityIssues.missingHeaders.length * 10; // -10 per missing header
-    score -= securityIssues.insecureCookies * 5; // -5 per insecure cookie
-    score -= securityIssues.sameSiteIssues * 4; // -4 per SameSite issue
-    score -= securityIssues.mixedContent * 3; // -3 per mixed content
-    score -= securityIssues.formsWithoutCSRF * 8; // -8 per form without CSRF
-    score -= Math.min(securityIssues.inlineScripts, 10) * 2; // -2 per inline script (max 10)
+    score -= isHttps ? 0 : 50; // Observatory: HTTPS not in use → severe penalty
+    score -= headerDeductionTotal;
+    score -= Math.min(securityIssues.mixedContent, 1) * 20; // any mixed content → -20
+    score -= insecureCookieDeduction;
+    score -= sameSiteDeduction;
+    score -= csrfDeduction;
+    // Inline scripts: Observatory does NOT score these directly, so keep the
+    // penalty token (max −5) — enough to nudge, not enough to tank a category.
+    score -= Math.min(securityIssues.inlineScripts, 5) * 1;
     securityIssues.securityScore = Math.max(0, score);
 
     return securityIssues;

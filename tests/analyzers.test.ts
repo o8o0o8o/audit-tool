@@ -10,6 +10,7 @@ import { CTADetectorAnalyzer } from '../lib/analyzers/content/cta-detector-analy
 import { OutboundLinkChecker } from '../lib/analyzers/content/outbound-link-checker';
 import { BrokenPaginationAnalyzer } from '../lib/analyzers/site-wide/broken-pagination-analyzer';
 import { ScoreCalculator } from '../lib/scoring/score-calculator';
+import { scoredCategoryOf, buildScoreImpact, sectionScoreSuffix } from '../lib/phase2/score-impact';
 import { DEFAULT_CONFIG } from '../lib/config-loader';
 import { METRIC_INFO, SIGNAL_CATEGORIES } from '../lib/reports/metrics-metadata';
 import { getJsonSummary } from '../lib/utils/cli-summary';
@@ -1445,5 +1446,74 @@ void describe('BrokenPaginationAnalyzer', () => {
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
     assert.strictEqual(result.issues.length, 0);
+  });
+});
+
+void describe('score-impact', () => {
+  void it('routes security headers and cookies to the Security score (not the legacy catalog category)', () => {
+    assert.strictEqual(scoredCategoryOf('Missing Permissions-Policy header'), 'security');
+    assert.strictEqual(scoredCategoryOf('Missing cross-origin isolation headers'), 'security');
+    assert.strictEqual(scoredCategoryOf('External scripts missing Subresource Integrity (SRI)'), 'security');
+    assert.strictEqual(scoredCategoryOf('Source maps exposed in production'), 'security');
+    assert.strictEqual(scoredCategoryOf('Third-party cookies without consent'), 'security');
+    assert.strictEqual(scoredCategoryOf('Multiple tracking cookies set before consent'), 'security');
+  });
+
+  void it('routes SEO, performance, accessibility and JS-error findings correctly', () => {
+    assert.strictEqual(scoredCategoryOf('Canonicals are not set for some pages'), 'seo');
+    assert.strictEqual(scoredCategoryOf('Duplicate page titles found'), 'seo');
+    assert.strictEqual(scoredCategoryOf('Render-blocking third-party scripts'), 'performance');
+    assert.strictEqual(scoredCategoryOf('Some pages have CLS more than 0.1'), 'performance');
+    assert.strictEqual(scoredCategoryOf('Color contrast fails WCAG AA (5 elements)'), 'accessibility');
+    assert.strictEqual(scoredCategoryOf('Form inputs missing labels'), 'accessibility');
+    // JS errors must read as Technical, never Performance.
+    assert.strictEqual(scoredCategoryOf('Critical JavaScript errors detected'), 'technical');
+  });
+
+  void it('projects a higher score and attributes per-finding points within the gap', () => {
+    const impact = buildScoreImpact(
+      { security: 50, seo: 80, performance: 100 },
+      {
+        'Missing Permissions-Policy header': { severity: 'high', count: 52 },
+        'External scripts missing Subresource Integrity (SRI)': { severity: 'medium', count: 12 },
+        'Duplicate page titles found': { severity: 'high', count: 5 },
+      },
+    );
+    const sec = impact.categories.security;
+    assert.ok(sec, 'security status present');
+    assert.strictEqual(sec!.current, 50);
+    // Projection improves but never reaches a perfect 100.
+    assert.ok(sec!.projected > 50 && sec!.projected <= 99, `projected ${sec!.projected}`);
+    assert.strictEqual(sec!.gain, sec!.projected - sec!.current);
+    // The high-severity, broad header finding earns the larger share.
+    const header = impact.findingLift.get('Missing Permissions-Policy header');
+    const sri = impact.findingLift.get('External scripts missing Subresource Integrity (SRI)');
+    assert.ok(header?.category === 'security' && header.points >= 1);
+    assert.ok(sri && sri.points >= 1);
+    assert.ok(header!.points >= sri!.points);
+  });
+
+  void it('emits no lift or projection for a category already at 100', () => {
+    const impact = buildScoreImpact(
+      { technical: 100 },
+      { 'Element with too many children': { severity: 'medium', count: 3 } },
+    );
+    assert.strictEqual(impact.categories.technical?.gain, 0);
+    assert.strictEqual(impact.findingLift.size, 0);
+  });
+
+  void it('builds a headroom-first section suffix and is empty when scores are unknown', () => {
+    const impact = buildScoreImpact(
+      { security: 44, technical: 100 },
+      {
+        'Missing Permissions-Policy header': { severity: 'high', count: 50 },
+        'Element with too many children': { severity: 'medium', count: 3 },
+      },
+    );
+    const suffix = sectionScoreSuffix(['technical', 'security'], impact);
+    // Security (with headroom) must lead Technical (at ceiling).
+    assert.ok(suffix.includes('Security 44/100 → ~'), suffix);
+    assert.ok(suffix.indexOf('Security') < suffix.indexOf('Technical'), suffix);
+    assert.strictEqual(sectionScoreSuffix(['seo'], buildScoreImpact(undefined, {})), '');
   });
 });

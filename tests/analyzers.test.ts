@@ -2014,6 +2014,77 @@ void describe('finding-verifier', () => {
     assert.strictEqual(r.status, 'unchecked');
   });
 
+  // ── New confirm-only verifiers backed by rich analyzer sub-objects ────────
+  void it('confirms empty-anchor from anchorTextData.emptyAnchors, never refutes', () => {
+    const has = idx({ 'https://e.com/x': { anchorTextData: { emptyAnchors: ['/', '/'] } as PageInfo['anchorTextData'] } });
+    const none = idx({ 'https://e.com/x': { anchorTextData: { emptyAnchors: [] } as PageInfo['anchorTextData'] } });
+    const absent = idx({ 'https://e.com/x': {} });
+    assert.strictEqual(verifyFinding('Empty anchor text', detail(['https://e.com/x']), has).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Links with empty anchor text', detail(['https://e.com/x']), has).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Some pages have links without any text', detail(['https://e.com/x']), has).status, 'confirmed');
+    // confirm-only: 0 / absent → unchecked, NEVER refuted
+    assert.strictEqual(verifyFinding('Empty anchor text', detail(['https://e.com/x']), none).status, 'unchecked');
+    assert.strictEqual(verifyFinding('Empty anchor text', detail(['https://e.com/x']), absent).status, 'unchecked');
+  });
+
+  void it('does NOT treat "Multiple pages target the same keyword in their H1" as a multiple-h1 finding', () => {
+    // Regression: keyword-cannibalisation is about distinct pages sharing a
+    // keyword, not one page with several H1s. The single-page H1 count (0/1)
+    // must not auto-drop it.
+    const pages = idx({ 'https://e.com/x': { headings: { h1Count: 1 } as PageInfo['headings'] } });
+    assert.strictEqual(verifyFinding('Multiple pages target the same keyword in their H1', detail(['https://e.com/x']), pages).status, 'unchecked');
+  });
+
+  void it('does NOT match other anchor findings as empty-anchor', () => {
+    const pages = idx({ 'https://e.com/x': { anchorTextData: { emptyAnchors: [] } as PageInfo['anchorTextData'] } });
+    assert.strictEqual(verifyFinding('Anchor text over-optimization detected', detail(['https://e.com/x']), pages).status, 'unchecked');
+    assert.strictEqual(verifyFinding('Same anchor text links to different pages', detail(['https://e.com/x']), pages).status, 'unchecked');
+  });
+
+  void it('confirms oversized / legacy-format image findings from imageOptimization', () => {
+    const over = idx({ 'https://e.com/x': { imageOptimization: { oversizedImages: [{}], legacyFormats: 0 } as PageInfo['imageOptimization'] } });
+    const legacy = idx({ 'https://e.com/x': { imageOptimization: { oversizedImages: [], legacyFormats: 2 } as PageInfo['imageOptimization'] } });
+    assert.strictEqual(verifyFinding('Some images are significantly larger than their display size', detail(['https://e.com/x']), over).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Pages serve images only as JPG/PNG instead of WebP/AVIF', detail(['https://e.com/x']), legacy).status, 'confirmed');
+  });
+
+  void it('confirms unused-code / unused-css against codeCoverage, leaves within-bounds unchecked', () => {
+    const heavy = idx({ 'https://e.com/x': { codeCoverage: { js: { unused: 600_000 }, css: { unused: 50_000, ratio: 70 } } as PageInfo['codeCoverage'] } });
+    const light = idx({ 'https://e.com/x': { codeCoverage: { js: { unused: 1_000 }, css: { unused: 1_000, ratio: 5 } } as PageInfo['codeCoverage'] } });
+    assert.strictEqual(verifyFinding('Large amount of unused code', detail(['https://e.com/x']), heavy).status, 'confirmed');
+    assert.strictEqual(verifyFinding('High percentage of unused CSS', detail(['https://e.com/x']), heavy).status, 'confirmed');
+    // confirm-only → within bounds stays unchecked, not refuted
+    assert.strictEqual(verifyFinding('Large amount of unused code', detail(['https://e.com/x']), light).status, 'unchecked');
+    assert.strictEqual(verifyFinding('High percentage of unused CSS', detail(['https://e.com/x']), light).status, 'unchecked');
+  });
+
+  void it('confirms render-blocking / dom-children / third-party payload from persisted metrics', () => {
+    const p = idx({
+      'https://e.com/x': {
+        resourceOptimization: { renderBlocking: { totalBlocking: 9 } } as PageInfo['resourceOptimization'],
+        domComplexityData: { maxChildren: 90, totalNodes: 1200 } as PageInfo['domComplexityData'],
+        thirdPartyData: { totalSize: 900_000 } as PageInfo['thirdPartyData'],
+      },
+    });
+    assert.strictEqual(verifyFinding('Some pages have too many render-blocking resources', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Element with too many children', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Excessive DOM size', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Excessive third-party payload', detail(['https://e.com/x']), p).status, 'confirmed');
+  });
+
+  void it('does NOT match render-blocking THIRD-PARTY scripts as the generic render-blocking kind', () => {
+    const p = idx({ 'https://e.com/x': { resourceOptimization: { renderBlocking: { totalBlocking: 0 } } as PageInfo['resourceOptimization'] } });
+    // This finding is about third-party scripts specifically → left for the LLM/CLI pass.
+    assert.strictEqual(verifyFinding('Render-blocking third-party scripts', detail(['https://e.com/x']), p).status, 'unchecked');
+  });
+
+  void it('confirms tracking-before-consent from consentData, never refutes', () => {
+    const has = idx({ 'https://e.com/x': { consentData: { trackingBeforeConsent: ['googletagmanager.com'], cookiesBeforeConsent: [] } as unknown as PageInfo['consentData'] } });
+    const none = idx({ 'https://e.com/x': { consentData: { trackingBeforeConsent: [], cookiesBeforeConsent: [] } as unknown as PageInfo['consentData'] } });
+    assert.strictEqual(verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), has).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), none).status, 'unchecked');
+  });
+
   void it('verifyDetails partitions findings into confirmed / refuted / unchecked', () => {
     const pages = idx({
       'https://e.com/a': { canonical: '' }, // genuinely missing → confirmed
@@ -2138,7 +2209,7 @@ void describe('finding-verifier — threshold & boolean verifiers', () => {
 // ============================================================
 // LLM finding-verify — pure parsing + signal collection
 // ============================================================
-import { parseLlmVerdicts } from '../lib/phase2/llm-finding-verify';
+import { parseLlmVerdicts, extractCliResult } from '../lib/phase2/llm-finding-verify';
 import { buildPageSignals, collectUncheckedContexts } from '../lib/phase2/finding-verifier';
 
 void describe('llm finding-verify parsing', () => {
@@ -2154,6 +2225,19 @@ void describe('llm finding-verify parsing', () => {
   void it('returns [] on malformed output', () => {
     assert.deepStrictEqual(parseLlmVerdicts('no json here', [0]), []);
     assert.deepStrictEqual(parseLlmVerdicts('{"nope":1}', [0]), []);
+  });
+
+  void it('extractCliResult unwraps the --output-format json envelope and tolerates raw text', () => {
+    // CLI JSON envelope: the assistant text lives in `.result`.
+    const env = JSON.stringify({ type: 'result', result: '{"verdicts":[{"index":0,"verdict":"confirmed"}]}', is_error: false });
+    assert.ok(extractCliResult(env).includes('"verdicts"'));
+    // Verdicts parse straight out of the unwrapped result.
+    assert.strictEqual(parseLlmVerdicts(extractCliResult(env), [0])[0].verdict, 'confirmed');
+    // Bare text (no envelope) is returned as-is.
+    assert.strictEqual(extractCliResult('{"verdicts":[]}'), '{"verdicts":[]}');
+    // Empty / whitespace → ''.
+    assert.strictEqual(extractCliResult('   '), '');
+    assert.strictEqual(extractCliResult(''), '');
   });
 });
 

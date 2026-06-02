@@ -37,7 +37,7 @@ import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
 import { loadAllPages, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
-import { llmVerifyFindings } from './llm-finding-verify';
+import { llmVerifyFindings, claudeCliVerifyFindings, isClaudeCliAvailable } from './llm-finding-verify';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -1372,20 +1372,27 @@ async function runVerification(
   if (injected) {
     verdictByKey = injected;
     console.log(`  … applying ${injected.size} injected verdict(s) from verify-verdicts.json (no API key needed)`);
-  } else if (process.env.ANTHROPIC_API_KEY && contexts.length > 0) {
-    console.log(`  … LLM-verifying ${contexts.length} finding(s) the deterministic pass could not check`);
+  } else if (contexts.length > 0 && (process.env.ANTHROPIC_API_KEY || isClaudeCliAvailable())) {
+    // Prefer the API when a key is set (fastest, parallel); otherwise spawn the
+    // Claude CLI so the LLM pass still runs with no key. Both share the same
+    // payload, parsing, and verdict-merge below.
     const items = contexts.map((c, i) => ({ index: i, message: c.message, example: c.example, pageUrl: c.pageUrl, signals: c.signals }));
-    const verdicts = await llmVerifyFindings(items, {
+    const llmOpts = {
       cacheDir: path.join(artifacts.runDir, 'cache', 'llm-finding-verify'),
       verbose: options.verbose,
       siteContext: buildSiteAggregate(pages),
-    });
+    };
+    const useApi = !!process.env.ANTHROPIC_API_KEY;
+    console.log(
+      `  … ${useApi ? 'LLM-verifying' : 'verifying via Claude CLI (no API key)'} ${contexts.length} finding(s) the deterministic pass could not check`,
+    );
+    const verdicts = useApi ? await llmVerifyFindings(items, llmOpts) : await claudeCliVerifyFindings(items, llmOpts);
     for (const v of verdicts) {
       const ctx = contexts[v.index];
       if (ctx) verdictByKey.set(ctx.key, { verdict: v.verdict, reason: v.reason });
     }
   } else if (options.verbose) {
-    console.warn('--verify: no verify-verdicts.json and no ANTHROPIC_API_KEY; skipping LLM fallback.');
+    console.warn('--verify: no verify-verdicts.json, no ANTHROPIC_API_KEY, and no Claude CLI; skipping LLM fallback.');
   }
 
   // The LLM may only UPGRADE a finding to confirmed — it never drops. LLM

@@ -26,6 +26,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawn, spawnSync } from 'child_process';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -206,4 +207,173 @@ export async function llmVerifyFindings(items: LlmVerifyItem[], options: LlmVeri
 
   const results = await Promise.all(batches.map((batch) => verifyBatch(batch, apiKey, options)));
   return results.flat();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Keyless transport — spawn the Claude Code CLI (`claude -p`) instead of the
+// API. Same prompt, same parsing; the only difference is where the model runs.
+// This lets `--verify` reason over the unchecked findings WITHOUT an
+// `ANTHROPIC_API_KEY`, using the user's existing `claude` login. Like every
+// other LLM pass here it degrades silently: no binary / spawn failure / bad
+// output → [], and the caller keeps the deterministic result unchanged.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** The CLI binary to spawn; overridable for tests / non-standard installs. */
+const CLAUDE_CLI_BIN = process.env.SEO_AUDIT_CLAUDE_CLI_BIN || 'claude';
+/** Per-batch wall-clock cap so a hung/interactive CLI can never stall the run. */
+const CLI_TIMEOUT_MS = 180_000;
+
+let claudeCliCached: boolean | null = null;
+
+/**
+ * Is the Claude CLI present and runnable? Probed once (via `--version`) and
+ * memoised. Returns false on any error so detection itself never throws.
+ */
+export function isClaudeCliAvailable(): boolean {
+  if (claudeCliCached !== null) return claudeCliCached;
+  if (process.env.SEO_AUDIT_SKIP_CLAUDE_CLI) {
+    claudeCliCached = false;
+    return false;
+  }
+  try {
+    const res = spawnSync(CLAUDE_CLI_BIN, ['--version'], { encoding: 'utf8', timeout: 15_000 });
+    claudeCliCached = res.status === 0;
+  } catch {
+    claudeCliCached = false;
+  }
+  return claudeCliCached;
+}
+
+/**
+ * Pull the assistant text out of the CLI reply. `--output-format json` wraps it
+ * in `{ "result": "<text>", ... }`; we also accept a raw text reply. Pure and
+ * defensive (exported for unit testing) — returns '' on anything unparseable.
+ */
+export function extractCliResult(stdout: string): string {
+  const s = (stdout ?? '').trim();
+  if (!s) return '';
+  // JSON envelope first (the `--output-format json` shape).
+  const brace = s.indexOf('{');
+  if (brace !== -1) {
+    try {
+      const env = JSON.parse(s.slice(brace)) as { result?: unknown };
+      if (typeof env.result === 'string') return env.result.trim();
+    } catch {
+      // fall through — maybe the model emitted bare JSON verdicts as text
+    }
+  }
+  return s;
+}
+
+/** Spawn one CLI call, feeding the prompt on stdin. Resolves the result text. */
+function callClaudeCli(prompt: string, model: string | undefined, verbose: boolean): Promise<string | null> {
+  return new Promise((resolve) => {
+    const argv = ['-p', '--output-format', 'json'];
+    if (model) argv.push('--model', model);
+    let child;
+    try {
+      child = spawn(CLAUDE_CLI_BIN, argv, { stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (error: unknown) {
+      if (verbose) console.warn(`claude CLI spawn failed: ${(error as Error).message}`);
+      return resolve(null);
+    }
+    let out = '';
+    let settled = false;
+    const done = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+      if (verbose) console.warn('claude CLI timed out');
+      done(null);
+    }, CLI_TIMEOUT_MS);
+    child.stdout.on('data', (d) => {
+      out += d.toString();
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      if (verbose) console.warn(`claude CLI error: ${error.message}`);
+      done(null);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        if (verbose) console.warn(`claude CLI exited ${code}`);
+        return done(null);
+      }
+      done(extractCliResult(out));
+    });
+    // The stdin stream emits its OWN async 'error' (e.g. EPIPE if the child
+    // already exited) — a different emitter from child.on('error') above. Without
+    // a listener that becomes an uncaught exception and crashes the audit, which
+    // would defeat this module's silent-degradation contract.
+    child.stdin.on('error', (error) => {
+      clearTimeout(timer);
+      if (verbose) console.warn(`claude CLI stdin error: ${error.message}`);
+      done(null);
+    });
+    try {
+      child.stdin.write(prompt);
+      child.stdin.end();
+    } catch {
+      clearTimeout(timer);
+      done(null);
+    }
+  });
+}
+
+/** Verify one batch via the CLI; cached by payload hash (distinct from API). */
+async function cliVerifyBatch(items: LlmVerifyItem[], options: LlmVerifyOptions): Promise<LlmVerdict[]> {
+  const model = options.model; // undefined → CLI uses the user's default model
+  const userPrompt = buildUserPrompt(items, options.siteContext);
+  const prompt = `${SYSTEM_PROMPT}\n\n${userPrompt}`;
+  const validIndices = items.map((i) => i.index);
+  const key = `cli-${cacheKey(model ?? 'default', userPrompt)}`;
+
+  let cacheFile: string | null = null;
+  if (options.cacheDir) {
+    try {
+      fs.mkdirSync(options.cacheDir, { recursive: true });
+      cacheFile = path.join(options.cacheDir, `${key}.json`);
+      if (fs.existsSync(cacheFile)) return parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), validIndices);
+    } catch {
+      cacheFile = null;
+    }
+  }
+
+  const text = await callClaudeCli(prompt, model, options.verbose ?? false);
+  if (!text) return [];
+  if (cacheFile) {
+    try {
+      fs.writeFileSync(cacheFile, text);
+    } catch {
+      // best effort
+    }
+  }
+  return parseLlmVerdicts(text, validIndices);
+}
+
+/**
+ * Verify the given findings by spawning the Claude CLI (no API key). Returns []
+ * when the CLI isn't available / no items / any failure, so the caller keeps the
+ * deterministic result unchanged. Batched like the API path. Returned indices
+ * match the `index` values passed in.
+ */
+export async function claudeCliVerifyFindings(items: LlmVerifyItem[], options: LlmVerifyOptions = {}): Promise<LlmVerdict[]> {
+  if (items.length === 0 || !isClaudeCliAvailable()) return [];
+
+  const batches: LlmVerifyItem[][] = [];
+  for (let i = 0; i < items.length; i += BATCH_SIZE) batches.push(items.slice(i, i + BATCH_SIZE));
+
+  // Sequential: spawning many CLI processes at once is heavy and offers little
+  // gain over the API path's parallelism. Batches are few in practice.
+  const out: LlmVerdict[] = [];
+  for (const batch of batches) out.push(...(await cliVerifyBatch(batch, options)));
+  return out;
 }

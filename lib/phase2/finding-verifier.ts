@@ -324,6 +324,71 @@ const wordCountOf = (p: PageInfo): number | undefined => {
   return typeof p.wordCount === 'number' ? p.wordCount : undefined;
 };
 
+// ── Readers for the persisted analyzer sub-objects the new verifiers cross-check.
+// Each returns the measured number/flag, or `undefined`/`null` when the signal
+// wasn't captured (so the verifier stays `unchecked`, never a false drop).
+
+/** Empty-anchor count from `anchorTextData.emptyAnchors` (array or number). */
+function emptyAnchorCountOf(p: PageInfo): number | undefined {
+  const a = p.anchorTextData as { emptyAnchors?: unknown } | undefined;
+  if (!a) return undefined;
+  if (Array.isArray(a.emptyAnchors)) return a.emptyAnchors.length;
+  return typeof a.emptyAnchors === 'number' ? a.emptyAnchors : undefined;
+}
+
+type ImageOpt = { oversizedImages?: unknown; legacyFormats?: number; totalImageSize?: number } | undefined;
+const imageOptOf = (p: PageInfo): ImageOpt => p.imageOptimization as ImageOpt;
+
+/** Count of images displayed far smaller than their intrinsic size. */
+function oversizedImageCountOf(p: PageInfo): number | undefined {
+  const io = imageOptOf(p);
+  if (!io) return undefined;
+  return Array.isArray(io.oversizedImages) ? io.oversizedImages.length : undefined;
+}
+
+/** Total bytes of unused JS + CSS from `codeCoverage`. */
+function unusedCodeBytesOf(p: PageInfo): number | undefined {
+  const cc = p.codeCoverage as { js?: { unused?: number }; css?: { unused?: number } } | undefined;
+  if (!cc) return undefined;
+  const js = typeof cc.js?.unused === 'number' ? cc.js.unused : 0;
+  const css = typeof cc.css?.unused === 'number' ? cc.css.unused : 0;
+  return cc.js || cc.css ? js + css : undefined;
+}
+
+/** Percentage of CSS bytes that went unused (`codeCoverage.css.ratio`). */
+function unusedCssRatioOf(p: PageInfo): number | undefined {
+  const cc = p.codeCoverage as { css?: { ratio?: number } } | undefined;
+  return typeof cc?.css?.ratio === 'number' ? cc.css.ratio : undefined;
+}
+
+/** Render-blocking resource count from `resourceOptimization.renderBlocking`. */
+function renderBlockingCountOf(p: PageInfo): number | undefined {
+  const ro = p.resourceOptimization as { renderBlocking?: { totalBlocking?: number } } | undefined;
+  return typeof ro?.renderBlocking?.totalBlocking === 'number' ? ro.renderBlocking.totalBlocking : undefined;
+}
+
+type DomComplexity = { totalNodes?: number; maxChildren?: number } | undefined;
+const domComplexityOf = (p: PageInfo): DomComplexity => p.domComplexityData as DomComplexity;
+
+/** Total third-party transfer bytes from `thirdPartyData.totalSize`. */
+function thirdPartySizeOf(p: PageInfo): number | undefined {
+  const tp = p.thirdPartyData as { totalSize?: number } | undefined;
+  return typeof tp?.totalSize === 'number' ? tp.totalSize : undefined;
+}
+
+/** True when tracking fired before consent (`consentData.trackingBeforeConsent`/`cookiesBeforeConsent`). */
+function trackingBeforeConsentOf(p: PageInfo): boolean | null {
+  const cd = p.consentData as { trackingBeforeConsent?: unknown; cookiesBeforeConsent?: unknown } | undefined;
+  if (!cd) return null;
+  const len = (v: unknown): number => (Array.isArray(v) ? v.length : typeof v === 'number' ? v : 0);
+  if (cd.trackingBeforeConsent === undefined && cd.cookiesBeforeConsent === undefined) return null;
+  return len(cd.trackingBeforeConsent) > 0 || len(cd.cookiesBeforeConsent) > 0;
+}
+
+/** Local bar for "high % unused CSS" — the analyzer has no single constant; a
+ *  conservative floor so confirm-only never over-confirms. */
+const UNUSED_CSS_PCT_BAR = 40;
+
 type NumGet = (p: PageInfo) => number | undefined;
 
 /**
@@ -436,8 +501,13 @@ const VERIFIERS: Verifier[] = [
   },
   {
     // "Some pages have more than one h1 tag". Reads the persisted heading count.
+    // EXCLUDES keyword-cannibalisation ("Multiple pages target the same keyword
+    // in their H1") — that is about distinct pages sharing a keyword, NOT one
+    // page with several H1s, so refuting it on a single page's H1 count is a
+    // false drop. Same guard the duplicate-title matcher uses against /keyword/.
     kind: 'multiple-h1',
-    match: (m) => /\bh1\b/.test(m) && /(more than one|multiple|several)/.test(m),
+    match: (m) =>
+      /\bh1\b/.test(m) && /(more than one|multiple|several)/.test(m) && !/(keyword|target|cannibal|same keyword)/.test(m),
     verify: (ctx) =>
       verifySingle(
         'multiple-h1',
@@ -586,6 +656,63 @@ const VERIFIERS: Verifier[] = [
     (p) => { const e = p.eeat as { author?: unknown } | undefined; if (!e) return null;
       return !(typeof e.author === 'string' && e.author.trim().length > 0); },
     'page has no author attribution', 'page has author attribution', true),
+
+  // ── Confirm-only checks against rich analyzer sub-objects ─────────────────
+  // These proxy a broader analyzer subset than the exact finding, so they only
+  // CONFIRM from disk (refuteOk=false) — a non-match stays `unchecked`, never a
+  // false drop. Matchers are anchored to the analyzer's emitted wording.
+
+  // "Empty anchor text", "Links with empty anchor text", "Many links with empty
+  // anchor text", "Some pages have links without any text". EXCLUDES the other
+  // anchor findings (over-optimization, diversity, duplicate, same-anchor).
+  booleanVerifier('empty-anchor', (m) => /empty anchor/.test(m) || /links? without any text/.test(m),
+    (p) => { const n = emptyAnchorCountOf(p); return typeof n === 'number' ? n > 0 : null; },
+    'page has empty-anchor links', 'no empty anchors recorded for this page', false),
+
+  // "Some images are significantly larger than their display size".
+  booleanVerifier('oversized-images', (m) => /images?\b/.test(m) && /larger than (their|the)? ?display/.test(m),
+    (p) => { const n = oversizedImageCountOf(p); return typeof n === 'number' ? n > 0 : null; },
+    'page has images larger than their display size', 'no oversized images recorded for this page', false),
+
+  // "Pages serve images only as JPG/PNG instead of WebP/AVIF".
+  booleanVerifier('legacy-image-format', (m) => /(webp|avif)/.test(m) && /(jpg|jpeg|png|legacy|instead)/.test(m),
+    (p) => { const io = imageOptOf(p); return typeof io?.legacyFormats === 'number' ? io.legacyFormats > 0 : null; },
+    'page serves legacy-format images', 'no legacy-format images recorded for this page', false),
+
+  // "Some pages have excessive total image size".
+  numericVerifier('excessive-image-size', (m) => /image/.test(m) && /(excessive|too (big|large)).*(size|image)|excessive total image/.test(m),
+    (p) => imageOptOf(p)?.totalImageSize, THRESHOLDS.TOTAL_IMAGE_SIZE_MAX, 'over', 'total image size', false),
+
+  // "Large amount of unused code" — unused JS+CSS bytes.
+  numericVerifier('unused-code', (m) => /unused (code|javascript|js)/.test(m) && !/css/.test(m),
+    unusedCodeBytesOf, THRESHOLDS.UNUSED_CODE_BYTES_WARNING, 'over', 'unused code bytes', false),
+
+  // "High percentage of unused CSS".
+  numericVerifier('unused-css', (m) => /unused css/.test(m),
+    unusedCssRatioOf, UNUSED_CSS_PCT_BAR, 'over', 'unused CSS %', false),
+
+  // "Some pages have too many render-blocking resources".
+  numericVerifier('render-blocking', (m) => /render-?blocking/.test(m) && !/third-party/.test(m),
+    renderBlockingCountOf, THRESHOLDS.RENDER_BLOCKING_MAX, 'over', 'render-blocking resources', false),
+
+  // "Element with too many children".
+  numericVerifier('dom-children', (m) => /(element|node)/.test(m) && /too many children/.test(m),
+    (p) => domComplexityOf(p)?.maxChildren, THRESHOLDS.DOM_CHILDREN_WARNING, 'over', 'max element children', false),
+
+  // "Excessive DOM size" (large node count). Note: "Large HTML document" /
+  // "HTML document exceeds 3MB" are byte-size findings, not node-count — they
+  // intentionally fall through to the LLM/CLI pass.
+  numericVerifier('excessive-dom', (m) => /(excessive dom|dom size|too many (dom )?nodes)/.test(m),
+    (p) => domComplexityOf(p)?.totalNodes, THRESHOLDS.DOM_NODES_WARNING, 'over', 'DOM node count', false),
+
+  // "Excessive third-party payload".
+  numericVerifier('third-party-payload', (m) => /third-?party/.test(m) && /(payload|size|bytes|weight)/.test(m),
+    thirdPartySizeOf, THRESHOLDS.THIRD_PARTY_SIZE_WARNING, 'over', 'third-party payload', false),
+
+  // "Multiple tracking cookies set before consent". Anchored to a cookie/tracking
+  // subject so it can't match unrelated "before consent" wording.
+  booleanVerifier('tracking-before-consent', (m) => /(tracking|cookies?|trackers?).{0,40}before consent/.test(m),
+    trackingBeforeConsentOf, 'page fired tracking/cookies before consent', 'no pre-consent tracking recorded for this page', false),
 ];
 
 /** Pick the example the report would show first (worst-first, then stable). */

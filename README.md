@@ -54,6 +54,7 @@ This runs the whole flow: crawl + Lighthouse field data + PSI lab scores per rep
 | `--repo=<path>` | off | Run source-code analysis against a local repo (framework detection, Next.js anti-patterns, package.json hygiene) |
 | `--llm-narrative` | off | Use Claude to rewrite the per-section "Analysis" paragraphs. Requires `ANTHROPIC_API_KEY`. Disk-cached so re-renders are free. ~$0.02–$0.03 per audit at Sonnet pricing. |
 | `--llm-findings` | off | Use Claude (vision + signals) to find emergent functional/UX bugs the rule-based analyzers miss — dead buttons, CTAs to 404s, never-terminating pagination, forms posting nowhere, visually broken layout. Reasons over each representative page's screenshot + structured signals; findings merge into their section tagged "🔍 AI-discovered". Requires `ANTHROPIC_API_KEY`. Disk-cached. ~$0.02–$0.05 per sampled page. |
+| `--verify` | off | Fact-check every reported finding against the crawl data and emit a separate `audit-report.verified.{md,pdf}` (the normal report is never touched). Stage 1 is deterministic (no network). Stage 2 hands the leftovers to Claude via whichever transport is available — an injected `verify-verdicts.json`, the API (`ANTHROPIC_API_KEY`), or, with **no key**, the `claude` CLI spawned headless. Disable the CLI spawn with `SEO_AUDIT_SKIP_CLAUDE_CLI=1`. |
 | `--concurrency=<n>` | 5 | Parallel page workers (1–20) |
 | `--limit=<n>` | none | Stop after N pages (useful for large sites) |
 | `--save-html` | off | Save full HTML snapshot of every crawled page |

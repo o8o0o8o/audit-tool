@@ -785,6 +785,28 @@ void describe('buildReportMarkdown determinism', () => {
     assert.ok(md.includes('insights/page/6'), 'real affected pages must still be listed');
   });
 
+  void it('--no-score strips score projections, point chips, and the scoring legend', () => {
+    const keys = ['Missing meta description', 'Duplicate page titles found'];
+    const examples = {
+      'Missing meta description': ['https://e.com/a'],
+      'Duplicate page titles found': ['https://e.com/b'],
+    };
+
+    // Default report carries the scoring legend and at least one score token
+    // (either a `→` projection arrow or a `pts` chip).
+    const scored = buildReportMarkdown(mkArtifacts(keys, examples));
+    assert.ok(scored.includes('score we would expect'), 'default report should include the scoring legend');
+    assert.ok(/→|pts/.test(scored), 'default report should include score projections or point chips');
+
+    // --no-score (7th positional arg) must remove all three.
+    const noScore = buildReportMarkdown(mkArtifacts(keys, examples), {}, [], new Set(), undefined, undefined, true);
+    assert.ok(!noScore.includes('score we would expect'), 'no-score report must drop the scoring legend');
+    assert.ok(!noScore.includes('→'), 'no-score report must not contain score projections');
+    assert.ok(!/\+~\d+\s*pts/.test(noScore), 'no-score report must not contain per-finding point chips');
+    // Findings themselves are untouched.
+    assert.ok(noScore.includes('Missing meta description'), 'findings must still be present without scores');
+  });
+
   void it('produces identical affected-pages samples regardless of example order', () => {
     const fwd = buildReportMarkdown(
       mkArtifacts(['Alpha unknown finding'], {

@@ -434,6 +434,7 @@ async function audit() {
           llmFindings: args.llmFindings === true,
           llmVerify: args.llmVerify === true,
           verify: args.verify === true,
+          noScore: args.noScore === true,
           verbose: args.verbose === true,
         });
         console.log(`📄 Curated report: ${pdfPath}`);

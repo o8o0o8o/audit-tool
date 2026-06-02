@@ -38,6 +38,8 @@ Options:
   --dry-run                 Show URLs that would be audited, then exit
   --preset=<name>           Audit preset: quick, standard, or deep
   --quiet, -q               Minimal output (suppress info messages)
+  --no-score                Omit all scores from the curated PDF report
+                            (category projections + per-finding point chips)
   --ci[=<threshold>]        CI mode: exit code 1 if score < threshold (default: 70)
   --json                    Output machine-readable JSON summary to stdout
   --webhook=<url>           POST audit summary JSON to this URL when done

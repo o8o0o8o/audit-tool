@@ -63,6 +63,11 @@ export interface Phase2Options {
    *  and emit a SEPARATE `audit-report.verified.*` report (the original report
    *  is left untouched). */
   verify?: boolean;
+  /** When true, strip every score from the report — the per-category header
+   *  projections (`current → ~projected`), the per-finding point chips
+   *  (`+~N pts`), and the methodology paragraph that explains them. Findings,
+   *  severities, counts and fixes are all unaffected. */
+  noScore?: boolean;
   /** Surface API/cache errors. */
   verbose?: boolean;
 }
@@ -500,7 +505,7 @@ function buildCover(artifacts: AuditArtifacts): string {
   return lines.join('\n');
 }
 
-function buildPurpose(artifacts: AuditArtifacts): string {
+function buildPurpose(artifacts: AuditArtifacts, noScore = false): string {
   const lines: string[] = [
     '## Purpose of the Audit',
     '',
@@ -521,9 +526,17 @@ function buildPurpose(artifacts: AuditArtifacts): string {
     '',
     'The audit combines a deterministic crawl (Playwright on Chromium) with on-page analyzers and external signals (CrUX / PageSpeed Insights). All findings cited below are anchored in the crawl artifacts collected for this run.',
     '',
-    'Each category section header shows the current 0–100 score and, where there is room to improve, the score we would expect once that category’s issues are addressed across the site (`current → ~projected`). Because a category’s findings can appear in more than one section, the projection is shown once — on the section that owns the score — while individual findings everywhere carry the rough number of points fixing them recovers in their category (`+~N pts`). These projections are estimates — the `~` is deliberate: SEO and Technical scores are direct functions of the findings, while Performance, Accessibility and Security derive from measured per-page signals (Core Web Vitals, axe-core, security headers), so a per-finding figure approximates resolving the class of problem it represents.',
-    '',
   ];
+
+  // The scoring legend is only meaningful when the report actually carries
+  // scores. Under --no-score the section projections and per-finding chips are
+  // gone, so the paragraph explaining them would dangle — drop it.
+  if (!noScore) {
+    lines.push(
+      'Each category section header shows the current 0–100 score and, where there is room to improve, the score we would expect once that category’s issues are addressed across the site (`current → ~projected`). Because a category’s findings can appear in more than one section, the projection is shown once — on the section that owns the score — while individual findings everywhere carry the rough number of points fixing them recovers in their category (`+~N pts`). These projections are estimates — the `~` is deliberate: SEO and Technical scores are direct functions of the findings, while Performance, Accessibility and Security derive from measured per-page signals (Core Web Vitals, axe-core, security headers), so a per-finding figure approximates resolving the class of problem it represents.',
+      '',
+    );
+  }
 
   // Run-specific characteristics — gives the reader an at-a-glance picture
   // of what was actually measured for this particular audit.
@@ -1064,6 +1077,7 @@ export function buildReportMarkdown(
   suppressed: ReadonlySet<string> = new Set(),
   verifyView?: VerifyView,
   verifyBanner?: string,
+  noScore = false,
 ): string {
   const isNextjs = detectNextjs(artifacts);
   const sourceMapping = artifacts.repoAnalysis?.sourceMapping ?? null;
@@ -1074,14 +1088,16 @@ export function buildReportMarkdown(
   mergeAnomalies(buckets, anomalies);
   // Score-impact model: ties every category section and finding to the score it
   // moves. Built from the same prepared details the sections render, so the
-  // annotations and the findings can never disagree.
-  const impact = buildScoreImpact(artifacts.analysis.summary?.categoryScores, details);
+  // annotations and the findings can never disagree. With --no-score we leave it
+  // undefined, which suppresses both the section header projections and the
+  // per-finding point chips downstream.
+  const impact = noScore ? undefined : buildScoreImpact(artifacts.analysis.summary?.categoryScores, details);
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
   // Verification banner (only on the `--verify` report) sits right under the
   // cover so the reader knows these findings were re-checked.
   if (verifyBanner) parts.push(verifyBanner);
-  parts.push(buildPurpose(artifacts));
+  parts.push(buildPurpose(artifacts, noScore));
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of SECTION_ORDER) {
     parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView));
@@ -1272,7 +1288,7 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
         })
       : Promise.resolve([] as Anomaly[]),
   ]);
-  const markdown = buildReportMarkdown(artifacts, narratives, anomalies, suppressed);
+  const markdown = buildReportMarkdown(artifacts, narratives, anomalies, suppressed, undefined, undefined, options.noScore === true);
 
   const mdPath = path.join(runDir, 'audit-report.md');
   fs.writeFileSync(mdPath, markdown);
@@ -1440,6 +1456,7 @@ async function runVerification(
     combinedSuppressed,
     { confirmed: summary.confirmed, aiConfirmed },
     banner,
+    options.noScore === true,
   );
 
   const mdPath = path.join(artifacts.runDir, 'audit-report.verified.md');

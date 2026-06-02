@@ -1644,6 +1644,7 @@ export interface ParsedArgs {
   llmFindings: boolean;
   llmVerify: boolean;
   verify: boolean;
+  noScore: boolean;
   evidence: boolean;
   evidenceCap: number;
   warnings: string[];

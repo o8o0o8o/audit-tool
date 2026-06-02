@@ -85,6 +85,7 @@ function parseArgs(args: string[]): ParsedArgs {
     llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
     llmVerify: false, // Use Claude to revalidate findings + drop confirmed duplicates/false positives before the final report
     verify: false, // Deterministic verification phase — re-check each finding's first example against crawl data, emit a separate verified report
+    noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
     warnings: [] as string[], // Collect validation warnings
@@ -132,6 +133,10 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.llmNarrative = true;
       parsed.llmFindings = true;
       parsed.llmVerify = true;
+    } else if (arg === '--no-score') {
+      parsed.noScore = true;
+    } else if (arg === '--score') {
+      parsed.noScore = false;
     } else if (arg === '--no-evidence') {
       parsed.evidence = false;
     } else if (arg === '--evidence') {

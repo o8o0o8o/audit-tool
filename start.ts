@@ -153,6 +153,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.llmFindings) childArgs.push('--llm-findings');
     if (args.llmVerify) childArgs.push('--llm-verify');
     if (args.verify) childArgs.push('--verify');
+    if (args.noScore) childArgs.push('--no-score');
     if (args.evidence === false) childArgs.push('--no-evidence');
     if (args.evidenceCap && args.evidenceCap !== 10) childArgs.push(`--evidence-cap=${args.evidenceCap}`);
 

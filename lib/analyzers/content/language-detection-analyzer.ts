@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { formatUrlList, getTopEntries } from '../../utils';
+import { getTopEntries, shortenUrl } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 // Trigram language profiles - top trigrams for common languages
@@ -676,11 +676,10 @@ class LanguageDetectionAnalyzer {
       }
     }
 
-    if (langMismatches.length > 0) {
-      const examples = formatUrlList(langMismatches, 5);
+    for (const url of langMismatches) {
       issues.push({
-        message: `${langMismatches.length} page(s) have content language mismatches`,
-        detail: `The detected content language does not match the declared language:<ul>${examples}</ul>${langMismatches.length > 5 ? `<p>...and ${langMismatches.length - 5} more</p>` : ''}`,
+        message: 'Content language does not match declared language',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — the detected content language differs from the page's declared lang attribute.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -690,8 +689,8 @@ class LanguageDetectionAnalyzer {
     if (langKeys.length > 1) {
       const langSummary = langKeys.map((l) => `${l}: ${detectedLanguages[l]} pages`).join(', ');
       warnings.push({
-        message: `Site has content in ${langKeys.length} detected languages`,
-        detail: `Detected languages: ${langSummary}. Ensure proper hreflang implementation for multilingual content.`,
+        message: 'Site has content in multiple detected languages',
+        detail: `Detected ${langKeys.length} content languages (${langSummary}). Ensure proper hreflang implementation for multilingual content.`,
         severity: SEVERITY.LOW,
       });
     }

@@ -1661,7 +1661,7 @@ void describe('PaginationAnalyzer.analyzeSiteWide — infinite scroll', () => {
     );
   });
 
-  void it('emits a HIGH finding only for pages where content is not crawlable', () => {
+  void it('emits a per-page finding only for pages where content is not crawlable', () => {
     const pages = {
       'https://ex.com/feed': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: false }),
       'https://ex.com/list': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: false }),
@@ -1669,9 +1669,17 @@ void describe('PaginationAnalyzer.analyzeSiteWide — infinite scroll', () => {
       'https://ex.com/home': pageWith({ infiniteScrollDetected: true, infiniteScrollContentCrawlable: true }),
     };
     const result = PaginationAnalyzer.analyzeSiteWide(pages as Record<string, PageInfo>);
-    const finding = result.issues.find((i) => /infinite scroll without pagination fallback/i.test(i.message ?? ''));
-    assert.ok(finding, 'expected an infinite-scroll finding');
-    assert.match(finding!.message ?? '', /^2 pages/);
+    // One issue per affected page (count-free, stable message), so the report's
+    // occurrence count matches the affected-page list instead of contradicting it.
+    const findings = result.issues.filter((i) =>
+      /infinite scroll without pagination fallback/i.test(i.message ?? ''),
+    );
+    assert.strictEqual(findings.length, 2, 'expected one finding per non-crawlable page');
+    // The crawlable page must not appear; both non-crawlable ones must.
+    const details = findings.map((f) => f.detail ?? '').join('\n');
+    assert.match(details, /\/feed/);
+    assert.match(details, /\/list/);
+    assert.doesNotMatch(details, /\/home/);
   });
 });
 

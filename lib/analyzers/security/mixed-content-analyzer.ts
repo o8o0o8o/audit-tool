@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { getTopEntries, getFileNameFromUrl, isSameDomain } from '../../utils';
+import { getTopEntries, getFileNameFromUrl, isSameDomain, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Resource types and their security impact
@@ -275,15 +275,15 @@ class MixedContentAnalyzer {
 
     // Site-wide issues
     if (stats.pagesWithActiveMixed > 0) {
-      const examples = pagesWithIssues
-        .slice(0, 3)
-        .map((p) => p.url)
-        .join(', ');
-      issues.push({
-        message: 'Active mixed content across site',
-        detail: `${stats.pagesWithActiveMixed} HTTPS pages load HTTP scripts/styles that are blocked. Total blocked resources: ${stats.totalActiveMixed}. Example pages: ${examples}`,
-        severity: SEVERITY.CRITICAL,
-      });
+      for (const p of pagesWithIssues) {
+        if (p.active > 0) {
+          issues.push({
+            message: 'Active mixed content on page',
+            detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — loads ${p.active} HTTP script/style resource(s) that browsers block on HTTPS.`,
+            severity: SEVERITY.CRITICAL,
+          });
+        }
+      }
     }
 
     if (stats.pagesWithPassiveMixed > 0) {

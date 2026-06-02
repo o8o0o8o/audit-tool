@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { hasRobotsDirective, formatSampleList } from '../../utils';
+import { hasRobotsDirective, shortenUrl } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class Soft404Analyzer {
@@ -251,6 +251,7 @@ class Soft404Analyzer {
     let soft404Count = 0;
     let potentialSoft404Count = 0;
     const soft404Urls: string[] = [];
+    const potentialSoft404Urls: string[] = [];
 
     for (const [url, page] of Object.entries(pages)) {
       if (page.soft404?.isSoft404) {
@@ -258,22 +259,22 @@ class Soft404Analyzer {
         soft404Urls.push(url);
       } else if ((page.soft404?.confidence ?? 0) >= 30) {
         potentialSoft404Count++;
+        potentialSoft404Urls.push(url);
       }
     }
 
-    if (soft404Count > 0) {
+    for (const url of soft404Urls) {
       issues.push({
-        message: `${soft404Count} soft 404 pages detected`,
-        detail: `These pages return HTTP 200 but display "not found" content. This wastes crawl budget. Consider returning proper 404 status or redirecting: ${formatSampleList(soft404Urls)}`,
+        message: 'Soft 404 page',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — returns HTTP 200 but shows "not found" content; return a real 404 status or redirect.`,
         severity: SEVERITY.HIGH,
       });
     }
 
-    if (potentialSoft404Count > 0) {
+    for (const url of potentialSoft404Urls) {
       warnings.push({
-        message: `${potentialSoft404Count} potential soft 404 pages need review`,
-        detail:
-          'Some pages show signs of being soft 404s. Review these pages to ensure they return appropriate status codes.',
+        message: 'Potential soft 404 page needs review',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — shows signs of a soft 404 (HTTP 200 with not-found/low-content signals); verify manually.`,
         severity: SEVERITY.LOW,
       });
     }

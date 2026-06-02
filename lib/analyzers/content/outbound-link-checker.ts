@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { getHostname } from '../../utils';
+import { getHostname, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 import * as https from 'https';
 import * as http from 'http';
@@ -149,20 +149,13 @@ class OutboundLinkChecker {
       }
     }
 
-    if (allBroken.size > 0) {
-      const sorted = [...allBroken.entries()].sort((a, b) => b[1].foundOn.length - a[1].foundOn.length);
-
-      const list = sorted
-        .slice(0, 10)
-        .map(
-          ([brokenUrl, data]) =>
-            `<li><a href="${brokenUrl}">${brokenUrl}</a> (HTTP ${data.status}) - found on ${data.foundOn.length} page(s)</li>`,
-        )
-        .join('');
-
+    // One issue per broken outbound link (stable, count-free message) so the
+    // report's occurrence count matches the affected-link list instead of
+    // contradicting it, and each broken URL is listed individually.
+    for (const [brokenUrl, data] of allBroken.entries()) {
       issues.push({
-        message: `${allBroken.size} broken outbound link(s) found across the site`,
-        detail: `External links returning errors:<ul>${list}</ul>${sorted.length > 10 ? `<p>...and ${sorted.length - 10} more</p>` : ''}<p>Broken outbound links hurt user trust and may negatively signal to search engines.</p>`,
+        message: 'Broken outbound link',
+        detail: `<a href="${brokenUrl}">${shortenUrl(brokenUrl)}</a> (HTTP ${data.status}) — found on ${data.foundOn.length} page(s); broken outbound links hurt user trust and may negatively signal to search engines.`,
         severity: SEVERITY.MEDIUM,
       });
     }

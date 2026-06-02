@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { calcPercent } from '../../utils';
+import { calcPercent, shortenUrl } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, FormInput } from '../../types';
 
 interface FormAnalysis {
@@ -342,8 +342,9 @@ class FormAccessibilityAnalyzer {
     let totalInputs = 0;
     let totalInputsWithoutLabels = 0;
     let pagesWithFormIssues = 0;
+    const formIssueUrls: string[] = [];
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (page.formData) {
         totalForms += page.formData.totalForms ?? 0;
         totalInputs += page.formData.totalInputs ?? 0;
@@ -351,6 +352,7 @@ class FormAccessibilityAnalyzer {
 
         if ((page.formData.inputsWithoutLabels ?? 0) > 0) {
           pagesWithFormIssues++;
+          formIssueUrls.push(url);
         }
       }
     }
@@ -358,18 +360,20 @@ class FormAccessibilityAnalyzer {
     if (totalInputsWithoutLabels > 0) {
       const percentage = calcPercent(totalInputsWithoutLabels, totalInputs);
       issues.push({
-        message: `${totalInputsWithoutLabels} form inputs across site missing labels`,
-        detail: `${percentage}% of form inputs lack proper labels. This is a WCAG 2.1 Level A failure affecting screen reader users.`,
+        message: 'Form inputs across the site are missing labels',
+        detail: `${totalInputsWithoutLabels} form input(s) (${percentage}% of all inputs) lack proper labels. This is a WCAG 2.1 Level A failure affecting screen reader users.`,
         severity: SEVERITY.HIGH,
       });
     }
 
     if (totalForms > 0 && pagesWithFormIssues > 0) {
-      warnings.push({
-        message: `${pagesWithFormIssues} pages have form accessibility issues`,
-        detail: `Review forms on these pages to ensure all inputs have associated labels and proper ARIA attributes.`,
-        severity: SEVERITY.MEDIUM,
-      });
+      for (const url of formIssueUrls) {
+        warnings.push({
+          message: 'Page has form accessibility issues',
+          detail: `<a href="${url}">${shortenUrl(url)}</a> — form inputs lack labels or proper ARIA attributes (WCAG 2.1 Level A).`,
+          severity: SEVERITY.MEDIUM,
+        });
+      }
     }
 
     return { issues, warnings };

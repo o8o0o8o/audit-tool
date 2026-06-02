@@ -193,7 +193,7 @@ class ScoreCalculator {
   static getFixRecommendations(): Record<string, FixRecommendation> {
     // Original curated entries take precedence over extended ones when keys
     // collide. Both are normalized at lookup time in phase2-runner.
-    return { ...EXTENDED_FIX_RECOMMENDATIONS, ...FIX_RECOMMENDATIONS };
+    return { ...EXTENDED_FIX_RECOMMENDATIONS, ...buildMessageAliases(), ...FIX_RECOMMENDATIONS };
   }
 }
 
@@ -343,6 +343,53 @@ function scoreSecurity(pages: PageInfo[]): number | null {
 }
 
 // ─── Fix recommendations (data only, no logic) ──────────────────────────────
+
+/**
+ * Maps the stabilized, count-free finding messages — emitted after the
+ * site-wide analyzers switched from baked-in-count titles ("13 pages …") to
+ * per-page emission — onto the existing catalog entries that were keyed to the
+ * older "<N> pages …" phrasings. Reusing the same entry by reference keeps fix
+ * recommendations resolving without duplicating their text. Keep in sync with
+ * the analyzers' message constants and docs/report-rules.md.
+ */
+const FIX_MESSAGE_ALIASES: Record<string, string> = {
+  'Soft 404 page': 'soft 404 pages detected',
+  'Page has critical JavaScript errors': 'pages have critical JavaScript errors',
+  'Page blocked via X-Robots-Tag: noindex (HTTP header)': 'page(s) blocked via X-Robots-Tag: noindex',
+  'Important content rendered in Shadow DOM': 'pages have important content in Shadow DOM',
+  'Paginated page has incorrect canonical': 'paginated pages have incorrect canonicals',
+  'Orphan page (no internal links point to it)': 'orphan pages detected (no internal links pointing to them)',
+  'Dead-end page (no outgoing internal links)': 'dead-end pages have no outgoing internal links',
+  'Page unreachable from homepage via internal links': 'pages are unreachable from homepage via internal links',
+  'Content language does not match declared language': 'page(s) have content language mismatches',
+  'Broken external link': 'broken external link(s) verified',
+  'Slow server response (TTFB)': 'pages have slow server response',
+  'Site connects to many unique origins': 'Site connects to unique origins',
+  'High average unused JavaScript site-wide': 'Site-wide: % of JavaScript is unused on average',
+  'High average unused CSS site-wide': 'Site-wide: % of CSS is unused on average',
+  'Some scripts consistently have high unused code': 'script(s) consistently have high unused code',
+  'Long redirect chain': 'Pages with long redirect chains',
+  'A notable share of pages have insufficient content': 'pages have insufficient content',
+  'Form inputs across the site are missing labels': 'form inputs across site missing labels',
+  'Page has form accessibility issues': 'pages have form accessibility issues',
+  'Active mixed content on page': 'Active mixed content across site',
+  'Videos across the site lack captions': 'videos across site lack captions',
+  'Broken outbound link': 'broken outbound link(s) found across the site',
+  'Page has very low internal link equity': 'pages have very low internal link equity',
+  'Pages have very similar content': 'pages have very similar content',
+  'A notable share of pages have near-duplicate content': 'pages have near-duplicate content',
+  'Page has too many links': 'page(s) have more than links',
+};
+
+/** Resolve {@link FIX_MESSAGE_ALIASES} against the extended catalog by reference. */
+function buildMessageAliases(): Record<string, FixRecommendation> {
+  const out: Record<string, FixRecommendation> = {};
+  for (const [newKey, srcKey] of Object.entries(FIX_MESSAGE_ALIASES)) {
+    const rec = EXTENDED_FIX_RECOMMENDATIONS[srcKey];
+    if (rec) out[newKey] = rec;
+  }
+  return out;
+}
 
 const FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
   'Some pages are missing alt attribute on images': {

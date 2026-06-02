@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { incrementCounter, calcPercent, getTopEntries, truncateText } from '../../utils';
+import { incrementCounter, calcPercent, getTopEntries, truncateText, shortenUrl } from '../../utils';
 import type { ChromePage, Issue, PageInfo } from '../../types';
 import type { ConsoleMessage } from 'playwright';
 
@@ -232,15 +232,19 @@ class ConsoleErrorAnalyzer {
     let pagesWithCriticalErrors = 0;
     let totalErrors = 0;
     const commonErrors = new Map();
+    const criticalErrorUrls: string[] = [];
+    const errorUrls: string[] = [];
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (page.consoleAnalysis?.hasErrors) {
         pagesWithErrors++;
+        errorUrls.push(url);
 
         totalErrors += page.consoleAnalysis.errorCount ?? 0;
 
         if (page.consoleAnalysis.hasCriticalErrors) {
           pagesWithCriticalErrors++;
+          criticalErrorUrls.push(url);
         }
 
         // Track common errors
@@ -260,25 +264,22 @@ class ConsoleErrorAnalyzer {
     const totalPages = Object.keys(pages).length;
     const errorPercentage = calcPercent(pagesWithErrors, totalPages);
 
-    if (pagesWithCriticalErrors > 0) {
+    for (const url of criticalErrorUrls) {
       issues.push({
-        message: `${pagesWithCriticalErrors} pages have critical JavaScript errors`,
-        detail: `Critical JS errors can break page functionality, affect user experience, and prevent proper crawling. Fix these errors as a priority.`,
+        message: 'Page has critical JavaScript errors',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — critical JS errors can break page functionality; fix as a priority.`,
         severity: SEVERITY.HIGH,
       });
     }
 
-    if (errorPercentage >= 50) {
-      issues.push({
-        message: `${errorPercentage}% of pages have JavaScript errors`,
-        detail: `${pagesWithErrors} of ${totalPages} pages have JS console errors. This indicates a widespread issue that should be investigated.`,
-        severity: SEVERITY.MEDIUM,
-      });
-    } else if (pagesWithErrors > 0) {
-      warnings.push({
-        message: `${pagesWithErrors} pages have JavaScript console errors`,
-        detail: `${totalErrors} total JS errors detected across the site. Review and fix to improve functionality.`,
-        severity: SEVERITY.LOW,
+    // Widespread JS console errors escalate the per-page finding's severity
+    // instead of emitting a separate site-wide percentage finding.
+    const widespread = errorPercentage >= 50;
+    for (const url of errorUrls) {
+      (widespread ? issues : warnings).push({
+        message: 'Page has JavaScript console errors',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — JavaScript console errors detected.`,
+        severity: widespread ? SEVERITY.MEDIUM : SEVERITY.LOW,
       });
     }
 

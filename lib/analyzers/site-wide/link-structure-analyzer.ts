@@ -1,5 +1,5 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
-import { incrementCounter, getTopEntries, escapeHtml, getIncomingLinkCount, normalizeToEntries } from '../../utils';
+import { incrementCounter, getTopEntries, escapeHtml, getIncomingLinkCount, normalizeToEntries, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface HubPage {
@@ -213,17 +213,12 @@ class LinkStructureAnalyzer {
       });
     }
 
-    // Report 5: Pages with excessive total links
-    if ((linkStats.excessiveLinkPages?.length ?? 0) > 0) {
-      const topExcessive = linkStats
-        .excessiveLinkPages!.sort((a: ExcessiveLinkPage, b: ExcessiveLinkPage) => b.totalLinks - a.totalLinks)
-        .slice(0, 5)
-        .map((p: ExcessiveLinkPage) => `<li><a href="${escapeHtml(p.url)}">${escapeHtml(p.url)}</a> (${p.totalLinks} total links)</li>`)
-        .join('');
-
+    // Report 5: Pages with excessive total links — one issue per page (stable,
+    // count-free message) so the occurrence count matches the affected pages.
+    for (const p of linkStats.excessiveLinkPages ?? []) {
       issues.push({
-        message: `${linkStats.excessiveLinkPages!.length} page(s) have more than ${THRESHOLDS.LINKS_PER_PAGE_WARNING} links`,
-        detail: `Pages with too many links dilute link equity and may signal low quality to search engines:<ul>${topExcessive}</ul>`,
+        message: `Page has too many links`,
+        detail: `<a href="${escapeHtml(p.url)}">${shortenUrl(p.url)}</a> — ${p.totalLinks} total links (over ${THRESHOLDS.LINKS_PER_PAGE_WARNING}); too many links dilute link equity and may signal low quality to search engines.`,
         severity: SEVERITY.MEDIUM,
       });
     }

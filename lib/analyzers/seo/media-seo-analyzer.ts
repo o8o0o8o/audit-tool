@@ -349,9 +349,8 @@ class MediaSEOAnalyzer {
 
     if (totalVideosWithoutCaptions > 3) {
       warnings.push({
-        message: `${totalVideosWithoutCaptions} videos across site lack captions`,
-        detail:
-          'Adding captions improves accessibility (WCAG requirement) and allows search engines to index video content.',
+        message: 'Videos across the site lack captions',
+        detail: `${totalVideosWithoutCaptions} video(s) across the site lack captions. Adding captions improves accessibility (WCAG requirement) and allows search engines to index video content.`,
         severity: SEVERITY.MEDIUM,
       });
     }

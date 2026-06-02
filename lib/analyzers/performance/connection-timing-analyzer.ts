@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { shortenUrl } from '../../utils';
 import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
 interface ResourceTimingEntry {
@@ -339,13 +340,15 @@ class ConnectionTimingAnalyzer {
     const warnings: Issue[] = [];
 
     let pagesWithSlowTtfb = 0;
+    const slowTtfbUrls: string[] = [];
     const totalUniqueOrigins = new Set<string>();
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (page.timingData) {
         // dns timing tracked but not currently used for site-wide reporting
         if ((page.timingData.document?.ttfb ?? 0) > 600) {
           pagesWithSlowTtfb++;
+          slowTtfbUrls.push(url);
         }
         for (const origin of page.timingData.uniqueOrigins ?? []) {
           totalUniqueOrigins.add(origin);
@@ -356,18 +359,19 @@ class ConnectionTimingAnalyzer {
     const totalPages = Object.keys(pages).length;
 
     if (pagesWithSlowTtfb > totalPages * 0.3) {
-      issues.push({
-        message: `${pagesWithSlowTtfb} pages have slow server response`,
-        detail: 'Many pages have TTFB over 600ms. Review server performance, caching, and CDN configuration.',
-        severity: SEVERITY.HIGH,
-      });
+      for (const url of slowTtfbUrls) {
+        issues.push({
+          message: 'Slow server response (TTFB)',
+          detail: `<a href="${url}">${shortenUrl(url)}</a> — TTFB over 600ms; investigate backend/server latency.`,
+          severity: SEVERITY.HIGH,
+        });
+      }
     }
 
     if (totalUniqueOrigins.size > 50) {
       warnings.push({
-        message: `Site connects to ${totalUniqueOrigins.size} unique origins`,
-        detail:
-          'Large number of third-party connections increases page load time. Review and consolidate external services.',
+        message: 'Site connects to many unique origins',
+        detail: `Site connects to ${totalUniqueOrigins.size} unique origins. Large number of third-party connections increases page load time. Review and consolidate external services.`,
         severity: SEVERITY.MEDIUM,
       });
     }

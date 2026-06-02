@@ -174,24 +174,26 @@ class ThinContentAnalyzer {
     const lowPercent = analyzedPages > 0 ? (lowContentPages / analyzedPages) * 100 : 0;
 
     // Report site-wide issues
-    if (thinPercent > 20) {
-      issues.push({
-        message: `${thinPercent.toFixed(1)}% of pages have very thin content`,
-        detail: `${thinPages} pages have fewer than ${this.THRESHOLDS.MIN_WORDS} words. Thin content can harm rankings.`,
-        severity: SEVERITY.HIGH,
-      });
-    } else if (thinPages > 0) {
-      warnings.push({
-        message: `${thinPages} pages have very thin content`,
-        detail: `These pages have fewer than ${this.THRESHOLDS.MIN_WORDS} words`,
-        severity: SEVERITY.MEDIUM,
-      });
+    if (thinPages > 0) {
+      const thinSeverity = thinPercent > 20 ? SEVERITY.HIGH : SEVERITY.MEDIUM;
+      for (const p of thinPagesList) {
+        const finding = {
+          message: 'Page has very thin content',
+          detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — only ${p.wordCount} words (minimum ${this.THRESHOLDS.MIN_WORDS}); thin content can harm rankings.`,
+          severity: thinSeverity,
+        };
+        if (thinSeverity === SEVERITY.HIGH) {
+          issues.push(finding);
+        } else {
+          warnings.push(finding);
+        }
+      }
     }
 
     if (lowPercent > 30) {
       warnings.push({
-        message: `${(thinPercent + lowPercent).toFixed(1)}% of pages have insufficient content`,
-        detail: `Consider expanding content on pages with fewer than ${this.THRESHOLDS.LOW_WORDS} words`,
+        message: 'A notable share of pages have insufficient content',
+        detail: `${(thinPercent + lowPercent).toFixed(1)}% of pages have fewer than ${this.THRESHOLDS.LOW_WORDS} words. Consider expanding content on these pages.`,
         severity: SEVERITY.MEDIUM,
       });
     }

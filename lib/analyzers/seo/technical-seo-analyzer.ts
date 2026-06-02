@@ -427,15 +427,6 @@ class TechnicalSEOAnalyzer {
 
     const totalPages = Object.keys(pages).length;
 
-    // Report meta refresh issues
-    if (metaRefreshCount > 0) {
-      issues.push({
-        message: `${metaRefreshCount} pages use meta refresh redirects`,
-        detail: 'Replace meta refresh with proper HTTP redirects for better SEO',
-        severity: SEVERITY.HIGH,
-      });
-    }
-
     // Report mixed frameworks
     if (frameworks.size > 1) {
       warnings.push({

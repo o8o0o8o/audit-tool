@@ -161,8 +161,8 @@ class BrokenPaginationAnalyzer {
 
     if (broken.length > SHOWN) {
       issues.push({
-        message: `${broken.length - SHOWN} more pagination series show broken/infinite "next" links`,
-        detail: 'Multiple paginated series advance past their real last page. Audit pagination termination site-wide.',
+        message: 'Additional pagination series show broken/infinite "next" links',
+        detail: `${broken.length - SHOWN} further paginated series advance past their real last page. Audit pagination termination site-wide.`,
         severity: SEVERITY.MEDIUM,
       });
     }

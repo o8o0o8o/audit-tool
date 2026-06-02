@@ -8,7 +8,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { getHeader } from '../../utils';
+import { getHeader, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ParsedLink {
@@ -179,35 +179,42 @@ class ResponseHeaderAnalyzer {
   static analyzeSiteWide(allPages: Record<string, PageInfo>) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const pages = Object.values(allPages) as PageInfo[];
 
     let pagesWithXRobotsNoindex = 0;
     let pagesWithDynamicServing = 0;
     const varyPatterns: Record<string, number> = {};
+    const xRobotsNoindexUrls: string[] = [];
+    const dynamicServingUrls: string[] = [];
 
-    for (const page of pages) {
+    for (const [url, page] of Object.entries(allPages)) {
       const headerData = page.responseHeaderAnalysis;
       if (!headerData) continue;
 
-      if (headerData.noindexViaHeader) pagesWithXRobotsNoindex++;
-      if (headerData.dynamicServing) pagesWithDynamicServing++;
+      if (headerData.noindexViaHeader) {
+        pagesWithXRobotsNoindex++;
+        xRobotsNoindexUrls.push(url);
+      }
+      if (headerData.dynamicServing) {
+        pagesWithDynamicServing++;
+        dynamicServingUrls.push(url);
+      }
 
       const varyKey = headerData.vary ?? 'none';
       varyPatterns[varyKey] = (varyPatterns[varyKey] || 0) + 1;
     }
 
-    if (pagesWithXRobotsNoindex > 0) {
+    for (const url of xRobotsNoindexUrls) {
       issues.push({
-        message: `${pagesWithXRobotsNoindex} page(s) blocked via X-Robots-Tag: noindex`,
-        detail: `These pages are blocked from indexing via HTTP response headers rather than meta tags. Verify this is intentional.`,
+        message: 'Page blocked via X-Robots-Tag: noindex (HTTP header)',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — blocked from indexing via HTTP response header rather than a meta tag; verify this is intentional.`,
         severity: SEVERITY.HIGH,
       });
     }
 
-    if (pagesWithDynamicServing > 0) {
+    for (const url of dynamicServingUrls) {
       warnings.push({
-        message: `${pagesWithDynamicServing} page(s) use Vary: User-Agent (dynamic serving)`,
-        detail: `Dynamic serving detected. Ensure Google can access both mobile and desktop versions.`,
+        message: 'Page uses Vary: User-Agent (dynamic serving)',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — dynamic serving detected; ensure Google can access both mobile and desktop variants.`,
         severity: SEVERITY.LOW,
       });
     }

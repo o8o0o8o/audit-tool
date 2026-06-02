@@ -4,6 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { shortenUrl } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
 class WebComponentAnalyzer {
@@ -313,10 +314,10 @@ class WebComponentAnalyzer {
     const warnings: Issue[] = [];
 
     let pagesWithShadowDom = 0;
-    let pagesWithContentInShadow = 0;
+    const shadowContentUrls: string[] = [];
     const frameworksUsed = new Set();
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (page.webComponentData) {
         if ((page.webComponentData.totalShadowRoots ?? 0) > 0) {
           pagesWithShadowDom++;
@@ -324,7 +325,7 @@ class WebComponentAnalyzer {
 
         const content = page.webComponentData.contentInShadowDom;
         if (content?.headings || content?.links) {
-          pagesWithContentInShadow++;
+          shadowContentUrls.push(url);
         }
 
         if (page.webComponentData.framework) {
@@ -333,11 +334,10 @@ class WebComponentAnalyzer {
       }
     }
 
-    if (pagesWithContentInShadow > 0) {
+    for (const url of shadowContentUrls) {
       issues.push({
-        message: `${pagesWithContentInShadow} pages have important content in Shadow DOM`,
-        detail:
-          'Links and headings in Shadow DOM may not be crawlable by search engines. Move critical content to Light DOM.',
+        message: 'Important content rendered in Shadow DOM',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — links/headings inside Shadow DOM may not be crawlable; move critical content to Light DOM.`,
         severity: SEVERITY.HIGH,
       });
     }

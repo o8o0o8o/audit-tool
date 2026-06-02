@@ -364,16 +364,16 @@ class CodeCoverageAnalyzer {
 
     if (avgJSUnused > 60) {
       issues.push({
-        message: `Site-wide: ${avgJSUnused}% of JavaScript is unused on average`,
-        detail: `Across ${pagesWithData} pages, ${formatBytes(totalUnusedJS)} of JavaScript went unused. Consider tree-shaking, code splitting, or lazy loading.`,
+        message: 'High average unused JavaScript site-wide',
+        detail: `${avgJSUnused}% of JavaScript is unused on average. Across ${pagesWithData} pages, ${formatBytes(totalUnusedJS)} of JavaScript went unused. Consider tree-shaking, code splitting, or lazy loading.`,
         severity: SEVERITY.HIGH,
       });
     }
 
     if (avgCSSUnused > 70) {
       issues.push({
-        message: `Site-wide: ${avgCSSUnused}% of CSS is unused on average`,
-        detail: `Across ${pagesWithData} pages, ${formatBytes(totalUnusedCSS)} of CSS went unused. Consider CSS purging or critical CSS extraction.`,
+        message: 'High average unused CSS site-wide',
+        detail: `${avgCSSUnused}% of CSS is unused on average. Across ${pagesWithData} pages, ${formatBytes(totalUnusedCSS)} of CSS went unused. Consider CSS purging or critical CSS extraction.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -392,8 +392,8 @@ class CodeCoverageAnalyzer {
         })
         .join('');
       warnings.push({
-        message: `${frequentlyUnused.length} script(s) consistently have high unused code`,
-        detail: `These scripts are frequently loaded but mostly unused:<ul>${list}</ul>`,
+        message: 'Some scripts consistently have high unused code',
+        detail: `${frequentlyUnused.length} script(s) are frequently loaded but mostly unused:<ul>${list}</ul>`,
         severity: SEVERITY.MEDIUM,
       });
     }

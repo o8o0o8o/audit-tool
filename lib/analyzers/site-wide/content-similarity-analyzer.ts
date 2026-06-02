@@ -84,16 +84,16 @@ class ContentSimilarityAnalyzer {
       for (const group of similarGroups.slice(0, 10)) {
         const urlList = formatUrlList(group.urls, 5);
         issues.push({
-          message: `${group.pageCount} pages have very similar content`,
-          detail: `Near-duplicate content detected across these pages:<ul>${urlList}</ul>${group.urls.length > 5 ? `<p>...and ${group.urls.length - 5} more</p>` : ''}<p>Consider consolidating with canonical tags or differentiating the content.</p>`,
+          message: `Pages have very similar content`,
+          detail: `Near-duplicate content detected across these ${group.pageCount} pages:<ul>${urlList}</ul>${group.urls.length > 5 ? `<p>...and ${group.urls.length - 5} more</p>` : ''}<p>Consider consolidating with canonical tags or differentiating the content.</p>`,
           severity: SEVERITY.MEDIUM,
         });
       }
 
       if (totalAffected > pages.length * 0.3 && totalAffected > 10) {
         warnings.push({
-          message: `${calcPercent(totalAffected, pages.length)}% of pages have near-duplicate content`,
-          detail: `${totalAffected} of ${pages.length} pages share very similar content across ${similarGroups.length} groups. This can dilute ranking signals.`,
+          message: `A notable share of pages have near-duplicate content`,
+          detail: `${calcPercent(totalAffected, pages.length)}% of pages (${totalAffected} of ${pages.length}) share very similar content across ${similarGroups.length} groups. This can dilute ranking signals.`,
           severity: SEVERITY.HIGH,
         });
       }

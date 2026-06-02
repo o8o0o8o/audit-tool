@@ -4,12 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import {
-  shortenUrl,
-  getIncomingLinkCount,
-  formatSampleList,
-  normalizeUrlForComparison,
-} from '../../utils';
+import { shortenUrl, getIncomingLinkCount, normalizeUrlForComparison } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class LinkDepthAnalyzer {
@@ -82,22 +77,20 @@ class LinkDepthAnalyzer {
     }
 
     // Report orphan pages
-    if (orphanPages.length > 0) {
+    for (const url of orphanPages) {
       issues.push({
-        message: `${orphanPages.length} orphan pages detected (no internal links pointing to them)`,
-        detail: `Example orphan pages: ${formatSampleList(orphanPages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
+        message: 'Orphan page (no internal links point to it)',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — no internal links point here; reachable only via sitemap or external links.`,
         severity: SEVERITY.HIGH,
       });
     }
 
-    // Report dead-end pages
-    if (deadEndPages.length > 0) {
-      const percent = ((deadEndPages.length / totalPages) * 100).toFixed(1);
-      if (deadEndPages.length > totalPages * 0.1) {
-        // More than 10%
+    // Report dead-end pages (only when more than 10% of the site dead-ends)
+    if (deadEndPages.length > totalPages * 0.1) {
+      for (const url of deadEndPages) {
         issues.push({
-          message: `${deadEndPages.length} dead-end pages (${percent}%) have no outgoing internal links`,
-          detail: `Dead-end pages don't pass link equity. Examples: ${formatSampleList(deadEndPages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
+          message: 'Dead-end page (no outgoing internal links)',
+          detail: `<a href="${url}">${shortenUrl(url)}</a> — has no outgoing internal links, so it passes no link equity onward.`,
           severity: SEVERITY.MEDIUM,
         });
       }
@@ -106,14 +99,14 @@ class LinkDepthAnalyzer {
     // Report deep pages
     if (deepPages.length > 0) {
       const deepPagesSorted = deepPages.sort((a, b) => b.depth - a.depth);
-      const maxDepth = deepPagesSorted[0].depth;
-      const sampleDeep = deepPagesSorted.slice(0, 5);
 
-      warnings.push({
-        message: `${deepPages.length} pages are more than 4 clicks from homepage`,
-        detail: `Maximum depth: ${maxDepth} clicks. Deep pages may be crawled less frequently. Examples: ${sampleDeep.map((p) => `<a href="${p.url}">${shortenUrl(p.url)}</a> (${p.depth} clicks)`).join(', ')}`,
-        severity: SEVERITY.LOW,
-      });
+      for (const p of deepPagesSorted) {
+        warnings.push({
+          message: 'Page is more than 4 clicks from homepage',
+          detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — ${p.depth} clicks from the homepage; deep pages are crawled less frequently.`,
+          severity: SEVERITY.LOW,
+        });
+      }
     }
 
     // Check for unreachable pages. Compare on normalized URLs so a trailing
@@ -138,11 +131,13 @@ class LinkDepthAnalyzer {
           severity: SEVERITY.LOW,
         });
       } else {
-        issues.push({
-          message: `${unreachablePages.length} pages are unreachable from homepage via internal links`,
-          detail: `These pages can only be accessed via sitemap or external links. Examples: ${formatSampleList(unreachablePages.map((u) => `<a href="${u}">${shortenUrl(u)}</a>`), 5)}`,
-          severity: SEVERITY.HIGH,
-        });
+        for (const url of unreachablePages) {
+          issues.push({
+            message: 'Page unreachable from homepage via internal links',
+            detail: `<a href="${url}">${shortenUrl(url)}</a> — reachable only via sitemap or external links, not internal navigation.`,
+            severity: SEVERITY.HIGH,
+          });
+        }
       }
     }
 

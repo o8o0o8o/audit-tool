@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { detectImportantPageLinks, detectAuthorInfo, isNonContentPage } from '../../utils';
+import { detectImportantPageLinks, detectAuthorInfo, isNonContentPage, shortenUrl } from '../../utils';
 import type { ParsedPage, Issue, PageInfo } from '../../types';
 
 class EEATAnalyzer {
@@ -323,9 +323,9 @@ class EEATAnalyzer {
     let pagesWithAuthor = 0;
     let contentPages = 0;
     let ymylPages = 0;
-    let ymylWithoutAuthor = 0;
+    const ymylNoAuthorUrls: string[] = [];
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (page.eeat) {
         contentPages++;
         totalScore += page.eeat.score;
@@ -333,10 +333,12 @@ class EEATAnalyzer {
         if (page.eeat.author) pagesWithAuthor++;
         if (page.eeat.isYMYL) {
           ymylPages++;
-          if (!page.eeat.author) ymylWithoutAuthor++;
+          if (!page.eeat.author) ymylNoAuthorUrls.push(url);
         }
       }
     }
+
+    const ymylWithoutAuthor = ymylNoAuthorUrls.length;
 
     const avgScore = contentPages > 0 ? totalScore / contentPages : 0;
     const authorPercent = contentPages > 0 ? (pagesWithAuthor / contentPages) * 100 : 0;
@@ -357,10 +359,10 @@ class EEATAnalyzer {
       });
     }
 
-    if (ymylWithoutAuthor > 0) {
+    for (const url of ymylNoAuthorUrls) {
       issues.push({
-        message: `${ymylWithoutAuthor} YMYL pages without author attribution`,
-        detail: `YMYL (Your Money Your Life) pages require strong E-E-A-T signals including clear authorship.`,
+        message: 'YMYL page without author attribution',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — YMYL (Your Money Your Life) page with no author byline; Google expects strong E-E-A-T (clear authorship) here.`,
         severity: SEVERITY.HIGH,
       });
     }

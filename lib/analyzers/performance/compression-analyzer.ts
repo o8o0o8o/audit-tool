@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { formatBytes, getFileNameFromUrl } from '../../utils';
+import { formatBytes, getFileNameFromUrl, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface ResourceAnalysisEntry {
@@ -242,12 +242,14 @@ class CompressionAnalyzer {
 
     // Report uncompressed pages
     if (uncompressedPages.length > 0) {
-      const percentage = ((uncompressedPages.length / totalPages) * 100).toFixed(1);
-      issues.push({
-        message: 'Pages served without compression',
-        detail: `${uncompressedPages.length} pages (${percentage}%) lack gzip/brotli compression. Total potential savings: ~${formatBytes(stats.totalPotentialSavings)}`,
-        severity: uncompressedPages.length > totalPages * 0.5 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
-      });
+      const severity = uncompressedPages.length > totalPages * 0.5 ? SEVERITY.HIGH : SEVERITY.MEDIUM;
+      for (const p of uncompressedPages) {
+        issues.push({
+          message: 'Page served without compression',
+          detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — ${formatBytes(p.size)} served without gzip/brotli compression.`,
+          severity,
+        });
+      }
     }
 
     // Check compression consistency

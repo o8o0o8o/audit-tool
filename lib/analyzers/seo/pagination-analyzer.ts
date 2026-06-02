@@ -5,7 +5,7 @@
 
 import { parse } from 'node-html-parser';
 import { CRAWL_SETTINGS, SEVERITY } from '../../constants';
-import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey } from '../../utils';
+import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey, shortenUrl } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo, PaginationProbeResult } from '../../types';
 
 class PaginationAnalyzer {
@@ -785,16 +785,16 @@ class PaginationAnalyzer {
     // `infiniteScrollContentCrawlable === false` already encodes the full per-page
     // decision (real list, absent from served HTML, no static fallback), so this
     // stays consistent with the per-page finding instead of a bare mechanism count.
-    let infiniteScrollProblemPages = 0;
-    let pagesWithBadCanonical = 0;
+    const infiniteScrollUrls: string[] = [];
+    const badCanonicalUrls: string[] = [];
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (page.paginationData?.hasPagination) {
         if (
           page.paginationData.infiniteScrollDetected &&
           page.paginationData.infiniteScrollContentCrawlable === false
         ) {
-          infiniteScrollProblemPages++;
+          infiniteScrollUrls.push(url);
         }
 
         if (
@@ -802,24 +802,23 @@ class PaginationAnalyzer {
           page.paginationData.currentPage > 1 &&
           !page.paginationData.canonicalPointsToSelf
         ) {
-          pagesWithBadCanonical++;
+          badCanonicalUrls.push(url);
         }
       }
     }
 
-    if (infiniteScrollProblemPages > 0) {
+    for (const url of infiniteScrollUrls) {
       issues.push({
-        message: `${infiniteScrollProblemPages} pages use infinite scroll without pagination fallback`,
-        detail:
-          'These pages load list content via infinite scroll that is not in the server-rendered HTML and has no static pagination links. Add paginated links or ensure all content URLs are server-rendered or covered by the sitemap.',
+        message: 'Infinite scroll without pagination fallback',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — list content loads via infinite scroll absent from server-rendered HTML with no static pagination links; add paginated links or ensure URLs are server-rendered / sitemap-covered.`,
         severity: SEVERITY.HIGH,
       });
     }
 
-    if (pagesWithBadCanonical > 0) {
+    for (const url of badCanonicalUrls) {
       issues.push({
-        message: `${pagesWithBadCanonical} paginated pages have incorrect canonicals`,
-        detail: 'Paginated pages (page 2, 3, etc.) should self-canonicalize to ensure content is indexed.',
+        message: 'Paginated page has incorrect canonical',
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — paginated pages (page 2, 3, …) should self-canonicalize so their content is indexed.`,
         severity: SEVERITY.HIGH,
       });
     }

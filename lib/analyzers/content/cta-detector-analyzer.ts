@@ -5,6 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
+import { shortenUrl } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class CTADetectorAnalyzer {
@@ -160,20 +161,26 @@ class CTADetectorAnalyzer {
     const pages = Object.values(allPages);
 
     let pagesWithoutCTAs = 0;
+    const noCtaUrls: string[] = [];
 
-    for (const page of pages) {
+    for (const [url, page] of Object.entries(allPages)) {
       const ctaData = page.ctaData;
       if (!ctaData?.summary) continue;
 
-      if (ctaData.summary.total === 0) pagesWithoutCTAs++;
+      if (ctaData.summary.total === 0) {
+        pagesWithoutCTAs++;
+        noCtaUrls.push(url);
+      }
     }
 
     if (pagesWithoutCTAs > pages.length * 0.5 && pages.length > 5) {
-      warnings.push({
-        message: `${pagesWithoutCTAs} of ${pages.length} pages have no conversion elements`,
-        detail: `Over half of the pages lack forms, CTA buttons, or contact links. Consider adding conversion paths where appropriate.`,
-        severity: SEVERITY.LOW,
-      });
+      for (const url of noCtaUrls) {
+        warnings.push({
+          message: 'Page has no conversion elements',
+          detail: `<a href="${url}">${shortenUrl(url)}</a> — no forms, CTA buttons, or contact links; consider adding a conversion path where appropriate.`,
+          severity: SEVERITY.LOW,
+        });
+      }
     }
 
     return { issues, warnings };

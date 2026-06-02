@@ -5,7 +5,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { formatUrlList } from '../../utils';
+import { shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 import { LinkDepthAnalyzer } from './link-depth-analyzer';
 
@@ -51,12 +51,15 @@ class InternalPageRankAnalyzer {
     const lowRankPages = ranked.filter(([, score]) => score < lowThreshold);
 
     if (lowRankPages.length > pages.length * 0.2 && lowRankPages.length > 5) {
-      const examples = formatUrlList(lowRankPages.slice(0, 5).map(([url]) => url));
-      warnings.push({
-        message: `${lowRankPages.length} pages have very low internal link equity`,
-        detail: `These pages receive minimal internal link equity, reducing their ranking potential:<ul>${examples}</ul>${lowRankPages.length > 5 ? `<p>...and ${lowRankPages.length - 5} more</p>` : ''}`,
-        severity: SEVERITY.MEDIUM,
-      });
+      // One warning per low-equity page (stable, count-free message) so the
+      // report lists the affected pages and its occurrence count matches them.
+      for (const [url] of lowRankPages) {
+        warnings.push({
+          message: 'Page has very low internal link equity',
+          detail: `<a href="${url}">${shortenUrl(url)}</a> — receives minimal internal link equity, reducing its ranking potential.`,
+          severity: SEVERITY.MEDIUM,
+        });
+      }
     }
 
     // Check for extreme concentration (top page has disproportionate share)

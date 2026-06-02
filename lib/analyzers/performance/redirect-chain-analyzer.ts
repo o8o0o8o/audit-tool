@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { incrementCounter, stripWww, getHostname } from '../../utils';
+import { incrementCounter, stripWww, getHostname, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 class RedirectChainAnalyzer {
@@ -225,15 +225,13 @@ class RedirectChainAnalyzer {
     }
 
     if (pagesWithLongChains.length > 0) {
-      const examples = pagesWithLongChains
-        .slice(0, 5)
-        .map((p) => `${p.url} (${p.length} hops)`)
-        .join(', ');
-      issues.push({
-        message: 'Pages with long redirect chains',
-        detail: `${pagesWithLongChains.length} pages have >2 redirects. Examples: ${examples}`,
-        severity: SEVERITY.HIGH,
-      });
+      for (const p of pagesWithLongChains) {
+        issues.push({
+          message: 'Long redirect chain',
+          detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — ${p.length} redirects before the final URL; reduce to a single hop.`,
+          severity: SEVERITY.HIGH,
+        });
+      }
     }
 
     if (stats.redirectTypes[302] > stats.redirectTypes[301]) {

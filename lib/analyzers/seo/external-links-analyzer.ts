@@ -4,7 +4,7 @@
  */
 
 import { SEVERITY } from '../../constants';
-import { isInternalLink, getOrigin, fetchWithTimeout, getHostname } from '../../utils';
+import { isInternalLink, getOrigin, fetchWithTimeout, getHostname, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 // Known spam/low-quality domains (simplified list)
@@ -342,32 +342,30 @@ class ExternalLinksAnalyzer {
     }
 
     // Generate issues
-    if (results.broken.length > 0) {
-      const brokenList = results.broken
-        .sort((a, b) => b.totalPages - a.totalPages)
-        .slice(0, 10)
-        .map((b) => `${b.url} (HTTP ${b.status}, found on ${b.totalPages} page(s))`)
-        .join('; ');
-
+    for (const b of results.broken) {
       issues.push({
-        message: `${results.broken.length} broken external link(s) verified`,
-        detail: `HTTP verification found ${results.broken.length} external URLs returning error status codes. Top broken: ${brokenList}`,
+        message: 'Broken external link',
+        detail:
+          `<a href="${b.url}">${shortenUrl(b.url)}</a> returns HTTP ${b.status}` +
+          (b.totalPages ? ` (found on ${b.totalPages} page(s))` : ''),
         severity: SEVERITY.MEDIUM,
       });
     }
 
     if (results.timeout.length > 5) {
-      warnings.push({
-        message: `${results.timeout.length} external links timed out`,
-        detail: `These external URLs did not respond within ${timeout / 1000}s. They may be slow or unreachable.`,
-        severity: SEVERITY.LOW,
-      });
+      for (const u of results.timeout) {
+        warnings.push({
+          message: 'External link timed out during verification',
+          detail: `<a href="${u}">${shortenUrl(u)}</a> did not respond within the verification timeout.`,
+          severity: SEVERITY.LOW,
+        });
+      }
     }
 
     if (uniqueUrls.length > maxUrls) {
       warnings.push({
-        message: `Only checked ${maxUrls} of ${uniqueUrls.length} unique external URLs`,
-        detail: `External link verification was limited to ${maxUrls} URLs for performance. Increase the limit for a full check.`,
+        message: 'External link verification was capped',
+        detail: `Only checked ${maxUrls} of ${uniqueUrls.length} unique external URLs for performance. Increase the limit for a full check.`,
         severity: SEVERITY.LOW,
       });
     }

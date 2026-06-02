@@ -32,7 +32,7 @@ import type {
   CrawlResults,
 } from './crawler-types';
 
-import { SEVERITY, THRESHOLDS, VIEWPORT, CRAWL_SETTINGS } from '../constants';
+import { SEVERITY, THRESHOLDS, VIEWPORT, CRAWL_SETTINGS, DEFAULT_USER_AGENT } from '../constants';
 import { analyzeUrlStructure } from '../utils';
 import { computeContentHash } from '../utils/content-hash';
 import { escapeHtml } from '../reports/html-utils';
@@ -184,6 +184,7 @@ class CrawlerEngine {
       cpuConditions: options.cpuConditions,
       verbose: options.verbose || false,
       userAgent: ((config.crawl as Record<string, unknown> | undefined)?.userAgent as string | null) ?? null,
+      headers: ((config.crawl as Record<string, unknown> | undefined)?.headers as Record<string, string> | null) ?? null,
       cruxApiKey: options.cruxApiKey ?? null,
       evidenceDir: options.evidenceDir,
       evidenceCap: options.evidenceCap,
@@ -496,9 +497,15 @@ class CrawlerEngine {
       browser = await chromium.launch();
       const contextOptions: Record<string, unknown> = {
         viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
+        // Always send a realistic UA. Falling back to Playwright's default
+        // "HeadlessChrome" UA gets the crawler 403'd by bot-protection on many
+        // sites, silently dropping pages from the audit.
+        userAgent: this.#options.userAgent || DEFAULT_USER_AGENT,
       };
-      if (this.#options.userAgent) {
-        contextOptions.userAgent = this.#options.userAgent;
+      // Custom request headers (auth tokens, or a vendor protection-bypass
+      // token for auditing your own protected site) — applied to every request.
+      if (this.#options.headers && Object.keys(this.#options.headers).length > 0) {
+        contextOptions.extraHTTPHeaders = this.#options.headers;
       }
       const context = await browser.newContext(
         contextOptions as { viewport: { width: number; height: number }; userAgent?: string },

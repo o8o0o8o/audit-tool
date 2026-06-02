@@ -20,6 +20,10 @@ export interface CrawlerInternalOptions {
   cpuConditions: Record<string, CpuCondition>;
   verbose: boolean;
   userAgent: string | null;
+  /** Extra HTTP request headers sent on every navigation (e.g. an auth token,
+   *  or Vercel's `x-vercel-protection-bypass` for auditing your own protected
+   *  site). From `crawl.headers` in the config. */
+  headers?: Record<string, string> | null;
   queryParams: QueryParamConfig;
   cruxApiKey?: string | null;
   config?: Record<string, unknown>;

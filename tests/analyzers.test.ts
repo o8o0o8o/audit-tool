@@ -1870,3 +1870,292 @@ void describe('inlineExample', () => {
     assert.strictEqual(inlineExample('https://example.com/bare'), 'https://example.com/bare');
   });
 });
+
+// ============================================================
+// Finding verifier (--verify) — re-checks a finding's first example
+// ============================================================
+import {
+  PageIndex,
+  verifyFinding,
+  verifyDetails,
+} from '../lib/phase2/finding-verifier';
+import type { IssueDetail as VIssueDetail } from '../lib/phase2/types';
+
+function idx(pages: Record<string, Partial<PageInfo>>): PageIndex {
+  const index = new PageIndex();
+  for (const [url, p] of Object.entries(pages)) index.add(url, { url, ...p } as PageInfo);
+  return index;
+}
+const detail = (examples: string[], extra: Partial<VIssueDetail> = {}): VIssueDetail => ({
+  severity: 'high',
+  count: examples.length,
+  examples,
+  ...extra,
+});
+
+void describe('finding-verifier', () => {
+  void it('confirms a true duplicate-title claim against captured titles', () => {
+    const pages = idx({
+      'https://e.com/a': { title: 'Shared Title' },
+      'https://e.com/b': { title: 'Shared Title' },
+    });
+    const ex = 'The title "Shared Title" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
+    const r = verifyFinding('Some pages have duplicate title', detail([ex]), pages);
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('refutes a duplicate-title claim when captured titles actually differ', () => {
+    const pages = idx({
+      'https://e.com/a': { title: 'Title One' },
+      'https://e.com/b': { title: 'Title Two' },
+    });
+    const ex = 'The title "Title One" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
+    const r = verifyFinding('Duplicate page titles found', detail([ex]), pages);
+    assert.strictEqual(r.status, 'refuted');
+  });
+
+  void it('confirms missing-canonical when the page has an empty canonical', () => {
+    const pages = idx({ 'https://e.com/x': { canonical: '' } });
+    const r = verifyFinding('Some pages missing canonical URL', detail(['https://e.com/x']), pages);
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('leaves missing-canonical UNCHECKED when the canonical field was not captured', () => {
+    // Absence of the field ≠ proof the page has no canonical — never drop on it.
+    const pages = idx({ 'https://e.com/x': {} });
+    const r = verifyFinding('Some pages missing canonical URL', detail(['https://e.com/x']), pages);
+    assert.strictEqual(r.status, 'unchecked');
+  });
+
+  void it('refutes missing-canonical when the page has a canonical', () => {
+    const pages = idx({ 'https://e.com/x': { canonical: 'https://e.com/x' } });
+    const r = verifyFinding('Some pages missing canonical URL', detail(['https://e.com/x']), pages);
+    assert.strictEqual(r.status, 'refuted');
+  });
+
+  void it('matches an example URL despite trailing-slash differences', () => {
+    const pages = idx({ 'https://e.com/x/': { canonical: 'https://e.com/x/' } });
+    const r = verifyFinding('Missing canonical URL', detail(['https://e.com/x']), pages);
+    assert.strictEqual(r.status, 'refuted');
+  });
+
+  void it('reads H1 count from persisted heading data, not the stripped top-level h1', () => {
+    // headings.h1Count is the field that actually survives storage.
+    const many = idx({ 'https://e.com/x': { headings: { h1Count: 2 } as PageInfo['headings'] } });
+    const one = idx({ 'https://e.com/x': { headings: { h1Count: 1 } as PageInfo['headings'] } });
+    const none = idx({ 'https://e.com/x': {} }); // no heading data captured
+    assert.strictEqual(verifyFinding('Multiple H1 tags', detail(['https://e.com/x']), many).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Multiple H1 tags', detail(['https://e.com/x']), one).status, 'refuted');
+    assert.strictEqual(verifyFinding('Multiple H1 tags', detail(['https://e.com/x']), none).status, 'unchecked');
+  });
+
+  void it('does NOT treat "Videos without accessible title" as a page-title finding', () => {
+    // Regression: a loose /title/+/without/ matcher refuted this real a11y
+    // finding because the page had a (page-level) title. It must be unchecked.
+    const pages = idx({ 'https://e.com/v': { title: 'A real page title' } });
+    const r = verifyFinding('Videos without accessible title', detail(['https://e.com/v']), pages);
+    assert.strictEqual(r.status, 'unchecked');
+  });
+
+  void it('does NOT treat "LCP more than 2500ms" as an HTTP 500 finding', () => {
+    // Regression: the substring "500" inside "2500ms" matched an http-error
+    // matcher and refuted a real performance finding. No verifier should match.
+    const pages = idx({ 'https://e.com/slow': { status: 200 } });
+    const r = verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/slow']), pages);
+    assert.strictEqual(r.status, 'unchecked');
+  });
+
+  void it('does NOT refute a "wrong canonical" finding where a canonical is present', () => {
+    // "Many pages canonicalized to other URLs" is about a WRONG canonical, not a
+    // missing one — the page HAS a canonical, so missing-canonical must not fire.
+    const pages = idx({ 'https://e.com/p': { canonical: 'https://e.com/other' } });
+    const r = verifyFinding('Many pages canonicalized to other URLs', detail(['https://e.com/p']), pages);
+    assert.strictEqual(r.status, 'unchecked');
+  });
+
+  void it('leaves a confirm-only kind (missing-alt) unchecked when the proxy is 0/absent', () => {
+    const some = idx({ 'https://e.com/x': { imagesWithoutAltCount: 3 } });
+    const zero = idx({ 'https://e.com/x': { imagesWithoutAltCount: 0 } });
+    const absent = idx({ 'https://e.com/x': {} });
+    assert.strictEqual(verifyFinding('Image links without alt text', detail(['https://e.com/x']), some).status, 'confirmed');
+    // 0 / absent → unchecked, NEVER refuted (the count is a broader proxy).
+    assert.strictEqual(verifyFinding('Image links without alt text', detail(['https://e.com/x']), zero).status, 'unchecked');
+    assert.strictEqual(verifyFinding('Image links without alt text', detail(['https://e.com/x']), absent).status, 'unchecked');
+  });
+
+  void it('leaves AI-discovered findings unchecked', () => {
+    const pages = idx({ 'https://e.com/x': {} });
+    const r = verifyFinding('Dead CTA button', detail(['saw it — https://e.com/x'], { aiDiscovered: true }), pages);
+    assert.strictEqual(r.status, 'unchecked');
+  });
+
+  void it('leaves findings with no matching verifier unchecked', () => {
+    const pages = idx({ 'https://e.com/x': {} });
+    const r = verifyFinding('Some unrelated finding', detail(['https://e.com/x']), pages);
+    assert.strictEqual(r.status, 'unchecked');
+  });
+
+  void it('verifyDetails partitions findings into confirmed / refuted / unchecked', () => {
+    const pages = idx({
+      'https://e.com/a': { canonical: '' }, // genuinely missing → confirmed
+      'https://e.com/b': { canonical: 'https://e.com/b' }, // present → refuted
+      'https://e.com/c': {},
+    });
+    const details: Record<string, VIssueDetail> = {
+      'Missing canonical URL on /a': detail(['https://e.com/a']),
+      'Missing canonical URL on /b': detail(['https://e.com/b']),
+      'Some unrelated finding': detail(['https://e.com/c']),
+    };
+    const summary = verifyDetails(details, pages);
+    assert.strictEqual(summary.confirmedCount, 1);
+    assert.strictEqual(summary.refutedCount, 1);
+    assert.strictEqual(summary.uncheckedCount, 1);
+    assert.ok(summary.confirmed.has('Missing canonical URL on /a'));
+    assert.ok(summary.refuted.has('Missing canonical URL on /b'));
+  });
+});
+
+void describe('verification labels in the report', () => {
+  void it('labels every issue ✓ Verified / unverified ONLY when a verify view is passed', () => {
+    const arts = mkArtifacts(['Alpha unknown finding']);
+    // Verified report, finding confirmed → ✓ Verified, no "unverified".
+    const confirmed = buildReportMarkdown(arts, {}, [], new Set(), { confirmed: new Set(['Alpha unknown finding']) });
+    assert.ok(confirmed.includes('✓ Verified'), 'confirmed issue should be badged');
+    assert.ok(!confirmed.includes('>unverified<'), 'confirmed issue must not be marked unverified');
+    // Verified report, finding NOT confirmed → unverified label.
+    const unchecked = buildReportMarkdown(arts, {}, [], new Set(), { confirmed: new Set() });
+    assert.ok(unchecked.includes('unverified'), 'unchecked issue should be marked unverified');
+    assert.ok(!unchecked.includes('✓ Verified'), 'unchecked issue must not be badged verified');
+    // Normal report (no verify view) → no verification labels at all.
+    const normal = buildReportMarkdown(arts);
+    assert.ok(!normal.includes('✓ Verified') && !normal.includes('unverified'), 'normal report carries no labels');
+  });
+});
+
+void describe('finding-verifier — persisted-field readers', () => {
+  // canonical/description are only set when present; an absent field on an
+  // ANALYZED page (has `indexability`) means the tag was genuinely missing.
+  const analyzed = { indexability: { isIndexable: true } } as Partial<PageInfo>;
+
+  void it('confirms missing-canonical on an analyzed page with no canonical field', () => {
+    const pages = idx({ 'https://e.com/x': { ...analyzed } });
+    assert.strictEqual(verifyFinding('Canonicals are not set for some pages', detail(['https://e.com/x']), pages).status, 'confirmed');
+  });
+
+  void it('still UNCHECKED when the page was not analyzed (no indexability)', () => {
+    const pages = idx({ 'https://e.com/x': {} });
+    assert.strictEqual(verifyFinding('Canonicals are not set for some pages', detail(['https://e.com/x']), pages).status, 'unchecked');
+  });
+
+  void it('confirms missing-description on an analyzed page with no description', () => {
+    const pages = idx({ 'https://e.com/x': { ...analyzed } });
+    assert.strictEqual(verifyFinding('Description meta tag is missing', detail(['https://e.com/x']), pages).status, 'confirmed');
+  });
+
+  void it('reads noindex from indexability.hasNoindexTag (confirm) and can refute', () => {
+    const yes = idx({ 'https://e.com/x': { indexability: { hasNoindexTag: true } } as Partial<PageInfo> });
+    const no = idx({ 'https://e.com/x': { indexability: { hasNoindexTag: false } } as Partial<PageInfo> });
+    const unknown = idx({ 'https://e.com/x': {} });
+    assert.strictEqual(verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), yes).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), no).status, 'refuted');
+    assert.strictEqual(verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), unknown).status, 'unchecked');
+  });
+
+  void it('reads redirect from hasRedirects (confirm) and refutes when not redirecting', () => {
+    const yes = idx({ 'https://e.com/x': { hasRedirects: true, redirectCount: 1 } });
+    const no = idx({ 'https://e.com/x': { hasRedirects: false, redirectCount: 0 } });
+    assert.strictEqual(verifyFinding('3xx redirects in sitemap', detail(['https://e.com/x']), yes).status, 'confirmed');
+    assert.strictEqual(verifyFinding('3xx redirects in sitemap', detail(['https://e.com/x']), no).status, 'refuted');
+  });
+
+  void it('verifies soft-404 from the persisted soft404 block', () => {
+    const yes = idx({ 'https://e.com/x': { soft404: { isSoft404: true, confidence: 80, signals: [] } } as Partial<PageInfo> });
+    const no = idx({ 'https://e.com/x': { soft404: { isSoft404: false, confidence: 0, signals: [] } } as Partial<PageInfo> });
+    assert.strictEqual(verifyFinding('Soft 404 page', detail(['https://e.com/x']), yes).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Soft 404 page', detail(['https://e.com/x']), no).status, 'refuted');
+  });
+});
+
+void describe('finding-verifier — threshold & boolean verifiers', () => {
+  void it('confirms a CWV finding when the stored metric breaches the threshold, refutes when not', () => {
+    const bad = idx({ 'https://e.com/x': { LCP: 4000 } });
+    const ok = idx({ 'https://e.com/x': { LCP: 1800 } });
+    const none = idx({ 'https://e.com/x': {} });
+    assert.strictEqual(verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), bad).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), ok).status, 'refuted');
+    assert.strictEqual(verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), none).status, 'unchecked');
+  });
+
+  void it('does NOT match a non-threshold metric mention ("LCP image not preloaded")', () => {
+    const pages = idx({ 'https://e.com/x': { LCP: 1000 } });
+    assert.strictEqual(verifyFinding('LCP image not preloaded', detail(['https://e.com/x']), pages).status, 'unchecked');
+  });
+
+  void it('verifies title/description length against the same bar the analyzer used', () => {
+    const longTitle = idx({ 'https://e.com/x': { titleLength: 72 } });
+    const shortTitle = idx({ 'https://e.com/x': { titleLength: 20 } });
+    assert.strictEqual(verifyFinding('Some pages have titles that are too long', detail(['https://e.com/x']), longTitle).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Some pages have titles that are too long', detail(['https://e.com/x']), shortTitle).status, 'refuted');
+    // "too short" must not fire on a 0-length (that's "missing", a different finding).
+    const zero = idx({ 'https://e.com/x': { titleLength: 0 } });
+    assert.strictEqual(verifyFinding('Some pages have titles that are too short', detail(['https://e.com/x']), zero).status, 'refuted');
+  });
+
+  void it('thin content is confirm-only (never refutes — the analyzer bar varies)', () => {
+    const thin = idx({ 'https://e.com/x': { contentQuality: { wordCount: 50 } as PageInfo['contentQuality'] } });
+    const fat = idx({ 'https://e.com/x': { contentQuality: { wordCount: 1200 } as PageInfo['contentQuality'] } });
+    assert.strictEqual(verifyFinding('Page has very thin content', detail(['https://e.com/x']), thin).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Page has very thin content', detail(['https://e.com/x']), fat).status, 'unchecked');
+  });
+
+  void it('verifies console errors and per-page broken outbound links', () => {
+    const errs = idx({ 'https://e.com/x': { consoleAnalysis: { errorCount: 3, warningCount: 0 } as PageInfo['consoleAnalysis'] } });
+    assert.strictEqual(verifyFinding('JavaScript console errors detected', detail(['https://e.com/x']), errs).status, 'confirmed');
+    const broken = idx({ 'https://e.com/x': { outboundLinkHealth: { broken: [{ url: 'x' }] } as unknown as PageInfo['outboundLinkHealth'] } });
+    assert.strictEqual(verifyFinding('Page has 2 broken outbound link(s)', detail(['https://e.com/x']), broken).status, 'confirmed');
+  });
+});
+
+// ============================================================
+// LLM finding-verify — pure parsing + signal collection
+// ============================================================
+import { parseLlmVerdicts } from '../lib/phase2/llm-finding-verify';
+import { buildPageSignals, collectUncheckedContexts } from '../lib/phase2/finding-verifier';
+
+void describe('llm finding-verify parsing', () => {
+  void it('keeps only known indices and normalizes unknown verdicts to unsure', () => {
+    const raw = '```json\n{"verdicts":[{"index":0,"verdict":"confirmed","reason":"ok"},{"index":1,"verdict":"weird"},{"index":9,"verdict":"refuted"}]}\n```';
+    const out = parseLlmVerdicts(raw, [0, 1]);
+    assert.strictEqual(out.length, 2);
+    assert.strictEqual(out[0].verdict, 'confirmed');
+    assert.strictEqual(out[1].verdict, 'unsure'); // "weird" → unsure
+    assert.ok(!out.find((v) => v.index === 9)); // out-of-range dropped
+  });
+
+  void it('returns [] on malformed output', () => {
+    assert.deepStrictEqual(parseLlmVerdicts('no json here', [0]), []);
+    assert.deepStrictEqual(parseLlmVerdicts('{"nope":1}', [0]), []);
+  });
+});
+
+void describe('llm finding-verify context collection', () => {
+  void it('builds a compact, defined-only signal snapshot', () => {
+    const sig = buildPageSignals({ url: 'https://e.com/x', status: 200, titleLength: 40, LCP: 3000 } as PageInfo);
+    assert.strictEqual(sig.status, 200);
+    assert.strictEqual(sig.LCP, 3000);
+    assert.ok(!('CLS' in sig), 'undefined fields are pruned');
+    assert.deepStrictEqual(buildPageSignals(undefined), {}); // off-page → empty
+  });
+
+  void it('collects only the deterministically-unchecked findings, with their page signals', () => {
+    const idxObj = idx({ 'https://e.com/x': { status: 200, titleLength: 40 } });
+    const details: Record<string, P2IssueDetail> = {
+      'Content may lack topical focus': { severity: 'low', count: 1, examples: ['https://e.com/x'] }, // no verifier → unchecked
+      'Duplicate page titles found': { severity: 'high', count: 2, examples: ['t "A" used on 2: https://e.com/x https://e.com/y'] },
+    };
+    const summary = verifyDetails(details, idxObj);
+    const ctxs = collectUncheckedContexts(details, summary.results, idxObj);
+    assert.ok(ctxs.some((c) => c.key === 'Content may lack topical focus'), 'unchecked finding is collected');
+    assert.ok(ctxs.every((c) => c.message && c.example), 'each context has message + example');
+  });
+});

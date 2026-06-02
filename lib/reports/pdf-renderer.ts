@@ -166,6 +166,9 @@ hr {
 .sev-high   { color: var(--high);   font-weight: 600; }
 .sev-medium { color: var(--medium); font-weight: 600; }
 .sev-low    { color: var(--low);    font-weight: 600; }
+/* Verification labels (only in the --verify report) */
+.verified   { color: var(--low);    font-weight: 600; } /* re-checked out against crawl data */
+.unverified { color: var(--muted);  font-weight: 600; } /* no deterministic check applies — neutral, not a defect */
 
 /* Force major sections onto a new page when authored with an HR + H2 */
 h1 + hr + h2,

@@ -1643,6 +1643,7 @@ export interface ParsedArgs {
   llmNarrative: boolean;
   llmFindings: boolean;
   llmVerify: boolean;
+  verify: boolean;
   evidence: boolean;
   evidenceCap: number;
   warnings: string[];

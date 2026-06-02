@@ -57,6 +57,13 @@ AI passes (require ANTHROPIC_API_KEY; degrade silently without it):
   --llm-verify              Revalidate findings + drop confirmed duplicates/false positives before the final report
   --llm                     Enable all of the above (full AI mode)
 
+Verification:
+  --verify                  Re-check each finding's first example against the crawl
+                            data, auto-drop refuted ones, and write a separate
+                            audit-report.verified.{md,pdf} (original report untouched).
+                            When ANTHROPIC_API_KEY is set, an LLM fallback verifies
+                            the findings the deterministic pass can't (✓ Verified (AI)).
+
 Comparison mode:
   --compare=<url>           Compare origin with another site (page-by-page)
   --compare-sitemap=<file>  Local sitemap XML for comparison site

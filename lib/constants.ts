@@ -92,6 +92,16 @@ export const DESKTOP_VIEWPORT = {
   HEIGHT: 800,
 } as const;
 
+/**
+ * Default User-Agent for crawling. Playwright's out-of-the-box UA contains
+ * "HeadlessChrome", which many WAFs / bot-protection layers answer with 403 —
+ * silently shrinking coverage (e.g. content articles returning 403). A real
+ * mobile-Chrome UA matches the mobile viewport above and crawls like Google's
+ * mobile-first bot. Override per-audit via `crawl.userAgent` in the config.
+ */
+export const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+
 // Performance and SEO thresholds
 export const THRESHOLDS = {
   // Core Web Vitals (Google's recommended thresholds)

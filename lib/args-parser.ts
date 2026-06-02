@@ -84,6 +84,7 @@ function parseArgs(args: string[]): ParsedArgs {
     llmNarrative: false, // Use Claude to rewrite per-section Analysis prose
     llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
     llmVerify: false, // Use Claude to revalidate findings + drop confirmed duplicates/false positives before the final report
+    verify: false, // Deterministic verification phase — re-check each finding's first example against crawl data, emit a separate verified report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
     warnings: [] as string[], // Collect validation warnings
@@ -124,6 +125,8 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.llmFindings = true;
     } else if (arg === '--llm-verify') {
       parsed.llmVerify = true;
+    } else if (arg === '--verify') {
+      parsed.verify = true;
     } else if (arg === '--llm') {
       // Umbrella flag — enable the full AI pass set (narrative + findings + verify).
       parsed.llmNarrative = true;

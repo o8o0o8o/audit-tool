@@ -36,6 +36,8 @@ import {
 import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
+import { loadAllPages, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
+import { llmVerifyFindings } from './llm-finding-verify';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -56,6 +58,11 @@ export interface Phase2Options {
   /** When true, run the LLM verification pass — revalidate findings and drop
    *  confirmed duplicates / false positives before the final report. */
   llmVerify?: boolean;
+  /** When true, run the deterministic verification phase — re-check each
+   *  finding's first example against the crawl data, auto-drop refuted ones,
+   *  and emit a SEPARATE `audit-report.verified.*` report (the original report
+   *  is left untouched). */
+  verify?: boolean;
   /** Surface API/cache errors. */
   verbose?: boolean;
 }
@@ -748,12 +755,25 @@ function buildSummary(
  *   **Example** — fenced code block (only when a recommendation supplied one)
  *   **Resources** — bullets (only when a recommendation supplied them)
  */
+/**
+ * Verification view passed only when rendering the `--verify` report. Its mere
+ * presence switches on the per-finding verification label; `confirmed` holds
+ * the messages that re-checked out. Absent for the normal report (no labels).
+ */
+interface VerifyView {
+  /** Confirmed by the deterministic pass (re-checked against crawl data). */
+  confirmed: ReadonlySet<string>;
+  /** Confirmed by the LLM fallback (judgment over evidence). */
+  aiConfirmed?: ReadonlySet<string>;
+}
+
 function buildFindingBlock(
   message: string,
   detail: IssueDetail,
   isNextjs = false,
   sourceMapping?: Record<string, SourceLocation[]> | null,
   impact?: ScoreImpact,
+  verifyView?: VerifyView,
 ): string {
   const lines: string[] = [];
   // sanitizeProse (not stripHtml) for the title: stripHtml deletes element
@@ -772,6 +792,19 @@ function buildFindingBlock(
   // Label LLM-discovered findings so they're auditable and clearly distinct
   // from deterministic analyzer output.
   if (detail.aiDiscovered) headerParts.push('🔍 AI-discovered');
+  // Verification label — only in the `--verify` report. Every surviving issue
+  // is tagged: ✓ Verified when its first example re-checked out against the
+  // crawl data, "unverified" when no deterministic check could corroborate it
+  // (refuted issues were dropped before rendering, so they never reach here).
+  if (verifyView) {
+    if (verifyView.confirmed.has(message)) {
+      headerParts.push('<span class="verified">✓ Verified</span>');
+    } else if (verifyView.aiConfirmed?.has(message)) {
+      headerParts.push('<span class="verified">✓ Verified (AI)</span>');
+    } else {
+      headerParts.push('<span class="unverified">unverified</span>');
+    }
+  }
   if (recommendation?.effort) headerParts.push(`effort: ${effortLevel(recommendation.effort)}`);
   // Score lever — roughly how many points fixing this recovers, and in which
   // category. Omitted for AI-discovered findings (no deterministic score model)
@@ -952,6 +985,7 @@ function buildSection(
   isNextjs = false,
   sourceMapping?: Record<string, SourceLocation[]> | null,
   impact?: ScoreImpact,
+  verifyView?: VerifyView,
 ): string {
   if (items.length === 0) return '';
 
@@ -994,7 +1028,7 @@ function buildSection(
   const hidden = overflow.filter(([m]) => sourceLocationsFor(m, sourceMapping).length === 0);
 
   for (const [message, detail] of [...shown, ...extraMapped]) {
-    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact));
+    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact, verifyView));
   }
 
   if (hidden.length > 0) {
@@ -1028,6 +1062,8 @@ export function buildReportMarkdown(
   narratives: Partial<Record<Section, string | null>> = {},
   anomalies: Anomaly[] = [],
   suppressed: ReadonlySet<string> = new Set(),
+  verifyView?: VerifyView,
+  verifyBanner?: string,
 ): string {
   const isNextjs = detectNextjs(artifacts);
   const sourceMapping = artifacts.repoAnalysis?.sourceMapping ?? null;
@@ -1042,10 +1078,13 @@ export function buildReportMarkdown(
   const impact = buildScoreImpact(artifacts.analysis.summary?.categoryScores, details);
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
+  // Verification banner (only on the `--verify` report) sits right under the
+  // cover so the reader knows these findings were re-checked.
+  if (verifyBanner) parts.push(verifyBanner);
   parts.push(buildPurpose(artifacts));
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of SECTION_ORDER) {
-    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact));
+    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView));
   }
   return parts.filter(Boolean).join('\n');
 }
@@ -1236,5 +1275,165 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
     title: `${artifacts.manifest.domain} — audit report`,
     imageBaseDir: path.join(runDir, 'evidence'),
   });
+
+  // Optional verification phase — never touches the report just written. It
+  // re-checks each finding against the crawl data and emits a parallel
+  // `audit-report.verified.*` set. Failures here must not fail the main report.
+  if (options.verify) {
+    try {
+      await runVerification(artifacts, narratives, anomalies, suppressed, options);
+    } catch (e: unknown) {
+      console.log('⚠️  Verification phase failed:', (e as Error).message);
+      if (options.verbose) console.error((e as Error).stack);
+    }
+  }
+
+  return pdfPath;
+}
+
+/**
+ * Load externally-supplied verdicts for the verify phase, if present. Lets a
+ * Claude session (Claude Code, a spawned subagent) verify the unchecked
+ * findings and drop the answers in `<runDir>/verify-verdicts.json` — no API key.
+ * Shape: `{ "findings": [ { "key": "<finding message>", "verdict":
+ * "confirmed"|"refuted"|"unsure", "reason": "..." } ] }`. Returns null when
+ * absent or malformed (the run then falls back to the API path / skips).
+ */
+function loadInjectedVerdicts(runDir: string): Map<string, { verdict: string; reason: string }> | null {
+  const file = path.join(runDir, 'verify-verdicts.json');
+  if (!fs.existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+      findings?: Array<{ key?: unknown; verdict?: unknown; reason?: unknown }>;
+    };
+    if (!Array.isArray(parsed.findings)) return null;
+    const out = new Map<string, { verdict: string; reason: string }>();
+    for (const f of parsed.findings) {
+      if (typeof f.key !== 'string') continue;
+      const verdict = f.verdict === 'confirmed' || f.verdict === 'refuted' ? f.verdict : 'unsure';
+      out.set(f.key, { verdict, reason: typeof f.reason === 'string' ? f.reason : '' });
+    }
+    return out.size > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verification phase (`--verify`). Two stages, both feeding a SEPARATE
+ * `audit-report.verified.*` (the originals are never touched):
+ *   1. Deterministic — re-checks each surviving finding's first example against
+ *      the crawl data; drops the ones the data contradicts (logged).
+ *   2. LLM fallback (only when `ANTHROPIC_API_KEY` is set) — reasons over the
+ *      cited page's evidence for the findings the deterministic pass left
+ *      `unchecked`, returning confirmed / refuted / unsure.
+ *
+ * Confirmed findings are labelled (✓ Verified, or ✓ Verified (AI)); refuted
+ * ones (by either stage) are dropped and logged; the rest stay *unverified*.
+ *
+ * Returns the verified PDF path, or null when there's nothing to verify.
+ */
+async function runVerification(
+  artifacts: AuditArtifacts,
+  narratives: Partial<Record<Section, string | null>>,
+  anomalies: Anomaly[],
+  suppressed: ReadonlySet<string>,
+  options: Phase2Options,
+): Promise<string | null> {
+  const pages = loadAllPages(artifacts.runDir);
+  if (pages.size === 0) {
+    console.log('⚠️  Verification skipped: no per-page data on disk to verify against.');
+    return null;
+  }
+
+  // Stage 1 — deterministic. Verify over exactly the set the main report
+  // rendered (post LLM-suppression).
+  const baseDetails = preparedDetails(artifacts, suppressed);
+  const summary = verifyDetails(baseDetails, pages);
+  for (const message of summary.refuted) {
+    const result = summary.results.get(message);
+    console.log(`  ✗ verify refuted: ${stripHtml(message)} — ${result?.reason ?? 'contradicted by crawl data'}`);
+  }
+
+  // Stage 2 — LLM fallback over the still-unchecked findings. Verdicts come from
+  // EITHER an injected `verify-verdicts.json` (so a Claude session — Claude Code,
+  // a subagent — can supply judgments with no API key) OR a live API call when
+  // `ANTHROPIC_API_KEY` is set. Injection wins when present.
+  const aiConfirmed = new Set<string>();
+  const contexts = collectUncheckedContexts(baseDetails, summary.results, pages);
+  const injected = loadInjectedVerdicts(artifacts.runDir);
+  let verdictByKey = new Map<string, { verdict: string; reason: string }>();
+
+  if (injected) {
+    verdictByKey = injected;
+    console.log(`  … applying ${injected.size} injected verdict(s) from verify-verdicts.json (no API key needed)`);
+  } else if (process.env.ANTHROPIC_API_KEY && contexts.length > 0) {
+    console.log(`  … LLM-verifying ${contexts.length} finding(s) the deterministic pass could not check`);
+    const items = contexts.map((c, i) => ({ index: i, message: c.message, example: c.example, pageUrl: c.pageUrl, signals: c.signals }));
+    const verdicts = await llmVerifyFindings(items, {
+      cacheDir: path.join(artifacts.runDir, 'cache', 'llm-finding-verify'),
+      verbose: options.verbose,
+      siteContext: buildSiteAggregate(pages),
+    });
+    for (const v of verdicts) {
+      const ctx = contexts[v.index];
+      if (ctx) verdictByKey.set(ctx.key, { verdict: v.verdict, reason: v.reason });
+    }
+  } else if (options.verbose) {
+    console.warn('--verify: no verify-verdicts.json and no ANTHROPIC_API_KEY; skipping LLM fallback.');
+  }
+
+  // The LLM may only UPGRADE a finding to confirmed — it never drops. LLM
+  // judgment over partial evidence is too uncertain to silently remove a real
+  // finding; only the deterministic pass (exact data) auto-drops. An LLM
+  // "refuted" is surfaced as a disputed note, not a deletion.
+  let aiDisputed = 0;
+  for (const c of contexts) {
+    const v = verdictByKey.get(c.key);
+    if (!v) continue;
+    if (v.verdict === 'confirmed') {
+      aiConfirmed.add(c.key);
+    } else if (v.verdict === 'refuted') {
+      aiDisputed++;
+      console.log(`  ⚠ AI disputes (kept, not dropped): ${c.message}${v.reason ? ` — ${v.reason}` : ''}`);
+    }
+  }
+
+  const combinedSuppressed = new Set<string>([...suppressed, ...summary.refuted]);
+  const dataConfirmed = summary.confirmedCount;
+  const dropped = summary.refutedCount;
+  const remainingUnverified = summary.uncheckedCount - aiConfirmed.size;
+  const total = dataConfirmed + summary.refutedCount + summary.uncheckedCount;
+  const aiNote = aiConfirmed.size > 0 ? ` + ${aiConfirmed.size} AI-confirmed` : '';
+  const disputeNote = aiDisputed > 0 ? `, ${aiDisputed} AI-disputed (kept)` : '';
+  console.log(
+    `✓ Verification: ${dataConfirmed} confirmed (data)${aiNote}, ${dropped} auto-removed${disputeNote}, ${remainingUnverified} unverified (of ${total}).`,
+  );
+
+  const banner =
+    `> **✓ Verification pass.** Each issue's first concrete example was re-checked — first against the crawl data, ` +
+    `then (where that was inconclusive) by an LLM reviewing the page's evidence. ` +
+    `**${dataConfirmed} confirmed from data**${aiConfirmed.size > 0 ? `, **${aiConfirmed.size} confirmed by AI review**` : ''}, ` +
+    `**${dropped} auto-removed** as false positives, ${remainingUnverified} still *unverified* (insufficient evidence to decide — not a defect). ` +
+    `The AI review only adds confirmations; it never drops a finding. Each issue below carries its status.\n`;
+
+  const markdown = buildReportMarkdown(
+    artifacts,
+    narratives,
+    anomalies,
+    combinedSuppressed,
+    { confirmed: summary.confirmed, aiConfirmed },
+    banner,
+  );
+
+  const mdPath = path.join(artifacts.runDir, 'audit-report.verified.md');
+  fs.writeFileSync(mdPath, markdown);
+
+  const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
+  await renderMarkdownToPdf(markdown, pdfPath, {
+    title: `${artifacts.manifest.domain} — verified audit report`,
+    imageBaseDir: path.join(artifacts.runDir, 'evidence'),
+  });
+  console.log(`📄 Verified report: ${pdfPath}`);
   return pdfPath;
 }

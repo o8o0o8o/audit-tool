@@ -144,6 +144,18 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.brandLogo) childArgs.push(`--brand-logo=${args.brandLogo}`);
     if (args.brandName) childArgs.push(`--brand-name=${args.brandName}`);
 
+    // Phase 2 report, AI passes and verification all run inside the child
+    // process, so their flags must be forwarded — otherwise they are silently
+    // dropped (the child never sees them, so no LLM pass / no verified report).
+    if (args.config) childArgs.push(`--config=${args.config}`);
+    if (args.phase2 === false) childArgs.push('--no-phase2');
+    if (args.llmNarrative) childArgs.push('--llm-narrative');
+    if (args.llmFindings) childArgs.push('--llm-findings');
+    if (args.llmVerify) childArgs.push('--llm-verify');
+    if (args.verify) childArgs.push('--verify');
+    if (args.evidence === false) childArgs.push('--no-evidence');
+    if (args.evidenceCap && args.evidenceCap !== 10) childArgs.push(`--evidence-cap=${args.evidenceCap}`);
+
     const child = spawn('node', childArgs, {
       stdio: 'inherit',
     });

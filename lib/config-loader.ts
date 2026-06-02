@@ -14,6 +14,7 @@ interface ConfigRecord {
     timeout?: number;
     retryAttempts?: number;
     userAgent?: string | null;
+    headers?: Record<string, string> | null;
     batchSize?: number;
     maxDiscoveredUrls?: number;
     [key: string]: unknown;
@@ -85,7 +86,7 @@ const DEFAULT_CONFIG = {
     concurrency: 5,
     timeout: 30000,
     retryAttempts: 3,
-    userAgent: null, // Use default Playwright UA
+    userAgent: null, // null → crawler uses DEFAULT_USER_AGENT (realistic mobile Chrome); set to override
     batchSize: 100, // Pages per batch file (higher = fewer files, more memory)
     maxDiscoveredUrls: 100000, // Maximum URLs to discover via link crawling
   },
@@ -245,7 +246,7 @@ const CONFIG_SCHEMA = {
   },
   crawl: {
     type: 'object',
-    allowedKeys: ['concurrency', 'timeout', 'retryAttempts', 'userAgent', 'batchSize', 'maxDiscoveredUrls'],
+    allowedKeys: ['concurrency', 'timeout', 'retryAttempts', 'userAgent', 'headers', 'batchSize', 'maxDiscoveredUrls'],
   },
   queryParams: {
     type: 'object',

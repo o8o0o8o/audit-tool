@@ -709,11 +709,6 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     example: '// React: use react-window or react-virtual for long lists.',
     resources: [{ text: 'DOM Size', url: 'https://developer.chrome.com/docs/lighthouse/performance/dom-size' }],
   },
-  'Large DOM size': {
-    effort: '1 hour',
-    fix: 'Reduce DOM nodes. Common wins: virtualize lists, paginate, remove decorative wrapper elements, defer below-the-fold sections.',
-    resources: [{ text: 'DOM Size', url: 'https://developer.chrome.com/docs/lighthouse/performance/dom-size' }],
-  },
   'Deep DOM nesting': {
     effort: '30 minutes',
     fix: 'Flatten deeply-nested markup (>32 levels). Deep nesting slows style calculation and layout.',

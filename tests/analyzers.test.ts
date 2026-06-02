@@ -1060,7 +1060,7 @@ void describe('normalizeMessage', () => {
   });
 
   void it('strips trailing (N units) with hyphenated units', () => {
-    assert.strictEqual(normalizeMessage('Large DOM size (1357 dom-nodes)'), 'Large DOM size');
+    assert.strictEqual(normalizeMessage('Excessive DOM size (1357 dom-nodes)'), 'Excessive DOM size');
   });
 
   void it('does not strip parenthesised numbers in the middle of the message', () => {

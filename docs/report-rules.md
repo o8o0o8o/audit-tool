@@ -88,6 +88,22 @@ vs `52 form inputs across site missing labels`). These must fold to one entry
 via `DEDUP_GROUPS` in `lib/phase2/consolidate.ts`; otherwise the same issue
 appears twice across summary sub-sections.
 
+**Tier-twin findings (one metric, two severity bands) must not exist.** A
+per-page analyzer measuring a single quantity must emit **one** message string
+regardless of which threshold band the page falls in — the band it crossed goes
+in the *detail*, never the title. Splitting into two tier-named titles (the old
+`Large DOM size` warning-band finding vs `Excessive DOM size` failure-band
+finding in `dom-complexity-analyzer.ts`) reads as two redundant findings for one
+problem, because site-wide aggregation surfaces both bands' page populations at
+once. For the same reason the message's severity must be **fixed**, not derived
+per page from the band: `ErrorAggregator.addError` keys by message and keeps the
+*first-seen* severity, so a per-page-varying severity would make the finding's
+severity depend on the non-deterministic crawl-completion order (a §6 violation).
+This is distinct from the deliberate *per-page vs site-wide* twins above (e.g.
+`Large web font payload` / `Excessive web font payload`), which describe
+different scopes and are reconciled by `DEDUP_GROUPS` — not two bands of the same
+per-page measurement.
+
 ## 6. Determinism contract
 
 **Goal: the same crawl data produces a byte-identical report for everyone.**

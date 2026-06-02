@@ -1,7 +1,10 @@
 /**
  * DOM Complexity Analyzer
  * Measures DOM node count, tree depth, and max children per element
- * Lighthouse thresholds: >800 warning, >1400 failure for total nodes
+ * Lighthouse thresholds: >800 warning, >1400 failure for total nodes.
+ * Both bands report under one "Excessive DOM size" finding (the crossed band is
+ * noted in the detail) rather than two tier-named findings — see the comment at
+ * the reporting block below.
  */
 
 import { SEVERITY, THRESHOLDS as GLOBAL_THRESHOLDS } from '../../constants';
@@ -127,27 +130,33 @@ class DOMComplexityAnalyzer {
       return { issues, warnings, info };
     }
 
-    // Report issues based on Lighthouse thresholds. Messages are kept stable
-    // (the page-specific count lives in the detail, not the title) so the same
-    // finding across pages aggregates into one entry with a correct count and
-    // page examples — instead of fragmenting into "(312 elements)", "(287
-    // elements)", … one row per page.
+    // Report a single "Excessive DOM size" finding for any page over the warning
+    // threshold. We deliberately do NOT split into two tier-named findings
+    // ("Large DOM size" for the warning band, "Excessive DOM size" for the
+    // failure band): site-wide aggregation surfaces both populations at once, so
+    // two messages produce two redundant report rows for one underlying problem.
+    // Instead the page lands under one message and the band it crossed (warning
+    // vs Lighthouse failure) is spelled out in the detail. The severity is fixed
+    // (the aggregator keys by message and keeps the first-seen severity, so a
+    // per-page-varying severity would make the finding's severity depend on
+    // non-deterministic crawl-completion order) — see docs/report-rules.md.
+    // The count stays in the detail, not the title, so the finding aggregates
+    // into one entry instead of fragmenting into "(312 elements)", … per page.
     const pageRef = `<a href="${url}">${url}</a>`;
-    if (info.totalNodes > THRESHOLDS.TOTAL_NODES_FAILURE) {
-      issues.push({
-        message: `Excessive DOM size`,
-        detail: `${pageRef} has ${info.totalNodes} DOM elements (Lighthouse threshold: ${THRESHOLDS.TOTAL_NODES_FAILURE}). Large DOMs increase memory usage, slow style calculations, and cause layout thrashing. Most common elements: ${Object.entries(
-          info.elementCounts,
-        )
-          .slice(0, 5)
-          .map(([tag, count]) => `<${tag}>: ${count}`)
-          .join(', ')}.`,
-        severity: SEVERITY.HIGH,
-      });
-    } else if (info.totalNodes > THRESHOLDS.TOTAL_NODES_WARNING) {
+    if (info.totalNodes > THRESHOLDS.TOTAL_NODES_WARNING) {
+      const overFailure = info.totalNodes > THRESHOLDS.TOTAL_NODES_FAILURE;
+      const thresholdNote = overFailure
+        ? `over Lighthouse's failure threshold of ${THRESHOLDS.TOTAL_NODES_FAILURE}`
+        : `over Lighthouse's warning threshold of ${THRESHOLDS.TOTAL_NODES_WARNING}`;
+      const topElements = Object.entries(info.elementCounts)
+        .slice(0, 5)
+        .map(([tag, count]) => `<${tag}>: ${count}`)
+        .join(', ');
       warnings.push({
-        message: `Large DOM size`,
-        detail: `${pageRef} has ${info.totalNodes} DOM elements (warning threshold: ${THRESHOLDS.TOTAL_NODES_WARNING}). Consider simplifying the page structure.`,
+        message: `Excessive DOM size`,
+        detail: `${pageRef} has ${info.totalNodes} DOM elements (${thresholdNote}). Large DOMs increase memory usage, slow style calculations, and cause layout thrashing.${
+          topElements ? ` Most common elements: ${topElements}.` : ''
+        }`,
         severity: SEVERITY.MEDIUM,
       });
     }

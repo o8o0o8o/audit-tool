@@ -79,9 +79,13 @@ function normUrl(u: string): string {
   }
 }
 
-/** All distinct http(s) URLs in an example string, in order. */
+/**
+ * All distinct real http(s) URLs in an example string, in order. Templated
+ * series keys (`…/page/{N}`) identify a series, not a crawled page, so they're
+ * dropped — the verifier can't re-check a placeholder against on-disk pages.
+ */
 function extractUrls(s: string): string[] {
-  return [...new Set(s.match(/https?:\/\/[^\s<>"']+/g) ?? [])];
+  return [...new Set((s.match(/https?:\/\/[^\s<>"']+/g) ?? []).filter((u) => !/[{}]/.test(u)))];
 }
 
 /** The first double- or smart-quoted value in a string, if any. */

@@ -43,10 +43,12 @@ interface EnrichedIssue {
   urls: string[];
 }
 
-/** Pull each https?:// URL out of an analyzer example string. */
+/** Pull each real https?:// URL out of an analyzer example string. Templated
+ *  series keys (`…/page/{N}`) aren't real pages, so they're excluded — counting
+ *  one would inflate a finding's affected-page tally. */
 function extractUrlsFromExample(example: string): string[] {
   const matches = example.match(/https?:\/\/[^\s<>"'`]+/g);
-  return matches ? matches : [];
+  return matches ? matches.filter((u) => !/[{}]/.test(u)) : [];
 }
 
 class ScoreCalculator {

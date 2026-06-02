@@ -766,6 +766,25 @@ void describe('buildReportMarkdown determinism', () => {
     assert.strictEqual(fwd, rev);
   });
 
+  void it('omits templated pagination series keys ({N}) from affected pages', () => {
+    // The broken-pagination finding embeds its series key as a URL-shaped
+    // template (e.g. https://e.com/insights/page/{N}) alongside the real
+    // affected pages. The {N} template is not a crawled page and must not lead
+    // the "Affected pages" list.
+    const example =
+      'The <code>https://e.com/insights/page/{N}</code> pagination series advances into empty pages. ' +
+      'Affected: https://e.com/insights/page/6, https://e.com/insights/page/7';
+    const md = buildReportMarkdown(
+      mkArtifacts(['Broken pagination wastes crawl budget — https://e.com/insights/page/{N}'], {
+        'Broken pagination wastes crawl budget — https://e.com/insights/page/{N}': [example],
+      }),
+    );
+    // The template may still appear in the finding header (it identifies the
+    // series), but never as a clickable affected-page link.
+    assert.ok(!md.includes('(https://e.com/insights/page/{N})'), 'templated {N} URL must not be linked as an affected page');
+    assert.ok(md.includes('insights/page/6'), 'real affected pages must still be listed');
+  });
+
   void it('produces identical affected-pages samples regardless of example order', () => {
     const fwd = buildReportMarkdown(
       mkArtifacts(['Alpha unknown finding'], {

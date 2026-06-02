@@ -1133,18 +1133,23 @@ async function prepareNarratives(
   return out;
 }
 
-/** Pull the first http(s):// URL out of a raw example string. */
+// A templated URL pattern carries a `{N}`-style placeholder (e.g. a pagination
+// series key `https://e.com/page/{N}`). These identify a series, not a real
+// crawled page, so they must never be surfaced as an "affected page".
+const isTemplateUrl = (u: string): boolean => /[{}]/.test(u);
+
+/** Pull the first real (non-templated) http(s):// URL out of a raw example string. */
 function extractFirstUrl(s: string): string | undefined {
-  const m = s.match(/https?:\/\/[^\s<>"']+/);
-  return m ? m[0] : undefined;
+  return (s.match(/https?:\/\/[^\s<>"']+/g) ?? []).find((u) => !isTemplateUrl(u));
 }
 
 /**
- * All distinct http(s) URLs in an example string, in order. Anchors render the
- * URL twice (`<a href="u">u</a>`), so de-dupe to avoid double-listing.
+ * All distinct real http(s) URLs in an example string, in order. Anchors render
+ * the URL twice (`<a href="u">u</a>`), so de-dupe to avoid double-listing.
+ * Templated series keys (`…/page/{N}`) are dropped — they aren't real pages.
  */
 function extractAllUrls(s: string): string[] {
-  return [...new Set(s.match(/https?:\/\/[^\s<>"']+/g) ?? [])];
+  return [...new Set((s.match(/https?:\/\/[^\s<>"']+/g) ?? []).filter((u) => !isTemplateUrl(u)))];
 }
 
 /**

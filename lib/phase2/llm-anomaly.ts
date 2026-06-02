@@ -11,7 +11,13 @@
  *
  * Design mirrors llm-narrative.ts:
  *   • No SDK dependency — Anthropic's API is a vanilla HTTPS POST.
- *   • Gated on `ANTHROPIC_API_KEY`. Returns [] when absent or on any failure.
+ *   • Two transports, auto-selected so a key is never required: with
+ *     `ANTHROPIC_API_KEY` it POSTs to the API (vision + signals); otherwise, if
+ *     the `claude` CLI is on PATH it spawns it headless (keyless). The CLI path
+ *     is SIGNALS-ONLY — the headless `claude -p` transport is text-only, so the
+ *     screenshot is dropped and only signal-derived anomalies (dead links,
+ *     failed requests, unbounded pagination, form actions) are reachable.
+ *     Returns [] only when neither transport is available, or on any failure.
  *   • Disk-cached by SHA of (model, system, page-signals, screenshot bytes) so
  *     re-runs are free.
  *   • Bounded cost: runs only over the small representative-page sample.
@@ -27,6 +33,7 @@ import * as zlib from 'zlib';
 import type { PageInfo } from '../types';
 import type { Section } from './categorize';
 import type { AuditArtifacts } from './types';
+import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -239,10 +246,14 @@ async function callModel(
  */
 export async function detectAnomalies(artifacts: AuditArtifacts, options: AnomalyOptions = {}): Promise<Anomaly[]> {
   const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
+  // No key → fall back to the keyless `claude` CLI (signals-only, no vision).
+  const useCli = !apiKey && isClaudeCliAvailable();
   const evidence = artifacts.manifest.evidence;
-  if (!apiKey || !evidence || Object.keys(evidence).length === 0) return [];
+  if ((!apiKey && !useCli) || !evidence || Object.keys(evidence).length === 0) return [];
 
-  const model = options.model ?? DEFAULT_MODEL;
+  // The CLI uses the user's default model; the API uses ours. The cache-hash
+  // model string is kept stable in either case.
+  const model = useCli ? options.model ?? 'cli-default' : options.model ?? DEFAULT_MODEL;
   let entries = Object.entries(evidence).filter(([, info]) => info.url);
   if (typeof options.maxPages === 'number' && options.maxPages > 0) {
     entries = entries.slice(0, options.maxPages);
@@ -259,44 +270,59 @@ export async function detectAnomalies(artifacts: AuditArtifacts, options: Anomal
     }
   }
 
-  const results = await Promise.all(
-    entries.map(async ([safeName, info]) => {
-      const url = info.url as string;
-      const evidenceDir = path.join(artifacts.runDir, 'evidence', safeName);
-      const requests = readMaybeGz<RequestsFile>(path.join(evidenceDir, 'requests.json'));
-      const signals = buildSignals(pages[url], requests);
-      const screenshot = pickScreenshot(evidenceDir, info.files);
-      const userPrompt = `Page URL: ${url}\n\nStructured signals (JSON):\n${JSON.stringify(signals, null, 1)}\n\nReview the screenshot and signals. Return the JSON array of problems.`;
+  const analyzePage = async ([safeName, info]: [string, { url?: string | null; files: string[] }]): Promise<Anomaly[]> => {
+    const url = info.url as string;
+    const evidenceDir = path.join(artifacts.runDir, 'evidence', safeName);
+    const requests = readMaybeGz<RequestsFile>(path.join(evidenceDir, 'requests.json'));
+    const signals = buildSignals(pages[url], requests);
+    // The headless CLI transport is text-only, so vision is dropped on that path.
+    const screenshot = useCli ? null : pickScreenshot(evidenceDir, info.files);
+    const reviewLine = screenshot ? 'Review the screenshot and signals.' : 'Review the signals (no screenshot available).';
+    const userPrompt = `Page URL: ${url}\n\nStructured signals (JSON):\n${JSON.stringify(signals, null, 1)}\n\n${reviewLine} Return the JSON array of problems.`;
 
-      // Cache by everything that affects the answer, incl. the image bytes.
-      const key = crypto
-        .createHash('sha256')
-        .update(model)
-        .update('\0')
-        .update(SYSTEM_PROMPT)
-        .update('\0')
-        .update(userPrompt)
-        .update('\0')
-        .update(screenshot?.data ?? 'no-image')
-        .digest('hex');
-      const cacheFile = options.cacheDir ? path.join(options.cacheDir, `${key}.json`) : null;
+    // Cache by everything that affects the answer, incl. the image bytes and the
+    // transport (API-with-vision and CLI-signals-only are different questions).
+    const key = crypto
+      .createHash('sha256')
+      .update(useCli ? 'cli' : 'api')
+      .update('\0')
+      .update(model)
+      .update('\0')
+      .update(SYSTEM_PROMPT)
+      .update('\0')
+      .update(userPrompt)
+      .update('\0')
+      .update(screenshot?.data ?? 'no-image')
+      .digest('hex');
+    const cacheFile = options.cacheDir ? path.join(options.cacheDir, `${key}.json`) : null;
 
-      let text: string | null;
-      if (cacheFile && fs.existsSync(cacheFile)) {
-        text = fs.readFileSync(cacheFile, 'utf8');
-      } else {
-        text = await callModel(userPrompt, screenshot, apiKey, model, options.verbose ?? false);
-        if (text && cacheFile) {
-          try {
-            fs.writeFileSync(cacheFile, text);
-          } catch {
-            // best effort
-          }
+    let text: string | null;
+    if (cacheFile && fs.existsSync(cacheFile)) {
+      text = fs.readFileSync(cacheFile, 'utf8');
+    } else {
+      text = useCli
+        ? await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, options.model, options.verbose ?? false)
+        : await callModel(userPrompt, screenshot, apiKey as string, model, options.verbose ?? false);
+      if (text && cacheFile) {
+        try {
+          fs.writeFileSync(cacheFile, text);
+        } catch {
+          // best effort
         }
       }
-      return text ? parseAnomalies(text, url) : [];
-    }),
-  );
+    }
+    return text ? parseAnomalies(text, url) : [];
+  };
+
+  // API: parallel (cheap HTTPS). CLI: sequential — spawning many headless
+  // `claude` processes at once is heavy and the sample is small.
+  let results: Anomaly[][];
+  if (useCli) {
+    results = [];
+    for (const entry of entries) results.push(await analyzePage(entry));
+  } else {
+    results = await Promise.all(entries.map(analyzePage));
+  }
 
   return results.flat();
 }

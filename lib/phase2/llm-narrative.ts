@@ -8,7 +8,10 @@
  *
  * Design:
  *   • No SDK dependency. Anthropic's API is a vanilla HTTPS POST.
- *   • Gated on `ANTHROPIC_API_KEY`. Returns null when absent.
+ *   • Two transports, auto-selected so a key is never required: with
+ *     `ANTHROPIC_API_KEY` it POSTs to the API; otherwise, if the `claude` CLI is
+ *     on PATH it spawns it headless (keyless, using the user's login). Returns
+ *     null only when neither is available, or on any failure.
  *   • Disk-cached by SHA of (model, system, user, findings) so re-runs are free.
  *   • Returns null on any failure so the caller falls back to templated text.
  *
@@ -21,6 +24,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -71,31 +75,8 @@ function cacheKey(model: string, system: string, user: string): string {
   return crypto.createHash('sha256').update(model).update('\0').update(system).update('\0').update(user).digest('hex');
 }
 
-/**
- * Generate a rich Analysis paragraph for one section, or null on failure.
- */
-export async function generateSectionAnalysis(req: NarrativeRequest): Promise<string | null> {
-  const apiKey = req.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
-  if (!apiKey) return null;
-
-  const model = req.model ?? DEFAULT_MODEL;
-  const userPrompt = buildUserPrompt(req);
-  const key = cacheKey(model, SYSTEM_PROMPT, userPrompt);
-
-  // Disk cache lookup
-  let cacheFile: string | null = null;
-  if (req.cacheDir) {
-    try {
-      fs.mkdirSync(req.cacheDir, { recursive: true });
-      cacheFile = path.join(req.cacheDir, `${key}.txt`);
-      if (fs.existsSync(cacheFile)) {
-        return fs.readFileSync(cacheFile, 'utf8');
-      }
-    } catch {
-      cacheFile = null;
-    }
-  }
-
+/** Call the Anthropic API for one section. Returns the paragraph text or null. */
+async function callApi(userPrompt: string, apiKey: string, model: string, verbose: boolean): Promise<string | null> {
   try {
     const res = await fetch(ANTHROPIC_ENDPOINT, {
       method: 'POST',
@@ -112,28 +93,78 @@ export async function generateSectionAnalysis(req: NarrativeRequest): Promise<st
       }),
     });
     if (!res.ok) {
-      if (req.verbose) {
+      if (verbose) {
         const body = await res.text().catch(() => '');
         console.warn(`LLM narrative HTTP ${res.status}: ${body.slice(0, 200)}`);
       }
       return null;
     }
     const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-    const text = json.content?.find((c) => c.type === 'text')?.text?.trim();
-    if (!text) return null;
-
-    if (cacheFile) {
-      try {
-        fs.writeFileSync(cacheFile, text);
-      } catch {
-        // best effort
-      }
-    }
-    return text;
+    return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
-    if (req.verbose) {
-      console.warn(`LLM narrative failed: ${(error as Error).message}`);
-    }
+    if (verbose) console.warn(`LLM narrative failed: ${(error as Error).message}`);
     return null;
   }
+}
+
+/**
+ * Generate a rich Analysis paragraph for one section, or null on failure.
+ *
+ * Transport priority: the Anthropic API when a key is present, otherwise the
+ * keyless `claude` CLI when it is available (shared with the verify/anomaly
+ * passes). Returns null when neither is reachable so the caller keeps templated
+ * prose. API and CLI replies are cached under distinct keys.
+ */
+export async function generateSectionAnalysis(req: NarrativeRequest): Promise<string | null> {
+  const apiKey = req.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
+  const useCli = !apiKey && isClaudeCliAvailable();
+  if (!apiKey && !useCli) return null;
+
+  // The CLI uses the user's default model (no override); the API uses ours.
+  const model = useCli ? req.model : req.model ?? DEFAULT_MODEL;
+  const userPrompt = buildUserPrompt(req);
+  const rawKey = cacheKey(model ?? 'default', SYSTEM_PROMPT, userPrompt);
+  const key = useCli ? `cli-${rawKey}` : rawKey;
+
+  // Disk cache lookup
+  let cacheFile: string | null = null;
+  if (req.cacheDir) {
+    try {
+      fs.mkdirSync(req.cacheDir, { recursive: true });
+      cacheFile = path.join(req.cacheDir, `${key}.txt`);
+      if (fs.existsSync(cacheFile)) {
+        return fs.readFileSync(cacheFile, 'utf8');
+      }
+    } catch {
+      cacheFile = null;
+    }
+  }
+
+  const text = useCli
+    ? extractParagraph(await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, model, req.verbose ?? false))
+    : await callApi(userPrompt, apiKey as string, model as string, req.verbose ?? false);
+  if (!text) return null;
+
+  if (cacheFile) {
+    try {
+      fs.writeFileSync(cacheFile, text);
+    } catch {
+      // best effort
+    }
+  }
+  return text;
+}
+
+/**
+ * Normalise a CLI reply into a clean paragraph: trim, drop any accidental
+ * markdown fences the headless model might wrap prose in, collapse to null when
+ * empty. The API path returns prose directly so it skips this.
+ */
+function extractParagraph(raw: string | null): string | null {
+  if (!raw) return null;
+  const text = raw
+    .replace(/^```[a-z]*\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  return text || null;
 }

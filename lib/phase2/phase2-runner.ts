@@ -1100,9 +1100,11 @@ async function prepareNarratives(
   suppressed: ReadonlySet<string>,
 ): Promise<Partial<Record<Section, string | null>>> {
   if (!options.llmNarrative) return {};
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // No key → the narrative pass falls back to the keyless `claude` CLI. Only bail
+  // to templated prose when neither transport is reachable.
+  if (!process.env.ANTHROPIC_API_KEY && !isClaudeCliAvailable()) {
     if (options.verbose) {
-      console.warn('--llm-narrative requested but ANTHROPIC_API_KEY is not set; falling back to templated prose.');
+      console.warn('--llm-narrative requested but no ANTHROPIC_API_KEY and no claude CLI found; falling back to templated prose.');
     }
     return {};
   }

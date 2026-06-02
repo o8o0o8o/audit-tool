@@ -145,14 +145,16 @@ class CrawlBudgetAnalyzer {
       nonIndexable: Math.min((stats.nonIndexablePages / stats.totalPages) * 20, 20),
     };
 
-    stats.efficiency.score = Math.max(
-      0,
-      100 -
-        efficiencyPenalties.redirects -
-        efficiencyPenalties.errors -
-        efficiencyPenalties.duplicates -
-        efficiencyPenalties.blocked -
-        efficiencyPenalties.nonIndexable,
+    stats.efficiency.score = Math.round(
+      Math.max(
+        0,
+        100 -
+          efficiencyPenalties.redirects -
+          efficiencyPenalties.errors -
+          efficiencyPenalties.duplicates -
+          efficiencyPenalties.blocked -
+          efficiencyPenalties.nonIndexable,
+      ),
     );
 
     stats.efficiency.grade = getLetterGrade(stats.efficiency.score);

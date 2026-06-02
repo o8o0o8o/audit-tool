@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import { SCORING } from '../constants';
+import { compareExamplesWorstFirst } from '../utils';
 import { renderMarkdownToPdf } from '../reports/pdf-renderer';
 import { ScoreCalculator } from '../scoring/score-calculator';
 import { classifyIssue, isCataloguedErrorTier } from '../scoring/seo-catalog';
@@ -800,10 +801,13 @@ function buildFindingBlock(
   if (examples.length > 0) {
     lines.push(detail.aiDiscovered ? '**Evidence**' : '**Affected pages**');
     lines.push('');
-    // Sort lexicographically before slicing so the shown sample is identical
-    // every run — `examples` are appended in concurrent crawl-completion order,
-    // which is not deterministic on its own.
-    const shown = [...examples].sort((x, y) => x.localeCompare(y)).slice(0, EXAMPLES_PER_FINDING);
+    // Sort worst-first before slicing so the shown sample leads with the most
+    // severe pages (highest request count, largest unused-code size, worst TBT,
+    // …) rather than alphabetically by URL. The lexicographic tiebreak inside
+    // the comparator keeps the sample identical every run — `examples` are
+    // appended in concurrent crawl-completion order, which is not deterministic
+    // on its own.
+    const shown = [...examples].sort(compareExamplesWorstFirst).slice(0, EXAMPLES_PER_FINDING);
     const PAGES_PER_CLUSTER = 12;
     for (const ex of shown) {
       // AI findings carry cited evidence ("<what was seen> — <url>"); keep it

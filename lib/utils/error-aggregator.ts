@@ -5,6 +5,7 @@
 
 import type { SeverityLevel, AnalysisDetail } from '../types';
 import { SEVERITY, CRAWL_SETTINGS } from '../constants';
+import { compareExamplesWorstFirst } from '../utils';
 
 export interface AnalysisState {
   overall: Set<string>;
@@ -123,19 +124,27 @@ class ErrorAggregator {
       const details = this.#analysis.details[generalError];
 
       // Only store up to MAX_EXAMPLES to save memory. Once at the cap, keep the
-      // lexicographically-smallest set rather than the first-arriving one: pages
-      // crawl concurrently, so "first arriving" is non-deterministic and would
-      // make the retained sample (and thus the report) differ run to run. The
-      // smallest-by-string subset is stable regardless of completion order.
+      // WORST examples (highest embedded metric — request count, unused-code
+      // size, …) so the report's affected-pages sample leads with the most
+      // severe pages instead of an arbitrary alphabetical slice. Ties (and
+      // metric-less bare-URL examples) fall back to a lexicographic order, which
+      // is stable regardless of the non-deterministic concurrent
+      // crawl-completion order pages arrive in — so the retained sample, and
+      // thus the report, is identical run to run.
       if (details.examples.length < MAX_EXAMPLES) {
         details.examples.push(detailedError);
       } else {
         details.truncated ??= true; // Mark that we've hit the limit
-        let maxIdx = 0;
+        // Find the least-severe example currently retained (ranks last
+        // worst-first), then evict it in favour of the newcomer when the
+        // newcomer is worse.
+        let leastIdx = 0;
         for (let i = 1; i < details.examples.length; i++) {
-          if (details.examples[i] > details.examples[maxIdx]) maxIdx = i;
+          if (compareExamplesWorstFirst(details.examples[i], details.examples[leastIdx]) > 0) leastIdx = i;
         }
-        if (detailedError < details.examples[maxIdx]) details.examples[maxIdx] = detailedError;
+        if (compareExamplesWorstFirst(detailedError, details.examples[leastIdx]) < 0) {
+          details.examples[leastIdx] = detailedError;
+        }
       }
 
       // Always increment count to track total occurrences accurately
@@ -169,6 +178,15 @@ class ErrorAggregator {
    * @returns {Object} Analysis data with overall converted to array
    */
   getData() {
+    // Sort each finding's retained examples worst-first (highest embedded
+    // metric leads) at the serialization choke point, so every consumer of
+    // analysis.details — the curated report, quick-win scoring, and the legacy
+    // HTML report's CSV export — emits affected pages most-severe-first instead
+    // of in the non-deterministic concurrent crawl-completion order they were
+    // collected in. The comparator's lexicographic tiebreak keeps it stable.
+    for (const detail of Object.values(this.#analysis.details)) {
+      if (Array.isArray(detail.examples)) detail.examples.sort(compareExamplesWorstFirst);
+    }
     return {
       overall: Array.from(this.#analysis.overall),
       details: this.#analysis.details,

@@ -716,6 +716,7 @@ void describe('findingGroupKey (cross-list identity)', () => {
 import { buildReportMarkdown } from '../lib/phase2/phase2-runner';
 import type { AuditArtifacts, IssueDetail as P2IssueDetail } from '../lib/phase2/types';
 import { ErrorAggregator } from '../lib/utils/error-aggregator';
+import { exampleMetric, compareExamplesWorstFirst } from '../lib/utils';
 
 function mkArtifacts(detailKeys: string[], examples: Record<string, string[]> = {}): AuditArtifacts {
   const details: Record<string, P2IssueDetail> = {};
@@ -794,6 +795,69 @@ void describe('ErrorAggregator example retention determinism', () => {
     assert.deepStrictEqual(a, b, 'retained example set must not depend on arrival order');
     // Total count is tracked accurately even though examples are capped.
     assert.strictEqual(forward.getData().details['Some issue'].count, 150);
+  });
+
+  void it('retains the worst examples (highest metric) when over the cap', () => {
+    // 150 pages with an embedded request count from 1..150. Only 100 are kept;
+    // the worst-first retention policy must keep the highest counts (51..150),
+    // not an alphabetical slice — regardless of arrival order.
+    const mk = (n: number) => `This page has ${n} requests https://e.com/page-${String(n).padStart(3, '0')}`;
+    const ns = Array.from({ length: 150 }, (_, i) => i + 1);
+    const agg = new ErrorAggregator();
+    for (const n of [...ns].reverse()) agg.addError('Too many requests', mk(n), 'medium');
+    const kept = agg.getData().details['Too many requests'].examples;
+    const counts = kept.map((e) => parseInt(e.match(/has (\d+) requests/)![1], 10)).sort((x, y) => x - y);
+    assert.strictEqual(counts.length, 100);
+    assert.strictEqual(counts[0], 51, 'lowest retained count should be 51 (worst 100 kept)');
+    assert.strictEqual(counts[99], 150, 'worst page (150 requests) must be retained');
+  });
+});
+
+void describe('worst-first example ordering', () => {
+  void it('exampleMetric reads the embedded value and normalises byte units', () => {
+    assert.strictEqual(exampleMetric('This page has 48 requests https://e.com/x'), 48);
+    assert.strictEqual(exampleMetric('https://e.com/x has Total Blocking Time 3273ms (threshold: 200ms)'), 3273);
+    assert.strictEqual(exampleMetric('https://e.com/x: 96% of CSS is unused (5.5 MB of 5.7 MB)'), 96);
+    // Byte units normalise so MB outranks KB even though 1.7 < 512 numerically.
+    assert.ok(exampleMetric('https://e.com/x: 1.7 MB of unused code') > exampleMetric('https://e.com/y: 512 KB of unused code'));
+    // Digits inside the URL path must not be mistaken for the metric.
+    assert.strictEqual(exampleMetric('https://e.com/5-year-anniversary/'), -Infinity);
+  });
+
+  void it('orders worst-first with a deterministic lexicographic tiebreak', () => {
+    const examples = [
+      'This page has 43 requests https://e.com/a',
+      'This page has 48 requests https://e.com/d',
+      'This page has 47 requests https://e.com/b',
+      'This page has 48 requests https://e.com/c',
+    ];
+    const sorted = [...examples].sort(compareExamplesWorstFirst);
+    assert.deepStrictEqual(
+      sorted.map((e) => parseInt(e.match(/has (\d+)/)![1], 10)),
+      [48, 48, 47, 43],
+    );
+    // The two 48s tie on metric, so order is lexicographic (…/c before …/d).
+    assert.ok(sorted[0].endsWith('/c'));
+    assert.ok(sorted[1].endsWith('/d'));
+    // Reversed input yields the identical order — determinism preserved.
+    assert.deepStrictEqual([...examples].reverse().sort(compareExamplesWorstFirst), sorted);
+  });
+
+  void it('renders the affected-pages sample worst-first in the report', () => {
+    const md = buildReportMarkdown(
+      mkArtifacts(['Some pages have too many requests'], {
+        'Some pages have too many requests': [
+          'This page has 43 requests https://e.com/a',
+          'This page has 90 requests https://e.com/z',
+          'This page has 47 requests https://e.com/m',
+        ],
+      }),
+    );
+    const i90 = md.indexOf('90 requests');
+    const i47 = md.indexOf('47 requests');
+    const i43 = md.indexOf('43 requests');
+    assert.ok(i90 >= 0 && i47 >= 0 && i43 >= 0, 'all examples should render');
+    assert.ok(i90 < i47 && i47 < i43, 'worst (90 requests) must appear first');
   });
 });
 

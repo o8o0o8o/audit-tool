@@ -1099,6 +1099,45 @@ function formatSampleList(items: string[], limit = 5, separator = ', '): string 
   return remaining > 0 ? `${shown}${separator}and ${remaining} more` : shown;
 }
 
+const BYTE_UNIT_SCALE: Record<string, number> = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 };
+
+/**
+ * Extract the numeric severity metric an analyzer embedded in an example /
+ * affected-page string, so lists can be ordered worst-first. Examples state the
+ * measured value in prose — before the URL ("This page has 48 requests …") or
+ * after it ("… loads 7.1 MB from third parties", "… 96% of CSS is unused",
+ * "… Total Blocking Time 3273ms"). URLs and HTML are stripped first so digits
+ * inside paths/hrefs (e.g. "/5-year-anniversary/") can't masquerade as the
+ * metric; then the first number is read. A byte unit (B/KB/MB/GB/TB) is
+ * normalised to bytes so "512 KB" sorts below "7.7 MB"; other units (ms, %,
+ * counts) are unit-consistent within a single finding, so the raw number is
+ * directly comparable. Returns -Infinity when no metric is present (bare-URL
+ * examples), so they sort last.
+ */
+function exampleMetric(ex: string): number {
+  const text = ex.replace(/<[^>]*>/g, ' ').replace(/https?:\/\/\S+/g, ' ');
+  const match = text.match(/(\d[\d,]*(?:\.\d+)?)\s*(B|KB|MB|GB|TB)?/i);
+  if (!match) return -Infinity;
+  const value = parseFloat(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(value)) return -Infinity;
+  const unit = match[2]?.toUpperCase();
+  return unit && BYTE_UNIT_SCALE[unit] ? value * BYTE_UNIT_SCALE[unit] : value;
+}
+
+/**
+ * Comparator that orders example strings worst-first: the higher embedded
+ * metric leads, with a lexicographic tiebreak so equal-metric (and metric-less)
+ * examples keep a stable order independent of the concurrent crawl-completion
+ * order they were collected in. This keeps the report deterministic — same
+ * crawl data → identical report — see docs/report-rules.md.
+ */
+function compareExamplesWorstFirst(a: string, b: string): number {
+  const ma = exampleMetric(a);
+  const mb = exampleMetric(b);
+  if (ma !== mb) return mb > ma ? 1 : -1;
+  return a.localeCompare(b);
+}
+
 export {
   normalizeUrl,
   stripHashFragment,
@@ -1154,6 +1193,8 @@ export {
   getIncomingLinkCount,
   normalizeToEntries,
   formatSampleList,
+  exampleMetric,
+  compareExamplesWorstFirst,
   getPaginationSeriesKey,
   getPaginationPageNumber,
   LOG_PREFIX,

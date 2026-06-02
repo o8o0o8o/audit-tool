@@ -100,13 +100,18 @@ order of `analysis.details` keys and of each finding's `examples` array — is
    stable string tiebreaker (`byImportance`, `byQuickWinImportance`, the
    quick-win effort sort, and `ScoreCalculator.identifyQuickWins`). Without it,
    JS's stable sort leaks the insertion order into tied findings.
-2. **Example samples are sorted before slicing.** The "Affected pages" list and
-   the quick-win `examples` are sorted lexicographically before the first N are
-   taken, so the shown sample is the same every run.
-3. **Example *retention* is deterministic.** `ErrorAggregator.addError` keeps the
-   lexicographically-smallest examples once it hits `MAX_EXAMPLES_PER_ISSUE`
-   (100), not the first-arriving ones — so even findings on >100 pages retain a
-   stable sample (same memory bound).
+2. **Example samples are sorted worst-first before slicing.** The "Affected
+   pages" list and the quick-win `examples` are ordered by the metric each
+   example embeds (request count, unused-code size, TBT, …) via
+   `compareExamplesWorstFirst`, so the shown sample leads with the most severe
+   pages rather than an alphabetical slice. The comparator's lexicographic
+   tiebreak makes the order — and thus the shown sample — the same every run.
+3. **Example *retention* is worst-first and deterministic.**
+   `ErrorAggregator.addError` keeps the **worst** examples (highest embedded
+   metric, same comparator) once it hits `MAX_EXAMPLES_PER_ISSUE` (100), not the
+   first-arriving or alphabetically-smallest ones — so even findings on >100
+   pages retain the most severe sample (same memory bound). Metric-less bare-URL
+   examples tie at `-Infinity` and fall back to the lexicographic tiebreak.
 
 ### What is *not* deterministic (by nature)
 

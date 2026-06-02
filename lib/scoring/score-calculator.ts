@@ -16,7 +16,7 @@
  */
 
 import { SCORING } from '../constants';
-import { stripIssueSeverity } from '../utils';
+import { stripIssueSeverity, compareExamplesWorstFirst } from '../utils';
 import { EXTENDED_FIX_RECOMMENDATIONS } from './fix-recommendations-extended';
 import { logNormalScore, urlPassScore, mean } from './methodologies';
 import { classifyIssue, type IssueTier, type IssueCategory } from './seo-catalog';
@@ -139,9 +139,11 @@ class ScoreCalculator {
           example: recommendation.example,
           resources: recommendation.resources ?? [],
           impactScore,
-          // Sort before slicing so the retained examples don't depend on the
-          // concurrent crawl-completion order they were collected in.
-          examples: [...(data.examples ?? [])].sort((a, b) => a.localeCompare(b)).slice(0, 3),
+          // Sort worst-first before slicing so the retained examples lead with
+          // the most severe pages, and don't depend on the concurrent
+          // crawl-completion order they were collected in (the comparator's
+          // lexicographic tiebreak keeps the sample deterministic).
+          examples: [...(data.examples ?? [])].sort(compareExamplesWorstFirst).slice(0, 3),
         });
       }
     }

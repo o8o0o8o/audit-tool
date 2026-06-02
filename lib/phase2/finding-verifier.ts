@@ -147,6 +147,88 @@ export function loadAllPages(runDir: string): PageIndex {
   return index;
 }
 
+/**
+ * Load the site-level artifacts (`metadata.json.gz` + `incoming-links.json.gz`)
+ * and derive the click-depth map by BFS from the homepage over the forward
+ * graph. Returns `null` when neither artifact is present (older runs).
+ */
+export function loadSiteData(runDir: string, pages: PageIndex): SiteData | null {
+  const incomingRaw =
+    readMaybeGz<Record<string, string[]>>(path.join(runDir, 'incoming-links.json.gz')) ??
+    readMaybeGz<Record<string, string[]>>(path.join(runDir, 'incoming-links.json'));
+  const metadata =
+    readMaybeGz<{
+      robots?: { ['user-agent']?: Record<string, { disallow?: string[]; allow?: string[] }> };
+      sitemaps?: { urls?: Record<string, unknown> };
+    }>(path.join(runDir, 'metadata.json.gz')) ??
+    readMaybeGz<{ robots?: unknown; sitemaps?: unknown }>(path.join(runDir, 'metadata.json'));
+
+  if (!incomingRaw && !metadata) return null;
+
+  // Inbound graph, normalized. Also build the forward graph for BFS.
+  const incoming = new Map<string, string[]>();
+  const forward = new Map<string, Set<string>>();
+  for (const [dst, srcs] of Object.entries(incomingRaw ?? {})) {
+    const nd = normUrl(dst);
+    const nsrcs = (Array.isArray(srcs) ? srcs : []).map(normUrl);
+    incoming.set(nd, nsrcs);
+    for (const s of nsrcs) {
+      if (!forward.has(s)) forward.set(s, new Set());
+      forward.get(s)!.add(nd);
+    }
+  }
+
+  // Homepage = the crawled page whose path is "/" (or the shortest origin URL).
+  let homepage: string | undefined;
+  for (const p of pages.all()) {
+    try {
+      const u = new URL(p.url);
+      if (u.pathname === '/' || u.pathname === '') {
+        homepage = normUrl(p.url);
+        break;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // BFS click-depth from the homepage.
+  const depthFromHome = new Map<string, number>();
+  if (homepage) {
+    depthFromHome.set(homepage, 0);
+    let frontier = [homepage];
+    let depth = 0;
+    while (frontier.length) {
+      const next: string[] = [];
+      for (const u of frontier) {
+        for (const v of forward.get(u) ?? []) {
+          if (!depthFromHome.has(v)) {
+            depthFromHome.set(v, depth + 1);
+            next.push(v);
+          }
+        }
+      }
+      frontier = next;
+      depth++;
+    }
+  }
+
+  const ua = (metadata?.robots as { ['user-agent']?: Record<string, { disallow?: string[]; allow?: string[] }> } | undefined)?.[
+    'user-agent'
+  ];
+  const robotsDisallow: string[] = [];
+  for (const rules of Object.values(ua ?? {})) {
+    if (Array.isArray(rules?.disallow)) robotsDisallow.push(...rules.disallow);
+  }
+  const robotsUserAgents = Object.keys(ua ?? {}).map((s) => s.toLowerCase());
+
+  const sitemapUrls = new Set<string>();
+  const urlsObj = (metadata?.sitemaps as { urls?: Record<string, unknown> } | undefined)?.urls;
+  if (urlsObj && typeof urlsObj === 'object') for (const u of Object.keys(urlsObj)) sitemapUrls.add(normUrl(u));
+
+  return { incoming, depthFromHome, robotsDisallow, robotsUserAgents, sitemapUrls };
+}
+
 // IMPORTANT: storage persists only a subset of `PageInfo`. These readers
 // return `null` when the underlying signal was NOT captured for a page, so the
 // verifiers can distinguish "the data contradicts the claim" (→ refute) from
@@ -240,12 +322,35 @@ function soft404State(p: PageInfo): boolean | null {
   return s.isSoft404;
 }
 
+/**
+ * Site-level artifacts (robots.txt, sitemap, internal-link graph) that live in
+ * `metadata.json.gz` / `incoming-links.json.gz` — NOT in the per-page JSONs.
+ * Loaded once and threaded into every verifier so site-wide and link-graph
+ * findings (orphan, unreachable, robots rules, sitemap membership) become
+ * checkable. Absent → those verifiers stay `unchecked`.
+ */
+export interface SiteData {
+  /** Inbound link graph: normalized url → normalized source urls. */
+  incoming: Map<string, string[]>;
+  /** Click depth from the homepage over the forward graph. Unreachable pages are
+   *  ABSENT from the map (not stored as Infinity) — callers test `.has(url)`. */
+  depthFromHome: Map<string, number>;
+  /** robots.txt disallow patterns (across all user-agents). */
+  robotsDisallow: string[];
+  /** robots.txt user-agent tokens, lowercased. */
+  robotsUserAgents: string[];
+  /** Normalized URLs declared in the sitemap(s). */
+  sitemapUrls: Set<string>;
+}
+
 interface VerifierCtx {
   /** First example string the report would show (worst-first). */
   example: string;
   urls: string[];
   quoted?: string;
   pages: PageIndex;
+  /** Site-level artifacts, when loaded (see {@link SiteData}). */
+  site?: SiteData;
 }
 
 interface Verifier {
@@ -270,7 +375,26 @@ function verifyShared(
   valueOf: (p: PageInfo) => string | null,
   ctx: VerifierCtx,
 ): VerificationResult {
-  if (ctx.urls.length < 2) return unchecked(kind, `example lists <2 ${label} pages`);
+  if (ctx.urls.length < 2) {
+    // Single-cited "identical X" finding ("…is duplicated for this page <url>"):
+    // confirm by scanning the FULL index for ≥2 crawled pages sharing the quoted
+    // value. The quote may be truncated ("…to an…"), so match exact OR by prefix.
+    // Confirm-only — a duplicate partner that wasn't crawled must not refute.
+    if (ctx.quoted) {
+      const raw = normValue(ctx.quoted);
+      const prefix = raw.replace(/[.…]+$/, '').trim();
+      if (prefix.length > 10) {
+        const shareCount = ctx.pages
+          .all()
+          .filter((p) => {
+            const v = valueOf(p);
+            return v !== null && (v === raw || v.startsWith(prefix));
+          }).length;
+        if (shareCount >= 2) return confirmed(kind, `${shareCount} crawled pages share ${label} "${truncate(prefix)}"`);
+      }
+    }
+    return unchecked(kind, `example lists <2 ${label} pages`);
+  }
   const pages = ctx.urls.map((u) => ctx.pages.get(u));
   if (pages.some((p) => !p)) return unchecked(kind, 'one or more cited pages not found on disk');
   const values = (pages as PageInfo[]).map(valueOf);
@@ -388,6 +512,64 @@ function trackingBeforeConsentOf(p: PageInfo): boolean | null {
 /** Local bar for "high % unused CSS" — the analyzer has no single constant; a
  *  conservative floor so confirm-only never over-confirms. */
 const UNUSED_CSS_PCT_BAR = 40;
+/** Click depth beyond which "more than N clicks from homepage" is confirmed. */
+const CLICK_DEPTH_BAR = 4;
+/** Inbound-link count at or below which "very low link equity" is confirmed. */
+const LOW_EQUITY_BAR = 3;
+/** AI-crawler user-agent tokens (lowercased) the robots-no-ai check looks for. */
+const AI_CRAWLER_UAS = ['gptbot', 'claudebot', 'claude-web', 'perplexitybot', 'google-extended', 'ccbot', 'anthropic-ai', 'oai-searchbot', 'bytespider', 'amazonbot'];
+
+/** AA / AAA contrast-failure counts from `colorContrastData`. */
+function contrastFailuresOf(p: PageInfo, level: 'aa' | 'aaa'): number | undefined {
+  const cc = p.colorContrastData as { aaFailures?: number; aaaFailures?: number } | undefined;
+  if (!cc) return undefined;
+  const v = level === 'aa' ? cc.aaFailures : cc.aaaFailures;
+  return typeof v === 'number' ? v : undefined;
+}
+
+/** Count of external scripts missing SRI (`sriData.missingIntegrity`). */
+function missingSriCountOf(p: PageInfo): number | undefined {
+  const s = p.sriData as { missingIntegrity?: unknown } | undefined;
+  if (!s) return undefined;
+  return Array.isArray(s.missingIntegrity) ? s.missingIntegrity.length : undefined;
+}
+
+/** Tri-state "no Permissions-Policy header" from `permissionsPolicyData`. */
+function noPermissionsPolicyOf(p: PageInfo): boolean | null {
+  const pp = p.permissionsPolicyData as { hasPermissionsPolicy?: boolean } | undefined;
+  if (!pp || typeof pp.hasPermissionsPolicy !== 'boolean') return null;
+  return pp.hasPermissionsPolicy === false;
+}
+
+/** Tri-state "not cross-origin isolated" from `crossOriginPolicyData`. */
+function notCrossOriginIsolatedOf(p: PageInfo): boolean | null {
+  const co = p.crossOriginPolicyData as { isCrossOriginIsolated?: boolean } | undefined;
+  if (!co || typeof co.isCrossOriginIsolated !== 'boolean') return null;
+  return co.isCrossOriginIsolated === false;
+}
+
+/** Tri-state "no prefers-reduced-motion support" from `reducedMotionData`. */
+function noReducedMotionOf(p: PageInfo): boolean | null {
+  const rm = p.reducedMotionData as { hasReducedMotionQuery?: boolean } | undefined;
+  if (!rm || typeof rm.hasReducedMotionQuery !== 'boolean') return null;
+  return rm.hasReducedMotionQuery === false;
+}
+
+/** Count of form inputs missing the autocomplete attribute (`formData`). */
+function inputsWithoutAutocompleteOf(p: PageInfo): number | undefined {
+  const f = p.formData as { inputsWithoutAutocomplete?: number } | undefined;
+  return typeof f?.inputsWithoutAutocomplete === 'number' ? f.inputsWithoutAutocomplete : undefined;
+}
+
+/** Total web-font files loaded (`fontData.totalFonts`). */
+function totalFontsOf(p: PageInfo): number | undefined {
+  const f = p.fontData as { totalFonts?: number } | undefined;
+  return typeof f?.totalFonts === 'number' ? f.totalFonts : undefined;
+}
+
+/** Local bar for "too many font files" — the analyzer tracks byte sizes, not a
+ *  file-count constant; 4 is a conservative confirm-only floor. */
+const TOO_MANY_FONTS_BAR = 4;
 
 type NumGet = (p: PageInfo) => number | undefined;
 
@@ -466,13 +648,13 @@ const VERIFIERS: Verifier[] = [
     // near-duplicate (titles aren't identical) and keyword-cannibalisation.
     kind: 'duplicate-title',
     match: (m) =>
-      /\btitles?\b/.test(m) && /\bduplicate\b/.test(m) && !/near-duplicate/.test(m) && !/keyword/.test(m) && !/description/.test(m),
+      /\btitles?\b/.test(m) && /(\bduplicate\b|\bidentical\b)/.test(m) && !/near-duplicate/.test(m) && !/keyword/.test(m) && !/description/.test(m),
     verify: (ctx) => verifyShared('duplicate-title', 'title', titleOf, ctx),
   },
   {
     // "Duplicate meta descriptions found".
     kind: 'duplicate-description',
-    match: (m) => /descriptions?\b/.test(m) && /\bduplicate\b/.test(m) && !/near-duplicate/.test(m),
+    match: (m) => /descriptions?\b/.test(m) && /(\bduplicate\b|\bidentical\b)/.test(m) && !/near-duplicate/.test(m),
     verify: (ctx) => verifyShared('duplicate-description', 'description', descOf, ctx),
   },
   {
@@ -599,15 +781,28 @@ const VERIFIERS: Verifier[] = [
       /sitemap/.test(m) &&
       /(missing from|not (in|listed|included|found)|no sitemap entries|absent)/.test(m) &&
       !/(robots\.txt|nested|invalid|integration|plugin|declared|limit|origin|changefreq|trailing|duplicat|http instead)/.test(m),
-    verify: (ctx) =>
-      verifySingle(
+    verify: (ctx) => {
+      // Count-only finding ("45 indexable pages are not listed in the sitemap")
+      // has no example URL — fall back to a site-level count from the index.
+      const url = ctx.urls[0];
+      if ((!url || !ctx.pages.get(url)) && ctx.site && ctx.site.sitemapUrls.size > 0) {
+        const n = ctx.pages.all().filter((p) => {
+          const ix = p.indexability as { isIndexable?: boolean } | undefined;
+          return ix?.isIndexable === true && !ctx.site!.sitemapUrls.has(normUrl(p.url));
+        }).length;
+        return n > 0
+          ? confirmed('not-in-sitemap', `${n} indexable page(s) are not listed in the sitemap`)
+          : unchecked('not-in-sitemap', 'all indexable pages appear in the sitemap');
+      }
+      return verifySingle(
         'not-in-sitemap',
         ctx,
         (p) => (p.foundIn === 'discovered' ? true : p.foundIn === 'sitemap' ? false : null),
         'page was discovered via crawl, not the sitemap',
         'page is recorded as found in the sitemap',
         true,
-      ),
+      );
+    },
   },
 
   // ── Core Web Vitals & threshold findings ──────────────────────────────────
@@ -624,8 +819,12 @@ const VERIFIERS: Verifier[] = [
 
   // ── Size / count / length thresholds ──────────────────────────────────────
   numericVerifier('too-many-h2', (m) => /\bh2\b/.test(m) && /more than/.test(m),
-    (p) => { const h = p.headings as { h2?: unknown[] } | undefined; return Array.isArray(h?.h2) ? h!.h2!.length : undefined; },
-    THRESHOLDS.H2_COUNT, 'over', 'H2 count'),
+    // `headings.h2Count` is the field that survives storage; the `h2` array is
+    // usually stripped. Confirm-only: the analyzer's bar can differ per finding.
+    (p) => { const h = p.headings as { h2?: unknown[]; h2Count?: number } | undefined;
+      if (Array.isArray(h?.h2)) return h!.h2!.length;
+      return typeof h?.h2Count === 'number' ? h.h2Count : undefined; },
+    THRESHOLDS.H2_COUNT, 'over', 'H2 count', false),
   numericVerifier('too-many-requests', (m) => /requests?\b/.test(m) && /(too many|more than)/.test(m),
     (p) => p.totalNumberOfRequests ?? p.requestCount, THRESHOLDS.REQUEST_COUNT, 'over', 'request count'),
   numericVerifier('page-too-big', (m) => /size is too big|(page|document)\b.*too (big|large)/.test(m),
@@ -713,6 +912,158 @@ const VERIFIERS: Verifier[] = [
   // subject so it can't match unrelated "before consent" wording.
   booleanVerifier('tracking-before-consent', (m) => /(tracking|cookies?|trackers?).{0,40}before consent/.test(m),
     trackingBeforeConsentOf, 'page fired tracking/cookies before consent', 'no pre-consent tracking recorded for this page', false),
+
+  // "Color contrast passes AA but fails AAA (N elements)" → aaaFailures. Listed
+  // BEFORE the AA matcher since this wording contains "AA" too.
+  numericVerifier('contrast-aaa', (m) => /color contrast/.test(m) && /aaa/.test(m),
+    (p) => contrastFailuresOf(p, 'aaa'), 0, 'over', 'AAA contrast failures', false),
+  // "Color contrast fails WCAG AA (N elements)" → aaFailures (excludes the AAA wording).
+  numericVerifier('contrast-aa', (m) => /color contrast/.test(m) && /\baa\b/.test(m) && !/aaa/.test(m),
+    (p) => contrastFailuresOf(p, 'aa'), 0, 'over', 'AA contrast failures', false),
+
+  // "External scripts missing Subresource Integrity (SRI)".
+  numericVerifier('sri-missing', (m) => /subresource integrity|\bsri\b/.test(m),
+    missingSriCountOf, 0, 'over', 'scripts missing SRI', false),
+
+  // "Form inputs missing autocomplete attribute".
+  numericVerifier('autocomplete-missing', (m) => /autocomplete/.test(m),
+    inputsWithoutAutocompleteOf, 0, 'over', 'inputs missing autocomplete', false),
+
+  // "Missing Permissions-Policy header".
+  booleanVerifier('permissions-policy', (m) => /permissions-policy/.test(m) && /(missing|no\b|absent|without)/.test(m),
+    noPermissionsPolicyOf, 'page sends no Permissions-Policy header', 'page sends a Permissions-Policy header', false),
+
+  // "Missing cross-origin isolation headers".
+  booleanVerifier('cross-origin-isolation', (m) => /cross-origin isolation/.test(m),
+    notCrossOriginIsolatedOf, 'page is not cross-origin isolated', 'page is cross-origin isolated', false),
+
+  // "No prefers-reduced-motion CSS support".
+  booleanVerifier('reduced-motion', (m) => /prefers-reduced-motion/.test(m),
+    noReducedMotionOf, 'page has no prefers-reduced-motion support', 'page supports prefers-reduced-motion', false),
+
+  // "Too many font files loaded".
+  numericVerifier('too-many-fonts', (m) => /font files|fonts loaded|too many fonts/.test(m),
+    totalFontsOf, TOO_MANY_FONTS_BAR, 'over', 'font files', false),
+
+  // ── Site-level checks against the link graph + robots + sitemap ────────────
+  // These read ctx.site (loaded from incoming-links.json.gz / metadata.json.gz),
+  // not a per-page JSON. All confirm-only: the graph/sitemap can be incomplete,
+  // so a non-match stays `unchecked`, never a drop.
+
+  // "Orphan page (no internal links point to it)".
+  {
+    kind: 'orphan-page',
+    match: (m) => /orphan/.test(m) && /(internal link|no .*link|point to it)/.test(m),
+    verify: (ctx) => {
+      if (!ctx.site) return unchecked('orphan-page', 'no link-graph data loaded');
+      const url = ctx.urls[0];
+      if (!url) return unchecked('orphan-page', 'no URL in example');
+      const inc = ctx.site.incoming.get(normUrl(url));
+      if (inc && inc.length > 0) return unchecked('orphan-page', `${inc.length} internal link(s) point to this page`);
+      // The graph lists every linked-to page, so a CRAWLED page absent from it
+      // (or present with an empty list) genuinely has no inbound internal links.
+      if (inc === undefined && !ctx.pages.get(url))
+        return unchecked('orphan-page', 'cited page neither crawled nor in the link graph');
+      return confirmed('orphan-page', 'no internal links point to this page');
+    },
+  },
+  // "Page unreachable from homepage via internal links".
+  {
+    kind: 'unreachable',
+    match: (m) => /unreachable from (the )?homepage/.test(m),
+    verify: (ctx) => {
+      if (!ctx.site) return unchecked('unreachable', 'no link-graph data loaded');
+      const url = ctx.urls[0];
+      if (!url) return unchecked('unreachable', 'no URL in example');
+      if (ctx.site.depthFromHome.size === 0) return unchecked('unreachable', 'homepage/graph not resolved');
+      return ctx.site.depthFromHome.has(normUrl(url))
+        ? unchecked('unreachable', 'page IS reachable from the homepage')
+        : confirmed('unreachable', 'page is not reachable from the homepage via internal links');
+    },
+  },
+  // "Page is more than N clicks from homepage".
+  {
+    kind: 'click-depth',
+    match: (m) => /\bclicks?\b/.test(m) && /(from (the )?homepage|deep)/.test(m),
+    verify: (ctx) => {
+      if (!ctx.site) return unchecked('click-depth', 'no link-graph data loaded');
+      const url = ctx.urls[0];
+      if (!url) return unchecked('click-depth', 'no URL in example');
+      const d = ctx.site.depthFromHome.get(normUrl(url));
+      if (d === undefined) return unchecked('click-depth', 'cited page not reached in BFS');
+      return d > CLICK_DEPTH_BAR
+        ? confirmed('click-depth', `page is ${d} clicks from the homepage`)
+        : unchecked('click-depth', `page is only ${d} clicks from the homepage`);
+    },
+  },
+  // "Page has very low internal link equity".
+  {
+    kind: 'low-link-equity',
+    match: (m) => /(low|few).*(internal link|link equity)/.test(m),
+    verify: (ctx) => {
+      if (!ctx.site) return unchecked('low-link-equity', 'no link-graph data loaded');
+      const url = ctx.urls[0];
+      if (!url) return unchecked('low-link-equity', 'no URL in example');
+      const inc = ctx.site.incoming.get(normUrl(url));
+      if (inc === undefined) return unchecked('low-link-equity', 'cited page not in the link graph');
+      return inc.length <= LOW_EQUITY_BAR
+        ? confirmed('low-link-equity', `only ${inc.length} internal link(s) point to this page`)
+        : unchecked('low-link-equity', `${inc.length} internal links point to this page`);
+    },
+  },
+  // "Sensitive paths exposed in robots.txt".
+  {
+    kind: 'robots-sensitive',
+    match: (m) => /robots\.txt/.test(m) && /(sensitive|exposed|reveal)/.test(m),
+    verify: (ctx) =>
+      !ctx.site
+        ? unchecked('robots-sensitive', 'no robots data loaded')
+        : ctx.site.robotsDisallow.length > 0
+          ? confirmed('robots-sensitive', `robots.txt discloses ${ctx.site.robotsDisallow.length} disallowed path(s)`)
+          : unchecked('robots-sensitive', 'no disallow rules recorded'),
+  },
+  // "Pattern matching characters used in robots.txt".
+  {
+    kind: 'robots-wildcards',
+    match: (m) => /robots\.txt/.test(m) && /(pattern matching|wildcard|\*|\$)/.test(m),
+    verify: (ctx) =>
+      !ctx.site
+        ? unchecked('robots-wildcards', 'no robots data loaded')
+        : ctx.site.robotsDisallow.some((d) => /[*$]/.test(d))
+          ? confirmed('robots-wildcards', 'robots.txt uses * or $ wildcards')
+          : unchecked('robots-wildcards', 'no wildcard patterns recorded'),
+  },
+  // "No explicit AI crawler rules in robots.txt".
+  {
+    kind: 'robots-no-ai',
+    match: (m) => /robots\.txt/.test(m) && /(ai crawler|gptbot|claudebot|ai bot)/.test(m),
+    verify: (ctx) => {
+      if (!ctx.site) return unchecked('robots-no-ai', 'no robots data loaded');
+      const hasAi = ctx.site.robotsUserAgents.some((ua) => AI_CRAWLER_UAS.some((b) => ua.includes(b)));
+      return hasAi
+        ? unchecked('robots-no-ai', 'robots.txt DOES name an AI crawler')
+        : confirmed('robots-no-ai', 'robots.txt names no AI crawler user-agents');
+    },
+  },
+  // "Sitemap URLs were not successfully crawled".
+  {
+    kind: 'sitemap-not-crawled',
+    match: (m) => /sitemap/.test(m) && /(not (successfully )?crawled|failed to crawl|uncrawled)/.test(m),
+    verify: (ctx) => {
+      // Prefer the URLs the example itself cites as uncrawled — most direct.
+      if (ctx.urls.length > 0) {
+        const missing = ctx.urls.filter((u) => !ctx.pages.get(u));
+        return missing.length > 0
+          ? confirmed('sitemap-not-crawled', `${missing.length} cited sitemap URL(s) are absent from the crawl`)
+          : unchecked('sitemap-not-crawled', 'all cited sitemap URLs were crawled');
+      }
+      if (!ctx.site || ctx.site.sitemapUrls.size === 0) return unchecked('sitemap-not-crawled', 'no sitemap data loaded');
+      const missing = [...ctx.site.sitemapUrls].filter((u) => !ctx.pages.get(u));
+      return missing.length > 0
+        ? confirmed('sitemap-not-crawled', `${missing.length} sitemap URL(s) were not crawled`)
+        : unchecked('sitemap-not-crawled', 'all sitemap URLs were crawled');
+    },
+  },
 ];
 
 /** Pick the example the report would show first (worst-first, then stable). */
@@ -726,7 +1077,7 @@ function firstExample(detail: IssueDetail): string | undefined {
  * Verify a single finding's first example. AI-discovered findings are never
  * machine-verifiable here (they describe emergent issues) → always unchecked.
  */
-export function verifyFinding(message: string, detail: IssueDetail, pages: PageIndex): VerificationResult {
+export function verifyFinding(message: string, detail: IssueDetail, pages: PageIndex, site?: SiteData): VerificationResult {
   if (detail.aiDiscovered) return unchecked('ai-discovered', 'AI-discovered finding — not deterministically verifiable');
   const example = firstExample(detail);
   if (!example) return unchecked('none', 'finding has no example to verify');
@@ -740,6 +1091,7 @@ export function verifyFinding(message: string, detail: IssueDetail, pages: PageI
     urls: extractUrls(example),
     quoted: extractQuoted(example),
     pages,
+    site,
   });
 }
 
@@ -756,14 +1108,14 @@ export interface VerificationSummary {
  * Verify every finding in a prepared details map. Returns the per-message
  * verdicts plus the confirmed/refuted message sets the report renderer needs.
  */
-export function verifyDetails(details: Record<string, IssueDetail>, pages: PageIndex): VerificationSummary {
+export function verifyDetails(details: Record<string, IssueDetail>, pages: PageIndex, site?: SiteData): VerificationSummary {
   const results = new Map<string, VerificationResult>();
   const confirmedSet = new Set<string>();
   const refutedSet = new Set<string>();
   let uncheckedCount = 0;
 
   for (const [message, detail] of Object.entries(details)) {
-    const result = verifyFinding(message, detail, pages);
+    const result = verifyFinding(message, detail, pages, site);
     results.set(message, result);
     if (result.status === 'confirmed') confirmedSet.add(message);
     else if (result.status === 'refuted') refutedSet.add(message);
@@ -802,7 +1154,13 @@ export function buildPageSignals(page: PageInfo | undefined): Record<string, unk
   const md = page.mediaData as { videoCount?: number; audioCount?: number } | undefined;
   const ee = page.eeat as Record<string, unknown> | undefined;
   const la = page.linkAnalysis as { internalLinks?: number; externalLinks?: number; brokenLinks?: number } | undefined;
-  const h2 = (page.headings as { h2?: unknown[] } | undefined)?.h2;
+  const headingsObj = page.headings as { h2?: unknown[]; h2Count?: number } | undefined;
+  const h2 = headingsObj?.h2;
+  const h2Count = Array.isArray(h2) ? h2.length : typeof headingsObj?.h2Count === 'number' ? headingsObj.h2Count : undefined;
+  const font = page.fontData as { totalFonts?: number } | undefined;
+  const form = page.formData as { totalInputs?: number; inputsWithoutAutocomplete?: number; inputsWithoutLabels?: number } | undefined;
+  const af = page.aboveFoldData as { lcpInViewport?: boolean; renderBlockingResources?: number } | undefined;
+  const dep = page.deprecatedHtmlData as { totalDeprecated?: number } | undefined;
 
   // Rich analyzer sub-objects — the measured numbers the findings are about.
   const dom = page.domComplexityData as { totalNodes?: number; maxChildren?: number; bodyChildren?: number; maxDepth?: number } | undefined;
@@ -835,7 +1193,14 @@ export function buildPageSignals(page: PageInfo | undefined): Record<string, unk
     textToHtmlRatio: cq?.textToHtmlRatio,
     contentScore: cq?.contentScore,
     h1Count: h1CountOf(page) ?? undefined,
-    h2Count: Array.isArray(h2) ? h2.length : undefined,
+    h2Count,
+    totalFonts: font?.totalFonts,
+    formInputs: form?.totalInputs,
+    inputsWithoutAutocomplete: form?.inputsWithoutAutocomplete,
+    inputsWithoutLabels: form?.inputsWithoutLabels,
+    lcpInViewport: af?.lcpInViewport,
+    aboveFoldRenderBlocking: af?.renderBlockingResources,
+    deprecatedHtmlElements: dep?.totalDeprecated,
     LCP: page.LCP ?? page.lcp,
     FCP: page.FCP ?? page.fcp,
     TTFB: page.TTFB ?? page.ttfb,
@@ -887,7 +1252,7 @@ export function buildPageSignals(page: PageInfo | undefined): Record<string, unk
           trackingBeforeConsent: cd.trackingBeforeConsent,
           // Far-future `expires` (epoch seconds) backs the "excessive lifespan" finding.
           sample: Array.isArray(cd.cookies)
-            ? cd.cookies.slice(0, 6).map((c) => ({ name: c.name, thirdParty: c.isThirdParty, expires: c.expires }))
+            ? cd.cookies.slice(0, 20).map((c) => ({ name: c.name, thirdParty: c.isThirdParty, expires: c.expires }))
             : undefined,
         })
       : undefined,

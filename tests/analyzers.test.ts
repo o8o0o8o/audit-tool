@@ -2085,6 +2085,126 @@ void describe('finding-verifier', () => {
     assert.strictEqual(verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), none).status, 'unchecked');
   });
 
+  void it('confirms color-contrast AAA vs AA against colorContrastData without cross-matching', () => {
+    const p = idx({ 'https://e.com/x': { colorContrastData: { aaFailures: 5, aaaFailures: 20 } as PageInfo['colorContrastData'] } });
+    // "passes AA but fails AAA" → AAA reader (must NOT hit the AA matcher despite containing "AA")
+    assert.strictEqual(verifyFinding('Color contrast passes AA but fails AAA (20 elements)', detail(['https://e.com/x']), p).status, 'confirmed');
+    // "fails WCAG AA" → AA reader
+    assert.strictEqual(verifyFinding('Color contrast fails WCAG AA (5 elements)', detail(['https://e.com/x']), p).status, 'confirmed');
+    // 0 failures → confirm-only stays unchecked
+    const none = idx({ 'https://e.com/x': { colorContrastData: { aaFailures: 0, aaaFailures: 0 } as PageInfo['colorContrastData'] } });
+    assert.strictEqual(verifyFinding('Color contrast passes AA but fails AAA (3 elements)', detail(['https://e.com/x']), none).status, 'unchecked');
+  });
+
+  void it('confirms SRI / Permissions-Policy / cross-origin / reduced-motion / autocomplete from persisted signals', () => {
+    const p = idx({
+      'https://e.com/x': {
+        sriData: { missingIntegrity: [{}, {}] } as unknown as PageInfo['sriData'],
+        permissionsPolicyData: { hasPermissionsPolicy: false } as PageInfo['permissionsPolicyData'],
+        crossOriginPolicyData: { isCrossOriginIsolated: false } as PageInfo['crossOriginPolicyData'],
+        reducedMotionData: { hasReducedMotionQuery: false } as PageInfo['reducedMotionData'],
+        formData: { inputsWithoutAutocomplete: 3 } as PageInfo['formData'],
+      },
+    });
+    assert.strictEqual(verifyFinding('External scripts missing Subresource Integrity (SRI)', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Missing Permissions-Policy header', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Missing cross-origin isolation headers', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('No prefers-reduced-motion CSS support', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Form inputs missing autocomplete attribute', detail(['https://e.com/x']), p).status, 'confirmed');
+  });
+
+  void it('confirms a single-cited "identical title" finding by scanning the full index (exact + truncated)', () => {
+    const pages = idx({
+      'https://e.com/a': { title: 'Shared Webinar Title | Siro' },
+      'https://e.com/b': { title: 'Shared Webinar Title | Siro' },
+      'https://e.com/c': { title: 'Other' },
+    });
+    const ex = 'Title "Shared Webinar Title | Siro" is duplicated for this page <a href="https://e.com/a">a</a>';
+    assert.strictEqual(verifyFinding('Some pages have identical titles', detail([ex]), pages).status, 'confirmed');
+    // Truncated description quote ("…") matched by prefix across pages
+    const dpages = idx({
+      'https://e.com/a': { description: 'EasyCare and Siro show how EasyCoach uses AI to analyze calls and coach reps' },
+      'https://e.com/b': { description: 'EasyCare and Siro show how EasyCoach uses AI to analyze calls and coach reps' },
+    });
+    const dex = 'Description "EasyCare and Siro show how EasyCoach uses AI to an..." is duplicated for this page <a href="https://e.com/a">a</a>';
+    assert.strictEqual(verifyFinding('Some pages have identical descriptions', detail([dex]), dpages).status, 'confirmed');
+  });
+
+  void it('reads too-many-h2 from the persisted h2Count field (confirm-only)', () => {
+    const over = idx({ 'https://e.com/x': { headings: { h2Count: 17 } as PageInfo['headings'] } });
+    const under = idx({ 'https://e.com/x': { headings: { h2Count: 2 } as PageInfo['headings'] } });
+    assert.strictEqual(verifyFinding('Some pages have more than 10 h2 tags', detail(['https://e.com/x']), over).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Some pages have more than 10 h2 tags', detail(['https://e.com/x']), under).status, 'unchecked');
+  });
+
+  void it('confirms link-graph findings (orphan / unreachable / click-depth / low-equity) from SiteData', () => {
+    const pages = idx({
+      'https://e.com/': {},
+      'https://e.com/deep': {},
+      'https://e.com/orphan': {},
+      'https://e.com/low': {},
+    });
+    const site = {
+      incoming: new Map<string, string[]>([
+        ['https://e.com/deep', ['https://e.com/a']],
+        ['https://e.com/low', ['https://e.com/a', 'https://e.com/b']],
+        ['https://e.com/orphan', []],
+      ]),
+      depthFromHome: new Map<string, number>([['https://e.com', 0], ['https://e.com/deep', 22]]),
+      robotsDisallow: ['/admin/*'],
+      robotsUserAgents: ['*'],
+      sitemapUrls: new Set<string>(),
+    };
+    assert.strictEqual(verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages, site).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Page unreachable from homepage via internal links', detail(['https://e.com/orphan']), pages, site).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Page is more than 4 clicks from homepage', detail(['https://e.com/deep']), pages, site).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Page has very low internal link equity', detail(['https://e.com/low']), pages, site).status, 'confirmed');
+    // No SiteData → unchecked, never a false drop
+    assert.strictEqual(verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages).status, 'unchecked');
+  });
+
+  void it('confirms robots.txt findings from SiteData', () => {
+    const pages = idx({ 'https://e.com/': {} });
+    const site = {
+      incoming: new Map<string, string[]>(),
+      depthFromHome: new Map<string, number>(),
+      robotsDisallow: ['/admin/*'],
+      robotsUserAgents: ['*'],
+      sitemapUrls: new Set<string>(),
+    };
+    assert.strictEqual(verifyFinding('Sensitive paths exposed in robots.txt', detail(['/admin']), pages, site).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Pattern matching characters used in robots.txt', detail(['/admin/*']), pages, site).status, 'confirmed');
+    assert.strictEqual(verifyFinding('No explicit AI crawler rules in robots.txt', detail(['x']), pages, site).status, 'confirmed');
+    // When GPTBot IS named → the AI-rules finding is left unchecked (not confirmed)
+    const withAi = { ...site, robotsUserAgents: ['*', 'gptbot'] };
+    assert.strictEqual(verifyFinding('No explicit AI crawler rules in robots.txt', detail(['x']), pages, withAi).status, 'unchecked');
+  });
+
+  void it('confirms sitemap findings (uncrawled URLs + indexable-not-in-sitemap count)', () => {
+    const pages = idx({
+      'https://e.com/a': { indexability: { isIndexable: true } as PageInfo['indexability'] },
+      'https://e.com/b': { indexability: { isIndexable: true } as PageInfo['indexability'] },
+    });
+    const site = {
+      incoming: new Map<string, string[]>(),
+      depthFromHome: new Map<string, number>(),
+      robotsDisallow: [],
+      robotsUserAgents: [],
+      sitemapUrls: new Set<string>(['https://e.com/a']), // /b indexable but absent
+    };
+    // Example cites an uncrawled sitemap URL
+    assert.strictEqual(verifyFinding('Sitemap URLs were not successfully crawled', detail(['https://e.com/ghost']), pages, site).status, 'confirmed');
+    // Count-only finding (no URL) → site-level fallback counts /b
+    assert.strictEqual(verifyFinding('Indexable pages missing from sitemap', detail(['45 indexable page(s) are not listed in the sitemap']), pages, site).status, 'confirmed');
+  });
+
+  void it('confirms too-many-fonts from fontData.totalFonts', () => {
+    const many = idx({ 'https://e.com/x': { fontData: { totalFonts: 7 } as PageInfo['fontData'] } });
+    const few = idx({ 'https://e.com/x': { fontData: { totalFonts: 2 } as PageInfo['fontData'] } });
+    assert.strictEqual(verifyFinding('Too many font files loaded', detail(['https://e.com/x']), many).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Too many font files loaded', detail(['https://e.com/x']), few).status, 'unchecked');
+  });
+
   void it('verifyDetails partitions findings into confirmed / refuted / unchecked', () => {
     const pages = idx({
       'https://e.com/a': { canonical: '' }, // genuinely missing → confirmed

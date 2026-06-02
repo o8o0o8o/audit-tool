@@ -36,7 +36,7 @@ import {
 import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
-import { loadAllPages, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
+import { loadAllPages, loadSiteData, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
 import { llmVerifyFindings, claudeCliVerifyFindings, isClaudeCliAvailable } from './llm-finding-verify';
 import type {
   AnalysisData,
@@ -1352,9 +1352,11 @@ async function runVerification(
   }
 
   // Stage 1 — deterministic. Verify over exactly the set the main report
-  // rendered (post LLM-suppression).
+  // rendered (post LLM-suppression). `loadSiteData` adds the link graph + robots
+  // + sitemap (from incoming-links/metadata) so site-level findings are checkable.
   const baseDetails = preparedDetails(artifacts, suppressed);
-  const summary = verifyDetails(baseDetails, pages);
+  const site = loadSiteData(artifacts.runDir, pages) ?? undefined;
+  const summary = verifyDetails(baseDetails, pages, site);
   for (const message of summary.refuted) {
     const result = summary.results.get(message);
     console.log(`  ✗ verify refuted: ${stripHtml(message)} — ${result?.reason ?? 'contradicted by crawl data'}`);

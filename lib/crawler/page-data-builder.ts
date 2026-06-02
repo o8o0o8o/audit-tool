@@ -531,9 +531,15 @@ export function collectLinks(
     if (!text) {
       const escapedUrl = escapeHtml(url);
       const escapedHref = escapeHtml(href);
+      // Surface the full <a> markup so the empty link is locatable in source.
+      // These anchors usually wrap an icon/image, so the tag is what identifies
+      // them — the bare href is often ambiguous (many anchors share one href).
+      const rawTag = (link.outerHTML || '').replace(/\s+/g, ' ').trim();
+      const tag = rawTag.length > 300 ? `${rawTag.slice(0, 300)}…` : rawTag;
+      const markup = tag ? ` Markup: <code>${escapeHtml(tag)}</code>` : '';
       reportIssue(
         `Some pages have links without any text`,
-        `The page <a href="${escapedUrl}">${escapedUrl}</a> has a link without text "${escapedHref}"`,
+        `The page <a href="${escapedUrl}">${escapedUrl}</a> has a link without text "${escapedHref}".${markup}`,
         SEVERITY.MEDIUM,
       );
     }

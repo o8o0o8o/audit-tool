@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ErrorAggregator } from '../utils/error-aggregator';
-import type { PageInfo } from '../types';
+import type { PageInfo, CrawlProfile } from '../types';
 import { formatBytes } from '../utils';
 import type { FileManager } from '../storage/file-manager';
 
@@ -52,6 +52,7 @@ interface ProgressResults {
   isMultiLang?: boolean;
   timing?: Record<string, unknown>;
   cruxData?: unknown;
+  crawlProfile?: CrawlProfile | null;
   pageData: {
     pages: Record<string, PageInfo>;
     processedPages: Set<string> | string[];
@@ -511,6 +512,7 @@ class ProgressManager {
       isMultiLang: results.isMultiLang,
       timing: results.timing,
       cruxData: results.cruxData ?? null,
+      crawlProfile: results.crawlProfile ?? null,
     };
     this.fileManager.writeMetadata(metadata);
 

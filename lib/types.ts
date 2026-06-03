@@ -1339,6 +1339,18 @@ export interface CpuCondition {
   name: string;
 }
 
+/**
+ * The crawl's effective throttle profile, recorded into metadata so the live
+ * `--verify` pass can re-fetch under the same conditions. `network`/`cpu` are
+ * the SINGLE selected conditions actually applied (slow4g / normal), not the
+ * full condition maps.
+ */
+export interface CrawlProfile {
+  perf: boolean;
+  network: NetworkCondition | null;
+  cpu: CpuCondition | null;
+}
+
 export interface AuditConfig {
   origin?: string;
   sitemap?: string;

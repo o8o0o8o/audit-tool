@@ -3,7 +3,7 @@
  * Shared across crawler-engine.ts, resilience.ts, page-data-builder.ts, analyzer-runner.ts
  */
 
-import type { PageInfo, ParsedPage, NetworkCondition, CpuCondition, SitemapUrl, Issue, ChromePage } from '../types';
+import type { PageInfo, ParsedPage, NetworkCondition, CpuCondition, CrawlProfile, SitemapUrl, Issue, ChromePage } from '../types';
 import type { CrUXFieldData } from './crux-api';
 import type { BrowserContext } from 'playwright';
 
@@ -137,6 +137,9 @@ export interface CrawlResults {
     truncatedPaginationSeries?: Record<string, number>;
   };
   cruxData?: CrUXFieldData | null;
+  /** Effective throttle profile applied during the crawl — recorded so the live
+   *  `--verify` pass can re-fetch under the same network/CPU conditions. */
+  crawlProfile?: CrawlProfile;
 }
 
 export interface CrawlSinglePageParams {

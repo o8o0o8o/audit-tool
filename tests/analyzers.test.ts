@@ -2535,7 +2535,7 @@ void describe('live-verifier: parseReportFindings — scan bounds & exclusions',
   });
 });
 
-import { checkFindingSignals, type LiveSignals } from '../lib/phase2/live-verifier';
+import { checkFindingSignals, brokenOutboundVerdict, type LiveSignals } from '../lib/phase2/live-verifier';
 
 void describe('live-verifier: checker refute contract', () => {
   // A clean baseline page (no defects present at load).
@@ -2545,6 +2545,7 @@ void describe('live-verifier: checker refute contract', () => {
     h1Count: 1, iframeCount: 0, wordCount: 800, semanticRatio: 0.5, emptyAnchorCount: 0, inputsWithoutAutocomplete: 0,
     scriptsNoSri: 0, maxChildren: 5, jpgPngImages: 0, modernImages: 2, renderBlockingTotal: 0, renderBlockingThirdParty: 0,
     thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0, adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0,
+    clsValue: 0, tbtMs: 0, unusedCssRatio: -1, unusedJsRatio: -1, preConsentTrackingCookies: 0, contrastViolations: -1,
   };
 
   void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
@@ -2584,5 +2585,135 @@ void describe('live-verifier: parser ↔ renderer round-trip', () => {
     assert.strictEqual(f?.severity, 'HIGH');
     assert.strictEqual(f?.count, 5);
     assert.strictEqual(f?.exampleUrl, url);
+  });
+});
+
+import { verifySitemapMembership, verifyReachability, type LiveSite, type ReportFinding } from '../lib/phase2/live-verifier';
+
+void describe('live-verifier: site-level verifiers', () => {
+  const f = (title: string, url: string): ReportFinding => ({ title, severity: 'HIGH', count: 1, exampleUrl: url, exampleUrls: [url] });
+  const site: LiveSite = {
+    sitemapUrls: new Set(['https://e.com/a']),
+    sitemapCapped: false,
+    reachable: new Set(['https://e.com/a']),
+    reachabilityCapped: false,
+  };
+
+  void it('sitemap: cited page absent from sitemap → confirmed; present → refuted', () => {
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/orphan'), site).status, 'confirmed');
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/a'), site).status, 'refuted');
+  });
+
+  void it('reachability: unreachable → confirmed; reachable → refuted', () => {
+    assert.strictEqual(verifyReachability(f('Orphan page', 'https://e.com/orphan'), site).status, 'confirmed');
+    assert.strictEqual(verifyReachability(f('Orphan page', 'https://e.com/a'), site).status, 'refuted');
+  });
+
+  void it('reachability: when the BFS was capped, a missing page is unverified (never a false orphan)', () => {
+    const capped: LiveSite = { ...site, reachabilityCapped: true };
+    assert.strictEqual(verifyReachability(f('Orphan page', 'https://e.com/orphan'), capped).status, 'unverified');
+  });
+
+  void it('sitemap: no sitemap fetched → unverified', () => {
+    const empty: LiveSite = { sitemapUrls: new Set(), sitemapCapped: false, reachable: new Set(), reachabilityCapped: false };
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/x'), empty).status, 'unverified');
+  });
+});
+
+import { crawlProfileToThrottle } from '../lib/phase2/phase2-runner';
+import { NETWORK_CONDITIONS, CPU_CONDITIONS } from '../lib/constants';
+
+void describe('live-verifier: crawl throttle round-trip', () => {
+  void it('maps a --perf crawl profile (slow4g network, normal cpu) to a live Throttle', () => {
+    // This is exactly what the crawler records (crawler-engine selects
+    // networkConditions.slow4g + cpuConditions.normal).
+    const t = crawlProfileToThrottle({ perf: true, network: NETWORK_CONDITIONS.slow4g, cpu: CPU_CONDITIONS.normal });
+    assert.ok(t, 'a perf crawl yields a throttle (regression guard: the map-vs-condition shape bug returned undefined)');
+    assert.strictEqual(t?.downloadBps, NETWORK_CONDITIONS.slow4g.download);
+    assert.strictEqual(t?.latencyMs, NETWORK_CONDITIONS.slow4g.latency);
+    assert.strictEqual(t?.cpuRate, undefined, 'normal cpu is noThrottle → no CPU rate');
+  });
+
+  void it('returns undefined for a non-perf (unthrottled) crawl', () => {
+    assert.strictEqual(crawlProfileToThrottle({ perf: false, network: null, cpu: null }), undefined);
+    assert.strictEqual(crawlProfileToThrottle(null), undefined);
+  });
+
+  void it('applies CPU throttle when the selected cpu condition has a rate', () => {
+    const t = crawlProfileToThrottle({ perf: true, network: NETWORK_CONDITIONS.normal, cpu: CPU_CONDITIONS.slow });
+    assert.strictEqual(t?.cpuRate, CPU_CONDITIONS.slow.rate);
+  });
+});
+
+void describe('live-verifier: broken-outbound match split', () => {
+  const sig = (status: number): LiveSignals => ({
+    url: 'https://e.com/p', finalUrl: 'https://e.com/p', status, ttfbMs: 100, htmlBytes: 1000, totalBytes: 1000, totalRequests: 1,
+    title: 'T', description: 'd', canonical: 'https://e.com/p', h1Count: 1, iframeCount: 0, wordCount: 800, semanticRatio: 0.5,
+    emptyAnchorCount: 0, inputsWithoutAutocomplete: 0, scriptsNoSri: 0, maxChildren: 5, jpgPngImages: 0, modernImages: 2,
+    renderBlockingTotal: 0, renderBlockingThirdParty: 0, thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0,
+    adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0, clsValue: 0, tbtMs: 0, unusedCssRatio: -1, unusedJsRatio: -1,
+    preConsentTrackingCookies: 0, contrastViolations: -1,
+  });
+
+  void it('per-page "Page has N broken outbound link(s)" does NOT refute on a 200 container page', () => {
+    // The example is the on-site container (HTTP 200); refuting here would drop a real finding.
+    const r = checkFindingSignals('Page has 3 broken outbound link(s)', sig(200), 1);
+    assert.notStrictEqual(r.status, 'refuted');
+  });
+
+  void it('site-wide broken-outbound verdict is confirm-only: 4xx → confirmed, 200 → unverified (volatile, never dropped)', () => {
+    assert.strictEqual(brokenOutboundVerdict(404).status, 'confirmed');
+    assert.strictEqual(brokenOutboundVerdict(503).status, 'confirmed');
+    // External-link liveness is volatile; a 200 now must NOT drop a real finding.
+    assert.strictEqual(brokenOutboundVerdict(200).status, 'unverified');
+  });
+});
+
+void describe('live-verifier: path-case is significant in site-graph drop decisions', () => {
+  const f = (title: string, url: string): ReportFinding => ({ title, severity: 'HIGH', count: 1, exampleUrl: url, exampleUrls: [url] });
+
+  void it('sitemap: /Foo cited but only /foo in sitemap → NOT refuted (distinct resources)', () => {
+    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/foo']), sitemapCapped: false, reachable: new Set(), reachabilityCapped: true };
+    // /Foo is genuinely missing; case-insensitive matching would wrongly drop it.
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/Foo'), site).status, 'confirmed');
+  });
+
+  void it('sitemap: exact case match → refuted', () => {
+    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/Foo']), sitemapCapped: false, reachable: new Set(), reachabilityCapped: true };
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/Foo'), site).status, 'refuted');
+  });
+
+  void it('sitemap: truncated index + page absent → unverified, NOT a false confirm', () => {
+    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/foo']), sitemapCapped: true, reachable: new Set(), reachabilityCapped: true };
+    // The page could live in an unread child sitemap → must not assert "absent".
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/other'), site).status, 'unverified');
+    // A present page still refutes even when truncated (presence is authoritative).
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/foo'), site).status, 'refuted');
+  });
+
+  void it('host case is ignored (URL normalizes host), path case is preserved', () => {
+    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/foo']), sitemapCapped: false, reachable: new Set(), reachabilityCapped: true };
+    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://E.com/foo'), site).status, 'refuted');
+  });
+});
+
+import { duplicateVerdict } from '../lib/phase2/live-verifier';
+
+void describe('live-verifier: duplicateVerdict count-coverage', () => {
+  void it('matching values → confirmed regardless of count', () => {
+    assert.strictEqual(duplicateVerdict('title', 'Same', 'Same', 2).status, 'confirmed');
+    assert.strictEqual(duplicateVerdict('title', 'Same', 'Same', 9).status, 'confirmed');
+  });
+
+  void it('count==2: the 2 cited pages ARE the finding → a mismatch refutes (drops)', () => {
+    assert.strictEqual(duplicateVerdict('title', 'A', 'B', 2).status, 'refuted');
+  });
+
+  void it('count>2: a mismatch is partial evidence → unverified, never dropped', () => {
+    assert.strictEqual(duplicateVerdict('description', 'A', 'B', 5).status, 'unverified');
+  });
+
+  void it('a missing value → unverified', () => {
+    assert.strictEqual(duplicateVerdict('title', null, 'B', 2).status, 'unverified');
   });
 });

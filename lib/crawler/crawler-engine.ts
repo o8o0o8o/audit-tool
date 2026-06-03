@@ -11,6 +11,7 @@ import type {
   PageInfo,
   NetworkCondition,
   CpuCondition,
+  CrawlProfile,
   CrawlerEngineOptions,
   CrawlerCallbacks,
 } from '../types';
@@ -491,6 +492,15 @@ class CrawlerEngine {
     incomingLinksTracking,
     sitemapUrls,
   }: CrawlPagesParams) {
+    // Record the effective network/CPU/perf profile so the live --verify pass
+    // can re-fetch under the same conditions (TTFB/CLS/TBT need parity). Store
+    // the SINGLE selected conditions actually applied per page (slow4g/normal —
+    // see #basicTest call site), NOT the full condition maps.
+    results.crawlProfile = {
+      perf: !!this.#options.perf,
+      network: this.#options.networkConditions?.slow4g ?? null,
+      cpu: this.#options.cpuConditions?.normal ?? null,
+    };
     let browser;
     let sigintHandler: (() => void) | undefined;
     try {

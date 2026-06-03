@@ -20,7 +20,7 @@ import { renderMarkdownToPdf } from '../reports/pdf-renderer';
 import { ScoreCalculator } from '../scoring/score-calculator';
 import { classifyIssue, isCataloguedErrorTier } from '../scoring/seo-catalog';
 import { nextjsOverrideFor, isNextjsAudit } from '../scoring/nextjs-recommendations';
-import type { FixRecommendation } from '../types';
+import type { FixRecommendation, CrawlProfile } from '../types';
 import { normalizeMessage as _normalizeMessage, normalizeMessageForLookup } from '../utils/finding-id';
 import { categorize, type Section } from './categorize';
 import { benchmarkFor } from './benchmarks';
@@ -38,7 +38,7 @@ import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
 import { loadAllPages, loadSiteData, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
 import { llmVerifyFindings, claudeCliVerifyFindings, isClaudeCliAvailable } from './llm-finding-verify';
-import { verifyReportLive } from './live-verifier';
+import { verifyReportLive, type Throttle } from './live-verifier';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -1481,6 +1481,40 @@ async function runVerification(
 }
 
 /**
+ * Convert a recorded {@link CrawlProfile} (single selected conditions) to a live
+ * {@link Throttle}. Returns undefined for a no-perf or no-throttle crawl. Pure
+ * (no IO) so the producer→consumer shape is unit-testable.
+ */
+export function crawlProfileToThrottle(p: CrawlProfile | null | undefined): Throttle | undefined {
+  if (!p?.perf) return undefined;
+  const t: Throttle = {};
+  if (p.network && !p.network.noThrottle && (p.network.download ?? 0) > 0) {
+    t.downloadBps = p.network.download;
+    t.uploadBps = p.network.upload;
+    t.latencyMs = p.network.latency;
+  }
+  if (p.cpu && !p.cpu.noThrottle && (p.cpu.rate ?? 1) > 1) t.cpuRate = p.cpu.rate;
+  return t.downloadBps || t.cpuRate ? t : undefined;
+}
+
+/**
+ * Read the crawl's throttle profile from `metadata.json.gz` (written when the
+ * crawl ran with `--perf`) into a {@link Throttle} for the live pass, so perf
+ * signals are measured under the same network/CPU conditions. Returns undefined
+ * (unthrottled — matching a default crawl) when absent or unreadable.
+ */
+function loadCrawlThrottle(runDir: string): Throttle | undefined {
+  try {
+    const file = path.join(runDir, 'metadata.json.gz');
+    if (!fs.existsSync(file)) return undefined;
+    const meta = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')) as { crawlProfile?: CrawlProfile | null };
+    return crawlProfileToThrottle(meta.crawlProfile);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Live verification phase (default for `--verify`). Parses the report just
  * written (`audit-report.md`), takes each CRITICAL/HIGH/MEDIUM finding's first
  * concrete example, RE-FETCHES that page live, and re-asserts the claim against
@@ -1506,8 +1540,12 @@ async function runLiveVerification(
   }
   const reportMd = fs.readFileSync(reportPath, 'utf8');
 
+  // Match the crawl's network/CPU throttle (recorded in metadata when the crawl
+  // ran with --perf) so live perf signals (TTFB/CLS/TBT) are comparable.
+  const throttle = loadCrawlThrottle(artifacts.runDir);
+
   console.log("🔎 Live verification: re-fetching each finding's first example and re-asserting the claim…");
-  const verdicts = await verifyReportLive(reportMd, { verbose: options.verbose });
+  const verdicts = await verifyReportLive(reportMd, { verbose: options.verbose, throttle });
 
   // Map parsed report titles → in-memory finding messages. The renderer emits
   // `### ${sanitizeProse(message)}`, so a parsed title equals

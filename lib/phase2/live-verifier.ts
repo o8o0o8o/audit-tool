@@ -28,7 +28,8 @@
  */
 
 import { chromium } from 'playwright';
-import type { Browser } from 'playwright';
+import type { Browser, Page } from 'playwright';
+import { AxeBuilder } from '@axe-core/playwright';
 import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT } from '../constants';
 
 export type LiveStatus = 'confirmed' | 'refuted' | 'unverified';
@@ -43,6 +44,9 @@ export interface ReportFinding {
   count: number;
   /** First real http(s) example URL under "Affected pages" (templated `{N}` skipped). */
   exampleUrl?: string;
+  /** All real http(s) example URLs under "Affected pages", deduped, in order
+   *  (templated `{N}` skipped). Cross-page checks (duplicate) need ≥2. */
+  exampleUrls: string[];
 }
 
 export interface LiveVerdict {
@@ -98,12 +102,13 @@ export function parseReportFindings(md: string): ReportFinding[] {
     // banner's drop count diverge from what's actually dropped.
     if (/AI-discovered/i.test(headerLine)) continue;
 
-    // Collect the first real example URL — ONLY from the "Affected pages"
-    // block. Scanning to the next heading would otherwise walk into Fix /
-    // Resources and grab an external doc link, then re-check the wrong page.
-    let exampleUrl: string | undefined;
+    // Collect example URLs — ONLY from the "Affected pages" block. Scanning to
+    // the next heading would otherwise walk into Fix / Resources and grab an
+    // external doc link, then re-check the wrong page. Collect several (deduped,
+    // capped) so cross-page checks (duplicate) have a 2nd page to compare.
+    const exampleUrls: string[] = [];
     let inAffected = false;
-    for (let k = j + 1; k < lines.length && !/^#{2,3}\s/.test(lines[k]); k++) {
+    for (let k = j + 1; k < lines.length && !/^#{2,3}\s/.test(lines[k]) && exampleUrls.length < 6; k++) {
       const line = lines[k];
       if (/^\*\*Affected pages\*\*/.test(line)) {
         inAffected = true;
@@ -119,13 +124,11 @@ export function parseReportFindings(md: string): ReportFinding[] {
       if (!urls) continue;
       for (const url of urls) {
         if (/[{}]/.test(url)) continue; // templated series key — not a real page
-        exampleUrl = url;
-        break;
+        if (!exampleUrls.includes(url)) exampleUrls.push(url);
       }
-      if (exampleUrl) break;
     }
 
-    findings.push({ title, severity: severity as Severity, count, exampleUrl });
+    findings.push({ title, severity: severity as Severity, count, exampleUrl: exampleUrls[0], exampleUrls });
   }
 
   return findings;
@@ -134,6 +137,62 @@ export function parseReportFindings(md: string): ReportFinding[] {
 /* ------------------------------------------------------- live signal capture */
 
 const AD_HOST_RE = /(doubleclick|googlesyndication|google-analytics|googletagservices|adservice|adsystem|adnxs|amazon-adsystem|criteo|taboola|outbrain|pubmatic|rubiconproject|openx|scorecardresearch|moatads|adroll|quantserve)\b/i;
+
+/** Common tracking-cookie name prefixes (GA, FB, GTM, Hotjar, …). */
+const TRACKER_COOKIE_RE = /^(_ga|_gid|_gat|_fbp|_fbc|_gcl|_hj|_uet|__hs|hubspotutk|mp_|amplitude|_pk_|optimizely|_clck|_clsk|IDE|test_cookie|fr|MUID)/i;
+
+/** Unused fraction (0–1) from Playwright CSS coverage; -1 when no CSS. */
+function cssUnusedRatio(entries: { text?: string; ranges: { start: number; end: number }[] }[]): number {
+  let total = 0;
+  let used = 0;
+  for (const e of entries) {
+    const len = e.text?.length ?? 0;
+    if (!len) continue;
+    total += len;
+    for (const r of e.ranges) used += r.end - r.start;
+  }
+  return total > 0 ? (total - used) / total : -1;
+}
+
+/**
+ * Unused fraction (0–1) from Playwright (V8) JS coverage; -1 when no JS.
+ * Summing count>0 ranges over-counts used bytes for nested ranges, which biases
+ * the result toward LOWER unused% — safe for a confirm-only "high unused" check
+ * (it can only under-confirm, never false-confirm).
+ */
+function jsUnusedRatio(entries: { source?: string; functions: { ranges: { count: number; startOffset: number; endOffset: number }[] }[] }[]): number {
+  let total = 0;
+  let used = 0;
+  for (const e of entries) {
+    const len = e.source?.length ?? 0;
+    if (!len) continue;
+    total += len;
+    let entryUsed = 0;
+    for (const fn of e.functions) for (const r of fn.ranges) if (r.count > 0) entryUsed += r.endOffset - r.startOffset;
+    used += Math.min(len, entryUsed);
+  }
+  return total > 0 ? (total - used) / total : -1;
+}
+
+/** Scroll to the bottom in viewport steps to trigger lazy content, then back to top. */
+async function autoScroll(page: Page): Promise<void> {
+  await page
+    .evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        let y = 0;
+        const tick = () => {
+          window.scrollBy(0, window.innerHeight);
+          y += window.innerHeight;
+          // Cap the travel so an infinite-scroll page can't loop forever.
+          if (y < document.body.scrollHeight && y < 60000) setTimeout(tick, 100);
+          else resolve();
+        };
+        tick();
+      });
+    })
+    .catch(() => undefined);
+  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => undefined);
+}
 
 export interface LiveSignals {
   url: string;
@@ -164,6 +223,18 @@ export interface LiveSignals {
   adScriptBytes: number;
   largestImageBytes: number;
   oversizedImages: number;
+  /** Cumulative Layout Shift accumulated over load + scroll (PerformanceObserver). */
+  clsValue: number;
+  /** Total Blocking Time proxy: sum of long-task time over 50ms, in ms. */
+  tbtMs: number;
+  /** Fraction (0–1) of downloaded CSS bytes never used; -1 when no CSS / unmeasured. */
+  unusedCssRatio: number;
+  /** Fraction (0–1) of downloaded JS bytes never used; -1 when no JS / unmeasured. */
+  unusedJsRatio: number;
+  /** Third-party / known-tracker cookies present at load, before any consent interaction. */
+  preConsentTrackingCookies: number;
+  /** axe-core color-contrast violation nodes; -1 when the scan didn't run. */
+  contrastViolations: number;
 }
 
 /**
@@ -185,23 +256,91 @@ function registrable(host: string): string {
  * the page can't be loaded (network error / non-HTML), which routes the finding
  * to `unverified` rather than a false refutation.
  */
-async function captureOne(browser: Browser, url: string, timeoutMs: number): Promise<LiveSignals | null> {
+async function captureOne(browser: Browser, url: string, timeoutMs: number, throttle?: Throttle): Promise<LiveSignals | null> {
+  // Match the crawl's device profile so perf signals are comparable: the
+  // crawler always uses the fixed mobile viewport (VIEWPORT) + UA.
   const context = await browser.newContext({
     viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
+    deviceScaleFactor: VIEWPORT.DEVICE_SCALE_FACTOR,
+    isMobile: true,
+    hasTouch: true,
     userAgent: DEFAULT_USER_AGENT,
   });
+  // Accurate per-request transfer sizes come from `request.sizes()` on
+  // 'requestfinished' (real responseBodySize, incl. chunked) rather than the
+  // unreliable content-length header.
   const requests: { host: string; type: string; bytes: number }[] = [];
+  const sizings: Promise<void>[] = [];
   try {
     const page = await context.newPage();
-    page.on('response', (resp) => {
+    page.on('requestfinished', (req) => {
+      sizings.push(
+        (async () => {
+          try {
+            const s = await req.sizes();
+            requests.push({ host: new URL(req.url()).hostname, type: req.resourceType(), bytes: s.responseBodySize > 0 ? s.responseBodySize : 0 });
+          } catch {
+            /* request may have no recordable size */
+          }
+        })(),
+      );
+    });
+
+    // CLS + long-task (TBT proxy) observers must be installed before any script
+    // runs on the page.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __cls: number; __tbt: number };
+      w.__cls = 0;
+      w.__tbt = 0;
       try {
-        const u = new URL(resp.url());
-        const len = Number(resp.headers()['content-length'] ?? 0);
-        requests.push({ host: u.hostname, type: resp.request().resourceType(), bytes: Number.isFinite(len) ? len : 0 });
+        new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) {
+            const ls = e as PerformanceEntry & { value: number; hadRecentInput: boolean };
+            if (!ls.hadRecentInput) w.__cls += ls.value;
+          }
+        }).observe({ type: 'layout-shift', buffered: true });
+        new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) {
+            const over = e.duration - 50;
+            if (over > 0) w.__tbt += over;
+          }
+        }).observe({ type: 'longtask', buffered: true });
       } catch {
-        /* ignore unparsable */
+        /* observers unsupported — leaves 0, routes to unverified, never refute */
       }
     });
+
+    // CDP coverage for unused-CSS/JS — started before navigation.
+    let coverageOn = false;
+    try {
+      await page.coverage.startCSSCoverage();
+      await page.coverage.startJSCoverage();
+      coverageOn = true;
+    } catch {
+      /* non-Chromium / unsupported — coverage stays unmeasured (-1) */
+    }
+
+    // Match the crawl's network/CPU throttle (when it ran with --perf) so
+    // TTFB/CLS/TBT are comparable. Applied via CDP before navigation.
+    if (throttle && ((throttle.downloadBps ?? 0) > 0 || (throttle.cpuRate ?? 1) > 1)) {
+      try {
+        const session = await context.newCDPSession(page);
+        if ((throttle.downloadBps ?? 0) > 0) {
+          await session.send('Network.enable');
+          await session.send('Network.emulateNetworkConditions', {
+            offline: false,
+            downloadThroughput: throttle.downloadBps ?? -1,
+            uploadThroughput: throttle.uploadBps ?? -1,
+            latency: throttle.latencyMs ?? 0,
+          });
+        }
+        if ((throttle.cpuRate ?? 1) > 1) {
+          await session.send('Emulation.setCPUThrottlingRate', { rate: throttle.cpuRate ?? 1 });
+        }
+      } catch {
+        /* throttle unsupported — proceed unthrottled (perf signals stay confirm-only) */
+      }
+    }
 
     const response = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
     if (!response) return null;
@@ -209,9 +348,48 @@ async function captureOne(browser: Browser, url: string, timeoutMs: number): Pro
     // read DOM signals. networkidle can never settle on sites with persistent
     // connections (analytics, websockets), so cap it and ignore the timeout.
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+    // Scroll the page to trigger lazy / below-the-fold images, iframes and
+    // scroll-loaded third parties so the DOM and network match a real visit.
+    await autoScroll(page);
+    await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => undefined);
     const status = response.status();
     const finalUrl = response.url();
     const pageHost = new URL(finalUrl).hostname;
+
+    // Cookies present now — before any consent interaction (we never click) — so
+    // third-party / known-tracker cookies here were set without consent.
+    let preConsentTrackingCookies = 0;
+    try {
+      const pageReg0 = registrable(pageHost);
+      const cookies = await context.cookies();
+      preConsentTrackingCookies = cookies.filter((c) => {
+        const host = c.domain.replace(/^\./, '');
+        return registrable(host) !== pageReg0 || TRACKER_COOKIE_RE.test(c.name);
+      }).length;
+    } catch {
+      /* leave 0 → unverified */
+    }
+
+    // CLS / TBT readout.
+    const vitals = await page
+      .evaluate(() => {
+        const w = window as unknown as { __cls?: number; __tbt?: number };
+        return { cls: w.__cls ?? 0, tbt: Math.round(w.__tbt ?? 0) };
+      })
+      .catch(() => ({ cls: 0, tbt: 0 }));
+
+    // Coverage readout → unused ratios.
+    let unusedCssRatio = -1;
+    let unusedJsRatio = -1;
+    if (coverageOn) {
+      try {
+        const [css, js] = await Promise.all([page.coverage.stopCSSCoverage(), page.coverage.stopJSCoverage()]);
+        unusedCssRatio = cssUnusedRatio(css);
+        unusedJsRatio = jsUnusedRatio(js);
+      } catch {
+        /* leave -1 */
+      }
+    }
 
     // Raw served-document bytes — the faithful equivalent of the analyzer's
     // `htmlSize`. Reliable (the document response always loads), unlike network
@@ -327,6 +505,21 @@ async function captureOne(browser: Browser, url: string, timeoutMs: number): Pro
       })
       .catch(() => null);
 
+    // axe-core color-contrast scan (bounded). -1 if it doesn't run.
+    let contrastViolations = -1;
+    try {
+      const axe = await Promise.race([
+        new AxeBuilder({ page: page as unknown as Page }).withRules(['color-contrast']).analyze(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 20_000)),
+      ]);
+      if (axe) contrastViolations = axe.violations.reduce((n, v) => n + v.nodes.length, 0);
+    } catch {
+      /* axe unavailable / timed out → stays -1 (unverified, never refute) */
+    }
+
+    // Wait for the in-flight size lookups (request.sizes()) to resolve so the
+    // transfer totals are complete before we compute aggregates.
+    await Promise.all(sizings).catch(() => undefined);
     const pageReg = registrable(pageHost);
     const thirdParty = requests.filter((r) => r.host && registrable(r.host) !== pageReg);
     const totalBytes = requests.reduce((n, r) => n + r.bytes, 0);
@@ -361,6 +554,12 @@ async function captureOne(browser: Browser, url: string, timeoutMs: number): Pro
       adScriptBytes: thirdParty.filter((r) => r.type === 'script' && AD_HOST_RE.test(r.host)).reduce((n, r) => n + r.bytes, 0),
       largestImageBytes: imageBytes.length ? Math.max(...imageBytes) : 0,
       oversizedImages: dom.oversizedImages,
+      clsValue: vitals.cls,
+      tbtMs: vitals.tbt,
+      unusedCssRatio,
+      unusedJsRatio,
+      preConsentTrackingCookies,
+      contrastViolations,
     };
   } catch {
     return null;
@@ -422,13 +621,22 @@ function presentOrUnsure(present: boolean, whenPresent: string, whenAbsent: stri
   return present ? confirmed(whenPresent) : unverifiable(whenAbsent);
 }
 
+/**
+ * Normalize a URL for equality: drop the fragment and a single trailing slash.
+ * The `URL` API already lowercases scheme + host; the PATH is left case-sensitive
+ * on purpose — `/Foo` and `/foo` are distinct resources, and the site-graph
+ * verifiers make DROP decisions on this equality, so lowercasing the path would
+ * collide them and false-refute a real finding.
+ */
 function normUrl(u: string): string {
   try {
     const url = new URL(u);
     url.hash = '';
-    return (url.href.endsWith('/') ? url.href.slice(0, -1) : url.href).toLowerCase();
+    const href = url.href; // scheme + host already lowercased by URL; path case preserved
+    return href.endsWith('/') ? href.slice(0, -1) : href;
   } catch {
-    return u.toLowerCase();
+    // Mirror the try branch: drop the fragment and a SINGLE trailing slash.
+    return u.replace(/#.*$/, '').replace(/\/$/, '');
   }
 }
 
@@ -624,42 +832,361 @@ const CHECKERS: LiveChecker[] = [
     check: () => unverifiable('series-level claim — needs the full paginated series, not one page'),
   },
   {
+    // Per-page "Page has N broken outbound link(s)": the example's first URL is
+    // the ON-SITE container page, not the dead link — fetching it gets HTTP 200
+    // and would FALSELY refute. Routed to a special verifier that fetches the
+    // cited external link instead. Listed before the site-wide kind below.
+    kind: 'broken-outbound-page',
+    noFetch: true,
+    match: (t) => /page has \d+ broken outbound|broken outbound link\(s\)/.test(t),
+    check: () => unverifiable('per-page broken-outbound handled by the special verifier'),
+  },
+  {
+    // Site-wide "Broken outbound link": the example URL IS the dead link.
+    // Handled by the verifyBrokenOutbound special verifier (lightweight fetch,
+    // no axe/coverage/scroll), confirm-only — external-link liveness is volatile
+    // (transient outage recovered, anti-bot/rate-limit answering our UA), so a
+    // sub-400 status now never drops the finding. (Excludes the per-page kind.)
     kind: 'broken-outbound',
     noFetch: true,
-    match: (t) => /broken outbound|broken (external )?link/.test(t),
-    check: () => unverifiable('outbound target not isolated in the report example — fetch the link, not the page'),
+    match: (t) => /broken outbound|broken (external )?link/.test(t) && !/page has/.test(t),
+    check: () => unverifiable('site-wide broken-outbound handled by the special verifier'),
   },
   {
     kind: 'vitals',
-    noFetch: true,
     match: (t) => /\bcls\b|\btbt\b|\binp\b|layout shift|blocking time/.test(t),
-    check: () => unverifiable('CLS/TBT/INP need Web-Vitals instrumentation not captured by the light live load'),
+    // CLS/TBT measured live via PerformanceObserver under the crawl's
+    // network/CPU/device profile. Confirm-only (they vary load to load). INP
+    // needs real interaction → unverified.
+    check: (s, f) => {
+      const t = f.title.toLowerCase();
+      if (/\bcls\b|layout shift/.test(t)) return overOrUnsure(Number(s.clsValue.toFixed(3)), THRESHOLDS.CLS, 'CLS');
+      if (/\btbt\b|blocking time/.test(t)) return overOrUnsure(s.tbtMs, THRESHOLDS.TBT, 'TBT', 'ms');
+      return unverifiable('INP needs real user interaction — not measurable from an automated load');
+    },
   },
   {
     kind: 'coverage',
-    noFetch: true,
     match: (t) => /unused (css|code)/.test(t),
-    check: () => unverifiable('unused CSS/code needs CDP coverage instrumentation'),
-  },
-  {
-    kind: 'contrast',
-    noFetch: true,
-    match: (t) => /contrast/.test(t),
-    check: () => unverifiable('color contrast needs an axe-core pass'),
+    // Unused-bytes ratio from Playwright CSS/JS coverage. Confirm-only: deferred
+    // / interaction-loaded code can only raise real usage, never the reverse.
+    check: (s, f) => {
+      // "unused CSS" → CSS coverage; "unused code" means unused JavaScript → JS coverage.
+      const ratio = /css/.test(f.title.toLowerCase()) ? s.unusedCssRatio : s.unusedJsRatio;
+      if (ratio < 0) return unverifiable('coverage not measurable on this page');
+      const pct = Math.round(ratio * 100);
+      return pct > 50 ? confirmed(`${pct}% of downloaded bytes unused`) : unverifiable(`${pct}% unused at load (≤ 50%); deferred code may raise this — not dropping`);
+    },
   },
   {
     kind: 'consent',
-    noFetch: true,
     match: (t) => /consent|tracking cookie/.test(t),
-    check: () => unverifiable('pre-consent tracking needs the two-pass consent capture'),
+    // Cookies present at load — before any consent interaction — that are
+    // third-party or known trackers. Confirm-only (banners may set them only
+    // after interaction, so absence at load isn't proof).
+    check: (s) =>
+      presentOrUnsure(
+        s.preConsentTrackingCookies > 0,
+        `${s.preConsentTrackingCookies} tracking cookie(s) set before consent`,
+        'no pre-consent tracking cookies at load — may be set after interaction; not dropping',
+      ),
+  },
+  {
+    kind: 'contrast',
+    match: (t) => /contrast/.test(t),
+    // axe-core color-contrast node count. Confirm-only: axe sees only rendered/
+    // visible nodes, so 0 at load doesn't prove none exist elsewhere.
+    check: (s) =>
+      s.contrastViolations < 0
+        ? unverifiable('contrast scan did not run on this page')
+        : s.contrastViolations > 0
+          ? confirmed(`${s.contrastViolations} color-contrast violation(s) (axe-core)`)
+          : unverifiable('no contrast violations on the rendered page at load — interaction-gated views unscanned; not dropping'),
   },
 ];
 
+/* ------------------------- site-level + multi-page + series verifiers ------- */
+
+/** Kinds the orchestrator handles with dedicated async verifiers (site context,
+ *  multi-page comparison, or series walk) instead of the per-page registry. */
+const SPECIAL_KINDS = new Set(['duplicate', 'site-graph', 'broken-pagination', 'broken-outbound-page', 'broken-outbound']);
+
+/** Page cap for the homepage reachability BFS (orphan/unreachable checks). */
+const REACHABILITY_MAX_PAGES = 120;
+
+export interface LiveSite {
+  /** Normalized URLs declared in the sitemap(s); empty if none fetched. */
+  sitemapUrls: Set<string>;
+  /** True when the sitemap fetch was truncated (budget / fan-out / URL cap) —
+   *  the set is INCOMPLETE, so a missing URL can't be asserted absent. */
+  sitemapCapped: boolean;
+  /** Normalized URLs reachable from the homepage via internal links (bounded BFS). */
+  reachable: Set<string>;
+  /** True when the BFS hit its page cap — reachability is then INCOMPLETE, so a
+   *  missing URL can't be asserted as an orphan (→ unverified, never refute). */
+  reachabilityCapped: boolean;
+}
+
+/** GET text with a timeout; null on any failure / non-2xx. */
+async function fetchText(url: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
+    clearTimeout(timer);
+    return res.ok ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collect declared sitemap URLs (robots.txt → Sitemap:, else /sitemap.xml;
+ * follows indexes). Returns `capped: true` when the fetch budget or URL cap was
+ * hit with child sitemaps still unread — the set is then INCOMPLETE, so a
+ * missing URL can't be asserted as "absent from sitemap" (→ unverified).
+ */
+async function fetchSitemapUrls(origin: string, timeoutMs: number): Promise<{ urls: Set<string>; capped: boolean }> {
+  const urls = new Set<string>();
+  const queue: string[] = [];
+  const robots = await fetchText(`${origin}/robots.txt`, timeoutMs);
+  if (robots) for (const m of robots.matchAll(/sitemap:\s*(\S+)/gi)) queue.push(m[1].trim());
+  if (queue.length === 0) queue.push(`${origin}/sitemap.xml`);
+  const seen = new Set<string>();
+  let budget = 25;
+  let droppedChild = false; // a child sitemap we couldn't enqueue (index fan-out cap)
+  while (queue.length && budget-- > 0) {
+    const sm = queue.shift() as string;
+    if (seen.has(sm)) continue;
+    seen.add(sm);
+    const xml = await fetchText(sm, timeoutMs);
+    if (!xml) continue;
+    const isIndex = /<sitemapindex/i.test(xml);
+    for (const m of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)) {
+      const loc = m[1].trim();
+      if (isIndex) {
+        if (queue.length < 50) queue.push(loc);
+        else droppedChild = true;
+      } else {
+        urls.add(normUrl(loc));
+        if (urls.size >= 50000) return { urls, capped: true };
+      }
+    }
+  }
+  // Incomplete if the fetch budget ran out with sitemaps still queued, or the
+  // index fan-out cap dropped a child we never read.
+  return { urls, capped: queue.length > 0 || droppedChild };
+}
+
+/** Bounded BFS from the homepage over internal links → reachable URL set. */
+async function buildReachable(browser: Browser, origin: string, timeoutMs: number): Promise<{ set: Set<string>; capped: boolean }> {
+  const MAX_PAGES = REACHABILITY_MAX_PAGES;
+  const start = `${origin}/`;
+  const reachable = new Set<string>([normUrl(start)]);
+  const queue: string[] = [start];
+  const originReg = registrable(new URL(origin).hostname);
+  const context = await browser.newContext({ viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT }, userAgent: DEFAULT_USER_AGENT });
+  let visited = 0;
+  // True once we DISCOVER a reachable URL but stop enqueuing it for crawling
+  // (cap reached). The graph is then only partially explored, so a URL absent
+  // from `reachable` can't be asserted as an orphan — coverage is incomplete
+  // even if the queue happens to drain to empty.
+  let suppressed = false;
+  try {
+    const page = await context.newPage();
+    while (queue.length && visited < MAX_PAGES) {
+      const url = queue.shift() as string;
+      visited++;
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+        await page.waitForLoadState('networkidle', { timeout: 2000 }).catch(() => undefined);
+        const links = await page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), (a) => (a as HTMLAnchorElement).href));
+        for (const l of links) {
+          try {
+            const u = new URL(l);
+            u.hash = '';
+            if (registrable(u.hostname) !== originReg) continue;
+            const key = normUrl(u.href);
+            if (!reachable.has(key)) {
+              reachable.add(key);
+              if (visited + queue.length < MAX_PAGES) queue.push(u.href);
+              else suppressed = true;
+            }
+          } catch {
+            /* skip unparsable href */
+          }
+        }
+      } catch {
+        /* skip unreachable page */
+      }
+    }
+  } finally {
+    await context.close().catch(() => undefined);
+  }
+  // Capped if the loop stopped with work left OR we ever suppressed an enqueue.
+  return { set: reachable, capped: queue.length > 0 || suppressed };
+}
+
+/** Light fetch: status + title + description + word count (no heavy instrumentation). */
+async function fetchLight(browser: Browser, url: string, timeoutMs: number): Promise<{ status: number; title: string; description: string | null; wordCount: number } | null> {
+  const context = await browser.newContext({ viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT }, userAgent: DEFAULT_USER_AGENT });
+  try {
+    const page = await context.newPage();
+    const resp = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+    if (!resp) return null;
+    await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => undefined);
+    const dom = await page.evaluate(() => {
+      const text = (document.body?.innerText ?? '').trim();
+      return {
+        title: (document.title ?? '').trim(),
+        description: (document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '').trim() || null,
+        wordCount: text ? text.split(/\s+/).length : 0,
+      };
+    });
+    return { status: resp.status(), ...dom };
+  } catch {
+    return null;
+  } finally {
+    await context.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Verdict for a duplicate finding from the two cited pages' field values.
+ * Pure (no IO), so the count-coverage logic is unit-tested directly.
+ *
+ * The two cited pages are only PART of a finding that spans `count` pages, so a
+ * mismatch can only DROP the finding when those two ARE the whole finding
+ * (`count <= 2`). For `count > 2` a mismatch is partial evidence — the other
+ * pages may still share the value — so it stays `unverified`, never refuted.
+ * (This is why duplicate is exempt from the orchestrator's blunt
+ * guardPluralRefute, which would otherwise also block the valid count==2 drop.)
+ */
+export function duplicateVerdict(field: 'title' | 'description', a: string | null, b: string | null, count: number): CheckResult {
+  if (!a || !b) return unverifiable(`a cited page is missing its ${field}`);
+  if (a.trim() === b.trim()) return confirmed(`2 pages share the same ${field}: "${a.slice(0, 60)}"`);
+  return count <= 2
+    ? refuted(`the ${field}s of the only ${count} cited pages now differ`)
+    : unverifiable(`the first 2 of ${count} cited pages now differ, but the other ${count - 2} weren't compared — not dropping`);
+}
+
+/** Duplicate title/description: fetch the first two example pages and compare. */
+async function verifyDuplicate(f: ReportFinding, browser: Browser, timeoutMs: number): Promise<CheckResult> {
+  const isDesc = /description/i.test(f.title);
+  const field: 'title' | 'description' = isDesc ? 'description' : 'title';
+  if (f.exampleUrls.length < 2) return unverifiable(`only one example page cited — need ≥2 to compare ${field}s`);
+  const [a, b] = await Promise.all([fetchLight(browser, f.exampleUrls[0], timeoutMs), fetchLight(browser, f.exampleUrls[1], timeoutMs)]);
+  if (!a || !b) return unverifiable('could not load both example pages');
+  return duplicateVerdict(field, isDesc ? a.description : a.title, isDesc ? b.description : b.title, f.count);
+}
+
+/**
+ * Per-page "Page has N broken outbound link(s)": the first example URL is the
+ * on-site container page; the dead links are the remaining (external) example
+ * URLs. Fetch the first external one and confirm a 4xx/5xx. Confirm-only — a
+ * 200 means that one link recovered, but other links on the page may still be
+ * dead, so we never refute (and never fetch the container, which would falsely
+ * read 200).
+ */
+async function verifyBrokenOutboundPage(f: ReportFinding, browser: Browser, timeoutMs: number): Promise<CheckResult> {
+  if (f.exampleUrls.length < 2) return unverifiable('report did not cite the specific outbound link to re-fetch');
+  let containerReg = '';
+  try {
+    containerReg = registrable(new URL(f.exampleUrls[0]).hostname);
+  } catch {
+    /* leave empty → treat all as external */
+  }
+  const links = f.exampleUrls.slice(1).filter((u) => {
+    try {
+      return registrable(new URL(u).hostname) !== containerReg;
+    } catch {
+      return false;
+    }
+  });
+  if (links.length === 0) return unverifiable('no external outbound link cited to re-fetch');
+  const state = await fetchLight(browser, links[0], timeoutMs);
+  if (!state) return unverifiable(`could not load cited outbound link ${links[0]}`);
+  return state.status >= 400
+    ? confirmed(`cited outbound link returns HTTP ${state.status}`)
+    : unverifiable(`cited outbound link now returns HTTP ${state.status}; other links on the page unchecked — not dropping`);
+}
+
+/**
+ * Verdict for a re-fetched outbound link by HTTP status. Confirm-only: a 4xx/5xx
+ * confirms the broken link; a sub-400 status is `unverified` (external-link
+ * liveness is volatile — never drop on it). Pure, so it's unit-tested directly.
+ */
+export function brokenOutboundVerdict(status: number): CheckResult {
+  return status >= 400
+    ? confirmed(`outbound link returns HTTP ${status}`)
+    : unverifiable(`outbound link now returns HTTP ${status}; external-link liveness is volatile (transient outage / UA gating) — not dropping`);
+}
+
+/**
+ * Site-wide "Broken outbound link": the example URL IS the dead link. Re-fetch
+ * it with the lightweight path (no axe/coverage/scroll — wasted on a dead
+ * external link) and read the status. Confirm-only.
+ */
+async function verifyBrokenOutbound(f: ReportFinding, browser: Browser, timeoutMs: number): Promise<CheckResult> {
+  if (!f.exampleUrl) return unverifiable('no outbound link cited to re-fetch');
+  const state = await fetchLight(browser, f.exampleUrl, timeoutMs);
+  return state ? brokenOutboundVerdict(state.status) : unverifiable(`could not load cited outbound link ${f.exampleUrl}`);
+}
+
+/** Sitemap membership: confirm when the cited indexable page is absent from the sitemap. */
+export function verifySitemapMembership(f: ReportFinding, site: LiveSite): CheckResult {
+  if (site.sitemapUrls.size === 0) return unverifiable('no sitemap could be fetched');
+  if (!f.exampleUrl) return unverifiable('no example URL to check against the sitemap');
+  if (site.sitemapUrls.has(normUrl(f.exampleUrl))) return refuted('cited page IS present in the sitemap');
+  // Present → refute is safe. Absent → only a CONFIRM if the sitemap was read
+  // in full; if truncated, the page may live in an unread child sitemap, so we
+  // can't assert "absent" (never assert on incomplete data).
+  return site.sitemapCapped
+    ? unverifiable('sitemap fetch was truncated (large multi-sitemap index) — cannot assert the page is absent; not confirming')
+    : confirmed('cited page is absent from the sitemap');
+}
+
+/** Orphan / unreachable: confirm when the cited page isn't reachable from the homepage. */
+export function verifyReachability(f: ReportFinding, site: LiveSite): CheckResult {
+  if (!f.exampleUrl) return unverifiable('no example URL to test reachability');
+  if (site.reachable.has(normUrl(f.exampleUrl))) return refuted('cited page IS reachable from the homepage via internal links');
+  if (site.reachabilityCapped) return unverifiable(`cited page not seen within the ${REACHABILITY_MAX_PAGES}-page crawl cap — reachability inconclusive, not dropping`);
+  return confirmed('cited page is not reachable from the homepage via internal links');
+}
+
+/** Broken/infinite pagination: probe a page far past the end of the series. */
+async function verifyPagination(f: ReportFinding, browser: Browser, timeoutMs: number): Promise<CheckResult> {
+  const m = f.title.match(/(https?:\/\/\S*\{N\}\S*)/i);
+  if (!m) return unverifiable('no {N} series URL pattern in the finding title');
+  const far = m[1].replace(/\{N\}/g, '9999');
+  const state = await fetchLight(browser, far, timeoutMs);
+  if (!state) return unverifiable(`could not load ${far}`);
+  if (state.status >= 400) return refuted(`page #9999 correctly returns HTTP ${state.status} — pagination is bounded`);
+  if (state.wordCount < 50)
+    return confirmed(`page #9999 still returns HTTP 200 with thin content (${state.wordCount} words) — pagination never terminates`);
+  return unverifiable(`page #9999 returns HTTP 200 with ${state.wordCount} words — inconclusive without walking the full series`);
+}
+
 /* --------------------------------------------------------------- orchestrator */
+
+/**
+ * Network + CPU throttling to match the crawl's conditions, so perf signals
+ * (TTFB, CLS, TBT) are measured on a comparable footing. Omit / zero values for
+ * no throttle (the default unthrottled crawl).
+ */
+export interface Throttle {
+  downloadBps?: number;
+  uploadBps?: number;
+  latencyMs?: number;
+  /** CPU slowdown multiplier (1 = none). */
+  cpuRate?: number;
+}
 
 export interface LiveVerifyOptions {
   timeoutMs?: number;
   verbose?: boolean;
+  /** Same network/CPU profile the crawl used (CLS/TBT need it to reproduce). */
+  throttle?: Throttle;
 }
 
 /**
@@ -672,29 +1199,73 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
   const findings = parseReportFindings(reportMd);
   const verdicts: LiveVerdict[] = [];
 
-  // Resolve the checker for each finding up-front so we only fetch URLs that
-  // actually have a live checker (site-level kinds need no fetch).
   const plan = findings.map((f) => {
-    const t = f.title.toLowerCase();
-    const checker = CHECKERS.find((c) => c.match(t));
+    const checker = CHECKERS.find((c) => c.match(f.title.toLowerCase()));
     return { f, checker };
   });
 
+  // Per-page signal fetches: every fetchable, non-special kind with an example.
   const urlsToFetch = new Set<string>();
+  let needsSiteCtx = false;
+  let hasSpecial = false;
   for (const { f, checker } of plan) {
-    if (!checker || checker.noFetch) continue; // noFetch checkers read no live signals
-    if (f.exampleUrl) urlsToFetch.add(f.exampleUrl);
+    if (!checker) continue;
+    if (checker.kind === 'site-graph') needsSiteCtx = true;
+    if (SPECIAL_KINDS.has(checker.kind)) hasSpecial = true;
+    else if (!checker.noFetch && f.exampleUrl) urlsToFetch.add(f.exampleUrl);
   }
 
   const cache = new Map<string, LiveSignals | null>();
-  if (urlsToFetch.size > 0) {
+  const verdictByPlan = new Map<ReportFinding, CheckResult & { kind: string }>();
+
+  if (urlsToFetch.size > 0 || hasSpecial || needsSiteCtx) {
     const browser = await chromium.launch();
     try {
+      // 1. Per-page signal captures.
       let n = 0;
       for (const url of urlsToFetch) {
         n++;
         if (opts.verbose) console.log(`  … live-fetching (${n}/${urlsToFetch.size}) ${url}`);
-        cache.set(url, await captureOne(browser, url, timeoutMs));
+        cache.set(url, await captureOne(browser, url, timeoutMs, opts.throttle));
+      }
+
+      // 2. Site context (sitemap + reachability) for site-level findings.
+      let site: LiveSite | null = null;
+      if (needsSiteCtx) {
+        // Derive the origin from a site-graph finding's OWN example (always
+        // on-site) — NOT the first finding of any kind, whose example could be
+        // an external URL (e.g. a broken-outbound link) → wrong-origin sitemap.
+        const siteGraphUrl = plan.find((p) => p.checker?.kind === 'site-graph' && p.f.exampleUrl)?.f.exampleUrl;
+        if (siteGraphUrl) {
+          const origin = new URL(siteGraphUrl).origin;
+          if (opts.verbose) console.log(`  … building site context (sitemap + reachability) for ${origin}`);
+          const sitemap = await fetchSitemapUrls(origin, timeoutMs);
+          const wantsReach = plan.some((p) => p.checker?.kind === 'site-graph' && /orphan|unreachable/i.test(p.f.title));
+          const reach = wantsReach ? await buildReachable(browser, origin, timeoutMs) : { set: new Set<string>(), capped: true };
+          site = { sitemapUrls: sitemap.urls, sitemapCapped: sitemap.capped, reachable: reach.set, reachabilityCapped: reach.capped };
+        }
+      }
+
+      // 3. Special-kind verifiers (multi-page / series / site-level).
+      for (const { f, checker } of plan) {
+        if (!checker || !SPECIAL_KINDS.has(checker.kind)) continue;
+        let r: CheckResult;
+        if (checker.kind === 'duplicate') r = await verifyDuplicate(f, browser, timeoutMs);
+        else if (checker.kind === 'broken-pagination') r = await verifyPagination(f, browser, timeoutMs);
+        else if (checker.kind === 'broken-outbound-page') r = await verifyBrokenOutboundPage(f, browser, timeoutMs);
+        else if (checker.kind === 'broken-outbound') r = await verifyBrokenOutbound(f, browser, timeoutMs);
+        else if (checker.kind === 'site-graph') {
+          if (!site) r = unverifiable('site context unavailable');
+          else if (/missing from sitemap/i.test(f.title)) r = verifySitemapMembership(f, site);
+          else if (/orphan|unreachable/i.test(f.title)) r = verifyReachability(f, site);
+          else r = unverifiable('link-equity / click-depth not derivable from a bounded live crawl');
+        } else r = unverifiable('unhandled special kind');
+        // `duplicate` does its own count-coverage gating inside duplicateVerdict
+        // (refute only when the 2 cited pages ARE the whole finding), so it is
+        // EXEMPT from the blunt count>1 guard — which would otherwise downgrade
+        // the legitimate count==2 drop. All other special kinds keep the guard.
+        const guarded = checker.kind === 'duplicate' ? r : guardPluralRefute(r, f);
+        verdictByPlan.set(f, { ...guarded, kind: checker.kind });
       }
     } finally {
       await browser.close().catch(() => undefined);
@@ -704,6 +1275,11 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
   for (const { f, checker } of plan) {
     if (!checker) {
       verdicts.push({ title: f.title, severity: f.severity, status: 'unverified', reason: 'no live checker for this finding kind', exampleUrl: f.exampleUrl, kind: 'none' });
+      continue;
+    }
+    const special = verdictByPlan.get(f);
+    if (special) {
+      verdicts.push({ title: f.title, severity: f.severity, status: special.status, reason: special.reason, exampleUrl: f.exampleUrl, kind: special.kind });
       continue;
     }
     if (checker.noFetch) {
@@ -755,7 +1331,7 @@ function guardPluralRefute(r: CheckResult, f: ReportFinding): CheckResult {
 export function checkFindingSignals(title: string, signals: LiveSignals, count = 1): CheckResult {
   const checker = CHECKERS.find((c) => c.match(title.toLowerCase()));
   if (!checker) return unverifiable('no live checker for this finding kind');
-  const f: ReportFinding = { title, severity: 'HIGH', count };
+  const f: ReportFinding = { title, severity: 'HIGH', count, exampleUrls: [] };
   if (checker.noFetch) return checker.check({} as LiveSignals, f);
   return guardPluralRefute(checker.check(signals, f), f);
 }

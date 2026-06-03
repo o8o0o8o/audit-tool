@@ -8,6 +8,27 @@ import { CRAWL_SETTINGS, SEVERITY } from '../../constants';
 import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey, shortenUrl } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo, PaginationProbeResult } from '../../types';
 
+/**
+ * Verdict for the active "next"-control probe. The finding's premise is that a
+ * crawler follows "next" indefinitely INTO NEW URLS, wasting crawl budget — so
+ * `urlAdvanced` is a hard precondition: a control that only changes the hash
+ * (in-page anchor like "Where to go next") or never produces a new crawlable
+ * URL cannot waste crawl budget and is never flagged, no matter how the content
+ * behaves. Only once "next" is producing new URLs do the empty/duplicate/
+ * never-changed signals indicate broken (infinite) pagination.
+ */
+export function isSuspectedInfinitePagination(p: {
+  clicks: number;
+  controlPersists: boolean;
+  urlAdvanced: boolean;
+  emptyAfterClick: boolean;
+  contentChanged: boolean;
+  duplicateStreak: number;
+}): boolean {
+  if (p.clicks <= 0 || !p.controlPersists || !p.urlAdvanced) return false;
+  return p.emptyAfterClick || !p.contentChanged || p.duplicateStreak >= 2;
+}
+
 class PaginationAnalyzer {
   /**
    * Analyze pagination implementation
@@ -635,7 +656,10 @@ class PaginationAnalyzer {
           const items = document.querySelectorAll(
             'article, li, .card, [class*="item"], [class*="result"], [class*="post"]',
           ).length;
-          return { len: text.replace(/\s+/g, ' ').trim().length, items };
+          // `key` is the crawlable URL identity — path + query, HASH EXCLUDED:
+          // a "next" that only changes the hash (in-page anchor) produces no new
+          // crawlable URL, so it can't waste crawl budget.
+          return { len: text.replace(/\s+/g, ' ').trim().length, items, key: location.pathname + location.search };
         });
 
       const nextEnabled = async () =>
@@ -694,6 +718,7 @@ class PaginationAnalyzer {
       let contentChanged = false;
       let duplicateStreak = 0;
       let emptyAfterClick = false;
+      let urlAdvanced = false;
 
       for (let i = 0; i < maxClicks; i++) {
         if (Date.now() > deadline) break;
@@ -704,6 +729,8 @@ class PaginationAnalyzer {
         await probePage.waitForTimeout(800).catch(() => {});
         const cur = await signature();
 
+        // Did the click produce a NEW crawlable URL (path/query, hash ignored)?
+        if (cur.key !== prev.key) urlAdvanced = true;
         // "Emptied out" = the main content text collapsed to near-nothing.
         // Don't key off item-element count: a div-based listing whose item
         // classes don't match our selectors reads items===0 on every page,
@@ -720,18 +747,14 @@ class PaginationAnalyzer {
       }
 
       const controlPersists = await nextEnabled();
-      // Broken: after exhausting our clicks the "next" control is STILL enabled
-      // while content has stopped changing or gone empty. Require strong
-      // evidence — emptied out, never changed at all, or two consecutive
-      // duplicate loads — so genuine JS pagination isn't flagged.
-      const suspectedInfinite =
-        clicks > 0 && controlPersists && (emptyAfterClick || !contentChanged || duplicateStreak >= 2);
+      const suspectedInfinite = isSuspectedInfinitePagination({ clicks, controlPersists, urlAdvanced, emptyAfterClick, contentChanged, duplicateStreak });
 
       const nextProbe: PaginationProbeResult = {
         clicks,
         contentChanged,
         controlPersists,
         emptyAfterClick,
+        urlAdvanced,
         suspectedInfinite,
       };
 

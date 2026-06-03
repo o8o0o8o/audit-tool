@@ -30,7 +30,9 @@
 import { chromium } from 'playwright';
 import type { Browser, Page } from 'playwright';
 import { AxeBuilder } from '@axe-core/playwright';
-import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT } from '../constants';
+import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT, CRAWL_SETTINGS } from '../constants';
+import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
+import { withTimeout } from '../crawler/resilience';
 
 export type LiveStatus = 'confirmed' | 'refuted' | 'unverified';
 
@@ -1154,17 +1156,65 @@ export function verifyReachability(f: ReportFinding, site: LiveSite): CheckResul
   return confirmed('cited page is not reachable from the homepage via internal links');
 }
 
-/** Broken/infinite pagination: probe a page far past the end of the series. */
+/**
+ * Broken/infinite pagination. Two finding forms:
+ *  - Templated series (`…/page/{N}`, from the post-crawl analyzer): probe a page
+ *    far past the end — a 4xx is a refute, a thin 200 confirms unboundedness.
+ *  - Active "next"-control probe (from pagination-analyzer): RE-RUN the same
+ *    live probe on the cited pages. Catches the in-page-anchor / normal
+ *    client-side-nav false positive (where "next" reaches pages that exist):
+ *    the `urlAdvanced`-gated probe won't reproduce it, so we refute. This is the
+ *    live safety net for reports produced by a PRE-FIX crawl (whose stored
+ *    analysis still carries the old false positive) and for cross-time site
+ *    changes — same-run crawls are already gated at crawl time. Refute requires
+ *    the cited examples to cover the finding (count ≤ pages probed), so it's
+ *    exempt from guardPluralRefute.
+ */
 async function verifyPagination(f: ReportFinding, browser: Browser, timeoutMs: number): Promise<CheckResult> {
   const m = f.title.match(/(https?:\/\/\S*\{N\}\S*)/i);
-  if (!m) return unverifiable('no {N} series URL pattern in the finding title');
-  const far = m[1].replace(/\{N\}/g, '9999');
-  const state = await fetchLight(browser, far, timeoutMs);
-  if (!state) return unverifiable(`could not load ${far}`);
-  if (state.status >= 400) return refuted(`page #9999 correctly returns HTTP ${state.status} — pagination is bounded`);
-  if (state.wordCount < 50)
-    return confirmed(`page #9999 still returns HTTP 200 with thin content (${state.wordCount} words) — pagination never terminates`);
-  return unverifiable(`page #9999 returns HTTP 200 with ${state.wordCount} words — inconclusive without walking the full series`);
+  if (m) {
+    const far = m[1].replace(/\{N\}/g, '9999');
+    const state = await fetchLight(browser, far, timeoutMs);
+    if (!state) return unverifiable(`could not load ${far}`);
+    if (state.status >= 400) return refuted(`page #9999 correctly returns HTTP ${state.status} — pagination is bounded`);
+    if (state.wordCount < 50) return confirmed(`page #9999 still returns HTTP 200 with thin content (${state.wordCount} words) — pagination never terminates`);
+    return unverifiable(`page #9999 returns HTTP 200 with ${state.wordCount} words — inconclusive without walking the full series`);
+  }
+
+  // Active "next"-control form — re-run the real probe on each cited page.
+  const urls = f.exampleUrls.slice(0, 5);
+  if (urls.length === 0) return unverifiable('no example URL to re-probe for a "next" control');
+  const context = await browser.newContext({ viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT }, userAgent: DEFAULT_USER_AGENT });
+  try {
+    const page = await context.newPage();
+    let probed = 0;
+    let anyEmptied = false;
+    for (const u of urls) {
+      // Hard-cap each probe (parity with the crawl-time caller) so a frozen page
+      // can't stall the verify pass past the rest of its budget.
+      const res = await withTimeout(
+        PaginationAnalyzer.probeJsNext(page, u),
+        CRAWL_SETTINGS.BROKEN_PAGINATION_PROBE_TIMEOUT_MS + 2000,
+        'pagination re-probe timeout',
+      ).catch(() => null);
+      const nextProbe = res?.nextProbe ?? null;
+      if (!nextProbe) continue; // probe couldn't run / timed out on this page
+      probed++;
+      if (nextProbe.suspectedInfinite) return confirmed(`live "next" probe reproduces broken/infinite pagination on ${u}`);
+      // Content collapsed after a click but the URL didn't advance → possible
+      // broken IN-PLACE pagination a single light probe may under-observe.
+      if (nextProbe.emptyAfterClick) anyEmptied = true;
+    }
+    if (probed === 0) return unverifiable('could not re-probe any cited page');
+    // Never drop when there's a hint of broken behavior we might have under-observed
+    // (doctrine: don't refute on a signal a single light load can under-observe).
+    if (anyEmptied) return unverifiable('a cited page\'s content collapsed after clicking "next" without a URL advance — possible broken in-place pagination; not dropping');
+    return f.count <= probed
+      ? refuted(`re-probed all ${probed} cited page(s): "next" advances to real distinct pages or only an in-page anchor — not broken pagination`)
+      : unverifiable(`re-probed ${probed} of ${f.count} cited pages clean, but the rest weren't probed — not dropping`);
+  } finally {
+    await context.close().catch(() => undefined);
+  }
 }
 
 /* --------------------------------------------------------------- orchestrator */
@@ -1260,11 +1310,12 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
           else if (/orphan|unreachable/i.test(f.title)) r = verifyReachability(f, site);
           else r = unverifiable('link-equity / click-depth not derivable from a bounded live crawl');
         } else r = unverifiable('unhandled special kind');
-        // `duplicate` does its own count-coverage gating inside duplicateVerdict
-        // (refute only when the 2 cited pages ARE the whole finding), so it is
-        // EXEMPT from the blunt count>1 guard — which would otherwise downgrade
-        // the legitimate count==2 drop. All other special kinds keep the guard.
-        const guarded = checker.kind === 'duplicate' ? r : guardPluralRefute(r, f);
+        // `duplicate` and `broken-pagination` do their own count-coverage gating
+        // (refute only when the cited examples cover the whole finding), so they
+        // are EXEMPT from the blunt count>1 guard — which would otherwise
+        // downgrade those legitimate, fully-covered drops. Others keep the guard.
+        const selfGated = checker.kind === 'duplicate' || checker.kind === 'broken-pagination';
+        const guarded = selfGated ? r : guardPluralRefute(r, f);
         verdictByPlan.set(f, { ...guarded, kind: checker.kind });
       }
     } finally {

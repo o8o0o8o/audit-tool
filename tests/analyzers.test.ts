@@ -2717,3 +2717,31 @@ void describe('live-verifier: duplicateVerdict count-coverage', () => {
     assert.strictEqual(duplicateVerdict('title', null, 'B', 2).status, 'unverified');
   });
 });
+
+import { isSuspectedInfinitePagination } from '../lib/analyzers/seo/pagination-analyzer';
+
+void describe('pagination probe: isSuspectedInfinitePagination', () => {
+  const base = { clicks: 3, controlPersists: true, urlAdvanced: true, emptyAfterClick: false, contentChanged: true, duplicateStreak: 0 };
+
+  void it('FALSE POSITIVE GUARD: in-page/hash "next" that never advances the URL is never flagged', () => {
+    // agntcms /docs case: clicking "next" only changed the hash, content identical.
+    assert.strictEqual(isSuspectedInfinitePagination({ ...base, urlAdvanced: false, contentChanged: false, duplicateStreak: 3 }), false);
+  });
+
+  void it('healthy pagination (URL advances, content changes) is not flagged', () => {
+    assert.strictEqual(isSuspectedInfinitePagination(base), false);
+  });
+
+  void it('broken: URL advances but content empties → flagged', () => {
+    assert.strictEqual(isSuspectedInfinitePagination({ ...base, emptyAfterClick: true }), true);
+  });
+
+  void it('broken: URL advances but content is duplicate (never changes) → flagged', () => {
+    assert.strictEqual(isSuspectedInfinitePagination({ ...base, contentChanged: false, duplicateStreak: 3 }), true);
+  });
+
+  void it('no clicks or control gone → not flagged', () => {
+    assert.strictEqual(isSuspectedInfinitePagination({ ...base, clicks: 0 }), false);
+    assert.strictEqual(isSuspectedInfinitePagination({ ...base, controlPersists: false, emptyAfterClick: true }), false);
+  });
+});

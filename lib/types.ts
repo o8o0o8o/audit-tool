@@ -1107,6 +1107,10 @@ export interface PaginationProbeResult {
   controlPersists: boolean;
   /** Whether the listing became empty after clicking. */
   emptyAfterClick: boolean;
+  /** Whether clicking "next" ever advanced the URL path/query (ignoring the
+   *  hash) — i.e. produced a new CRAWLABLE URL. False for in-page anchor /
+   *  hash-only "next" links, which can't waste crawl budget. */
+  urlAdvanced: boolean;
   /** Heuristic verdict: "next" advances into empty/duplicate content forever. */
   suspectedInfinite: boolean;
 }

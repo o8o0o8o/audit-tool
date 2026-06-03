@@ -2588,6 +2588,96 @@ void describe('live-verifier: parser ↔ renderer round-trip', () => {
   });
 });
 
+void describe('buildReportMarkdown screenshot embedding', () => {
+  // A two-page evidence index; only /about and / were "sampled".
+  const evidence = {
+    'https_example.com_about': {
+      url: 'https://example.com/about',
+      files: ['screenshot.mobile.png', 'screenshot.desktop.png', 'axe.json'],
+    },
+    'https_example.com_': {
+      url: 'https://example.com/',
+      files: ['screenshot.mobile.png', 'screenshot.desktop.png'],
+    },
+  };
+  function withEvidence(arts: AuditArtifacts, ev: Record<string, { url: string; files: string[] }>): AuditArtifacts {
+    arts.manifest.evidence = ev;
+    return arts;
+  }
+
+  void it('embeds mobile + desktop shots for a finding whose example page was sampled', () => {
+    const msg = 'Canonicals are not set for some pages';
+    const arts = withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), evidence);
+    const md = buildReportMarkdown(arts);
+    assert.match(md, /\*\*Screenshot\*\*/);
+    assert.match(md, /src="evidence\/https_example\.com_about\/screenshot\.mobile\.png"/);
+    assert.match(md, /src="evidence\/https_example\.com_about\/screenshot\.desktop\.png"/);
+  });
+
+  void it('renders no screenshot block when the cited page was not sampled', () => {
+    const msg = 'Canonicals are not set for some pages';
+    const arts = withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/unsampled'] }), evidence);
+    const md = buildReportMarkdown(arts);
+    assert.doesNotMatch(md, /\*\*Screenshot\*\*/);
+  });
+
+  void it('matches a trailing-slash / fragment variant of the sampled URL', () => {
+    const msg = 'Canonicals are not set for some pages';
+    const arts = withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about/#section'] }), evidence);
+    const md = buildReportMarkdown(arts);
+    assert.match(md, /src="evidence\/https_example\.com_about\/screenshot\.mobile\.png"/);
+  });
+
+  void it('embeds each page once; later findings on the same page get a pointer', () => {
+    const a = 'Canonicals are not set for some pages';
+    const b = 'Pages have titles that are too long';
+    const arts = withEvidence(
+      mkArtifacts([a, b], { [a]: ['https://example.com/about'], [b]: ['https://example.com/about'] }),
+      evidence,
+    );
+    const md = buildReportMarkdown(arts);
+    const mobileEmbeds = (md.match(/src="evidence\/https_example\.com_about\/screenshot\.mobile\.png"/g) ?? []).length;
+    assert.strictEqual(mobileEmbeds, 1, 'the page screenshot is embedded exactly once across the report');
+    assert.match(md, /is shown above\./);
+  });
+
+  void it('a rendered screenshot block does not corrupt parseReportFindings example capture', () => {
+    const msg = 'Canonicals are not set for some pages';
+    const url = 'https://example.com/about';
+    const arts = withEvidence(mkArtifacts([msg], { [msg]: [url] }), evidence);
+    const parsed = parseReportFindings(buildReportMarkdown(arts));
+    const f = parsed.find((p) => p.title === sanitizeProse(msg));
+    assert.ok(f, 'finding still parses');
+    assert.strictEqual(f?.exampleUrl, url, 'example URL is the affected page, not a screenshot path');
+  });
+
+  void it('output is identical regardless of evidence-key insertion order', () => {
+    const msg = 'Canonicals are not set for some pages';
+    const reversed = Object.fromEntries(Object.entries(evidence).reverse());
+    const fwd = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), evidence));
+    const rev = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), reversed));
+    assert.strictEqual(fwd, rev);
+  });
+
+  void it('on a normalized-URL collision the pick is deterministic, not manifest-order dependent', () => {
+    // Two sampled dirs whose URLs differ only by a trailing slash both normalize
+    // to the same key (a real possibility — the tool flags trailing-slash pairs
+    // elsewhere). The chosen screenshot must not depend on manifest/readdir order.
+    const msg = 'Canonicals are not set for some pages';
+    const collide = {
+      aaa_dir: { url: 'https://example.com/about', files: ['screenshot.mobile.png', 'screenshot.desktop.png'] },
+      zzz_dir: { url: 'https://example.com/about/', files: ['screenshot.mobile.png', 'screenshot.desktop.png'] },
+    };
+    const reversed = Object.fromEntries(Object.entries(collide).reverse());
+    const fwd = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), collide));
+    const rev = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), reversed));
+    assert.strictEqual(fwd, rev, 'collision pick is insertion-order independent');
+    // The lexicographically-first dir key wins, in either order.
+    assert.match(fwd, /src="evidence\/aaa_dir\/screenshot\.mobile\.png"/);
+    assert.doesNotMatch(fwd, /src="evidence\/zzz_dir\//);
+  });
+});
+
 import { verifySitemapMembership, verifyReachability, type LiveSite, type ReportFinding } from '../lib/phase2/live-verifier';
 
 void describe('live-verifier: site-level verifiers', () => {

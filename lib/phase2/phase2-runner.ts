@@ -788,6 +788,8 @@ function buildFindingBlock(
   sourceMapping?: Record<string, SourceLocation[]> | null,
   impact?: ScoreImpact,
   verifyView?: VerifyView,
+  screenshots?: ScreenshotIndex,
+  embedded?: Set<string>,
 ): string {
   const lines: string[] = [];
   // sanitizeProse (not stripHtml) for the title: stripHtml deletes element
@@ -891,6 +893,18 @@ function buildFindingBlock(
       lines.push(`- *…and ${remaining} more affected page${remaining === 1 ? '' : 's'}*`);
     }
     lines.push('');
+
+    // Screenshot evidence — embed the captured mobile + desktop shots for the
+    // first affected page we sampled. Only the ~10 representative pages carry
+    // evidence, so most findings render none. AI-discovered findings supply
+    // their own evidence block, so skip them here.
+    if (screenshots && screenshots.size > 0 && embedded && !detail.aiDiscovered) {
+      const block = buildScreenshotBlock(shown, screenshots, embedded);
+      if (block) {
+        lines.push(block);
+        lines.push('');
+      }
+    }
   }
 
   // Fix — anomaly-supplied remediation, else catalogued recommendation, else
@@ -1000,6 +1014,8 @@ function buildSection(
   sourceMapping?: Record<string, SourceLocation[]> | null,
   impact?: ScoreImpact,
   verifyView?: VerifyView,
+  screenshots?: ScreenshotIndex,
+  embedded?: Set<string>,
 ): string {
   if (items.length === 0) return '';
 
@@ -1042,7 +1058,7 @@ function buildSection(
   const hidden = overflow.filter(([m]) => sourceLocationsFor(m, sourceMapping).length === 0);
 
   for (const [message, detail] of [...shown, ...extraMapped]) {
-    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact, verifyView));
+    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact, verifyView, screenshots, embedded));
   }
 
   if (hidden.length > 0) {
@@ -1093,6 +1109,11 @@ export function buildReportMarkdown(
   // undefined, which suppresses both the section header projections and the
   // per-finding point chips downstream.
   const impact = noScore ? undefined : buildScoreImpact(artifacts.analysis.summary?.categoryScores, details);
+  // Screenshot evidence — index the sampled-page captures so findings can embed
+  // them. `embedded` is mutated as sections render (deterministic traversal) so
+  // each unique page's screenshots appear once across the whole report.
+  const screenshots = buildScreenshotIndex(artifacts.manifest);
+  const embedded = new Set<string>();
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
   // Verification banner (only on the `--verify` report) sits right under the
@@ -1101,7 +1122,7 @@ export function buildReportMarkdown(
   parts.push(buildPurpose(artifacts, noScore));
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of SECTION_ORDER) {
-    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView));
+    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView, screenshots, embedded));
   }
   return parts.filter(Boolean).join('\n');
 }
@@ -1160,6 +1181,105 @@ const isTemplateUrl = (u: string): boolean => /[{}]/.test(u);
 /** Pull the first real (non-templated) http(s):// URL out of a raw example string. */
 function extractFirstUrl(s: string): string | undefined {
   return (s.match(/https?:\/\/[^\s<>"']+/g) ?? []).find((u) => !isTemplateUrl(u));
+}
+
+/**
+ * Normalize a URL for matching a finding's example against the captured-evidence
+ * index: drop the fragment and any trailing slash so `https://e.com/about/` and
+ * `https://e.com/about#x` both resolve to the same evidence entry. Both sides of
+ * the comparison come from the same crawl, so case is left untouched.
+ */
+function normalizeUrlForEvidence(u: string): string {
+  return u.replace(/#.*$/, '').replace(/\/+$/, '');
+}
+
+/** A captured page's screenshots, as paths relative to the evidence dir. */
+interface ScreenshotRef {
+  url: string;
+  mobile?: string;
+  desktop?: string;
+}
+type ScreenshotIndex = Map<string, ScreenshotRef>;
+
+/**
+ * Build a normalized-URL → screenshot-paths index from the manifest's evidence
+ * section. Paths are relative to `<runDir>` (the report's own directory and the
+ * `imageBaseDir` the PDF renderer resolves to `file://`), so the same `evidence/
+ * <dir>/…` src resolves both in the rendered PDF and when `audit-report.md` /
+ * `.html` is opened directly. Deterministic: see the key-sorted iteration below.
+ */
+function buildScreenshotIndex(manifest: ManifestData): ScreenshotIndex {
+  const idx: ScreenshotIndex = new Map();
+  const evidence = manifest.evidence;
+  if (!evidence) return idx;
+  // Iterate entries in evidence-dir-key order, not manifest order. The manifest's
+  // evidence map is built by walking the evidence directory (readdir-derived,
+  // machine-dependent), so its insertion order is NOT guaranteed. On a normalized
+  // -URL collision (e.g. both `/about` and `/about/` were sampled — trailing-slash
+  // pairs do occur), first-wins over the key-sorted entries deterministically
+  // picks the lexicographically-first dir, preserving the byte-identical-report
+  // guarantee (docs/report-rules.md) regardless of manifest order.
+  const entries = Object.entries(evidence).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const [key, entry] of entries) {
+    if (!entry?.url) continue;
+    const ref: ScreenshotRef = { url: entry.url };
+    if (entry.files.includes('screenshot.mobile.png')) ref.mobile = `evidence/${key}/screenshot.mobile.png`;
+    if (entry.files.includes('screenshot.desktop.png')) ref.desktop = `evidence/${key}/screenshot.desktop.png`;
+    if (!ref.mobile && !ref.desktop) continue;
+    const k = normalizeUrlForEvidence(entry.url);
+    if (!idx.has(k)) idx.set(k, ref);
+  }
+  return idx;
+}
+
+/** Minimal escaping for a value placed inside a double-quoted HTML attribute. */
+function escapeHtmlAttr(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+}
+
+/**
+ * Render a `**Screenshot**` block for the first sampled example among `shown`
+ * (already worst-first sorted, so the pick is deterministic). Each unique
+ * evidence page is embedded ONCE per report — `embedded` tracks pages already
+ * shown, and later findings on the same page get a lightweight pointer instead
+ * of repeating the (potentially large) full-page images. Returns null when no
+ * shown example was sampled.
+ */
+function buildScreenshotBlock(
+  shown: string[],
+  screenshots: ScreenshotIndex,
+  embedded: Set<string>,
+): string | null {
+  let ref: ScreenshotRef | undefined;
+  for (const ex of shown) {
+    const url = extractFirstUrl(ex);
+    if (!url) continue;
+    const found = screenshots.get(normalizeUrlForEvidence(url));
+    if (found) {
+      ref = found;
+      break;
+    }
+  }
+  if (!ref) return null;
+
+  const lines: string[] = ['**Screenshot**', ''];
+  const key = normalizeUrlForEvidence(ref.url);
+  if (embedded.has(key)) {
+    lines.push(`Screenshot of ${mdLink(ref.url, ref.url)} is shown above.`);
+    return lines.join('\n');
+  }
+  embedded.add(key);
+
+  const alt = escapeHtmlAttr(ref.url);
+  lines.push('<div class="evidence-shots">');
+  if (ref.mobile) {
+    lines.push(`<figure><img src="${ref.mobile}" alt="Mobile screenshot of ${alt}" /><figcaption>Mobile</figcaption></figure>`);
+  }
+  if (ref.desktop) {
+    lines.push(`<figure><img src="${ref.desktop}" alt="Desktop screenshot of ${alt}" /><figcaption>Desktop</figcaption></figure>`);
+  }
+  lines.push('</div>');
+  return lines.join('\n');
 }
 
 /**
@@ -1297,7 +1417,9 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   const pdfPath = path.join(runDir, 'audit-report.pdf');
   await renderMarkdownToPdf(markdown, pdfPath, {
     title: `${artifacts.manifest.domain} — audit report`,
-    imageBaseDir: path.join(runDir, 'evidence'),
+    // Base at the run dir (where the .md/.html/.pdf live) so the `evidence/<dir>/…`
+    // image paths resolve both in the rendered PDF and in the directly-opened report.
+    imageBaseDir: runDir,
   });
 
   // Optional verification phase — never touches the report just written. It
@@ -1474,7 +1596,7 @@ async function runVerification(
   const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
   await renderMarkdownToPdf(markdown, pdfPath, {
     title: `${artifacts.manifest.domain} — verified audit report`,
-    imageBaseDir: path.join(artifacts.runDir, 'evidence'),
+    imageBaseDir: artifacts.runDir,
   });
   console.log(`📄 Verified report: ${pdfPath}`);
   return pdfPath;
@@ -1610,7 +1732,7 @@ async function runLiveVerification(
   const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
   await renderMarkdownToPdf(markdown, pdfPath, {
     title: `${artifacts.manifest.domain} — verified audit report (live)`,
-    imageBaseDir: path.join(artifacts.runDir, 'evidence'),
+    imageBaseDir: artifacts.runDir,
   });
   console.log(`📄 Verified report (live): ${pdfPath}`);
   return pdfPath;

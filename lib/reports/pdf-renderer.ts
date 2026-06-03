@@ -156,6 +156,33 @@ img {
   page-break-inside: avoid;
 }
 
+/* Evidence screenshots — mobile + desktop side by side under a finding. Each
+   shot is height-capped so a tall full-page capture doesn't span several PDF
+   pages, and the row avoids splitting across a page break. */
+.evidence-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0.6em 0;
+  page-break-inside: avoid;
+}
+.evidence-shots figure {
+  margin: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
+.evidence-shots img {
+  max-width: 100%;
+  max-height: 360px;
+  width: auto;
+  margin: 0 auto 4px;
+}
+.evidence-shots figcaption {
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
 hr {
   border: 0;
   border-top: 1px solid var(--rule);

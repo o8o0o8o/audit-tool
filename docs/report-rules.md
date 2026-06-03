@@ -138,6 +138,13 @@ order of `analysis.details` keys and of each finding's `examples` array — is
   are model-driven and not bit-reproducible. They are opt-in; the default
   template-driven report is deterministic. Results are disk-cached per audit so
   re-runs of the *same* audit are stable.
+- **The live `--verify` pass** (default; `lib/phase2/live-verifier.ts`) re-fetches
+  each finding's first example from the *live* site, so its verdicts reflect the
+  site's current state at verification time, not the crawl-time snapshot — it is
+  non-deterministic by design and timestamped in the report banner. It writes a
+  SEPARATE `audit-report.verified.{md,pdf}` and never touches the deterministic
+  main report. `SEO_AUDIT_VERIFY_OFFLINE=1` selects the legacy deterministic
+  disk verifier instead.
 
 Determinism is covered by tests in `tests/analyzers.test.ts`
 (`buildReportMarkdown determinism`, `ErrorAggregator example retention

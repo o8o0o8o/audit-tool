@@ -38,6 +38,7 @@ import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
 import { loadAllPages, loadSiteData, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
 import { llmVerifyFindings, claudeCliVerifyFindings, isClaudeCliAvailable } from './llm-finding-verify';
+import { verifyReportLive } from './live-verifier';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -1363,6 +1364,14 @@ async function runVerification(
   suppressed: ReadonlySet<string>,
   options: Phase2Options,
 ): Promise<string | null> {
+  // Live re-fetch verification (default). Parses the report just written, takes
+  // each finding's first example, re-fetches it, and re-asserts the claim
+  // against the live page. Set SEO_AUDIT_VERIFY_OFFLINE=1 to use the legacy
+  // deterministic disk pass (reproducible, no network) instead.
+  if (process.env.SEO_AUDIT_VERIFY_OFFLINE !== '1') {
+    return await runLiveVerification(artifacts, narratives, anomalies, suppressed, options);
+  }
+
   const pages = loadAllPages(artifacts.runDir);
   if (pages.size === 0) {
     console.log('⚠️  Verification skipped: no per-page data on disk to verify against.');
@@ -1468,5 +1477,103 @@ async function runVerification(
     imageBaseDir: path.join(artifacts.runDir, 'evidence'),
   });
   console.log(`📄 Verified report: ${pdfPath}`);
+  return pdfPath;
+}
+
+/**
+ * Live verification phase (default for `--verify`). Parses the report just
+ * written (`audit-report.md`), takes each CRITICAL/HIGH/MEDIUM finding's first
+ * concrete example, RE-FETCHES that page live, and re-asserts the claim against
+ * the current page. Confirmed → ✓ Verified; refuted → dropped (no longer true /
+ * false positive); the rest stay *unverified* (site-level, cross-page, or
+ * needing instrumentation a single light load can't provide).
+ *
+ * Non-deterministic by nature — the verified report reflects the live site at a
+ * point in time, so the banner is timestamped. The legacy deterministic disk
+ * pass is still available via SEO_AUDIT_VERIFY_OFFLINE=1.
+ */
+async function runLiveVerification(
+  artifacts: AuditArtifacts,
+  narratives: Partial<Record<Section, string | null>>,
+  anomalies: Anomaly[],
+  suppressed: ReadonlySet<string>,
+  options: Phase2Options,
+): Promise<string | null> {
+  const reportPath = path.join(artifacts.runDir, 'audit-report.md');
+  if (!fs.existsSync(reportPath)) {
+    console.log('⚠️  Live verification skipped: audit-report.md not found.');
+    return null;
+  }
+  const reportMd = fs.readFileSync(reportPath, 'utf8');
+
+  console.log("🔎 Live verification: re-fetching each finding's first example and re-asserting the claim…");
+  const verdicts = await verifyReportLive(reportMd, { verbose: options.verbose });
+
+  // Map parsed report titles → in-memory finding messages. The renderer emits
+  // `### ${sanitizeProse(message)}`, so a parsed title equals
+  // sanitizeProse(message); match on that to build the render's VerifyView.
+  const baseDetails = preparedDetails(artifacts, suppressed);
+  const titleToMessage = new Map<string, string>();
+  for (const message of Object.keys(baseDetails)) {
+    const key = sanitizeProse(message);
+    if (!titleToMessage.has(key)) titleToMessage.set(key, message);
+  }
+
+  const confirmed = new Set<string>();
+  const refutedMessages = new Set<string>();
+  for (const v of verdicts) {
+    const message = titleToMessage.get(v.title) ?? titleToMessage.get(sanitizeProse(v.title));
+    if (message) {
+      if (v.status === 'confirmed') confirmed.add(message);
+      else if (v.status === 'refuted') refutedMessages.add(message);
+    }
+
+    if (v.status === 'refuted' && message) console.log(`  ✗ live refuted (dropped): ${stripHtml(v.title)} — ${v.reason}`);
+    else if (v.status === 'refuted') console.log(`  · live refuted but unmatched (kept): ${stripHtml(v.title)} — ${v.reason}`);
+    else if (options.verbose) console.log(`  ${v.status === 'confirmed' ? '✓' : '·'} live ${v.status}: ${stripHtml(v.title)} — ${v.reason}`);
+  }
+
+  // Confirm wins over refute on a title collision: if two distinct findings
+  // collapse to the same sanitizeProse key, never let a stray refute DROP a
+  // message another verdict confirmed. Keeps the two sets disjoint so the
+  // counts below can't double-count one message.
+  for (const m of confirmed) refutedMessages.delete(m);
+
+  // Count over the FULL rendered set so the banner reconciles with the badges.
+  // buildReportMarkdown labels every rendered finding (all severities — LOW and
+  // unmatched included): confirmed → ✓ Verified, everything else → unverified,
+  // refuted → dropped. So total = all prepared findings; unverified is the
+  // remainder after confirmed + refuted. (Mirrors the disk pass, whose total is
+  // also over baseDetails.) Counting over verdicts.length alone (C/H/M only)
+  // would understate the total and under-count the unverified badges shown.
+  const confirmedCount = confirmed.size;
+  const refutedCount = refutedMessages.size;
+  const renderedTotal = Object.keys(baseDetails).length;
+  const unverifiedCount = Math.max(0, renderedTotal - confirmedCount - refutedCount);
+
+  console.log(
+    `✓ Live verification: ${confirmedCount} confirmed, ${refutedCount} refuted (dropped), ${unverifiedCount} unverified (of ${renderedTotal}; ${verdicts.length} CRITICAL/HIGH/MEDIUM findings parsed).`,
+  );
+
+  const stamp = `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+  const banner =
+    `> **🔎 Live verification pass.** Each CRITICAL/HIGH/MEDIUM issue's first concrete example was **re-fetched live** ` +
+    `(${stamp}) and its claim re-checked against the current page — not the crawl-time snapshot. ` +
+    `**${confirmedCount} confirmed**, **${refutedCount} refuted** (dropped as no-longer-true / false positive), ` +
+    `${unverifiedCount} *unverified* — i.e. lower-severity findings (not live-checked), site-level / cross-page claims, multi-page findings whose other pages weren't sampled, or those needing instrumentation a single live load can't provide (not a defect). ` +
+    `Because the live site can change, this report reflects a point in time. Each issue below carries its status.\n`;
+
+  const combinedSuppressed = new Set<string>([...suppressed, ...refutedMessages]);
+  const markdown = buildReportMarkdown(artifacts, narratives, anomalies, combinedSuppressed, { confirmed }, banner, options.noScore === true);
+
+  const mdPath = path.join(artifacts.runDir, 'audit-report.verified.md');
+  fs.writeFileSync(mdPath, markdown);
+
+  const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
+  await renderMarkdownToPdf(markdown, pdfPath, {
+    title: `${artifacts.manifest.domain} — verified audit report (live)`,
+    imageBaseDir: path.join(artifacts.runDir, 'evidence'),
+  });
+  console.log(`📄 Verified report (live): ${pdfPath}`);
   return pdfPath;
 }

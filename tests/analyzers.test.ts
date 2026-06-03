@@ -2404,3 +2404,185 @@ void describe('llm finding-verify context collection', () => {
     assert.ok(ctxs.every((c) => c.message && c.example), 'each context has message + example');
   });
 });
+
+import { parseReportFindings } from '../lib/phase2/live-verifier';
+
+void describe('live-verifier: parseReportFindings', () => {
+  const md = [
+    '## SEO Audit',
+    '',
+    '### Top Priority Issues',
+    '',
+    '1. <span class="sev-high">HIGH</span> — Something *(3 occurrences)*',
+    '',
+    '### Canonicals are not set for some pages',
+    '',
+    '<span class="sev-high">HIGH</span> · affects 44 occurrences · effort: low',
+    '',
+    '**Affected pages**',
+    '',
+    '- [/a](https://www.siro.ai/a) — missing canonical',
+    '- [/b](https://www.siro.ai/b) — missing canonical',
+    '',
+    '### Broken pagination wastes crawl budget — https://www.siro.ai/insights/page/{N}',
+    '',
+    '<span class="sev-high">HIGH</span> · affects 1 occurrence · effort: medium',
+    '',
+    '**Affected pages**',
+    '',
+    '- [/insights/page/{N}](https://www.siro.ai/insights/page/{N}) — template',
+    '',
+    '### Minor cosmetic thing',
+    '',
+    '<span class="sev-low">LOW</span> · affects 2 occurrences · effort: low',
+    '',
+    '**Affected pages**',
+    '',
+    '- [/c](https://www.siro.ai/c) — low sev',
+    '',
+  ].join('\n');
+
+  const findings = parseReportFindings(md);
+
+  void it('skips summary headings without a severity line', () => {
+    assert.ok(!findings.some((f) => f.title === 'Top Priority Issues'), 'summary heading excluded');
+  });
+
+  void it('keeps CRITICAL/HIGH/MEDIUM and drops LOW', () => {
+    assert.ok(findings.some((f) => f.title === 'Canonicals are not set for some pages'));
+    assert.ok(!findings.some((f) => f.title === 'Minor cosmetic thing'), 'LOW dropped');
+  });
+
+  void it('extracts the first real example URL', () => {
+    const c = findings.find((f) => f.title === 'Canonicals are not set for some pages');
+    assert.strictEqual(c?.exampleUrl, 'https://www.siro.ai/a');
+    assert.strictEqual(c?.severity, 'HIGH');
+  });
+
+  void it('parses the occurrence count (used to guard plural refutes)', () => {
+    const c = findings.find((f) => f.title === 'Canonicals are not set for some pages');
+    assert.strictEqual(c?.count, 44);
+  });
+
+  void it('leaves exampleUrl undefined when only templated {N} URLs exist', () => {
+    const p = findings.find((f) => f.title.startsWith('Broken pagination'));
+    assert.ok(p, 'pagination finding parsed');
+    assert.strictEqual(p?.exampleUrl, undefined, 'templated URL not used as example');
+  });
+});
+
+void describe('live-verifier: parseReportFindings — scan bounds & exclusions', () => {
+  void it('does NOT grab a URL from Fix/Resources when Affected pages has no link (F1)', () => {
+    const md = [
+      '## SEO Audit',
+      '',
+      '### Finding whose example is plain text',
+      '',
+      '<span class="sev-high">HIGH</span> · affects 3 occurrences · effort: low',
+      '',
+      '**Affected pages**',
+      '',
+      '- Bare contextual evidence with no markdown link',
+      '',
+      '**Fix**',
+      '',
+      'Apply the standard best practice.',
+      '',
+      '**Resources**',
+      '',
+      '- [web.dev guide](https://web.dev/some-guide)',
+      '',
+    ].join('\n');
+    const f = parseReportFindings(md);
+    const finding = f.find((x) => x.title.startsWith('Finding whose example'));
+    assert.ok(finding, 'finding parsed');
+    assert.strictEqual(finding?.exampleUrl, undefined, 'Resources URL not used as example');
+  });
+
+  void it('skips AI-discovered findings (F3)', () => {
+    const md = [
+      '## UX Audit',
+      '',
+      '### Dead button on hero',
+      '',
+      '<span class="sev-medium">MEDIUM</span> · affects 1 occurrence · 🔍 AI-discovered · effort: medium',
+      '',
+      '**Affected pages**',
+      '',
+      '- Button does nothing — [https://x.example/](https://x.example/)',
+      '',
+    ].join('\n');
+    const f = parseReportFindings(md);
+    assert.ok(!f.some((x) => x.title === 'Dead button on hero'), 'AI-discovered finding excluded');
+  });
+
+  void it('parses CRITICAL severity from the span text, not the class (F8)', () => {
+    const md = [
+      '## Security Audit',
+      '',
+      '### Critical security gap',
+      '',
+      '<span class="sev-high">CRITICAL</span> · affects 2 occurrences · effort: high',
+      '',
+      '**Affected pages**',
+      '',
+      '- [/x](https://x.example/x) — bad',
+      '',
+    ].join('\n');
+    const f = parseReportFindings(md);
+    const finding = f.find((x) => x.title === 'Critical security gap');
+    assert.strictEqual(finding?.severity, 'CRITICAL');
+  });
+});
+
+import { checkFindingSignals, type LiveSignals } from '../lib/phase2/live-verifier';
+
+void describe('live-verifier: checker refute contract', () => {
+  // A clean baseline page (no defects present at load).
+  const base: LiveSignals = {
+    url: 'https://x.example/', finalUrl: 'https://x.example/', status: 200, ttfbMs: 100,
+    htmlBytes: 1000, totalBytes: 1000, totalRequests: 1, title: 'T', description: 'd', canonical: 'https://x.example/',
+    h1Count: 1, iframeCount: 0, wordCount: 800, semanticRatio: 0.5, emptyAnchorCount: 0, inputsWithoutAutocomplete: 0,
+    scriptsNoSri: 0, maxChildren: 5, jpgPngImages: 0, modernImages: 2, renderBlockingTotal: 0, renderBlockingThirdParty: 0,
+    thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0, adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0,
+  };
+
+  void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
+    const r = checkFindingSignals('Form inputs missing autocomplete attribute', base, 1);
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('autocomplete confirms when inputs without autocomplete are present at load', () => {
+    const r = checkFindingSignals('Form inputs missing autocomplete attribute', { ...base, inputsWithoutAutocomplete: 4 }, 1);
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('plural guard: a stable-signal refute on a multi-occurrence finding is downgraded to unverified', () => {
+    // canonical present → missing-canonical would refute, but count>1 must not drop.
+    const r = checkFindingSignals('Canonicals are not set for some pages', base, 44);
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('single-occurrence stable-signal refute still refutes (the sampled page IS the finding)', () => {
+    const r = checkFindingSignals('Canonical URL is not set', base, 1);
+    assert.strictEqual(r.status, 'refuted');
+  });
+});
+
+void describe('live-verifier: parser ↔ renderer round-trip', () => {
+  // Guards the implicit coupling between buildReportMarkdown's finding emit and
+  // parseReportFindings: render a real finding through the actual renderer, then
+  // re-parse it. Catches a renderer format change that hand-written fixtures
+  // (which could share the same wrong format) would miss.
+  void it('a rendered finding re-parses with matching title/severity/count/url', () => {
+    const message = 'Canonicals are not set for some pages';
+    const url = 'https://example.com/page-a';
+    const md = buildReportMarkdown(mkArtifacts([message], { [message]: [url] }));
+    const parsed = parseReportFindings(md);
+    const f = parsed.find((p) => p.title === sanitizeProse(message));
+    assert.ok(f, 'finding survives the render → parse round-trip');
+    assert.strictEqual(f?.severity, 'HIGH');
+    assert.strictEqual(f?.count, 5);
+    assert.strictEqual(f?.exampleUrl, url);
+  });
+});

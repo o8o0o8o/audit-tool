@@ -2535,7 +2535,7 @@ void describe('live-verifier: parseReportFindings — scan bounds & exclusions',
   });
 });
 
-import { checkFindingSignals, brokenOutboundVerdict, type LiveSignals } from '../lib/phase2/live-verifier';
+import { checkFindingSignals, brokenOutboundVerdict, titleDescriptionVerdict, sharedTitleKeyword, resolveSiteOrigin, cannibalisationElement, type LiveSignals } from '../lib/phase2/live-verifier';
 
 void describe('live-verifier: checker refute contract', () => {
   // A clean baseline page (no defects present at load).
@@ -2546,6 +2546,7 @@ void describe('live-verifier: checker refute contract', () => {
     scriptsNoSri: 0, maxChildren: 5, jpgPngImages: 0, modernImages: 2, renderBlockingTotal: 0, renderBlockingThirdParty: 0,
     thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0, adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0,
     clsValue: 0, tbtMs: 0, unusedCssRatio: -1, unusedJsRatio: -1, preConsentTrackingCookies: 0, contrastViolations: -1,
+    mainCount: 1, resourceHintCount: 2, privacyLinkCount: 1, tlsMs: 50, eeatSignals: 2,
   };
 
   void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
@@ -2567,6 +2568,135 @@ void describe('live-verifier: checker refute contract', () => {
   void it('single-occurrence stable-signal refute still refutes (the sampled page IS the finding)', () => {
     const r = checkFindingSignals('Canonical URL is not set', base, 1);
     assert.strictEqual(r.status, 'refuted');
+  });
+
+  // ---- registry-gap closers: every category-A finding kind is now OWNED ----
+
+  void it('title-length confirms a too-short title and refutes one within range', () => {
+    assert.strictEqual(checkFindingSignals('Some pages have titles that are too short', { ...base, title: 'short' }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Some pages have titles that are too short', { ...base, title: 'A perfectly adequate descriptive page title' }, 1).status, 'refuted');
+  });
+
+  void it('description-length confirms a too-long description and refutes one within range', () => {
+    assert.strictEqual(checkFindingSignals('Some pages have descriptions that are too long', { ...base, description: 'x'.repeat(365) }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Some pages have descriptions that are too long', { ...base, description: 'y'.repeat(140) }, 1).status, 'refuted');
+  });
+
+  void it('length checkers do NOT own other "too long" findings (URL/headline/manifest) — locks matcher scope vs future wording drift', () => {
+    // These real corpus messages contain "too long" but neither "title" nor
+    // "description", so they must fall through, never be refuted against the
+    // page's title/description length.
+    for (const t of ['Article headline too long for rich results', 'Some URLs are too long', 'Manifest name too long', 'URL is too long (120 chars, max recommended: 100)']) {
+      const r = checkFindingSignals(t, { ...base, title: 'short', description: 'x'.repeat(400) }, 1);
+      assert.notStrictEqual(r.status, 'refuted', `"${t}" must not be refuted by a length checker`);
+      assert.match(r.reason, /no live checker/i, `"${t}" should not route to title/description-length`);
+    }
+  });
+
+  void it('missing-main confirms when no <main> landmark and refutes when present', () => {
+    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 1 }, 1).status, 'refuted');
+  });
+
+  void it('missing-main matches the <main> titles but NOT <nav>/<header> landmark titles (which it must not refute against mainCount)', () => {
+    // Real report titles that SHOULD route to the <main> checker.
+    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Many pages missing <main> landmark', { ...base, mainCount: 0 }, 1).status, 'confirmed');
+    // A <nav>/<header> landmark finding, or one whose text merely contains "main"
+    // as a substring (FAQPage missing mainEntity), must NOT be owned by
+    // missing-main — a present <main> would otherwise falsely refute (drop) it.
+    for (const t of ['Missing <nav> landmark', 'Missing <header> landmark', 'FAQPage missing mainEntity array']) {
+      const r = checkFindingSignals(t, { ...base, mainCount: 1 }, 1);
+      assert.notStrictEqual(r.status, 'refuted', `"${t}" must not be refuted by the <main> checker`);
+      assert.match(r.reason, /no live checker/i, `"${t}" should not route to missing-main`);
+    }
+  });
+
+  void it('privacy-link confirms when absent and refutes when present', () => {
+    assert.strictEqual(checkFindingSignals('No privacy policy link found', { ...base, privacyLinkCount: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('No privacy policy link found', { ...base, privacyLinkCount: 1 }, 1).status, 'refuted');
+  });
+
+  void it('a multi-occurrence missing-main refute is downgraded to unverified (only the first page was checked)', () => {
+    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 1 }, 19).status, 'unverified');
+  });
+
+  void it('tls is confirm-only: slow handshake confirms, fast/reused stays unverified (never refutes)', () => {
+    assert.strictEqual(checkFindingSignals('Slow TLS negotiation', { ...base, tlsMs: 446 }, 2).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Slow TLS negotiation', { ...base, tlsMs: 20 }, 2).status, 'unverified');
+    assert.strictEqual(checkFindingSignals('Slow TLS negotiation', { ...base, tlsMs: null }, 2).status, 'unverified');
+  });
+
+  void it('resource-hints (site-wide page) confirms when the homepage has none, stays unverified when present', () => {
+    assert.strictEqual(checkFindingSignals('Most pages lack resource hints', { ...base, resourceHintCount: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Most pages lack resource hints', { ...base, resourceHintCount: 3 }, 1).status, 'unverified');
+  });
+
+  void it('eeat (site-wide page) confirms when no signals on the homepage, stays unverified otherwise', () => {
+    assert.strictEqual(checkFindingSignals('Low E-E-A-T signals across site', { ...base, eeatSignals: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals('Low E-E-A-T signals across site', { ...base, eeatSignals: 3 }, 1).status, 'unverified');
+  });
+
+  void it('cross-page topic aggregates are OWNED (unverified with reason), not a "no live checker" gap', () => {
+    const topics = checkFindingSignals('Many topics with thin coverage', base, 1);
+    assert.strictEqual(topics.status, 'unverified');
+    assert.match(topics.reason, /topic|coverage aggregate/i);
+    assert.doesNotMatch(topics.reason, /no live checker/i);
+    assert.strictEqual(checkFindingSignals('High-opportunity content gaps identified', base, 1).status, 'unverified');
+  });
+
+  void it('every category-A kind resolves to a real checker, never the "no live checker" fallback', () => {
+    const titles = [
+      'Some pages have descriptions that are too long',
+      'Some pages have titles that are too short',
+      'Multiple pages target the same keyword in their titles',
+      'Low E-E-A-T signals across site',
+      'Some URLs are not listed in sitemap',
+      'Most pages lack resource hints',
+      'Many topics with thin coverage',
+      'No privacy policy link found',
+      'Missing `<main>` element',
+      'High-opportunity content gaps identified',
+      'Slow TLS negotiation',
+    ];
+    for (const t of titles) {
+      assert.doesNotMatch(checkFindingSignals(t, base, 1).reason, /no live checker for this finding kind/i, `"${t}" should be owned by a checker`);
+    }
+  });
+});
+
+void describe('live-verifier: registry-gap pure helpers', () => {
+  void it('titleDescriptionVerdict handles both directions and a missing value', () => {
+    assert.strictEqual(titleDescriptionVerdict('title', 'short', false, 30, 60).status, 'confirmed');
+    assert.strictEqual(titleDescriptionVerdict('title', 'a'.repeat(45), false, 30, 60).status, 'refuted');
+    assert.strictEqual(titleDescriptionVerdict('description', 'd'.repeat(200), true, 120, 160).status, 'confirmed');
+    assert.strictEqual(titleDescriptionVerdict('description', 'd'.repeat(140), true, 120, 160).status, 'refuted');
+    assert.strictEqual(titleDescriptionVerdict('description', null, true, 120, 160).status, 'unverified');
+    assert.strictEqual(titleDescriptionVerdict('title', '   ', false, 30, 60).status, 'unverified');
+  });
+
+  void it('sharedTitleKeyword finds a non-trivial shared word and ignores stopwords/short tokens', () => {
+    assert.strictEqual(sharedTitleKeyword('AgntCMS Docs — Core', 'AgntCMS Docs — Concepts'), 'agntcms');
+    assert.strictEqual(sharedTitleKeyword('The Home Page', 'The Home Site'), null); // only stopwords shared
+    assert.strictEqual(sharedTitleKeyword('Pricing', 'Contact'), null);
+  });
+
+  void it('cannibalisationElement routes the H1 finding variant to H1, the title variant to title', () => {
+    // Guards the wrong-element bug: the "…in their H1" finding must be verified
+    // against H1s, not titles (which would falsely confirm off title overlap).
+    assert.strictEqual(cannibalisationElement('Multiple pages target the same keyword in their H1'), 'h1');
+    assert.strictEqual(cannibalisationElement('Multiple pages target the same keyword in their titles'), 'title');
+  });
+
+  void it('resolveSiteOrigin picks the most-cited on-site origin, ignoring external links', () => {
+    const f = (urls: string[]): ReportFinding => ({ title: 't', severity: 'HIGH', count: 1, exampleUrl: urls[0], exampleUrls: urls });
+    const origin = resolveSiteOrigin([
+      f(['https://site.com/a', 'https://site.com/b']),
+      f(['https://site.com/c']),
+      f(['https://external.cdn/x']),
+    ]);
+    assert.strictEqual(origin, 'https://site.com');
+    assert.strictEqual(resolveSiteOrigin([f([])]), null);
   });
 });
 
@@ -2710,8 +2840,51 @@ void describe('live-verifier: site-level verifiers', () => {
   });
 });
 
-import { crawlProfileToThrottle } from '../lib/phase2/phase2-runner';
+import { crawlProfileToThrottle, firstExampleUrl, writeRefutedReport } from '../lib/phase2/phase2-runner';
 import { NETWORK_CONDITIONS, CPU_CONDITIONS } from '../lib/constants';
+
+void describe('phase2: refuted-findings report', () => {
+  void it('firstExampleUrl extracts the first real URL and skips templated {N} series keys', () => {
+    assert.strictEqual(firstExampleUrl(['The page <a href="https://e.com/x">x</a> has a short title']), 'https://e.com/x');
+    assert.strictEqual(firstExampleUrl(['[https://e.com/insights/page/{N}](https://e.com/insights/page/{N})', 'https://e.com/real']), 'https://e.com/real');
+    assert.strictEqual(firstExampleUrl(['no url here']), undefined);
+    assert.strictEqual(firstExampleUrl(undefined), undefined);
+    // Trailing sentence punctuation on a bare URL is trimmed.
+    assert.strictEqual(firstExampleUrl(['available at https://e.com/x.']), 'https://e.com/x');
+    assert.strictEqual(firstExampleUrl(['see https://e.com/a/b; next']), 'https://e.com/a/b');
+  });
+
+  void it('writeRefutedReport writes nothing (returns null) when no findings were refuted', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refuted-empty-'));
+    assert.strictEqual(writeRefutedReport(dir, 'e.com', 'live', []), null);
+    assert.strictEqual(fs.existsSync(path.join(dir, 'audit-report.refuted.md')), false);
+  });
+
+  void it('writeRefutedReport writes a report listing each dropped finding with its reason', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refuted-'));
+    const out = writeRefutedReport(dir, 'e.com', 'live', [
+      { title: 'Some URLs are not listed in sitemap', severity: 'medium', kind: 'site-graph', exampleUrl: 'https://e.com/', reason: 'cited page IS present in the sitemap' },
+    ]);
+    assert.ok(out, 'returns the written path');
+    const md = fs.readFileSync(out as string, 'utf8');
+    assert.match(md, /refuted findings/i);
+    assert.match(md, /1 finding\(s\) dropped/);
+    assert.match(md, /Some URLs are not listed in sitemap/);
+    assert.match(md, /site-graph/);
+    assert.match(md, /cited page IS present in the sitemap/);
+    assert.match(md, /\*\*Re-checked:\*\*/, 'live mode labels the URL "Re-checked"');
+  });
+
+  void it('the data (offline) pass labels the URL "Example", not the live-only "Re-checked"', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refuted-data-'));
+    const out = writeRefutedReport(dir, 'e.com', 'data', [
+      { title: 'Duplicate page titles found', severity: 'medium', kind: 'duplicate-title', exampleUrl: 'https://e.com/a', reason: 'titles differ in the crawl data' },
+    ]);
+    const md = fs.readFileSync(out as string, 'utf8');
+    assert.match(md, /\*\*Example:\*\*/);
+    assert.doesNotMatch(md, /Re-checked/);
+  });
+});
 
 void describe('live-verifier: crawl throttle round-trip', () => {
   void it('maps a --perf crawl profile (slow4g network, normal cpu) to a live Throttle', () => {
@@ -2743,6 +2916,7 @@ void describe('live-verifier: broken-outbound match split', () => {
     renderBlockingTotal: 0, renderBlockingThirdParty: 0, thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0,
     adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0, clsValue: 0, tbtMs: 0, unusedCssRatio: -1, unusedJsRatio: -1,
     preConsentTrackingCookies: 0, contrastViolations: -1,
+    mainCount: 1, resourceHintCount: 2, privacyLinkCount: 1, tlsMs: 50, eeatSignals: 2,
   });
 
   void it('per-page "Page has N broken outbound link(s)" does NOT refute on a 200 container page', () => {

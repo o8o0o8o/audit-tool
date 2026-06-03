@@ -237,6 +237,16 @@ export interface LiveSignals {
   preConsentTrackingCookies: number;
   /** axe-core color-contrast violation nodes; -1 when the scan didn't run. */
   contrastViolations: number;
+  /** `<main>` / `[role="main"]` landmark elements on the page. */
+  mainCount: number;
+  /** Resource-hint links in the document: preconnect / preload / dns-prefetch / prefetch / modulepreload. */
+  resourceHintCount: number;
+  /** Anchors whose href or text references a privacy policy. */
+  privacyLinkCount: number;
+  /** TLS handshake time (ms) from navigation timing (connectEnd − secureConnectionStart); null when the connection was reused / no secure handshake. */
+  tlsMs: number | null;
+  /** Count (0–4) of E-E-A-T signals present: author byline, about link, contact link, Person/Organization JSON-LD. */
+  eeatSignals: number;
 }
 
 /**
@@ -479,6 +489,32 @@ async function captureOne(browser: Browser, url: string, timeoutMs: number, thro
       const canonicalEl = document.querySelector('link[rel="canonical"]');
       const descEl = document.querySelector('meta[name="description"]');
 
+      // `<main>` landmark (the "Missing <main> element" finding). role="main"
+      // counts as an equivalent landmark.
+      const mainCount = document.querySelectorAll('main, [role="main"]').length;
+
+      // Resource hints in the document head/body. rel is case-insensitive in
+      // HTML, so use the `i` attribute flag.
+      const resourceHintCount = document.querySelectorAll(
+        'link[rel~="preconnect" i], link[rel~="preload" i], link[rel~="dns-prefetch" i], link[rel~="prefetch" i], link[rel~="modulepreload" i]',
+      ).length;
+
+      // Privacy-policy links: href OR visible text mentions "privacy".
+      let privacyLinkCount = 0;
+      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+        const href = (a.getAttribute('href') ?? '').toLowerCase();
+        const text = (a.textContent ?? '').toLowerCase();
+        if (/privacy/.test(href) || /privacy/.test(text)) privacyLinkCount++;
+      }
+
+      // E-E-A-T proxy signals on the page (0–4).
+      let eeatSignals = 0;
+      if (document.querySelector('[rel="author"], [itemprop="author"], [class*="author" i], [class*="byline" i]')) eeatSignals++;
+      const anchors = Array.from(document.querySelectorAll('a[href]'));
+      if (anchors.some((a) => /about/.test(((a.getAttribute('href') ?? '') + ' ' + (a.textContent ?? '')).toLowerCase()))) eeatSignals++;
+      if (anchors.some((a) => /contact/.test(((a.getAttribute('href') ?? '') + ' ' + (a.textContent ?? '')).toLowerCase()))) eeatSignals++;
+      if (Array.from(document.querySelectorAll('script[type="application/ld+json"]')).some((s) => /"@type"\s*:\s*"(Person|Organization)"/.test(s.textContent ?? ''))) eeatSignals++;
+
       return {
         title: (document.title ?? '').trim(),
         description: descEl ? (descEl.getAttribute('content') ?? '').trim() : null,
@@ -496,16 +532,28 @@ async function captureOne(browser: Browser, url: string, timeoutMs: number, thro
         renderBlockingTotal,
         renderBlockingThirdParty,
         oversizedImages,
+        mainCount,
+        resourceHintCount,
+        privacyLinkCount,
+        eeatSignals,
       };
     });
 
-    // Navigation-timing TTFB (responseStart), in ms.
-    const ttfbMs = await page
+    // Navigation-timing TTFB (responseStart) + TLS handshake, in ms. TLS is the
+    // secure-handshake span (connectEnd − secureConnectionStart); 0/absent
+    // secureConnectionStart means the connection was reused (no fresh handshake),
+    // reported as null so the checker stays confirm-only.
+    const navTiming = await page
       .evaluate(() => {
         const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-        return nav ? Math.round(nav.responseStart) : null;
+        if (!nav) return { ttfb: null as number | null, tls: null as number | null };
+        return {
+          ttfb: Math.round(nav.responseStart),
+          tls: nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : null,
+        };
       })
-      .catch(() => null);
+      .catch(() => ({ ttfb: null as number | null, tls: null as number | null }));
+    const ttfbMs = navTiming.ttfb;
 
     // axe-core color-contrast scan (bounded). -1 if it doesn't run.
     let contrastViolations = -1;
@@ -562,6 +610,11 @@ async function captureOne(browser: Browser, url: string, timeoutMs: number, thro
       unusedJsRatio,
       preConsentTrackingCookies,
       contrastViolations,
+      mainCount: dom.mainCount,
+      resourceHintCount: dom.resourceHintCount,
+      privacyLinkCount: dom.privacyLinkCount,
+      tlsMs: navTiming.tls,
+      eeatSignals: dom.eeatSignals,
     };
   } catch {
     return null;
@@ -583,6 +636,11 @@ interface LiveChecker {
   /** Site-level / cross-page / instrumentation-only kinds read no live signals,
    *  so the orchestrator skips the fetch for them. */
   noFetch?: boolean;
+  /** Site-wide page-level claims that cite no per-page URL (e.g. "most pages
+   *  lack resource hints", "low E-E-A-T across site"): the orchestrator fetches
+   *  the resolved site homepage once and runs the checker against it. Confirm-only
+   *  by nature — one page can't refute a "most/all pages" claim. */
+  siteWidePage?: boolean;
 }
 
 const confirmed = (reason: string): CheckResult => ({ status: 'confirmed', reason });
@@ -621,6 +679,23 @@ function overOrUnsure(value: number, limit: number, label: string, unit = ''): C
  */
 function presentOrUnsure(present: boolean, whenPresent: string, whenAbsent: string): CheckResult {
   return present ? confirmed(whenPresent) : unverifiable(whenAbsent);
+}
+
+/**
+ * Verdict for a title/description length finding. The value is server-rendered
+ * and stable at load, so this confirms/refutes on the live measurement (a
+ * multi-occurrence refute is later downgraded by guardPluralRefute). A missing
+ * value routes to `unverified` — "too long/short" can't be judged on absent
+ * text, and a missing title/description is a separate finding. Pure → unit-tested.
+ */
+export function titleDescriptionVerdict(field: 'title' | 'description', value: string | null, tooLong: boolean, min: number, max: number): CheckResult {
+  const text = (value ?? '').trim();
+  if (!text) return unverifiable(`no ${field} on the page now — a missing ${field} is a separate finding, not "too ${tooLong ? 'long' : 'short'}"`);
+  const len = text.length;
+  if (tooLong) {
+    return len > max ? confirmed(`${field} is ${len} chars (> ${max})`) : refuted(`${field} is ${len} chars (≤ ${max})`);
+  }
+  return len < min ? confirmed(`${field} is ${len} chars (< ${min})`) : refuted(`${field} is ${len} chars (≥ ${min})`);
 }
 
 /**
@@ -812,6 +887,87 @@ const CHECKERS: LiveChecker[] = [
         ? confirmed(`${s.wordCount} words (< ${THRESHOLDS.THIN_CONTENT_LOW})`)
         : unverifiable(`${s.wordCount} words at load (≥ ${THRESHOLDS.THIN_CONTENT_LOW}); content may hydrate/lazy-load — not dropping`),
   },
+  {
+    // Title length — a stable, server-rendered signal, so confirm/refute both
+    // apply (multi-occurrence refutes are downgraded by guardPluralRefute).
+    kind: 'title-length',
+    match: (t) => /title/.test(t) && /(too short|too long)/.test(t),
+    check: (s, f) => titleDescriptionVerdict('title', s.title, /too long/.test(f.title.toLowerCase()), THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX),
+  },
+  {
+    kind: 'description-length',
+    match: (t) => /description/.test(t) && /(too short|too long)/.test(t),
+    check: (s, f) => titleDescriptionVerdict('description', s.description, /too long/.test(f.title.toLowerCase()), THRESHOLDS.DESCRIPTION_MIN, THRESHOLDS.DESCRIPTION_MAX),
+  },
+  {
+    // "Missing <main> element" / "has no landmark". `<main>` (or role="main") is
+    // server-rendered structure → confirm/refute both apply.
+    kind: 'missing-main',
+    // Scoped to the <main> landmark only, with `main` word-boundaried. This
+    // checker can REFUTE (drop) when a <main> is present (true on most pages), so
+    // a loose match would silently drop unrelated findings: a bare /landmark/ arm
+    // would catch "Missing <nav>/<header> landmark", and an unbounded `main`
+    // would catch "FAQPage missing mainEntity array" (HIGH structured-data) via
+    // the "main" substring of "mainEntity". \bmain\b matches <main> / role="main"
+    // but not mainEntity.
+    match: (t) => /missing.*\bmain\b|<main>|role="main"/.test(t),
+    check: (s) => (s.mainCount === 0 ? confirmed('no <main> / role="main" landmark on the page') : refuted(`${s.mainCount} <main>/role="main" landmark(s) present`)),
+  },
+  {
+    // "No privacy policy link found". Footer privacy links are server-rendered →
+    // confirm/refute both apply (plural-guarded for multi-page findings).
+    kind: 'privacy-link',
+    match: (t) => /privacy policy link|privacy.*link|no.*privacy/.test(t),
+    check: (s) => (s.privacyLinkCount === 0 ? confirmed('no visible privacy-policy link on the page') : refuted(`${s.privacyLinkCount} privacy-policy link(s) present`)),
+  },
+  {
+    kind: 'tls',
+    // Scoped to the handshake-TIME finding only. A bare /\btls\b/ would also
+    // match "Outdated TLS version" / "upgrade to TLS 1.3" (version claims), and
+    // this check keys on handshake duration (tlsMs) — unrelated to a version —
+    // so it could stamp a version finding ✓ Verified on irrelevant evidence.
+    match: (t) => /tls negotiation|slow tls/.test(t),
+    // Confirm-only: the TLS handshake span varies with session resumption, CDN
+    // POP and connection reuse, so a fast (or reused → null) sample isn't enough
+    // to drop a slow-handshake finding.
+    check: (s) =>
+      s.tlsMs == null
+        ? unverifiable('TLS handshake time not reported (connection reused / no fresh secure handshake on this navigation)')
+        : s.tlsMs > THRESHOLDS.TLS_HANDSHAKE
+          ? confirmed(`TLS handshake ${s.tlsMs}ms (> ${THRESHOLDS.TLS_HANDSHAKE}ms)`)
+          : unverifiable(`TLS handshake ${s.tlsMs}ms on this fetch (≤ ${THRESHOLDS.TLS_HANDSHAKE}ms); handshake time varies with session resumption / CDN POP — not dropping`),
+  },
+  {
+    // "Most pages lack resource hints" — cites no per-page URL, so it runs
+    // against the resolved homepage (siteWidePage). Confirm-only: one page with
+    // hints can't disprove a site-wide "most pages lack them" claim.
+    kind: 'resource-hints',
+    siteWidePage: true,
+    // Scoped to the site-wide "Most pages lack resource hints" finding only.
+    // A bare /preconnect|dns-prefetch/ would also capture per-page preconnect
+    // findings that cite their OWN example URL — force-routing them through the
+    // homepage hint-count check instead of their specific claim.
+    match: (t) => /resource hints/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.resourceHintCount === 0,
+        'homepage has no preconnect/preload/dns-prefetch/prefetch hints',
+        `homepage has ${s.resourceHintCount} resource hint(s); a site-wide "most pages lack hints" claim can't be settled from one page — not dropping`,
+      ),
+  },
+  {
+    // "Low E-E-A-T signals across site" — a site-wide average; cites no per-page
+    // URL, so it runs against the homepage (siteWidePage). Confirm-only.
+    kind: 'eeat',
+    siteWidePage: true,
+    match: (t) => /e-e-a-t|eeat|experience.*expertise|authoritativeness/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.eeatSignals === 0,
+        'homepage shows no author / about / contact / Person-or-Organization-schema E-E-A-T signals',
+        `homepage shows ${s.eeatSignals} E-E-A-T signal(s); a site-wide average can't be settled from one page — not dropping`,
+      ),
+  },
   // Site-level / cross-page / instrumentation-only kinds: a single live page
   // load cannot adjudicate these. Marked noFetch (the orchestrator skips the
   // fetch) and reported as `unverified` with the reason.
@@ -824,8 +980,27 @@ const CHECKERS: LiveChecker[] = [
   {
     kind: 'site-graph',
     noFetch: true,
-    match: (t) => /orphan|unreachable|missing from sitemap|link equity|click depth/.test(t),
+    match: (t) => /orphan|unreachable|missing from sitemap|not (listed )?in sitemap|link equity|click depth/.test(t),
     check: () => unverifiable('site-level (link graph / sitemap) — not derivable from one live page'),
+  },
+  {
+    // Keyword cannibalisation: "Multiple pages target the same keyword in their
+    // titles". Cross-page — the special verifier fetches the first 2 cited pages
+    // and checks their titles for a shared keyword. Confirm-only.
+    kind: 'cannibalisation',
+    noFetch: true,
+    match: (t) => /same keyword|cannibal|keyword.*(in (their )?titles?|conflict)/.test(t),
+    check: () => unverifiable('keyword cannibalisation handled by the special multi-page verifier'),
+  },
+  {
+    // Cross-page topic aggregates ("Many topics with thin coverage",
+    // "High-opportunity content gaps") are computed over the WHOLE crawl's topic
+    // clusters — a single live page can't reproduce them. Owned (so it isn't a
+    // "no live checker" gap) and routed to the offline / LLM pass.
+    kind: 'topic-coverage',
+    noFetch: true,
+    match: (t) => /topic|content gap|topical/.test(t),
+    check: () => unverifiable('cross-page topic / coverage aggregate (computed over the whole crawl) — not derivable from a single live page; use the offline or LLM verification pass'),
   },
   {
     kind: 'broken-pagination',
@@ -911,7 +1086,7 @@ const CHECKERS: LiveChecker[] = [
 
 /** Kinds the orchestrator handles with dedicated async verifiers (site context,
  *  multi-page comparison, or series walk) instead of the per-page registry. */
-const SPECIAL_KINDS = new Set(['duplicate', 'site-graph', 'broken-pagination', 'broken-outbound-page', 'broken-outbound']);
+const SPECIAL_KINDS = new Set(['duplicate', 'site-graph', 'broken-pagination', 'broken-outbound-page', 'broken-outbound', 'cannibalisation']);
 
 /** Page cap for the homepage reachability BFS (orphan/unreachable checks). */
 const REACHABILITY_MAX_PAGES = 120;
@@ -1030,7 +1205,7 @@ async function buildReachable(browser: Browser, origin: string, timeoutMs: numbe
 }
 
 /** Light fetch: status + title + description + word count (no heavy instrumentation). */
-async function fetchLight(browser: Browser, url: string, timeoutMs: number): Promise<{ status: number; title: string; description: string | null; wordCount: number } | null> {
+async function fetchLight(browser: Browser, url: string, timeoutMs: number): Promise<{ status: number; title: string; description: string | null; h1: string; wordCount: number } | null> {
   const context = await browser.newContext({ viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT }, userAgent: DEFAULT_USER_AGENT });
   try {
     const page = await context.newPage();
@@ -1042,6 +1217,7 @@ async function fetchLight(browser: Browser, url: string, timeoutMs: number): Pro
       return {
         title: (document.title ?? '').trim(),
         description: (document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '').trim() || null,
+        h1: (document.querySelector('h1')?.textContent ?? '').trim(),
         wordCount: text ? text.split(/\s+/).length : 0,
       };
     });
@@ -1080,6 +1256,48 @@ async function verifyDuplicate(f: ReportFinding, browser: Browser, timeoutMs: nu
   const [a, b] = await Promise.all([fetchLight(browser, f.exampleUrls[0], timeoutMs), fetchLight(browser, f.exampleUrls[1], timeoutMs)]);
   if (!a || !b) return unverifiable('could not load both example pages');
   return duplicateVerdict(field, isDesc ? a.description : a.title, isDesc ? b.description : b.title, f.count);
+}
+
+/** Generic title tokens that don't prove keyword cannibalisation on their own. */
+const TITLE_STOPWORDS = new Set(['the', 'and', 'for', 'with', 'your', 'from', 'this', 'that', 'home', 'page', 'site', 'official', 'welcome']);
+
+/**
+ * First non-trivial word (≥4 chars, not a stopword) shared by two titles, or
+ * null when they share none. Pure → unit-tested. The match is the live evidence
+ * that two pages still compete for the same keyword in their titles.
+ */
+export function sharedTitleKeyword(a: string, b: string): string | null {
+  const toks = (s: string): Set<string> => new Set((s.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []).filter((w) => !TITLE_STOPWORDS.has(w)));
+  const tb = toks(b);
+  for (const w of toks(a)) if (tb.has(w)) return w;
+  return null;
+}
+
+/**
+ * Keyword cannibalisation: fetch the first two cited pages and check whether the
+ * element the finding NAMES still shares a keyword. The analyzer emits two
+ * variants — "…in their titles" and "…in their H1" — so we compare the matching
+ * element (a title-only check would falsely confirm an H1 finding off title
+ * overlap). Confirm-only — the finding spans more groups/pages than the two
+ * sampled, so a non-match is partial evidence (`unverified`), never a drop.
+ */
+/** Which element a keyword-cannibalisation finding is about — the analyzer emits
+ *  a "…in their titles" and a "…in their H1" variant, verified on different
+ *  elements. Pure → unit-tested so the H1 variant can't be checked on titles. */
+export function cannibalisationElement(title: string): 'title' | 'h1' {
+  return /\bh1\b|heading/i.test(title) ? 'h1' : 'title';
+}
+
+async function verifyKeywordCannibalisation(f: ReportFinding, browser: Browser, timeoutMs: number): Promise<CheckResult> {
+  const onH1 = cannibalisationElement(f.title) === 'h1';
+  const label = onH1 ? 'H1' : 'title';
+  if (f.exampleUrls.length < 2) return unverifiable(`need ≥2 example pages to compare ${label}s for a shared keyword`);
+  const [a, b] = await Promise.all([fetchLight(browser, f.exampleUrls[0], timeoutMs), fetchLight(browser, f.exampleUrls[1], timeoutMs)]);
+  if (!a || !b) return unverifiable('could not load both example pages');
+  const shared = sharedTitleKeyword(onH1 ? a.h1 : a.title, onH1 ? b.h1 : b.title);
+  return shared
+    ? confirmed(`2 cited pages still share the ${label} keyword "${shared}"`)
+    : unverifiable(`the first 2 cited pages share no obvious ${label} keyword now, but the finding spans ${f.count} groups — other pages weren't compared; not dropping`);
 }
 
 /**
@@ -1240,6 +1458,34 @@ export interface LiveVerifyOptions {
 }
 
 /**
+ * Most-cited origin across all findings' example URLs — the site under audit.
+ * Used to fetch the homepage for siteWidePage checkers whose findings carry no
+ * per-page URL. Returns null when no finding cites an http(s) URL. Pure → tested.
+ */
+export function resolveSiteOrigin(findings: ReportFinding[]): string | null {
+  const counts = new Map<string, number>();
+  for (const f of findings) {
+    for (const u of f.exampleUrls) {
+      try {
+        const origin = new URL(u).origin;
+        counts.set(origin, (counts.get(origin) ?? 0) + 1);
+      } catch {
+        /* skip unparsable */
+      }
+    }
+  }
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [origin, n] of counts) {
+    if (n > bestN) {
+      best = origin;
+      bestN = n;
+    }
+  }
+  return best;
+}
+
+/**
  * Parse the report, re-fetch each finding's first example, and re-assert the
  * claim live. One fetch per DISTINCT example URL (cached). Findings with no
  * example URL or no matching checker resolve to `unverified`.
@@ -1258,17 +1504,24 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
   const urlsToFetch = new Set<string>();
   let needsSiteCtx = false;
   let hasSpecial = false;
+  let needsHomepage = false;
   for (const { f, checker } of plan) {
     if (!checker) continue;
     if (checker.kind === 'site-graph') needsSiteCtx = true;
+    if (checker.siteWidePage) needsHomepage = true;
     if (SPECIAL_KINDS.has(checker.kind)) hasSpecial = true;
-    else if (!checker.noFetch && f.exampleUrl) urlsToFetch.add(f.exampleUrl);
+    else if (!checker.noFetch && !checker.siteWidePage && f.exampleUrl) urlsToFetch.add(f.exampleUrl);
   }
+  // Resolve the site origin from the most-cited on-site host across all findings
+  // (used for the homepage fetch that backs siteWidePage checkers). External
+  // example URLs (broken-outbound links) lose to the dominant on-site origin.
+  const siteOrigin = needsHomepage ? resolveSiteOrigin(findings) : null;
 
   const cache = new Map<string, LiveSignals | null>();
   const verdictByPlan = new Map<ReportFinding, CheckResult & { kind: string }>();
+  let homepageSignals: LiveSignals | null = null;
 
-  if (urlsToFetch.size > 0 || hasSpecial || needsSiteCtx) {
+  if (urlsToFetch.size > 0 || hasSpecial || needsSiteCtx || (needsHomepage && siteOrigin)) {
     const browser = await chromium.launch();
     try {
       // 1. Per-page signal captures.
@@ -1277,6 +1530,15 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
         n++;
         if (opts.verbose) console.log(`  … live-fetching (${n}/${urlsToFetch.size}) ${url}`);
         cache.set(url, await captureOne(browser, url, timeoutMs, opts.throttle));
+      }
+
+      // 1b. Homepage capture backing the siteWidePage checkers (resource hints,
+      // E-E-A-T) — those findings cite no per-page URL.
+      if (needsHomepage && siteOrigin) {
+        const homeUrl = `${siteOrigin}/`;
+        if (opts.verbose) console.log(`  … live-fetching site homepage for site-wide checks: ${homeUrl}`);
+        homepageSignals = cache.get(homeUrl) ?? (await captureOne(browser, homeUrl, timeoutMs, opts.throttle));
+        cache.set(homeUrl, homepageSignals);
       }
 
       // 2. Site context (sitemap + reachability) for site-level findings.
@@ -1301,12 +1563,13 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
         if (!checker || !SPECIAL_KINDS.has(checker.kind)) continue;
         let r: CheckResult;
         if (checker.kind === 'duplicate') r = await verifyDuplicate(f, browser, timeoutMs);
+        else if (checker.kind === 'cannibalisation') r = await verifyKeywordCannibalisation(f, browser, timeoutMs);
         else if (checker.kind === 'broken-pagination') r = await verifyPagination(f, browser, timeoutMs);
         else if (checker.kind === 'broken-outbound-page') r = await verifyBrokenOutboundPage(f, browser, timeoutMs);
         else if (checker.kind === 'broken-outbound') r = await verifyBrokenOutbound(f, browser, timeoutMs);
         else if (checker.kind === 'site-graph') {
           if (!site) r = unverifiable('site context unavailable');
-          else if (/missing from sitemap/i.test(f.title)) r = verifySitemapMembership(f, site);
+          else if (/missing from sitemap|not (listed )?in sitemap/i.test(f.title)) r = verifySitemapMembership(f, site);
           else if (/orphan|unreachable/i.test(f.title)) r = verifyReachability(f, site);
           else r = unverifiable('link-equity / click-depth not derivable from a bounded live crawl');
         } else r = unverifiable('unhandled special kind');
@@ -1335,6 +1598,15 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
     }
     if (checker.noFetch) {
       const r = checker.check({} as LiveSignals, f);
+      verdicts.push({ title: f.title, severity: f.severity, status: r.status, reason: r.reason, exampleUrl: f.exampleUrl, kind: checker.kind });
+      continue;
+    }
+    if (checker.siteWidePage) {
+      // Site-wide page claim: judged against the resolved homepage. Confirm-only,
+      // so no plural guard is needed (the checker never refutes).
+      const r = homepageSignals
+        ? checker.check(homepageSignals, f)
+        : unverifiable(siteOrigin ? 'could not load the site homepage for the site-wide check' : 'no on-site URL in the report to resolve the homepage');
       verdicts.push({ title: f.title, severity: f.severity, status: r.status, reason: r.reason, exampleUrl: f.exampleUrl, kind: checker.kind });
       continue;
     }

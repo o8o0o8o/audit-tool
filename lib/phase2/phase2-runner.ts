@@ -36,9 +36,9 @@ import {
 import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
-import { loadAllPages, loadSiteData, verifyDetails, collectUncheckedContexts, buildSiteAggregate } from './finding-verifier';
+import { loadAllPages, loadSiteData, verifyDetails, collectUncheckedContexts, buildSiteAggregate, firstExample } from './finding-verifier';
 import { llmVerifyFindings, claudeCliVerifyFindings, isClaudeCliAvailable } from './llm-finding-verify';
-import { verifyReportLive, type Throttle } from './live-verifier';
+import { verifyReportLive, type Throttle, type LiveVerdict } from './live-verifier';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -1599,6 +1599,19 @@ async function runVerification(
     imageBaseDir: artifacts.runDir,
   });
   console.log(`📄 Verified report: ${pdfPath}`);
+
+  // Capture the deterministically-dropped findings in a separate report. Use the
+  // verifier's own worst-first example selector so the URL shown is the one the
+  // pass actually cross-checked.
+  const refutedEntries: RefutedEntry[] = [...summary.refuted].map((m) => {
+    const detail = baseDetails[m];
+    const res = summary.results.get(m);
+    const chosen = detail ? firstExample(detail) : undefined;
+    return { title: m, severity: detail?.severity, kind: res?.kind, exampleUrl: firstExampleUrl(chosen ? [chosen] : undefined), reason: res?.reason ?? 'contradicted by crawl data' };
+  });
+  const refutedPath = writeRefutedReport(artifacts.runDir, artifacts.manifest.domain, 'data', refutedEntries);
+  if (refutedPath) console.log(`📄 Refuted findings (dropped): ${refutedPath}`);
+
   return pdfPath;
 }
 
@@ -1634,6 +1647,60 @@ function loadCrawlThrottle(runDir: string): Throttle | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** First real http(s) URL across a finding's example strings (skips templated
+ *  `{N}` series keys), or undefined. Examples may be markdown/HTML or bare URLs. */
+export function firstExampleUrl(examples: string[] | undefined): string | undefined {
+  for (const ex of examples ?? []) {
+    for (const url of ex.match(/https?:\/\/[^\s)\]<>"']+/g) ?? []) {
+      // Strip trailing sentence punctuation a bare URL in prose can pick up
+      // ("…available at https://e.com/x." → drop the period).
+      if (!/[{}]/.test(url)) return url.replace(/[.,;:]+$/, '');
+    }
+  }
+  return undefined;
+}
+
+/** One dropped finding, for the refuted-findings report. */
+export interface RefutedEntry {
+  title: string;
+  severity?: string;
+  /** Live checker kind that drove the refute (live pass only). */
+  kind?: string;
+  /** The example URL / signal that was re-checked. */
+  exampleUrl?: string;
+  /** Why it was dropped (the verdict's reason). */
+  reason: string;
+}
+
+/**
+ * Write the findings the verification pass DROPPED to a separate
+ * `audit-report.refuted.md`. These never appear in the verified report (they
+ * were refuted — already-fixed or analyzer false positives), but they're worth
+ * keeping: a recurring refute is a candidate analyzer bug. Returns the path, or
+ * null when nothing was refuted (no empty file is written).
+ */
+export function writeRefutedReport(runDir: string, domain: string, mode: 'live' | 'data', entries: RefutedEntry[]): string | null {
+  if (entries.length === 0) return null;
+  const stamp = `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`;
+  const intro =
+    mode === 'live'
+      ? `> **Refuted by the live verification pass** (${stamp}). Each issue below was in the audit report, but a live re-fetch of its first example **contradicted the claim**, so it was DROPPED from \`audit-report.verified.md\`. These are likely already-fixed issues or analyzer false positives. The live site can change, so this reflects a point in time.`
+      : `> **Refuted by the deterministic verification pass.** Each issue below was in the audit report, but the crawl data on disk **contradicted the claim**, so it was DROPPED from \`audit-report.verified.md\`. These are candidate analyzer false positives worth investigating.`;
+  const lines: string[] = [`# ${domain} — refuted findings`, '', intro, '', `**${entries.length} finding(s) dropped.**`, ''];
+  for (const e of entries) {
+    lines.push(`## ${stripHtml(e.title)}`, '');
+    const meta = [e.severity ? e.severity.toUpperCase() : null, e.kind ? `kind: \`${e.kind}\`` : null].filter(Boolean).join(' · ');
+    if (meta) lines.push(meta, '');
+    // The live pass re-fetches a specific URL; the data pass cross-checks crawl
+    // data on disk, so call the URL an "Example" there rather than "Re-checked".
+    if (e.exampleUrl) lines.push(`- **${mode === 'live' ? 'Re-checked' : 'Example'}:** ${e.exampleUrl}`);
+    lines.push(`- **Why dropped:** ${stripHtml(e.reason)}`, '');
+  }
+  const mdPath = path.join(runDir, 'audit-report.refuted.md');
+  fs.writeFileSync(mdPath, lines.join('\n'));
+  return mdPath;
 }
 
 /**
@@ -1681,11 +1748,17 @@ async function runLiveVerification(
 
   const confirmed = new Set<string>();
   const refutedMessages = new Set<string>();
+  // Keep the refuting verdict per dropped message so the refuted report can show
+  // its severity / kind / example / reason.
+  const refutedByMessage = new Map<string, LiveVerdict>();
   for (const v of verdicts) {
     const message = titleToMessage.get(v.title) ?? titleToMessage.get(sanitizeProse(v.title));
     if (message) {
       if (v.status === 'confirmed') confirmed.add(message);
-      else if (v.status === 'refuted') refutedMessages.add(message);
+      else if (v.status === 'refuted') {
+        refutedMessages.add(message);
+        refutedByMessage.set(message, v);
+      }
     }
 
     if (v.status === 'refuted' && message) console.log(`  ✗ live refuted (dropped): ${stripHtml(v.title)} — ${v.reason}`);
@@ -1735,5 +1808,14 @@ async function runLiveVerification(
     imageBaseDir: artifacts.runDir,
   });
   console.log(`📄 Verified report (live): ${pdfPath}`);
+
+  // Capture the dropped findings in a separate report (candidate false positives).
+  const refutedEntries: RefutedEntry[] = [...refutedMessages].map((m) => {
+    const v = refutedByMessage.get(m);
+    return { title: v?.title ?? m, severity: v?.severity, kind: v?.kind, exampleUrl: v?.exampleUrl, reason: v?.reason ?? 'contradicted by the live page' };
+  });
+  const refutedPath = writeRefutedReport(artifacts.runDir, artifacts.manifest.domain, 'live', refutedEntries);
+  if (refutedPath) console.log(`📄 Refuted findings (dropped): ${refutedPath}`);
+
   return pdfPath;
 }

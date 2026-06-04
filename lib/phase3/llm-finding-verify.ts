@@ -26,7 +26,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { callClaudeCli, isClaudeCliAvailable, extractCliResult } from './claude-cli';
+import { callClaudeCli, isClaudeCliAvailable, extractCliResult } from '../phase2/claude-cli';
 
 // Re-export the shared CLI helpers so existing importers (phase2-runner, tests)
 // keep working unchanged after the transport was hoisted to ./claude-cli.

@@ -418,6 +418,7 @@ async function audit() {
     generateHTML(seo.file, seo.domainName!, htmlOutputPath);
 
     // Phase 2 — curated markdown + PDF report. Opt-out via --no-phase2.
+    let phase2Succeeded = false;
     if (args.phase2 !== false) {
       // Persist the latest analysis state before Phase 2 reads from disk.
       // Repo-analysis findings (and any other post-audit() saveError calls)
@@ -433,11 +434,11 @@ async function audit() {
           llmNarrative: args.llmNarrative === true,
           llmFindings: args.llmFindings === true,
           llmVerify: args.llmVerify === true,
-          verify: args.verify === true,
           noScore: args.noScore === true,
           verbose: args.verbose === true,
         });
         console.log(`📄 Curated report: ${pdfPath}`);
+        phase2Succeeded = true;
       } catch (e: unknown) {
         // Surface this loudly: the audit itself succeeded, but the curated
         // PDF the user expects is missing. A swallowed debug line here means a
@@ -445,6 +446,24 @@ async function audit() {
         console.log('⚠️  Phase 2 curated report failed:', (e as Error).message);
         console.log(
           `   Regenerate with: npx tsx -e "import {runPhase2} from './lib/phase2/phase2-runner'; runPhase2('${seo.fileManager.resultsDir}',{verbose:true}).then(p=>console.log(p))"`,
+        );
+        if (args.verbose === true) console.error((e as Error).stack);
+      }
+    }
+
+    // Phase 3 — verification (--verify). Reads the report + phase2-state.json
+    // Phase 2 just wrote and emits a SEPARATE audit-report.verified.* set; the
+    // main report is never touched. Isolated from Phase 2 so a verify failure
+    // (network, Playwright) can't lose the curated report, and re-runnable on
+    // its own — re-verify an existing audit anytime without re-crawling.
+    if (phase2Succeeded && args.verify === true) {
+      try {
+        const { runVerifyPhase } = await import('./lib/phase3/verify-runner');
+        await runVerifyPhase(seo.fileManager.resultsDir, { verbose: args.verbose === true });
+      } catch (e: unknown) {
+        console.log('⚠️  Verification phase failed:', (e as Error).message);
+        console.log(
+          `   Re-verify with: npx tsx -e "import {runVerifyPhase} from './lib/phase3/verify-runner'; runVerifyPhase('${seo.fileManager.resultsDir}',{verbose:true}).then(p=>console.log(p))"`,
         );
         if (args.verbose === true) console.error((e as Error).stack);
       }

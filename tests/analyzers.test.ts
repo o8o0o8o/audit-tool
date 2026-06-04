@@ -1919,7 +1919,7 @@ import {
   PageIndex,
   verifyFinding,
   verifyDetails,
-} from '../lib/phase2/finding-verifier';
+} from '../lib/phase3/finding-verifier';
 import type { IssueDetail as VIssueDetail } from '../lib/phase2/types';
 
 function idx(pages: Record<string, Partial<PageInfo>>): PageIndex {
@@ -2351,8 +2351,8 @@ void describe('finding-verifier — threshold & boolean verifiers', () => {
 // ============================================================
 // LLM finding-verify — pure parsing + signal collection
 // ============================================================
-import { parseLlmVerdicts, extractCliResult } from '../lib/phase2/llm-finding-verify';
-import { buildPageSignals, collectUncheckedContexts } from '../lib/phase2/finding-verifier';
+import { parseLlmVerdicts, extractCliResult } from '../lib/phase3/llm-finding-verify';
+import { buildPageSignals, collectUncheckedContexts } from '../lib/phase3/finding-verifier';
 
 void describe('llm finding-verify parsing', () => {
   void it('keeps only known indices and normalizes unknown verdicts to unsure', () => {
@@ -2405,7 +2405,7 @@ void describe('llm finding-verify context collection', () => {
   });
 });
 
-import { parseReportFindings } from '../lib/phase2/live-verifier';
+import { parseReportFindings } from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: parseReportFindings', () => {
   const md = [
@@ -2535,7 +2535,7 @@ void describe('live-verifier: parseReportFindings — scan bounds & exclusions',
   });
 });
 
-import { checkFindingSignals, brokenOutboundVerdict, titleDescriptionVerdict, sharedTitleKeyword, resolveSiteOrigin, cannibalisationElement, type LiveSignals } from '../lib/phase2/live-verifier';
+import { checkFindingSignals, brokenOutboundVerdict, titleDescriptionVerdict, sharedTitleKeyword, resolveSiteOrigin, cannibalisationElement, type LiveSignals } from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: checker refute contract', () => {
   // A clean baseline page (no defects present at load).
@@ -2808,7 +2808,7 @@ void describe('buildReportMarkdown screenshot embedding', () => {
   });
 });
 
-import { verifySitemapMembership, verifyReachability, type LiveSite, type ReportFinding } from '../lib/phase2/live-verifier';
+import { verifySitemapMembership, verifyReachability, type LiveSite, type ReportFinding } from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: site-level verifiers', () => {
   const f = (title: string, url: string): ReportFinding => ({ title, severity: 'HIGH', count: 1, exampleUrl: url, exampleUrls: [url] });
@@ -2840,10 +2840,37 @@ void describe('live-verifier: site-level verifiers', () => {
   });
 });
 
-import { crawlProfileToThrottle, firstExampleUrl, writeRefutedReport } from '../lib/phase2/phase2-runner';
+import { crawlProfileToThrottle, firstExampleUrl, writeRefutedReport, loadPhase2State } from '../lib/phase3/verify-runner';
 import { NETWORK_CONDITIONS, CPU_CONDITIONS } from '../lib/constants';
 
-void describe('phase2: refuted-findings report', () => {
+void describe('phase3: phase2-state.json boundary', () => {
+  void it('round-trips the Phase 2 render state (suppression, narratives, anomalies, noScore)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p2state-'));
+    const state = {
+      version: 1,
+      generatedAt: '2026-06-04T00:00:00.000Z',
+      suppressed: ['Duplicate page titles found'],
+      narratives: { seo: 'Anchored narrative.' },
+      anomalies: [{ section: 'ux', title: 'Dead button', severity: 'high', url: 'https://e.com/', evidence: 'e', recommendation: 'r' }],
+      noScore: true,
+    };
+    fs.writeFileSync(path.join(dir, 'phase2-state.json'), JSON.stringify(state));
+    assert.deepStrictEqual(loadPhase2State(dir), state);
+  });
+
+  void it('returns null when the state file is absent, malformed, missing the suppression array, or future-versioned', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p2state-missing-'));
+    assert.strictEqual(loadPhase2State(dir), null, 'absent file');
+    fs.writeFileSync(path.join(dir, 'phase2-state.json'), 'not json');
+    assert.strictEqual(loadPhase2State(dir), null, 'malformed JSON');
+    fs.writeFileSync(path.join(dir, 'phase2-state.json'), JSON.stringify({ version: 1, narratives: {} }));
+    assert.strictEqual(loadPhase2State(dir), null, 'suppressed must be an array');
+    fs.writeFileSync(path.join(dir, 'phase2-state.json'), JSON.stringify({ version: 2, suppressed: [], narratives: {}, anomalies: [], noScore: false }));
+    assert.strictEqual(loadPhase2State(dir), null, 'unknown version degrades to the absent-state fallback');
+  });
+});
+
+void describe('phase3: refuted-findings report', () => {
   void it('firstExampleUrl extracts the first real URL and skips templated {N} series keys', () => {
     assert.strictEqual(firstExampleUrl(['The page <a href="https://e.com/x">x</a> has a short title']), 'https://e.com/x');
     assert.strictEqual(firstExampleUrl(['[https://e.com/insights/page/{N}](https://e.com/insights/page/{N})', 'https://e.com/real']), 'https://e.com/real');
@@ -2961,7 +2988,7 @@ void describe('live-verifier: path-case is significant in site-graph drop decisi
   });
 });
 
-import { duplicateVerdict } from '../lib/phase2/live-verifier';
+import { duplicateVerdict } from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: duplicateVerdict count-coverage', () => {
   void it('matching values → confirmed regardless of count', () => {

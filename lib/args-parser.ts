@@ -84,7 +84,7 @@ function parseArgs(args: string[]): ParsedArgs {
     llmNarrative: false, // Use Claude to rewrite per-section Analysis prose
     llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
     llmVerify: false, // Use Claude to revalidate findings + drop confirmed duplicates/false positives before the final report
-    verify: false, // Deterministic verification phase — re-check each finding's first example against crawl data, emit a separate verified report
+    verify: false, // Phase 3 verification — re-check each finding's first example (live by default; crawl data with SEO_AUDIT_VERIFY_OFFLINE=1), emit a separate verified report
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)

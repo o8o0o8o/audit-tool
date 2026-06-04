@@ -29,7 +29,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import type { PageInfo } from '../types';
-import type { IssueDetail } from './types';
+import type { IssueDetail } from '../phase2/types';
 import { compareExamplesWorstFirst } from '../utils';
 import { THRESHOLDS } from '../constants';
 

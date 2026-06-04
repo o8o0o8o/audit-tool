@@ -3,7 +3,7 @@
  * Analyzes DNS lookup, TCP connection, and TLS negotiation times
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, THRESHOLDS } from '../../constants';
 import { shortenUrl } from '../../utils';
 import type { Issue, ChromePage, PageInfo, NetworkRequest } from '../../types';
 
@@ -107,7 +107,7 @@ class ConnectionTimingAnalyzer {
     }
 
     // Slow document TLS
-    if (navTiming && navTiming.tls > 100) {
+    if (navTiming && navTiming.tls > THRESHOLDS.TLS_HANDSHAKE) {
       warnings.push({
         message: 'Slow TLS negotiation',
         detail: `<a href="${url}">${url}</a> TLS negotiation took ${navTiming.tls}ms. Ensure TLS 1.3 is enabled and session resumption is configured.`,

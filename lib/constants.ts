@@ -111,6 +111,10 @@ export const THRESHOLDS = {
   CLS: 0.1,
   INP: 200,
 
+  // Connection timing (ms) — a TLS handshake above this is flagged "Slow TLS
+  // negotiation". Shared by the producing analyzer and the live verifier.
+  TLS_HANDSHAKE: 100,
+
   // Lab metrics (Lighthouse-style thresholds)
   TBT: 200,
   TTI: 3800,

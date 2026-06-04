@@ -1067,7 +1067,7 @@ const VERIFIERS: Verifier[] = [
 ];
 
 /** Pick the example the report would show first (worst-first, then stable). */
-function firstExample(detail: IssueDetail): string | undefined {
+export function firstExample(detail: IssueDetail): string | undefined {
   const examples = detail.examples ?? [];
   if (examples.length === 0) return undefined;
   return [...examples].sort(compareExamplesWorstFirst)[0];

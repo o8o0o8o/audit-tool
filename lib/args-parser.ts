@@ -62,7 +62,6 @@ function parseArgs(args: string[]): ParsedArgs {
     repo: null, // Path to local git repository for source code analysis
     exclude: [] as string[], // URL patterns to exclude from crawling
     limit: null, // Max pages to audit
-    onlyErrors: false, // Only show pages with errors in report
     dryRun: false, // Show what would be audited without crawling
     generateCi: false, // Generate GitHub Actions workflow
     validateConfig: false, // Validate config file and exit
@@ -71,7 +70,6 @@ function parseArgs(args: string[]): ParsedArgs {
     help: false, // Show help text
     open: false, // Auto-open HTML report in browser
     verbose: false, // Verbose output (per-URL logging)
-    quiet: false, // Minimal output (suppress info messages)
     preset: null, // Audit preset: quick, standard, deep
     sites: null, // File with list of URLs for batch audit
     slack: null, // Slack webhook URL for notifications
@@ -100,8 +98,6 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.open = true;
     } else if (arg === '--verbose' || arg === '-v') {
       parsed.verbose = true;
-    } else if (arg === '--quiet' || arg === '-q') {
-      parsed.quiet = true;
     } else if (arg.startsWith('--preset=')) {
       const preset = arg.substring('--preset='.length).toLowerCase();
       if (['quick', 'standard', 'deep'].includes(preset)) {
@@ -233,8 +229,6 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.brandLogo = arg.substring('--brand-logo='.length);
     } else if (arg.startsWith('--brand-name=')) {
       parsed.brandName = arg.substring('--brand-name='.length);
-    } else if (arg === '--only-errors') {
-      parsed.onlyErrors = true;
     } else if (arg.startsWith('--exclude=')) {
       const pattern = arg.substring('--exclude='.length);
       if (pattern) parsed.exclude.push(pattern);

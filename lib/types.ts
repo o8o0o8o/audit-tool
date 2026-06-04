@@ -1637,7 +1637,6 @@ export interface ParsedArgs {
   repo: string | null;
   exclude: string[];
   limit: number | null;
-  onlyErrors: boolean;
   dryRun: boolean;
   generateCi: boolean;
   validateConfig: boolean;
@@ -1646,7 +1645,6 @@ export interface ParsedArgs {
   help: boolean;
   open: boolean;
   verbose: boolean;
-  quiet: boolean;
   preset: 'quick' | 'standard' | 'deep' | null;
   sites: string | null;
   slack: string | null;

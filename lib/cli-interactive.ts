@@ -34,10 +34,8 @@ Options:
   --heap-size=<mb>          Node.js heap size in MB (512-32768, default: 8192)
   --exclude=<pattern>       Exclude URLs matching regex pattern (repeatable)
   --limit=<n>               Max number of pages to audit
-  --only-errors             Only include pages with errors in report
   --dry-run                 Show URLs that would be audited, then exit
   --preset=<name>           Audit preset: quick, standard, or deep
-  --quiet, -q               Minimal output (suppress info messages)
   --no-score                Omit all scores from the curated PDF report
                             (category projections + per-finding point chips)
   --ci[=<threshold>]        CI mode: exit code 1 if score < threshold (default: 70)
@@ -124,13 +122,11 @@ async function interactiveMode() {
     repo: string | null;
     exclude: string[];
     limit: number | null;
-    onlyErrors: boolean;
     dryRun: boolean;
     preset: string | null;
     help: boolean;
     open: boolean;
     verbose: boolean;
-    quiet: boolean;
     warnings: string[];
   } = {
     origin: null,
@@ -149,13 +145,11 @@ async function interactiveMode() {
     repo: null,
     exclude: [],
     limit: null,
-    onlyErrors: false,
     dryRun: false,
     preset: null,
     help: false,
     open: false,
     verbose: false,
-    quiet: false,
     warnings: [],
   };
 

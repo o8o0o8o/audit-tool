@@ -132,9 +132,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
       args.exclude.forEach((pattern) => childArgs.push(`--exclude=${pattern}`));
     }
     if (args.limit) childArgs.push(`--limit=${args.limit}`);
-    if (args.onlyErrors) childArgs.push('--only-errors');
     if (args.dryRun) childArgs.push('--dry-run');
-    if (args.quiet) childArgs.push('--quiet');
     if (args.preset) childArgs.push(`--preset=${args.preset}`);
     if (args.webhook) childArgs.push(`--webhook=${args.webhook}`);
     if (args.generateCi) childArgs.push('--generate-ci');

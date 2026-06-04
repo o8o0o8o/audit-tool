@@ -185,7 +185,6 @@ async function audit() {
       console.error('  --repo=<path>           Local git repo for source code analysis');
       console.error('  --exclude=<pattern>     Exclude URLs matching regex (repeatable)');
       console.error('  --limit=<number>        Max pages to audit');
-      console.error('  --only-errors           Only include pages with errors in report');
       console.error('  --ci[=<threshold>]      CI mode: exit 1 if score < threshold (default: 70)');
       console.error('  --json                  Output JSON summary to stdout');
       console.error('  --config=<path>         Path to config file');

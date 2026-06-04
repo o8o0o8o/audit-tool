@@ -5,13 +5,15 @@ Automated website audit. Crawls a site, runs ~50 SEO / performance / accessibili
 ## Pipeline
 
 ```
-URL ──▶ Phase 1: mechanical crawl ──▶ artifacts/ ──▶ Phase 2: curated PDF
-                                                    (optional LLM narrative)
+URL ──▶ Phase 1: mechanical crawl ──▶ artifacts/ ──▶ Phase 2: curated PDF ──▶ Phase 3: verification (--verify)
+                                                    (optional LLM narrative)     (separate verified report)
 ```
 
 **Phase 1** is fully deterministic — Playwright crawl + analyzers + evidence capture for sampled pages. No LLM, no judgement calls.
 
-**Phase 2** consumes the Phase 1 artifacts and produces `audit-report.pdf` in the human-audit style: cover, summary with Top 3 Priority Issues + Quick Wins + Long-term Recommendations, six sections (Performance / SEO / Privacy / Accessibility / UX / Technical), and an appendix with screenshots + PSI Lighthouse scores per representative page. Template-driven by default; opt into Claude prose with `--llm-narrative`.
+**Phase 2** consumes the Phase 1 artifacts and produces `audit-report.pdf` in the human-audit style: cover, summary with Top 3 Priority Issues + Quick Wins + Long-term Recommendations, six sections (Performance / SEO / Privacy / Accessibility / UX / Technical), and an appendix with screenshots + PSI Lighthouse scores per representative page. Template-driven by default; opt into Claude prose with `--llm-narrative`. Persists `phase2-state.json` — the exact render inputs — as the boundary the next phase re-renders from.
+
+**Phase 3** (opt-in via `--verify`) fact-checks the report Phase 2 just wrote: it re-fetches each CRITICAL/HIGH/MEDIUM finding's first example live and re-asserts the claim against the current page, then emits a **separate** `audit-report.verified.{md,pdf}` (confirmed findings badged ✓ Verified, refuted ones dropped into `audit-report.refuted.md`; the main report is never touched). Standalone re-runnable: everything it needs is on disk, so you can re-verify an existing audit at any later time without re-crawling — `runVerifyPhase(runDir)` from `lib/phase3/verify-runner.ts`.
 
 ## Installation
 
@@ -79,6 +81,10 @@ audit-results/
         ├── audit-report.pdf            # Phase 2 curated PDF
         ├── audit-report.md             # source markdown
         ├── audit-report.html           # styled HTML (renderer input)
+        ├── phase2-state.json           # Phase 2 → Phase 3 boundary (render inputs for standalone re-verify)
+        ├── audit-report.verified.pdf   # Phase 3 (--verify): re-checked report, per-issue status badges
+        ├── audit-report.verified.md    # its source markdown
+        ├── audit-report.refuted.md     # Phase 3: findings DROPPED as refuted, with reasons (omitted when none)
         ├── example.com.html            # Phase 1 engineer-facing data dump
         ├── manifest.json.gz            # index + evidence section
         ├── analysis.json.gz            # site-wide findings + summary

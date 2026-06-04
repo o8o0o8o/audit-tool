@@ -2355,9 +2355,9 @@ function clusterLabel(s: string): string {
 async function prepareSuppression(artifacts: AuditArtifacts, options: Phase2Options): Promise<Set<string>> {
   const empty = new Set<string>();
   if (!options.llmVerify) return empty;
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY && !isClaudeCliAvailable()) {
     if (options.verbose) {
-      console.warn('--llm-verify requested but ANTHROPIC_API_KEY is not set; keeping all findings.');
+      console.warn('--llm-verify requested but no ANTHROPIC_API_KEY and no claude CLI found; keeping all findings.');
     }
     return empty;
   }

@@ -14,8 +14,12 @@
  *
  * Design mirrors llm-narrative.ts / llm-anomaly.ts:
  *   • No SDK dependency. Anthropic's API is a vanilla HTTPS POST.
- *   • Gated on `ANTHROPIC_API_KEY`. Returns [] (no-op) when absent.
- *   • Disk-cached by SHA of (model, system, findings payload) so re-runs are free.
+ *   • Two transports, auto-selected so a key is never required: with
+ *     `ANTHROPIC_API_KEY` it calls the API; otherwise, if the `claude` CLI is
+ *     on PATH it is spawned headless (shared transport in claude-cli.ts).
+ *     Returns [] (no-op) when neither is reachable.
+ *   • Disk-cached by SHA of (model, system, findings payload) so re-runs are
+ *     free (API and CLI replies under distinct keys).
  *   • Returns [] on ANY failure so the caller falls back to the full finding set.
  *   • Conservative authority: only drops what the model explicitly flags, and
  *     every drop is logged with a reason so the suppression is auditable.
@@ -26,6 +30,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -126,33 +131,8 @@ export function parseVerifyResult(raw: string, validIndices: number[]): VerifyDr
   return out;
 }
 
-/**
- * Ask Claude which findings to drop. Returns [] on no key / no findings / any
- * failure, so the caller keeps the full deterministic set unchanged.
- */
-export async function verifyFindings(req: VerifyRequest): Promise<VerifyDrop[]> {
-  const apiKey = req.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
-  if (!apiKey) return [];
-  if (!req.findings || req.findings.length === 0) return [];
-
-  const model = req.model ?? DEFAULT_MODEL;
-  const userPrompt = buildUserPrompt(req);
-  const validIndices = req.findings.map((f) => f.index);
-  const key = cacheKey(model, SYSTEM_PROMPT, userPrompt);
-
-  let cacheFile: string | null = null;
-  if (req.cacheDir) {
-    try {
-      fs.mkdirSync(req.cacheDir, { recursive: true });
-      cacheFile = path.join(req.cacheDir, `${key}.json`);
-      if (fs.existsSync(cacheFile)) {
-        return parseVerifyResult(fs.readFileSync(cacheFile, 'utf8'), validIndices);
-      }
-    } catch {
-      cacheFile = null;
-    }
-  }
-
+/** One API call. Returns the reply text, or null on any failure. */
+async function callApi(userPrompt: string, apiKey: string, model: string, verbose: boolean): Promise<string | null> {
   try {
     const res = await fetch(ANTHROPIC_ENDPOINT, {
       method: 'POST',
@@ -169,28 +149,68 @@ export async function verifyFindings(req: VerifyRequest): Promise<VerifyDrop[]> 
       }),
     });
     if (!res.ok) {
-      if (req.verbose) {
+      if (verbose) {
         const body = await res.text().catch(() => '');
         console.warn(`LLM verify HTTP ${res.status}: ${body.slice(0, 200)}`);
       }
-      return [];
+      return null;
     }
     const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-    const text = json.content?.find((c) => c.type === 'text')?.text?.trim();
-    if (!text) return [];
-
-    if (cacheFile) {
-      try {
-        fs.writeFileSync(cacheFile, text);
-      } catch {
-        // best effort
-      }
-    }
-    return parseVerifyResult(text, validIndices);
+    return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
-    if (req.verbose) {
+    if (verbose) {
       console.warn(`LLM verify failed: ${(error as Error).message}`);
     }
-    return [];
+    return null;
   }
+}
+
+/**
+ * Ask Claude which findings to drop. Returns [] on no findings / any failure,
+ * so the caller keeps the full deterministic set unchanged.
+ *
+ * Transport priority: the Anthropic API when a key is present, otherwise the
+ * keyless `claude` CLI when it is available (shared with the narrative/anomaly
+ * passes). Returns [] when neither is reachable. API and CLI replies are
+ * cached under distinct keys.
+ */
+export async function verifyFindings(req: VerifyRequest): Promise<VerifyDrop[]> {
+  const apiKey = req.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
+  const useCli = !apiKey && isClaudeCliAvailable();
+  if (!apiKey && !useCli) return [];
+  if (!req.findings || req.findings.length === 0) return [];
+
+  // The CLI uses the user's default model (no override); the API uses ours.
+  const model = useCli ? req.model : req.model ?? DEFAULT_MODEL;
+  const userPrompt = buildUserPrompt(req);
+  const validIndices = req.findings.map((f) => f.index);
+  const rawKey = cacheKey(model ?? 'default', SYSTEM_PROMPT, userPrompt);
+  const key = useCli ? `cli-${rawKey}` : rawKey;
+
+  let cacheFile: string | null = null;
+  if (req.cacheDir) {
+    try {
+      fs.mkdirSync(req.cacheDir, { recursive: true });
+      cacheFile = path.join(req.cacheDir, `${key}.json`);
+      if (fs.existsSync(cacheFile)) {
+        return parseVerifyResult(fs.readFileSync(cacheFile, 'utf8'), validIndices);
+      }
+    } catch {
+      cacheFile = null;
+    }
+  }
+
+  const text = useCli
+    ? await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, model, req.verbose ?? false)
+    : await callApi(userPrompt, apiKey as string, model as string, req.verbose ?? false);
+  if (!text) return [];
+
+  if (cacheFile) {
+    try {
+      fs.writeFileSync(cacheFile, text);
+    } catch {
+      // best effort
+    }
+  }
+  return parseVerifyResult(text, validIndices);
 }

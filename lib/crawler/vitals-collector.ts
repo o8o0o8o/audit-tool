@@ -18,8 +18,14 @@ interface LCPSubParts {
 }
 
 interface CLSEntrySource {
+  /** Element nodeName (e.g. "DIV", "IMG") — kept for backward compatibility. */
   node: string | null;
+  /** Short CSS selector path for the shifted element, when resolvable. */
+  selector?: string | null;
+  /** Where the element ended up (viewport coordinates at shift time). */
   currentRect: { x: number; y: number; width: number; height: number } | null;
+  /** Where the element was before the shift — enables before/after visuals. */
+  previousRect?: { x: number; y: number; width: number; height: number } | null;
 }
 
 interface CLSEntry {
@@ -50,6 +56,8 @@ interface CollectedVitals {
   lcpElement: string | null;
   lcpUrl: string | null;
   lcpSize: { width: number; height: number } | null;
+  lcpSelector?: string | null;
+  lcpRect?: { x: number; y: number; width: number; height: number } | null;
   clsEntries: CLSEntry[];
   clsLargestShift: number | null;
   clsShiftCount: number;
@@ -156,12 +164,16 @@ class VitalsCollector {
           lcpElement: null as string | null,
           lcpUrl: null as string | null,
           lcpSize: null as { width: number; height: number } | null,
+          lcpSelector: null as string | null,
+          lcpRect: null as { x: number; y: number; width: number; height: number } | null,
           clsEntries: [] as Array<{
             value: number;
             startTime: number;
             sources: Array<{
               node: string | null;
+              selector: string | null;
               currentRect: { x: number; y: number; width: number; height: number } | null;
+              previousRect: { x: number; y: number; width: number; height: number } | null;
             }>;
           }>,
           clsLargestShift: null as number | null,
@@ -192,6 +204,10 @@ class VitalsCollector {
           inpObserver: PerformanceObserver | undefined,
           longTaskObserver: PerformanceObserver | undefined;
 
+        // LCP element reference — resolved to a selector + rect at finalize so
+        // the report can highlight the LCP element on the page screenshot.
+        let lcpNode: Element | null = null;
+
         // CLS Session Window tracking
         let clsSessionValue = 0;
         let clsSessionEntries: PerformanceEntry[] = [];
@@ -210,6 +226,46 @@ class VitalsCollector {
           attribution: Array<{ name: string; containerType: string; containerSrc: string }>;
         }> = [];
         let tbtTotal = 0;
+
+        // Short CSS selector path for a shifted element — lets the report
+        // re-locate / highlight it. Bounded depth, id-anchored when possible.
+        const cssPath = (node?: Node | null): string | null => {
+          if (!node || node.nodeType !== 1) return null;
+          try {
+            let el: Element | null = node as Element;
+            const parts: string[] = [];
+            for (let depth = 0; el && el.nodeType === 1 && depth < 4; depth++) {
+              if (el.id) {
+                parts.unshift(`#${CSS.escape(el.id)}`);
+                break;
+              }
+              let part = el.tagName.toLowerCase();
+              const cls = (el.getAttribute('class') ?? '').trim().split(/\s+/).filter(Boolean)[0];
+              if (cls) part += `.${CSS.escape(cls)}`;
+              const parent: Element | null = el.parentElement;
+              if (parent) {
+                const sibs = Array.from(parent.children).filter((c) => c.tagName === el!.tagName);
+                if (sibs.length > 1) part += `:nth-of-type(${sibs.indexOf(el) + 1})`;
+              }
+              parts.unshift(part);
+              if (el.tagName === 'BODY' || !parent) break;
+              el = parent;
+            }
+            return parts.length > 0 ? parts.join(' > ') : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const roundRect = (r?: DOMRectReadOnly | null) =>
+          r
+            ? {
+                x: Math.round(r.x),
+                y: Math.round(r.y),
+                width: Math.round(r.width),
+                height: Math.round(r.height),
+              }
+            : null;
 
         // Helper to finalize
         const finalize = () => {
@@ -234,24 +290,32 @@ class VitalsCollector {
           metrics.clsEntries = clsMaxSessionEntries.map((e) => {
             const entry = e as PerformanceEntry & {
               value: number;
-              sources?: Array<{ node?: { nodeName?: string }; currentRect?: DOMRectReadOnly }>;
+              sources?: Array<{
+                node?: Node & { nodeName?: string };
+                currentRect?: DOMRectReadOnly;
+                previousRect?: DOMRectReadOnly;
+              }>;
             };
             return {
               value: entry.value,
               startTime: entry.startTime,
               sources: (entry.sources ?? []).map((s) => ({
                 node: s.node?.nodeName ?? null,
-                currentRect: s.currentRect
-                  ? {
-                      x: Math.round(s.currentRect.x),
-                      y: Math.round(s.currentRect.y),
-                      width: Math.round(s.currentRect.width),
-                      height: Math.round(s.currentRect.height),
-                    }
-                  : null,
+                selector: cssPath(s.node ?? null),
+                currentRect: roundRect(s.currentRect),
+                previousRect: roundRect(s.previousRect),
               })),
             };
           });
+
+          // LCP element selector + rect (viewport coords at scroll 0 ≈ document
+          // coords on the full-page shot, same convention as the CLS sources).
+          metrics.lcpSelector = cssPath(lcpNode);
+          try {
+            metrics.lcpRect = lcpNode ? roundRect(lcpNode.getBoundingClientRect()) : null;
+          } catch {
+            metrics.lcpRect = null;
+          }
 
           if (clsMaxSessionEntries.length > 0) {
             const largest = clsMaxSessionEntries.reduce((max, e) => {
@@ -292,6 +356,8 @@ class VitalsCollector {
             lcpElement: metrics.lcpElement,
             lcpUrl: metrics.lcpUrl,
             lcpSize: metrics.lcpSize,
+            lcpSelector: metrics.lcpSelector,
+            lcpRect: metrics.lcpRect,
             clsEntries: metrics.clsEntries,
             clsLargestShift: metrics.clsLargestShift ? Number(metrics.clsLargestShift.toFixed(4)) : null,
             clsShiftCount: metrics.clsShiftCount,
@@ -387,6 +453,7 @@ class VitalsCollector {
 
             // LCP element attribution
             if (lastLCP.element) {
+              lcpNode = lastLCP.element as unknown as Element;
               metrics.lcpElement = lastLCP.element.tagName?.toLowerCase() || null;
               if (lastLCP.element.tagName === 'IMG') {
                 metrics.lcpUrl = (lastLCP.element as HTMLImageElement).src?.substring(0, 150) || null;

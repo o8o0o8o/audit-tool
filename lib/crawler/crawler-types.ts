@@ -80,6 +80,8 @@ export interface BasicTestResult {
   lcpElement?: string | null;
   lcpUrl?: string | null;
   lcpSize?: { width: number; height: number } | null;
+  lcpSelector?: string | null;
+  lcpRect?: { x: number; y: number; width: number; height: number } | null;
   lcpSubParts?: { ttfb: number; resourceLoad: number; resourceDelay: number; renderDelay: number };
   clsEntries?: unknown[];
   clsLargestShift?: number | null;
@@ -100,6 +102,13 @@ export interface BasicTestResult {
   blockers?: unknown;
   /** Served HTML (pre-JS response body), when capturable. */
   servedHtml?: string;
+  /**
+   * Viewport screenshot taken right after the load event, before vitals
+   * settle / auto-scroll / lazy hydration. Captured only for pages the
+   * representative sampler is expected to pick (evidence enabled); paired with
+   * the settled evidence screenshot to visualise post-load layout shifts.
+   */
+  firstLoadShot?: Buffer;
 }
 
 export interface PerformanceMetrics {

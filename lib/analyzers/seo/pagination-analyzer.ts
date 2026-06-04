@@ -3,9 +3,11 @@
  * Analyzes pagination implementation for SEO best practices
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { parse } from 'node-html-parser';
 import { CRAWL_SETTINGS, SEVERITY } from '../../constants';
-import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey, shortenUrl } from '../../utils';
+import { removeTrailingSlash, hasRobotsDirective, getPaginationSeriesKey, shortenUrl, createSafeFilename } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo, PaginationProbeResult } from '../../types';
 
 /**
@@ -635,6 +637,7 @@ class PaginationAnalyzer {
   static async probeJsNext(
     chromePage: ChromePage,
     url: string,
+    evidenceDir?: string,
   ): Promise<{ nextProbe: PaginationProbeResult | null; issues: Issue[]; warnings: Issue[] }> {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
@@ -713,6 +716,20 @@ class PaginationAnalyzer {
           return true;
         });
 
+      // Step screenshots for report evidence: the initial state, the first
+      // click, and the final state. Captured to buffers and written only when
+      // the probe actually flags broken pagination — no junk for healthy series.
+      const stepShots: Array<{ name: string; shot: Buffer }> = [];
+      const snap = async (name: string) => {
+        if (!evidenceDir) return;
+        try {
+          stepShots.push({ name, shot: await probePage!.screenshot({ fullPage: false, timeout: 3_000 }) });
+        } catch {
+          // evidence is best effort
+        }
+      };
+      await snap('step-0-initial');
+
       let prev = await signature();
       let clicks = 0;
       let contentChanged = false;
@@ -727,6 +744,7 @@ class PaginationAnalyzer {
         clicks++;
         // Give the click time to fetch/render (bounded).
         await probePage.waitForTimeout(800).catch(() => {});
+        if (clicks === 1) await snap('step-1-after-first-click');
         const cur = await signature();
 
         // Did the click produce a NEW crawlable URL (path/query, hash ignored)?
@@ -748,6 +766,26 @@ class PaginationAnalyzer {
 
       const controlPersists = await nextEnabled();
       const suspectedInfinite = isSuspectedInfinitePagination({ clicks, controlPersists, urlAdvanced, emptyAfterClick, contentChanged, duplicateStreak });
+
+      if (clicks > 1) await snap(`step-2-after-${clicks}-clicks`);
+
+      // Persist the step sequence only when the probe flags the series — the
+      // report renders it as "page as loaded / after clicking next" evidence.
+      // Stored as its own evidence dir (no screenshot.mobile.png, so it never
+      // enters the regular screenshot index); _meta.json keys it back to the URL.
+      if (suspectedInfinite && evidenceDir && stepShots.length > 0) {
+        try {
+          const probeDir = path.join(evidenceDir, `${createSafeFilename(url)}--pagination-probe`);
+          fs.mkdirSync(probeDir, { recursive: true });
+          fs.writeFileSync(
+            path.join(probeDir, '_meta.json'),
+            JSON.stringify({ url, capturedAt: new Date().toISOString(), kind: 'pagination-probe', clicks }, null, 2),
+          );
+          for (const s of stepShots) fs.writeFileSync(path.join(probeDir, `${s.name}.png`), s.shot);
+        } catch {
+          // evidence is best effort
+        }
+      }
 
       const nextProbe: PaginationProbeResult = {
         clicks,

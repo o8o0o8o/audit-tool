@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AxeBuilder } from '@axe-core/playwright';
 import type { Page as PlaywrightPage } from 'playwright';
-import type { PageInfo, SitemapUrl, Issue, HeadingAnalysis, UrlAnalysis } from '../types';
+import type { PageInfo, SitemapUrl, Issue, HeadingAnalysis, UrlAnalysis, CodeCoverageData } from '../types';
 import type {
   CrawlResults,
   RedirectEntry,
@@ -35,6 +35,8 @@ import {
 import { normalizeUrl, createSafeFilename, truncateText, getPaginationSeriesKey, normalizeUrlForComparison } from '../utils';
 import { escapeHtml } from '../reports/html-utils';
 import type { ChromePage } from '../types';
+import type { CLSEntry } from './vitals-collector';
+import { collectVisualOverlays } from './visual-overlay-collector';
 
 /**
  * Process title validation
@@ -1168,6 +1170,24 @@ export async function captureRepresentativeEvidence(
   options: CrawlerInternalOptions,
   requests?: Record<string, unknown>,
   accessibility?: unknown,
+  extras?: {
+    /** Viewport shot taken right after the load event (see BasicTestResult). */
+    firstLoadShot?: Buffer;
+    /** Layout-shift attribution from the vitals pass (--perf). */
+    clsEntries?: CLSEntry[];
+    clsValue?: number;
+    /** CDP coverage summary from the analyzer pass (--perf) — feeds panel evidence. */
+    codeCoverage?: CodeCoverageData | null;
+    /** LCP element attribution from the vitals pass (--perf). */
+    lcp?: {
+      selector: string | null;
+      rect: { x: number; y: number; width: number; height: number } | null;
+      value: number;
+      subParts?: { ttfb: number; resourceLoad: number; resourceDelay: number; renderDelay: number };
+    };
+    /** Security headers the analyzer found missing on this page. */
+    missingHeaders?: string[] | null;
+  },
 ): Promise<void> {
   const evidenceDir = options.evidenceDir;
   if (!evidenceDir) return;
@@ -1193,6 +1213,16 @@ export async function captureRepresentativeEvidence(
     // best effort
   }
 
+  // First-load viewport shot (captured during navigation, before settle) —
+  // pairs with the settled shot below to visualise post-load layout shifts.
+  if (extras?.firstLoadShot) {
+    try {
+      fs.writeFileSync(path.join(pageDir, 'screenshot.firstload.png'), extras.firstLoadShot);
+    } catch {
+      // best effort
+    }
+  }
+
   // Mobile full-page (current viewport).
   try {
     await chromePage.screenshot({
@@ -1204,6 +1234,10 @@ export async function captureRepresentativeEvidence(
       console.error(`Mobile screenshot failed for ${url}:`, (error as Error).message);
     }
   }
+
+  // Contrast-failure element targets harvested from the axe scan below; fed to
+  // the overlay collector so the report can highlight the exact failing nodes.
+  const contrastTargets: Array<{ selector: string; label?: string }> = [];
 
   // axe-core scan at mobile viewport. Bounded by a 30s timeout so a hung scan
   // doesn't block the crawl.
@@ -1233,9 +1267,90 @@ export async function captureRepresentativeEvidence(
     } else if (options.verbose) {
       console.warn(`axe-core scan timed out for ${url}`);
     }
+    if (axeResults) {
+      for (const v of axeResults.violations) {
+        if (v.id !== 'color-contrast' && v.id !== 'color-contrast-enhanced') continue;
+        for (const node of v.nodes) {
+          // Multi-entry targets address iframe/shadow contexts — not resolvable
+          // with a plain querySelector, so skip those.
+          if (!Array.isArray(node.target) || node.target.length !== 1) continue;
+          const selector = String(node.target[0]);
+          const data = (node.any?.[0] as { data?: { contrastRatio?: number; expectedContrastRatio?: string } } | undefined)?.data;
+          const label = data?.contrastRatio
+            ? `${data.contrastRatio}:1${data.expectedContrastRatio ? ` (needs ${data.expectedContrastRatio})` : ''}`
+            : undefined;
+          contrastTargets.push({ selector, label });
+          if (contrastTargets.length >= 12) break;
+        }
+        if (contrastTargets.length >= 12) break;
+      }
+    }
   } catch (error: unknown) {
     if (options.verbose) {
       console.error(`axe-core scan failed for ${url}:`, (error as Error).message);
+    }
+  }
+
+  // Visual overlay rects — measured NOW, at the mobile viewport, so they map
+  // 1:1 onto screenshot.mobile.png taken above. Best effort; never blocks.
+  try {
+    const overlays = await collectVisualOverlays(
+      chromePage,
+      url,
+      contrastTargets,
+      { value: extras?.clsValue, entries: extras?.clsEntries },
+      extras?.codeCoverage,
+      { lcp: extras?.lcp, missingHeaders: extras?.missingHeaders },
+    );
+    if (overlays) {
+      // Record the screenshot's true CSS-px size. A full-page capture can be
+      // wider than document.scrollWidth (scrollbar gutter), and the renderer
+      // must size the bitmap from the capture's own dimensions or every
+      // highlight box drifts vertically by the aspect difference.
+      try {
+        const png = fs.readFileSync(path.join(pageDir, 'screenshot.mobile.png'));
+        if (png.length > 24) {
+          const dpr = Number(await chromePage.evaluate('window.devicePixelRatio')) || 1;
+          overlays.shot = {
+            width: Math.round(png.readUInt32BE(16) / dpr),
+            height: Math.round(png.readUInt32BE(20) / dpr),
+          };
+        }
+      } catch {
+        // shot stays absent — the renderer falls back to document dims
+      }
+      fs.writeFileSync(path.join(pageDir, 'overlays.json'), JSON.stringify(overlays, null, 2));
+    } else if (options.verbose) {
+      console.warn(`Overlay collection returned no data for ${url} (evaluate failed) — findings fall back to plain screenshots`);
+    }
+  } catch (error: unknown) {
+    if (options.verbose) {
+      console.error(`Overlay collection failed for ${url}:`, (error as Error).message);
+    }
+  }
+
+  // JS-disabled viewport shot — what crawlers that don't execute JavaScript
+  // see. Loaded in a separate throwaway context (JS-enablement is a context-
+  // level setting); paired with the hydrated shot for JS-rendering findings.
+  try {
+    const browser = chromePage.context().browser();
+    if (browser) {
+      const nojsContext = await browser.newContext({
+        viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
+        javaScriptEnabled: false,
+        userAgent: options.userAgent ?? undefined,
+      });
+      try {
+        const nojsPage = await nojsContext.newPage();
+        await nojsPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 8_000 });
+        await nojsPage.screenshot({ path: path.join(pageDir, 'screenshot.nojs.png'), fullPage: false, timeout: 5_000 });
+      } finally {
+        await nojsContext.close().catch(() => {});
+      }
+    }
+  } catch (error: unknown) {
+    if (options.verbose) {
+      console.warn(`JS-disabled capture failed for ${url}:`, (error as Error).message);
     }
   }
 

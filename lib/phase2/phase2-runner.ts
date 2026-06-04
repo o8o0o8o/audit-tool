@@ -14,8 +14,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import { SCORING } from '../constants';
-import { compareExamplesWorstFirst } from '../utils';
+import { SCORING, THRESHOLDS } from '../constants';
+import type { VisualOverlays, OverlayItem, OverlayRect } from '../crawler/visual-overlay-collector';
+import { compareExamplesWorstFirst, formatBytes } from '../utils';
 import { renderMarkdownToPdf } from '../reports/pdf-renderer';
 import { ScoreCalculator } from '../scoring/score-calculator';
 import { classifyIssue, isCataloguedErrorTier } from '../scoring/seo-catalog';
@@ -790,6 +791,8 @@ function buildFindingBlock(
   verifyView?: VerifyView,
   screenshots?: ScreenshotIndex,
   embedded?: Set<string>,
+  probes?: ProbeIndex,
+  siteFacts?: SiteFacts | null,
 ): string {
   const lines: string[] = [];
   // sanitizeProse (not stripHtml) for the title: stripHtml deletes element
@@ -894,12 +897,13 @@ function buildFindingBlock(
     }
     lines.push('');
 
-    // Screenshot evidence — embed the captured mobile + desktop shots for the
-    // first affected page we sampled. Only the ~10 representative pages carry
-    // evidence, so most findings render none. AI-discovered findings supply
-    // their own evidence block, so skip them here.
-    if (screenshots && screenshots.size > 0 && embedded && !detail.aiDiscovered) {
-      const block = buildScreenshotBlock(shown, screenshots, embedded);
+    // Visual evidence — issue-aware when the sampled page carries overlay data
+    // for this finding kind (annotated highlight boxes, CLS before/after pair,
+    // SERP preview), otherwise the plain mobile + desktop pair. Only the ~10
+    // representative pages carry evidence, so most findings render none.
+    // AI-discovered findings supply their own evidence block, so skip them here.
+    if (screenshots && embedded && !detail.aiDiscovered) {
+      const block = buildEvidenceBlock(message, shown, screenshots, embedded, probes, siteFacts);
       if (block) {
         lines.push(block);
         lines.push('');
@@ -1016,6 +1020,8 @@ function buildSection(
   verifyView?: VerifyView,
   screenshots?: ScreenshotIndex,
   embedded?: Set<string>,
+  probes?: ProbeIndex,
+  siteFacts?: SiteFacts | null,
 ): string {
   if (items.length === 0) return '';
 
@@ -1058,7 +1064,7 @@ function buildSection(
   const hidden = overflow.filter(([m]) => sourceLocationsFor(m, sourceMapping).length === 0);
 
   for (const [message, detail] of [...shown, ...extraMapped]) {
-    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact, verifyView, screenshots, embedded));
+    lines.push(buildFindingBlock(message, detail, isNextjs, sourceMapping, impact, verifyView, screenshots, embedded, probes, siteFacts));
   }
 
   if (hidden.length > 0) {
@@ -1112,8 +1118,17 @@ export function buildReportMarkdown(
   // Screenshot evidence — index the sampled-page captures so findings can embed
   // them. `embedded` is mutated as sections render (deterministic traversal) so
   // each unique page's screenshots appear once across the whole report.
-  const screenshots = buildScreenshotIndex(artifacts.manifest);
+  const screenshots = buildScreenshotIndex(artifacts.manifest, artifacts.runDir);
   const embedded = new Set<string>();
+  // Probe-step shots (broken-pagination sequences) and site link-graph facts —
+  // both best-effort; absent artifacts simply mean no such evidence renders.
+  const probes = buildProbeIndex(artifacts.manifest);
+  let siteFacts: SiteFacts | null;
+  try {
+    siteFacts = loadSiteFacts(artifacts.runDir, artifacts.manifest.progress?.processedPages ?? []);
+  } catch {
+    siteFacts = null;
+  }
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
   // Verification banner (only on the `--verify` report) sits right under the
@@ -1122,7 +1137,7 @@ export function buildReportMarkdown(
   parts.push(buildPurpose(artifacts, noScore));
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of SECTION_ORDER) {
-    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView, screenshots, embedded));
+    parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView, screenshots, embedded, probes, siteFacts));
   }
   return parts.filter(Boolean).join('\n');
 }
@@ -1198,8 +1213,82 @@ interface ScreenshotRef {
   url: string;
   mobile?: string;
   desktop?: string;
+  /** Viewport shot taken right after the load event (pre-settle). */
+  firstload?: string;
+  /** Viewport shot rendered with JavaScript disabled (what non-JS crawlers see). */
+  nojs?: string;
+  /** Parsed overlays.json — issue-element rects, page meta, CLS shifts. */
+  overlays?: VisualOverlays;
+  /** Aggregated requests.json — feeds the network data panels. */
+  netSummary?: NetSummary;
 }
 type ScreenshotIndex = Map<string, ScreenshotRef>;
+
+interface NetSummary {
+  totalRequests: number;
+  totalBytes: number;
+  byType: Array<{ type: string; count: number; bytes: number }>;
+  byHost: Array<{ host: string; count: number; bytes: number; thirdParty: boolean }>;
+  thirdPartyCount: number;
+  thirdPartyBytes: number;
+}
+
+/**
+ * Aggregate a sampled page's request log into the compact summary the network
+ * panels render. Deterministic: byte-desc with name tiebreakers. First-party =
+ * same host as the page or a sub/super-domain of it (www. stripped).
+ */
+function summarizeRequests(pageUrl: string, requests: Record<string, { resourceType?: string; size?: number | null }>): NetSummary {
+  let pageHost = '';
+  try {
+    pageHost = new URL(pageUrl).hostname.replace(/^www\./, '');
+  } catch {
+    // unparseable page URL — everything counts as first-party
+  }
+  const byType = new Map<string, { count: number; bytes: number }>();
+  const byHost = new Map<string, { count: number; bytes: number; thirdParty: boolean }>();
+  let totalBytes = 0;
+  let totalRequests = 0;
+  let thirdPartyCount = 0;
+  let thirdPartyBytes = 0;
+  for (const [reqUrl, info] of Object.entries(requests)) {
+    let host: string;
+    try {
+      host = new URL(reqUrl).hostname.replace(/^www\./, '');
+    } catch {
+      continue;
+    }
+    const bytes = typeof info.size === 'number' ? info.size : 0;
+    const type = info.resourceType ?? 'other';
+    const thirdParty = pageHost !== '' && host !== pageHost && !host.endsWith(`.${pageHost}`) && !pageHost.endsWith(`.${host}`);
+    totalRequests += 1;
+    totalBytes += bytes;
+    if (thirdParty) {
+      thirdPartyCount += 1;
+      thirdPartyBytes += bytes;
+    }
+    const t = byType.get(type) ?? { count: 0, bytes: 0 };
+    t.count += 1;
+    t.bytes += bytes;
+    byType.set(type, t);
+    const h = byHost.get(host) ?? { count: 0, bytes: 0, thirdParty };
+    h.count += 1;
+    h.bytes += bytes;
+    byHost.set(host, h);
+  }
+  const sortDesc = <T extends { bytes: number; count: number }>(entries: Array<[string, T]>) =>
+    entries.sort(([an, a], [bn, b]) => b.bytes - a.bytes || b.count - a.count || (an < bn ? -1 : 1));
+  return {
+    totalRequests,
+    totalBytes,
+    byType: sortDesc([...byType.entries()]).map(([type, v]) => ({ type, ...v })),
+    byHost: sortDesc([...byHost.entries()])
+      .slice(0, 8)
+      .map(([host, v]) => ({ host, ...v })),
+    thirdPartyCount,
+    thirdPartyBytes,
+  };
+}
 
 /**
  * Build a normalized-URL → screenshot-paths index from the manifest's evidence
@@ -1208,7 +1297,7 @@ type ScreenshotIndex = Map<string, ScreenshotRef>;
  * <dir>/…` src resolves both in the rendered PDF and when `audit-report.md` /
  * `.html` is opened directly. Deterministic: see the key-sorted iteration below.
  */
-function buildScreenshotIndex(manifest: ManifestData): ScreenshotIndex {
+function buildScreenshotIndex(manifest: ManifestData, runDir?: string): ScreenshotIndex {
   const idx: ScreenshotIndex = new Map();
   const evidence = manifest.evidence;
   if (!evidence) return idx;
@@ -1225,11 +1314,113 @@ function buildScreenshotIndex(manifest: ManifestData): ScreenshotIndex {
     const ref: ScreenshotRef = { url: entry.url };
     if (entry.files.includes('screenshot.mobile.png')) ref.mobile = `evidence/${key}/screenshot.mobile.png`;
     if (entry.files.includes('screenshot.desktop.png')) ref.desktop = `evidence/${key}/screenshot.desktop.png`;
+    if (entry.files.includes('screenshot.firstload.png')) ref.firstload = `evidence/${key}/screenshot.firstload.png`;
+    if (entry.files.includes('screenshot.nojs.png')) ref.nojs = `evidence/${key}/screenshot.nojs.png`;
     if (!ref.mobile && !ref.desktop) continue;
+    // Issue-element rects measured at capture time. Best effort — an absent or
+    // unreadable overlays.json (older audits, synthetic test artifacts) just
+    // means findings fall back to the plain screenshot block.
+    if (runDir && entry.files.includes('overlays.json')) {
+      try {
+        ref.overlays = JSON.parse(fs.readFileSync(path.join(runDir, 'evidence', key, 'overlays.json'), 'utf8')) as VisualOverlays;
+      } catch {
+        // fall back to plain screenshots
+      }
+    }
+    // Aggregate the request log into the compact summary the network panels
+    // render; raw entries are discarded. Best effort like overlays.
+    if (runDir && entry.files.includes('requests.json')) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(path.join(runDir, 'evidence', key, 'requests.json'), 'utf8')) as {
+          requests?: Record<string, { resourceType?: string; size?: number | null }>;
+        };
+        if (raw.requests && Object.keys(raw.requests).length > 0) {
+          ref.netSummary = summarizeRequests(entry.url, raw.requests);
+        }
+      } catch {
+        // no network panel for this page
+      }
+    }
     const k = normalizeUrlForEvidence(entry.url);
     if (!idx.has(k)) idx.set(k, ref);
   }
   return idx;
+}
+
+/** Pagination-probe step shots, keyed by normalized probed URL. */
+interface ProbeShots {
+  url: string;
+  clicks?: number;
+  steps: Array<{ name: string; src: string }>;
+}
+type ProbeIndex = Map<string, ProbeShots>;
+
+/**
+ * Index pagination-probe evidence dirs (written by PaginationAnalyzer when a
+ * probe flags a series). They carry step-*.png files and no screenshot.mobile,
+ * so the regular screenshot index skips them; this picks them up instead.
+ */
+function buildProbeIndex(manifest: ManifestData): ProbeIndex {
+  const idx: ProbeIndex = new Map();
+  const evidence = manifest.evidence;
+  if (!evidence) return idx;
+  const entries = Object.entries(evidence).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const [key, entry] of entries) {
+    if (!entry?.url) continue;
+    const steps = entry.files
+      .filter((f) => /^step-.*\.png$/.test(f))
+      .sort()
+      .map((f) => ({ name: f.replace(/\.png$/, ''), src: `evidence/${key}/${f}` }));
+    if (steps.length === 0) continue;
+    const k = normalizeUrlForEvidence(entry.url);
+    if (!idx.has(k)) idx.set(k, { url: entry.url, steps });
+  }
+  return idx;
+}
+
+/** Site link-graph facts for the per-URL evidence table on site-wide findings. */
+interface SiteFacts {
+  /** normalized URL → inbound internal-link count */
+  inbound: Map<string, number>;
+  /** normalized sitemap URL set (null when no sitemap was recorded) */
+  sitemap: Set<string> | null;
+  /**
+   * Normalized crawled-page set. incoming-links.json only contains pages that
+   * RECEIVED links, so a true orphan is absent from the map — this set
+   * disambiguates "crawled with zero inbound links" (a hard fact worth a row)
+   * from "URL the crawl never saw" (no row — proves nothing).
+   */
+  crawled: Set<string>;
+}
+
+/**
+ * Load the inbound-link graph + sitemap URL set for the link-graph facts
+ * panel. Sync and best-effort: returns null when the artifacts are absent
+ * (synthetic test runs, partial audits) — findings then render no panel.
+ */
+function loadSiteFacts(runDir: string, processedPages: string[] = []): SiteFacts | null {
+  const readGzOrPlain = <T>(base: string): T | null => {
+    for (const file of [`${base}.gz`, base]) {
+      try {
+        const raw = fs.readFileSync(path.join(runDir, file));
+        return JSON.parse(file.endsWith('.gz') ? zlib.gunzipSync(raw).toString('utf8') : raw.toString('utf8')) as T;
+      } catch {
+        // try next variant
+      }
+    }
+    return null;
+  };
+  const incoming = readGzOrPlain<Record<string, string[]>>('incoming-links.json');
+  const metadata = readGzOrPlain<{ sitemaps?: { urls?: Record<string, unknown> } }>('metadata.json');
+  if (!incoming && !metadata) return null;
+  const inbound = new Map<string, number>();
+  for (const [dst, srcs] of Object.entries(incoming ?? {})) {
+    inbound.set(normalizeUrlForEvidence(dst), Array.isArray(srcs) ? srcs.length : 0);
+  }
+  const sitemapUrls = metadata?.sitemaps?.urls ? Object.keys(metadata.sitemaps.urls) : null;
+  const sitemap = sitemapUrls && sitemapUrls.length > 0 ? new Set(sitemapUrls.map(normalizeUrlForEvidence)) : null;
+  const crawled = new Set(processedPages.map(normalizeUrlForEvidence));
+  return { inbound, sitemap, crawled };
 }
 
 /** Minimal escaping for a value placed inside a double-quoted HTML attribute. */
@@ -1280,6 +1471,824 @@ function buildScreenshotBlock(
   }
   lines.push('</div>');
   return lines.join('\n');
+}
+
+// ─── Issue-aware visual evidence ─────────────────────────────────────────────
+//
+// When the sampled page carries overlays.json (rects of the offending elements
+// measured at capture time, CLS shift attribution, page meta), findings render
+// evidence that SHOWS the issue instead of a context-free full-page shot:
+//   • overlay kinds  → the mobile screenshot CSS-cropped to the issue region,
+//                      with highlight boxes + labels drawn over it
+//   • CLS            → first-load shot vs settled shot, shifted elements boxed
+//                      (ghost = position before the shift)
+//   • title/description findings → a SERP-style preview card with the
+//                      truncation/absence visualised
+// Everything degrades to the plain screenshot pair when the data is absent
+// (older audits, unsampled pages, --no-evidence).
+
+type HeadAspect = 'canonical' | 'noindex' | 'hreflang' | 'lang' | 'charset' | 'doctype';
+type EvidenceKind =
+  | { type: 'overlay'; kind: string }
+  | { type: 'cls' }
+  | { type: 'lcp' }
+  | { type: 'nojs' }
+  | { type: 'pagination' }
+  | { type: 'landmarks' }
+  | { type: 'serp'; field: 'title' | 'description' }
+  | { type: 'head'; aspect: HeadAspect }
+  | { type: 'net'; mode: 'types' | 'origins' }
+  | { type: 'coverage'; which: 'js' | 'css' }
+  | { type: 'render-blocking' }
+  | { type: 'sec-headers' }
+  | { type: 'schema' }
+  | { type: 'site-graph' };
+
+/**
+ * Map a finding message to the visual evidence it can carry. Regexes mirror
+ * the wording matched by the verifier checkers (live-verifier / finding-
+ * verifier) for the same kinds. Order matters: "Image links without alt text"
+ * must resolve to missing-alt, not empty-anchor.
+ */
+export function evidenceKindFor(message: string): EvidenceKind | null {
+  const t = message.toLowerCase();
+  if (/\balt (text|attribute)\b/.test(t) && /(without|missing|no\b|empty)/.test(t)) return { type: 'overlay', kind: 'missing-alt' };
+  if (/\bcls\b|layout shift/.test(t)) return { type: 'cls' };
+  if (/\btitles?\b/.test(t) && /(too long|too short|missing|empty|duplicat)/.test(t)) return { type: 'serp', field: 'title' };
+  if (/\bdescriptions?\b/.test(t) && /(too long|too short|missing|empty|duplicat)/.test(t)) return { type: 'serp', field: 'description' };
+  if (/image/.test(t) && /(larger than (their|the).*display|significantly larger)/.test(t)) return { type: 'overlay', kind: 'oversized-image' };
+  if (/(jpg|png).*(webp|avif)|webp\/avif|images only as/.test(t)) return { type: 'overlay', kind: 'legacy-image-format' };
+  if (/empty anchor|links? with empty|links? without (any )?text/.test(t)) return { type: 'overlay', kind: 'empty-anchor' };
+  if (/more than one h1|multiple h1/.test(t)) return { type: 'overlay', kind: 'multiple-h1' };
+  if (/touch targets?/.test(t)) return { type: 'overlay', kind: 'small-touch-target' };
+  if (/interstitial|popup/.test(t)) return { type: 'overlay', kind: 'interstitial' };
+  if (/conversion elements/.test(t)) return { type: 'overlay', kind: 'cta-fold' };
+  if (/contrast/.test(t)) return { type: 'overlay', kind: 'contrast' };
+  // Data panels — must run before the head-snippet arms ("render-blocking
+  // third-party scripts" should hit the render-blocking panel, not net).
+  if (/render.?blocking/.test(t)) return { type: 'render-blocking' };
+  if (/unused css/.test(t)) return { type: 'coverage', which: 'css' };
+  if (/unused (code|javascript|js)/.test(t)) return { type: 'coverage', which: 'js' };
+  if (/third.?party|advertis|heavy ads|ad scripts?/.test(t)) return { type: 'net', mode: 'origins' };
+  if (/too many requests|size is too big|page.*too (big|large)|total transfer/.test(t)) return { type: 'net', mode: 'types' };
+  // Head snippet cards
+  if (/canonical/.test(t)) return { type: 'head', aspect: 'canonical' };
+  if (/noindex/.test(t)) return { type: 'head', aspect: 'noindex' };
+  if (/hreflang|alternate link/.test(t)) return { type: 'head', aspect: 'hreflang' };
+  if (/\blang attribute\b|\bhtml lang\b|language mismatch/.test(t)) return { type: 'head', aspect: 'lang' };
+  if (/charset|character encoding/.test(t)) return { type: 'head', aspect: 'charset' };
+  if (/doctype/.test(t)) return { type: 'head', aspect: 'doctype' };
+  // Slice 3 — LCP highlight, JS-off pair, probe sequence, landmark overlay,
+  // security-header card, schema card, link-graph facts.
+  if (/\blcp\b|largest contentful/.test(t)) return { type: 'lcp' };
+  if (/rendered by javascript|relies on javascript|without ssr\b/.test(t)) return { type: 'nojs' };
+  if (/pagination/.test(t)) return { type: 'pagination' };
+  if (/form inputs? .*missing labels?|inputs?.*missing labels|placeholder used instead of label/.test(t))
+    return { type: 'overlay', kind: 'form-label' };
+  if (/autocomplete/.test(t)) return { type: 'overlay', kind: 'autocomplete' };
+  // \bmain\b deliberately — must not catch "mainEntity" (FAQPage schema finding).
+  if (/missing.*\bmain\b|<main>|role="main"|\bmain\b.*landmark/.test(t)) return { type: 'landmarks' };
+  // No aggregate "security headers" finding exists — analyzers emit per-header
+  // messages ("Missing Permissions-Policy header", …). The card lists ALL
+  // headers missing on the sampled page, which evidences any of them.
+  if (
+    /security headers?|missing.*(permissions-policy|x-frame-options|content-security-policy|strict-transport-security|x-content-type-options|referrer-policy)|cross-origin isolation/.test(
+      t,
+    )
+  )
+    return { type: 'sec-headers' };
+  if (/schema|structured data|json-?ld|faqpage|mainentity|videoobject|breadcrumb|howto\b/.test(t)) return { type: 'schema' };
+  if (/orphan|link equity|unreachable|click depth|sitemap/.test(t)) return { type: 'site-graph' };
+  return null;
+}
+
+const KIND_CAPTIONS: Record<string, string> = {
+  'missing-alt': 'Images without alt text',
+  'oversized-image': 'Images much larger than their display size',
+  'legacy-image-format': 'JPG/PNG images without a WebP/AVIF variant',
+  'empty-anchor': 'Links without anchor text',
+  'multiple-h1': 'Multiple H1 headings',
+  'small-touch-target': 'Touch targets below 48×48px',
+  interstitial: 'Intrusive overlay',
+  'cta-fold': 'First call-to-action relative to the fold',
+  contrast: 'Color-contrast failures (axe-core)',
+};
+
+/** First example among `shown` whose page was sampled for evidence. */
+function firstSampledRef(shown: string[], screenshots: ScreenshotIndex): ScreenshotRef | undefined {
+  for (const ex of shown) {
+    const url = extractFirstUrl(ex);
+    if (!url) continue;
+    const found = screenshots.get(normalizeUrlForEvidence(url));
+    if (found) return found;
+  }
+  return undefined;
+}
+
+interface CropWindow {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface EvidenceBox {
+  rect: OverlayRect;
+  label?: string;
+  /** Render as a dashed "previous position" outline (CLS before-rect). */
+  ghost?: boolean;
+}
+
+/**
+ * Pick the crop window for a set of highlight rects: full document width (the
+ * mobile doc is viewport-wide anyway), vertically spanning as many rects as fit
+ * in ~1.5 viewport heights starting from the topmost one. Keeps the annotated
+ * view readable instead of squeezing a 20 000px page into 360px.
+ */
+function cropWindowFor(
+  items: OverlayItem[],
+  doc: { width: number; height: number },
+  viewport: { width: number; height: number },
+): { window: CropWindow; visible: OverlayItem[]; hiddenCount: number } {
+  const sorted = [...items].sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+  const maxH = Math.max(viewport.height * 1.5, 600);
+  const startY = sorted[0].rect.y;
+  let visible = sorted.filter((i) => i.rect.y + i.rect.height <= startY + maxH);
+  if (visible.length === 0) visible = [sorted[0]];
+  const pad = 24;
+  const minY = Math.max(0, Math.min(...visible.map((i) => i.rect.y)) - pad);
+  const maxY = Math.min(doc.height, Math.max(...visible.map((i) => i.rect.y + i.rect.height)) + pad);
+  return {
+    window: { x: 0, y: minY, width: doc.width, height: Math.max(1, maxY - minY) },
+    visible,
+    hiddenCount: items.length - visible.length,
+  };
+}
+
+const pctOf = (n: number, base: number): string => ((n / base) * 100).toFixed(3);
+
+/**
+ * An annotated figure: the full-page screenshot CSS-cropped to `win` (pure
+ * CSS — an aspect-ratio wrapper with the img absolutely positioned at negative
+ * offsets, no image processing), with highlight boxes %-positioned within the
+ * window.
+ *
+ * Geometry invariants (all in DOCUMENT CSS px, the space the rects were
+ * measured in):
+ *   • Every vertical percentage (img top/height, box top/height) resolves
+ *     against the wrapper height; every horizontal one against the wrapper
+ *     width — one shared base per axis, so borders/box-sizing cancel out.
+ *   • The img gets EXPLICIT width AND height, never `height:auto`: a full-page
+ *     capture can be wider than document.scrollWidth (scrollbar gutter — hence
+ *     `shot.width`), and deriving height from the bitmap aspect would skew
+ *     every vertical position by that difference. Height is doc-based: the
+ *     bitmap's rows span the document regardless of its pixel count.
+ */
+function annotatedFigureHtml(
+  src: string,
+  url: string,
+  win: CropWindow,
+  doc: { width: number; height: number },
+  boxes: EvidenceBox[],
+  caption: string,
+  foldY?: number,
+  shot?: { width: number },
+): string {
+  const sw = shot?.width ?? doc.width;
+  const lines: string[] = ['<figure class="evidence-annotated">'];
+  // Cap the rendered height (~640px) so a tall crop window never exceeds a PDF
+  // page; width follows from the window's aspect ratio, capped near 1:1 CSS px.
+  const renderW = Math.min(420, Math.round((640 * win.width) / win.height));
+  lines.push(`<div class="ev-crop" style="aspect-ratio: ${win.width} / ${win.height}; width:${renderW}px;">`);
+  lines.push(
+    `<img src="${src}" alt="Annotated screenshot of ${escapeHtmlAttr(url)}" ` +
+      `style="position:absolute;left:-${pctOf(win.x, win.width)}%;top:-${pctOf(win.y, win.height)}%;` +
+      `width:${pctOf(sw, win.width)}%;height:${pctOf(doc.height, win.height)}%;max-width:none;max-height:none;margin:0;" />`,
+  );
+  for (const box of boxes) {
+    const left = ((box.rect.x - win.x) / win.width) * 100;
+    const top = ((box.rect.y - win.y) / win.height) * 100;
+    const w = (box.rect.width / win.width) * 100;
+    const h = (box.rect.height / win.height) * 100;
+    if (left > 100 || top > 100 || left + w < 0 || top + h < 0) continue; // outside the window
+    const cls = box.ghost ? 'ev-box ev-ghost' : 'ev-box';
+    const label = box.label && !box.ghost ? `<span class="ev-label">${escapeHtmlAttr(box.label)}</span>` : '';
+    lines.push(
+      `<span class="${cls}" style="left:${left.toFixed(3)}%;top:${top.toFixed(3)}%;width:${w.toFixed(3)}%;height:${h.toFixed(3)}%;">${label}</span>`,
+    );
+  }
+  if (foldY !== undefined && foldY > win.y && foldY < win.y + win.height) {
+    lines.push(
+      `<span class="ev-fold" style="top:${pctOf(foldY - win.y, win.height)}%;"><span class="ev-fold-label">fold</span></span>`,
+    );
+  }
+  lines.push('</div>');
+  lines.push(`<figcaption>${escapeHtmlAttr(caption)}</figcaption>`);
+  lines.push('</figure>');
+  return lines.join('\n');
+}
+
+/** Annotated screenshot for an overlay kind. Null when the data is absent. */
+function buildAnnotatedBlock(ref: ScreenshotRef, kind: string): string | null {
+  const ov = ref.overlays;
+  if (!ov || !ref.mobile) return null;
+  const items = ov.kinds?.[kind];
+  if (!items || items.length === 0) return null;
+  const { window: win, visible, hiddenCount } = cropWindowFor(items, ov.document, ov.viewport);
+  const boxes: EvidenceBox[] = visible.map((i) => ({ rect: i.rect, label: i.label }));
+  const suffix = hiddenCount > 0 ? ` (+${hiddenCount} more outside this view)` : '';
+  const caption = `${KIND_CAPTIONS[kind] ?? 'Issue locations'} — ${ref.url}${suffix}`;
+  const foldY = kind === 'cta-fold' ? ov.viewport.height : undefined;
+  return ['**Screenshot**', '', annotatedFigureHtml(ref.mobile, ref.url, win, ov.document, boxes, caption, foldY, ov.shot)].join('\n');
+}
+
+/**
+ * CLS before/after pair: the first-load viewport shot next to the settled
+ * shot cropped to the same viewport window, with each shifted element's
+ * previous position (dashed ghost) and final position (solid box) drawn on.
+ * Shift rects are viewport coordinates at shift time; shifts happen at scroll
+ * 0, where they coincide with document coordinates on the full-page shot.
+ */
+function buildClsPairBlock(ref: ScreenshotRef): string | null {
+  const ov = ref.overlays;
+  const cls = ov?.cls;
+  if (!ov || !cls || cls.shifts.length === 0 || !ref.mobile) return null;
+  const win: CropWindow = { x: 0, y: 0, width: ov.viewport.width, height: ov.viewport.height };
+  const boxes: EvidenceBox[] = [];
+  for (const s of cls.shifts) {
+    const label = (s.selector ?? s.node ?? undefined)?.slice(0, 40);
+    if (s.previousRect) boxes.push({ rect: s.previousRect, ghost: true });
+    if (s.currentRect) boxes.push({ rect: s.currentRect, label });
+  }
+  const lines: string[] = ['**Screenshot — layout shift**', '', '<div class="evidence-pair">'];
+  if (ref.firstload) {
+    lines.push(
+      `<figure><img src="${ref.firstload}" alt="First load of ${escapeHtmlAttr(ref.url)}" /><figcaption>On load</figcaption></figure>`,
+    );
+  }
+  lines.push(
+    annotatedFigureHtml(
+      ref.mobile,
+      ref.url,
+      win,
+      ov.document,
+      boxes,
+      `After layout shifts — CLS ${cls.value} (dashed = position before the shift)`,
+      undefined,
+      ov.shot,
+    ),
+  );
+  lines.push('</div>');
+  return lines.join('\n');
+}
+
+/**
+ * SERP-style preview for title/description findings on a sampled page: the
+ * snippet as a search engine would render it, with the overflow past the
+ * truncation point struck out and a one-line note quantifying the problem.
+ */
+function buildSerpCard(ref: ScreenshotRef, field: 'title' | 'description', message: string): string | null {
+  const meta = ref.overlays?.pageMeta;
+  if (!meta) return null;
+  const t = message.toLowerCase();
+  const value = field === 'title' ? meta.title : meta.description;
+  const max = field === 'title' ? THRESHOLDS.TITLE_MAX : THRESHOLDS.DESCRIPTION_MAX;
+  const min = field === 'title' ? THRESHOLDS.TITLE_MIN : THRESHOLDS.DESCRIPTION_MIN;
+
+  // The note must match the claim — a "too long" finding with a short sampled
+  // value means the sampled page isn't representative; skip rather than confuse.
+  let note: string;
+  if (/too long/.test(t)) {
+    if (value.length <= max) return null;
+    note = `This ${field} is ${value.length} characters — search engines truncate at ~${max}.`;
+  } else if (/too short/.test(t)) {
+    if (value.length === 0 || value.length >= min) return null;
+    note = `This ${field} is ${value.length} characters — below the recommended minimum of ${min}.`;
+  } else if (/duplicat/.test(t)) {
+    if (value.length === 0) return null;
+    note = `This exact ${field} appears on multiple pages — each page competes for the same snippet.`;
+  } else {
+    // missing/empty
+    if (value.length > 0) return null;
+    note = `No ${field === 'title' ? 'title' : 'meta description'} — search engines will generate their own snippet.`;
+  }
+
+  let host: string;
+  let crumbs = '';
+  try {
+    const u = new URL(ref.url);
+    host = u.hostname;
+    crumbs = u.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((s) => ` › ${s}`)
+      .join('');
+  } catch {
+    host = ref.url;
+  }
+
+  const esc = escapeHtmlAttr;
+  const titleHtml =
+    meta.title.length === 0
+      ? `<span class="serp-missing">(no title — URL shown instead)</span>`
+      : field === 'title' && meta.title.length > max
+        ? `${esc(meta.title.slice(0, max))}<span class="serp-overflow">${esc(meta.title.slice(max))}</span>`
+        : esc(meta.title);
+  const descHtml =
+    meta.description.length === 0
+      ? `<span class="serp-missing">(no meta description — snippet auto-generated from page text)</span>`
+      : field === 'description' && meta.description.length > max
+        ? `${esc(meta.description.slice(0, max))}<span class="serp-overflow">${esc(meta.description.slice(max))}</span>`
+        : esc(meta.description);
+
+  return [
+    '**Search preview**',
+    '',
+    '<div class="serp-preview">',
+    `<div class="serp-url">${esc(host)}${esc(crumbs)}</div>`,
+    `<div class="serp-title">${titleHtml}</div>`,
+    `<div class="serp-desc">${descHtml}</div>`,
+    `<div class="serp-note">${esc(note)}</div>`,
+    '</div>',
+  ].join('\n');
+}
+
+/**
+ * Head snippet card: a reconstructed `<head>` excerpt for the sampled page
+ * with the offending line flagged — or, when the element is missing, a
+ * flagged "missing:" comment where it should be. Honesty guard: a finding
+ * claiming X is missing renders nothing when the sampled page HAS X (the
+ * sampled page isn't representative of that finding).
+ */
+function buildHeadSnippetCard(ref: ScreenshotRef, aspect: HeadAspect, message: string): string | null {
+  const head = ref.overlays?.head;
+  const meta = ref.overlays?.pageMeta;
+  if (!head) return null;
+  const t = message.toLowerCase();
+  const esc = escapeHtmlAttr;
+  const missingClaim = /not set|missing|no\b|lacks|don'?t have|without/.test(t);
+
+  interface HeadLine {
+    html: string;
+    state?: 'flag' | 'missing';
+  }
+  const trunc = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n)}…` : s);
+  const lines: HeadLine[] = [];
+  const langAttr = head.htmlLang ? ` lang="${esc(head.htmlLang)}"` : '';
+  lines.push({ html: `&lt;html${langAttr}&gt;`, state: aspect === 'lang' ? (head.htmlLang ? 'flag' : undefined) : undefined });
+  if (aspect === 'lang' && !head.htmlLang) lines.push({ html: `&lt;!-- missing: lang attribute on &lt;html&gt; --&gt;`, state: 'missing' });
+  lines.push({ html: `&nbsp;&nbsp;&lt;head&gt;` });
+  const push = (html: string, state?: 'flag' | 'missing') => lines.push({ html: `&nbsp;&nbsp;&nbsp;&nbsp;${html}`, state });
+
+  if (head.charset) push(`&lt;meta charset="${esc(head.charset)}"&gt;`, aspect === 'charset' ? 'flag' : undefined);
+  else if (aspect === 'charset') push(`&lt;!-- missing: &lt;meta charset="utf-8"&gt; --&gt;`, 'missing');
+
+  if (meta?.title) push(`&lt;title&gt;${esc(trunc(meta.title, 60))}&lt;/title&gt;`);
+
+  if (head.canonical) push(`&lt;link rel="canonical" href="${esc(trunc(head.canonical))}"&gt;`, aspect === 'canonical' ? 'flag' : undefined);
+  else if (aspect === 'canonical') push(`&lt;!-- missing: &lt;link rel="canonical" href="…"&gt; --&gt;`, 'missing');
+
+  if (head.metaRobots) push(`&lt;meta name="robots" content="${esc(trunc(head.metaRobots, 60))}"&gt;`, aspect === 'noindex' ? 'flag' : undefined);
+
+  if (aspect === 'hreflang') {
+    for (const h of head.hreflangs.slice(0, 6)) {
+      push(`&lt;link rel="alternate" hreflang="${esc(h.lang)}" href="${esc(trunc(h.href, 70))}"&gt;`, 'flag');
+    }
+    if (head.hreflangs.length === 0) push(`&lt;!-- missing: &lt;link rel="alternate" hreflang="…"&gt; --&gt;`, 'missing');
+  }
+  if (aspect === 'doctype' && !head.hasDoctype) {
+    lines.unshift({ html: `&lt;!-- missing: &lt;!DOCTYPE html&gt; --&gt;`, state: 'missing' });
+  }
+  lines.push({ html: `&nbsp;&nbsp;&lt;/head&gt;` });
+
+  // Honesty guards per aspect — skip the card when the sampled page
+  // contradicts the claim; the generic screenshot fallback applies instead.
+  switch (aspect) {
+    case 'canonical':
+      if (missingClaim && head.canonical) return null;
+      break;
+    case 'noindex':
+      if (!head.metaRobots || !/noindex/i.test(head.metaRobots)) return null; // header-based noindex isn't visible here
+      break;
+    case 'hreflang':
+      if (missingClaim && head.hreflangs.length > 0) return null;
+      break;
+    case 'lang':
+      if (missingClaim && head.htmlLang) return null;
+      break;
+    case 'charset':
+      if (missingClaim && head.charset) return null;
+      break;
+    case 'doctype':
+      if (head.hasDoctype) return null;
+      break;
+  }
+
+  const body = lines
+    .map((l) => {
+      const cls = l.state === 'flag' ? ' class="line-flag"' : l.state === 'missing' ? ' class="line-missing"' : '';
+      return `<span${cls}>${l.html}</span>`;
+    })
+    .join('\n');
+  return [
+    '**Page head**',
+    '',
+    '<div class="code-card">',
+    `<div class="code-card-title">&lt;head&gt; of ${esc(ref.url)}</div>`,
+    `<pre class="code-card-pre">${body}</pre>`,
+    '</div>',
+  ].join('\n');
+}
+
+/** A labelled horizontal bar row for the data panels (pure CSS, PDF-safe). */
+function barRow(name: string, bytes: number, maxBytes: number, sub: string, flagged = false): string {
+  const pct = maxBytes > 0 ? Math.max(1, Math.round((bytes / maxBytes) * 100)) : 1;
+  const cls = flagged ? 'bar-fill bar-flag' : 'bar-fill';
+  return (
+    `<div class="bar-row"><span class="bar-name">${escapeHtmlAttr(name)}</span>` +
+    `<span class="bar-track"><span class="${cls}" style="width:${pct}%"></span></span>` +
+    `<span class="bar-sub">${escapeHtmlAttr(sub)}</span></div>`
+  );
+}
+
+/**
+ * Network panel from the sampled page's request log: transfer broken down by
+ * resource type ('types') or by origin with third-party flagged ('origins').
+ */
+function buildNetPanel(ref: ScreenshotRef, mode: 'types' | 'origins'): string | null {
+  const net = ref.netSummary;
+  if (!net || net.totalRequests === 0) return null;
+  const rows: string[] = [];
+  if (mode === 'types') {
+    const max = net.byType[0]?.bytes ?? 0;
+    for (const t of net.byType.slice(0, 8)) {
+      rows.push(barRow(t.type, t.bytes, max, `${formatBytes(t.bytes)} · ${t.count} req`));
+    }
+  } else {
+    const max = net.byHost[0]?.bytes ?? 0;
+    for (const h of net.byHost) {
+      rows.push(barRow(h.thirdParty ? `${h.host} (3rd-party)` : h.host, h.bytes, max, `${formatBytes(h.bytes)} · ${h.count} req`, h.thirdParty));
+    }
+  }
+  const headline =
+    mode === 'origins'
+      ? `${net.totalRequests} requests · ${formatBytes(net.totalBytes)} — third-party: ${net.thirdPartyCount} req / ${formatBytes(net.thirdPartyBytes)}`
+      : `${net.totalRequests} requests · ${formatBytes(net.totalBytes)} transferred`;
+  return [
+    '**Network breakdown**',
+    '',
+    '<div class="data-panel">',
+    `<div class="data-panel-title">${escapeHtmlAttr(`${headline} — ${ref.url}`)}</div>`,
+    ...rows,
+    '</div>',
+  ].join('\n');
+}
+
+/** Per-file unused-bytes bars from the persisted CDP coverage summary. */
+function buildCoveragePanel(ref: ScreenshotRef, which: 'js' | 'css'): string | null {
+  const cov = ref.overlays?.panels?.coverage?.[which];
+  if (!cov || cov.total === 0) return null;
+  const pct = Math.round((cov.unused / cov.total) * 100);
+  const rows = cov.files.map((f) => {
+    let name = f.url;
+    try {
+      const u = new URL(f.url);
+      name = u.pathname.split('/').filter(Boolean).pop() ?? u.hostname;
+    } catch {
+      // keep raw
+    }
+    return barRow(name, f.unused, cov.total, `${formatBytes(f.unused)} unused (${f.unusedPercent}%)`, f.unusedPercent > 50);
+  });
+  return [
+    '**Unused code**',
+    '',
+    '<div class="data-panel">',
+    `<div class="data-panel-title">${escapeHtmlAttr(
+      `Unused ${which.toUpperCase()}: ${formatBytes(cov.unused)} of ${formatBytes(cov.total)} (${pct}%) — ${ref.url}`,
+    )}</div>`,
+    ...rows,
+    '</div>',
+  ].join('\n');
+}
+
+/** Render-blocking head resources measured at capture time. */
+function buildRenderBlockingPanel(ref: ScreenshotRef): string | null {
+  const list = ref.overlays?.panels?.renderBlocking;
+  if (!list || list.length === 0) return null;
+  const rows = list.map((r) => {
+    let name = r.url;
+    try {
+      const u = new URL(r.url, ref.url);
+      name = `${u.hostname}${u.pathname}`;
+    } catch {
+      // keep raw
+    }
+    return `<div class="bar-row"><span class="rb-chip rb-${r.kind}">${r.kind}</span><span class="bar-name bar-name-wide">${escapeHtmlAttr(name.length > 90 ? `${name.slice(0, 90)}…` : name)}</span></div>`;
+  });
+  return [
+    '**Render-blocking resources**',
+    '',
+    '<div class="data-panel">',
+    `<div class="data-panel-title">${escapeHtmlAttr(`${list.length} render-blocking resource(s) in <head> — ${ref.url}`)}</div>`,
+    ...rows,
+    '</div>',
+  ].join('\n');
+}
+
+/**
+ * LCP evidence: the LCP element highlighted on the settled shot plus a
+ * sub-parts breakdown (TTFB / resource delay / resource load / render delay).
+ */
+function buildLcpBlock(ref: ScreenshotRef): string | null {
+  const ov = ref.overlays;
+  const lcp = ov?.lcp;
+  if (!ov || !lcp) return null;
+  const parts: string[] = [];
+  if (lcp.rect && ref.mobile) {
+    const win: CropWindow = { x: 0, y: 0, width: ov.viewport.width, height: ov.viewport.height };
+    const label = `LCP element — ${(lcp.value / 1000).toFixed(2)}s${lcp.selector ? ` (${lcp.selector.slice(0, 40)})` : ''}`;
+    parts.push(
+      annotatedFigureHtml(
+        ref.mobile,
+        ref.url,
+        win,
+        ov.document,
+        [{ rect: lcp.rect, label }],
+        `Largest Contentful Paint element — ${ref.url}`,
+        undefined,
+        ov.shot,
+      ),
+    );
+  }
+  if (lcp.subParts) {
+    const sp = lcp.subParts;
+    const rows: Array<[string, number]> = [
+      ['TTFB', sp.ttfb],
+      ['Resource delay', sp.resourceDelay],
+      ['Resource load', sp.resourceLoad],
+      ['Render delay', sp.renderDelay],
+    ];
+    const max = Math.max(...rows.map(([, v]) => v), 1);
+    parts.push(
+      [
+        '<div class="data-panel">',
+        `<div class="data-panel-title">${escapeHtmlAttr(`LCP ${(lcp.value / 1000).toFixed(2)}s — where the time went`)}</div>`,
+        ...rows.map(([name, v]) => barRow(name, v, max, `${Math.round(v)}ms`, v === max)),
+        '</div>',
+      ].join('\n'),
+    );
+  }
+  if (parts.length === 0) return null;
+  return ['**LCP evidence**', '', ...parts].join('\n');
+}
+
+/**
+ * JS-off vs hydrated pair — what crawlers that don't execute JavaScript see
+ * next to what users get. The starker the difference, the stronger the finding.
+ */
+function buildNojsPair(ref: ScreenshotRef): string | null {
+  if (!ref.nojs) return null;
+  const hydrated = ref.firstload ?? ref.mobile;
+  if (!hydrated) return null;
+  const esc = escapeHtmlAttr(ref.url);
+  return [
+    '**Screenshot — without JavaScript**',
+    '',
+    '<div class="evidence-pair">',
+    `<figure><img src="${ref.nojs}" alt="JavaScript disabled — ${esc}" /><figcaption>JavaScript disabled (what most crawlers see)</figcaption></figure>`,
+    `<figure><img src="${hydrated}" alt="Hydrated — ${esc}" /><figcaption>JavaScript enabled</figcaption></figure>`,
+    '</div>',
+  ].join('\n');
+}
+
+/**
+ * Pagination-probe step sequence: the listing as loaded vs after clicking
+ * "next" — content empties/duplicates while the control stays enabled.
+ */
+function buildPaginationSequence(shown: string[], probes: ProbeIndex): { block: string; probeUrl: string } | null {
+  if (probes.size === 0) return null;
+  let probe: ProbeShots | undefined;
+  for (const ex of shown) {
+    for (const url of extractAllUrls(ex)) {
+      probe = probes.get(normalizeUrlForEvidence(url));
+      if (probe) break;
+    }
+    if (probe) break;
+  }
+  // A report usually carries one probed series; if exactly one probe exists,
+  // use it even when the finding's example cites a sibling page of the series.
+  if (!probe && probes.size === 1) probe = [...probes.values()][0];
+  if (!probe || probe.steps.length === 0) return null;
+  const captions: Record<string, string> = {
+    'step-0-initial': 'Page as loaded',
+    'step-1-after-first-click': 'After clicking “next” once',
+  };
+  const figures = probe.steps.map((s) => {
+    const caption = captions[s.name] ?? `After ${s.name.match(/\d+/g)?.pop() ?? 'more'} clicks — “next” still enabled`;
+    return `<figure><img src="${s.src}" alt="${escapeHtmlAttr(`${caption} — ${probe!.url}`)}" /><figcaption>${escapeHtmlAttr(caption)}</figcaption></figure>`;
+  });
+  return {
+    block: ['**Screenshot — pagination probe**', '', '<div class="evidence-pair">', ...figures, '</div>'].join('\n'),
+    probeUrl: probe.url,
+  };
+}
+
+/**
+ * Landmark overlay for missing-<main> findings: tint the landmarks that ARE
+ * present so the gap is visible. Honesty guard: skip when a <main> landmark
+ * was found on the sampled page.
+ */
+function buildLandmarksBlock(ref: ScreenshotRef): string | null {
+  const ov = ref.overlays;
+  if (!ov || !ref.mobile) return null;
+  const items = ov.kinds?.['landmarks'];
+  if (!items || items.length === 0) return null;
+  if (items.some((i) => i.label === '<main>')) return null; // claim contradicted
+  const { window: win, visible, hiddenCount } = cropWindowFor(items, ov.document, ov.viewport);
+  const boxes: EvidenceBox[] = visible.map((i) => ({ rect: i.rect, label: i.label }));
+  const suffix = hiddenCount > 0 ? ` (+${hiddenCount} more outside this view)` : '';
+  return [
+    '**Screenshot**',
+    '',
+    annotatedFigureHtml(
+      ref.mobile,
+      ref.url,
+      win,
+      ov.document,
+      boxes,
+      `Landmarks present — no <main> among them — ${ref.url}${suffix}`,
+      undefined,
+      ov.shot,
+    ),
+  ].join('\n');
+}
+
+/** Security-headers card: the headers the analyzer found missing, listed ✗. */
+function buildSecHeadersCard(ref: ScreenshotRef): string | null {
+  const missing = ref.overlays?.panels?.securityHeaders?.missing;
+  if (!missing || missing.length === 0) return null;
+  const rows = missing.map(
+    (h) => `<div class="bar-row"><span class="hdr-miss">✗</span><span class="bar-name bar-name-wide">${escapeHtmlAttr(h)}</span></div>`,
+  );
+  return [
+    '**Response headers**',
+    '',
+    '<div class="data-panel">',
+    `<div class="data-panel-title">${escapeHtmlAttr(`${missing.length} security header(s) missing on ${ref.url}`)}</div>`,
+    ...rows,
+    '</div>',
+  ].join('\n');
+}
+
+/**
+ * Schema card: JSON-LD types found on the sampled page (chips) + the first
+ * block truncated. Honesty guard: a "missing schema" claim with types present
+ * renders nothing.
+ */
+function buildSchemaCard(ref: ScreenshotRef, message: string): string | null {
+  const schema = ref.overlays?.schema;
+  const head = ref.overlays;
+  if (!head) return null;
+  const t = message.toLowerCase();
+  const claimsMissing = /missing schema|no structured data|lacks structured data|no schema|without schema/.test(t);
+  const types = schema?.types ?? [];
+  if (claimsMissing && types.length > 0) return null;
+  const lines: string[] = ['**Structured data**', '', '<div class="code-card">'];
+  if (types.length === 0) {
+    lines.push(`<div class="code-card-title">No JSON-LD structured data found on ${escapeHtmlAttr(ref.url)}</div>`);
+  } else {
+    lines.push(
+      `<div class="code-card-title">JSON-LD on ${escapeHtmlAttr(ref.url)}: ${types.map((ty) => `<span class="chip">${escapeHtmlAttr(ty)}</span>`).join(' ')}</div>`,
+    );
+  }
+  if (schema?.snippet) {
+    lines.push(`<pre class="code-card-pre">${escapeHtmlAttr(schema.snippet)}${schema.snippet.length >= 600 ? '…' : ''}</pre>`);
+  }
+  lines.push('</div>');
+  return lines.join('\n');
+}
+
+/**
+ * Link-graph facts for site-wide findings (orphans, link equity, sitemap
+ * membership): a small per-cited-URL table of inbound-link count and sitemap
+ * presence, straight from the crawl's own graph artifacts.
+ */
+function buildSiteGraphPanel(shown: string[], siteFacts: SiteFacts | null | undefined): string | null {
+  if (!siteFacts) return null;
+  const urls: string[] = [];
+  for (const ex of shown) {
+    for (const u of extractAllUrls(ex)) {
+      if (!urls.includes(u)) urls.push(u);
+      if (urls.length >= 5) break;
+    }
+    if (urls.length >= 5) break;
+  }
+  if (urls.length === 0) return null;
+  const rows: string[] = [];
+  for (const u of urls) {
+    const k = normalizeUrlForEvidence(u);
+    // incoming-links.json omits pages with no inbound links — a crawled page
+    // absent from the map genuinely has 0 (the orphan case this panel exists
+    // for). For URLs the crawl never saw, absence proves nothing.
+    const inbound = siteFacts.inbound.get(k) ?? (siteFacts.crawled.has(k) ? 0 : undefined);
+    const inSitemap = siteFacts.sitemap ? siteFacts.sitemap.has(k) : null;
+    if (inbound === undefined && inSitemap !== true) continue;
+    const cells = [
+      `<span class="bar-name bar-name-wide">${escapeHtmlAttr(u)}</span>`,
+      `<span class="bar-sub">${inbound !== undefined ? `${inbound} inbound link${inbound === 1 ? '' : 's'}` : '—'}</span>`,
+      siteFacts.sitemap ? `<span class="bar-sub">${inSitemap ? 'in sitemap ✓' : 'not in sitemap ✗'}</span>` : '',
+    ];
+    rows.push(`<div class="bar-row">${cells.join('')}</div>`);
+  }
+  if (rows.length === 0) return null;
+  return [
+    '**Link-graph facts**',
+    '',
+    '<div class="data-panel">',
+    `<div class="data-panel-title">From the crawl's internal link graph${siteFacts.sitemap ? ' and sitemap' : ''}</div>`,
+    ...rows,
+    '</div>',
+  ].join('\n');
+}
+
+/**
+ * Issue-aware evidence dispatcher. Tries, in order: the kind-specific visual
+ * (annotated overlay / CLS pair / SERP card) for the first sampled example,
+ * then the plain screenshot pair. Annotated visuals are deduped per
+ * (kind, page) via namespaced keys in the same `embedded` set the plain block
+ * uses (plain keys are normalized URLs, so `kind:`-prefixed tags can't collide).
+ */
+function buildEvidenceBlock(
+  message: string,
+  shown: string[],
+  screenshots: ScreenshotIndex,
+  embedded: Set<string>,
+  probes?: ProbeIndex,
+  siteFacts?: SiteFacts | null,
+): string | null {
+  const kind = evidenceKindFor(message);
+
+  // Kinds that don't require the cited page to be SAMPLED: probe sequences
+  // belong to the series (probe shots are their own evidence dirs) and
+  // link-graph facts come from site-level artifacts.
+  if (kind?.type === 'pagination' && probes) {
+    const seq = buildPaginationSequence(shown, probes);
+    if (seq) {
+      // Dedupe keyed to the probe actually rendered — two flagged series in
+      // one report each show their own sequence exactly once.
+      const tag = `pagination:${normalizeUrlForEvidence(seq.probeUrl)}`;
+      if (embedded.has(tag)) return null; // this series' sequence already shown
+      embedded.add(tag);
+      return seq.block;
+    }
+  }
+  if (kind?.type === 'site-graph') {
+    const block = buildSiteGraphPanel(shown, siteFacts);
+    if (block) return block;
+  }
+
+  const ref = firstSampledRef(shown, screenshots);
+  if (!ref) return null;
+  if (kind && (kind.type === 'cls' || kind.type === 'overlay' || kind.type === 'lcp' || kind.type === 'landmarks' || kind.type === 'nojs')) {
+    const pageKey = normalizeUrlForEvidence(ref.url);
+    const tag = `${kind.type === 'overlay' ? kind.kind : kind.type}:${pageKey}`;
+    const block =
+      kind.type === 'cls'
+        ? buildClsPairBlock(ref)
+        : kind.type === 'lcp'
+          ? buildLcpBlock(ref)
+          : kind.type === 'landmarks'
+            ? buildLandmarksBlock(ref)
+            : kind.type === 'nojs'
+              ? buildNojsPair(ref)
+              : buildAnnotatedBlock(ref, kind.kind);
+    if (block) {
+      if (embedded.has(tag)) {
+        return `**Screenshot**\n\nAnnotated screenshot of ${mdLink(ref.url, ref.url)} is shown above.`;
+      }
+      embedded.add(tag);
+      embedded.add(pageKey); // later plain blocks for this page point upward
+      return block;
+    }
+  } else if (kind && kind.type !== 'pagination' && kind.type !== 'site-graph') {
+    // Image-less cards/panels — plain-screenshot dedup unaffected.
+    const block =
+      kind.type === 'serp'
+        ? buildSerpCard(ref, kind.field, message)
+        : kind.type === 'head'
+          ? buildHeadSnippetCard(ref, kind.aspect, message)
+          : kind.type === 'net'
+            ? buildNetPanel(ref, kind.mode)
+            : kind.type === 'coverage'
+              ? buildCoveragePanel(ref, kind.which)
+              : kind.type === 'sec-headers'
+                ? buildSecHeadersCard(ref)
+                : kind.type === 'schema'
+                  ? buildSchemaCard(ref, message)
+                  : buildRenderBlockingPanel(ref);
+    if (block) return block;
+  }
+  return buildScreenshotBlock(shown, screenshots, embedded);
 }
 
 /**

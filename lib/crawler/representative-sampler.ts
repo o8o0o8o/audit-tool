@@ -45,6 +45,20 @@ export class RepresentativeSampler {
     return true;
   }
 
+  /**
+   * Non-consuming peek: would `shouldSample(url)` return true right now?
+   * Used to decide cheap, early captures (e.g. the first-load screenshot taken
+   * during navigation) before the authoritative `shouldSample` call later in
+   * the page pipeline. Under concurrency two pages in the same bucket may both
+   * peek true — harmless, only one wins the later `shouldSample`.
+   */
+  wouldSample(url: string): boolean {
+    if (this.#sampled.length >= this.#cap) return false;
+    const bucket = RepresentativeSampler.bucketOf(url);
+    if (bucket === null) return false;
+    return !this.#seenBuckets.has(bucket);
+  }
+
   /** URLs that have already been sampled, in insertion order. */
   getSampledUrls(): string[] {
     return [...this.#sampled];

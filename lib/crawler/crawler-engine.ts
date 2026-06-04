@@ -331,7 +331,8 @@ class CrawlerEngine {
       status: number | undefined,
       redirectChain: RedirectEntry[],
       vitals: Partial<CollectedVitals>,
-      metrics: PerformanceMetrics;
+      metrics: PerformanceMetrics,
+      firstLoadShot: Buffer | undefined;
 
     try {
       if (this.#options.perf) {
@@ -374,6 +375,19 @@ class CrawlerEngine {
       });
 
       status = response?.status();
+
+      // First-load viewport screenshot — taken before vitals settle, auto-
+      // scroll, and lazy hydration, so post-load layout shifts (fonts, ads,
+      // hydration) are visible when paired with the settled evidence shot.
+      // Only for pages the sampler is expected to pick (cheap non-consuming
+      // peek; the authoritative shouldSample decision happens post-analysis).
+      if (status === 200 && this.#options.evidenceDir && this.#sampler.wouldSample(url)) {
+        try {
+          firstLoadShot = await page.screenshot({ fullPage: false, timeout: 5_000 });
+        } catch {
+          // Non-critical — the evidence pair simply won't render for this page.
+        }
+      }
 
       // Track redirects
       redirectChain = [];
@@ -468,6 +482,7 @@ class CrawlerEngine {
       responseHeaders,
       consoleData,
       servedHtml,
+      firstLoadShot,
     };
   }
 
@@ -1059,6 +1074,8 @@ class CrawlerEngine {
       lcpUrl,
       lcpSize,
       lcpSubParts,
+      lcpSelector,
+      lcpRect,
       clsEntries,
       clsLargestShift,
       clsShiftCount,
@@ -1075,6 +1092,7 @@ class CrawlerEngine {
       responseHeaders,
       consoleData,
       servedHtml,
+      firstLoadShot,
     } = page;
 
     // Defensive check for corrupted state
@@ -1294,7 +1312,17 @@ class CrawlerEngine {
     // Representative-page evidence capture (after analyzers so accessibility
     // data and the final request log are available).
     if (captureEvidence) {
-      await captureRepresentativeEvidence(chromePage, url, this.#options, requests, pageData.accessibility);
+      await captureRepresentativeEvidence(chromePage, url, this.#options, requests, pageData.accessibility, {
+        firstLoadShot,
+        clsEntries: clsEntries as CLSEntry[] | undefined,
+        clsValue: CLS,
+        codeCoverage: pageData.codeCoverage,
+        lcp:
+          typeof LCP === 'number' && LCP > 0
+            ? { selector: lcpSelector ?? null, rect: lcpRect ?? null, value: LCP, subParts: lcpSubParts }
+            : undefined,
+        missingHeaders: (pageData.security as { missingHeaders?: string[] } | undefined)?.missingHeaders,
+      });
     }
 
     // Update the consecutive-404 streak using soft-404 detection from analyzers.

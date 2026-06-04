@@ -494,7 +494,7 @@ export async function runAnalyzers(
   // (static-href series are covered post-crawl by BrokenPaginationAnalyzer).
   if (pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
     const probeResult = await withTimeout(
-      PaginationAnalyzer.probeJsNext(chromePage, url),
+      PaginationAnalyzer.probeJsNext(chromePage, url, options.evidenceDir),
       CRAWL_SETTINGS.BROKEN_PAGINATION_PROBE_TIMEOUT_MS + 2000,
       `Pagination probe timeout for ${url}`,
     ).catch((e) => {

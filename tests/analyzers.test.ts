@@ -3009,3 +3009,355 @@ void describe('pagination probe: isSuspectedInfinitePagination', () => {
     assert.strictEqual(isSuspectedInfinitePagination({ ...base, controlPersists: false, emptyAfterClick: true }), false);
   });
 });
+
+// ============================================================
+// Phase 2: issue-aware visual evidence (overlays / CLS pair / SERP)
+// ============================================================
+import { evidenceKindFor } from '../lib/phase2/phase2-runner';
+
+void describe('phase2: issue-aware visual evidence', () => {
+  const OVERLAYS = {
+    url: 'https://example.com/about',
+    capturedAt: '2026-01-01T00:00:00.000Z',
+    viewport: { width: 414, height: 896 },
+    document: { width: 414, height: 3000 },
+    pageMeta: { title: 'A'.repeat(75), description: 'D'.repeat(140) },
+    head: {
+      canonical: null as string | null,
+      metaRobots: null as string | null,
+      htmlLang: 'en',
+      charset: 'utf-8',
+      hasDoctype: true,
+      hreflangs: [] as Array<{ lang: string; href: string }>,
+    },
+    panels: {
+      renderBlocking: [
+        { url: 'https://example.com/styles.css', kind: 'style' },
+        { url: 'https://cdn.example.net/lib.js', kind: 'script' },
+      ],
+      coverage: {
+        js: {
+          total: 890_000,
+          unused: 612_000,
+          files: [{ url: 'https://example.com/assets/app.js', total: 500_000, unused: 365_000, unusedPercent: 73 }],
+        },
+      },
+    },
+    kinds: {
+      'missing-alt': [{ selector: 'img.hero', rect: { x: 10, y: 200, width: 300, height: 150 }, label: 'no alt text' }],
+    },
+    cls: {
+      value: 0.34,
+      shifts: [
+        {
+          node: 'DIV',
+          selector: 'div.hero',
+          previousRect: { x: 0, y: 100, width: 414, height: 200 },
+          currentRect: { x: 0, y: 300, width: 414, height: 200 },
+        },
+      ],
+    },
+  };
+
+  const REQUESTS = {
+    url: 'https://example.com/about',
+    requests: {
+      'https://example.com/about': { resourceType: 'document', size: 90_000 },
+      'https://example.com/app.js': { resourceType: 'script', size: 400_000 },
+      'https://tracker.adtech.io/pixel.js': { resourceType: 'script', size: 120_000 },
+    },
+  };
+
+  /** A real runDir on disk carrying overlays.json + requests.json for the sampled /about page. */
+  function mkEvidence(overlayOverrides: Record<string, unknown> = {}): { dir: string; files: string[] } {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'overlays-'));
+    const pageDir = path.join(dir, 'evidence', 'https_example.com_about');
+    fs.mkdirSync(pageDir, { recursive: true });
+    fs.writeFileSync(path.join(pageDir, 'overlays.json'), JSON.stringify({ ...OVERLAYS, ...overlayOverrides }));
+    fs.writeFileSync(path.join(pageDir, 'requests.json'), JSON.stringify(REQUESTS));
+    return {
+      dir,
+      files: ['screenshot.mobile.png', 'screenshot.desktop.png', 'screenshot.firstload.png', 'overlays.json', 'requests.json'],
+    };
+  }
+
+  function evidenceArts(msg: string, ev: { dir: string; files: string[] }): AuditArtifacts {
+    const a = mkArtifacts([msg], { [msg]: ['https://example.com/about'] });
+    a.runDir = ev.dir;
+    a.manifest.evidence = { 'https_example.com_about': { url: 'https://example.com/about', files: ev.files } };
+    return a;
+  }
+
+  void it('maps finding messages to their evidence kind', () => {
+    assert.deepStrictEqual(evidenceKindFor('Some images are missing alt text'), { type: 'overlay', kind: 'missing-alt' });
+    // "Image links without alt text" must hit missing-alt, NOT empty-anchor.
+    assert.deepStrictEqual(evidenceKindFor('Image links without alt text'), { type: 'overlay', kind: 'missing-alt' });
+    assert.deepStrictEqual(evidenceKindFor('Some pages have CLS more than 0.1'), { type: 'cls' });
+    assert.deepStrictEqual(evidenceKindFor('Pages have titles that are too long'), { type: 'serp', field: 'title' });
+    assert.deepStrictEqual(evidenceKindFor('Links with empty anchor text'), { type: 'overlay', kind: 'empty-anchor' });
+    assert.deepStrictEqual(evidenceKindFor('Insufficient color contrast detected'), { type: 'overlay', kind: 'contrast' });
+    assert.deepStrictEqual(evidenceKindFor('Canonicals are not set for some pages'), { type: 'head', aspect: 'canonical' });
+    assert.deepStrictEqual(evidenceKindFor('Pages in sitemap are marked noindex'), { type: 'head', aspect: 'noindex' });
+    // "Render-blocking third-party scripts" must hit the render-blocking panel, not net/origins.
+    assert.deepStrictEqual(evidenceKindFor('Render-blocking third-party scripts present'), { type: 'render-blocking' });
+    assert.deepStrictEqual(evidenceKindFor('High percentage of unused CSS'), { type: 'coverage', which: 'css' });
+    assert.deepStrictEqual(evidenceKindFor('Unused code exceeds 500KB'), { type: 'coverage', which: 'js' });
+    assert.deepStrictEqual(evidenceKindFor('Large third-party payload detected'), { type: 'net', mode: 'origins' });
+    assert.deepStrictEqual(evidenceKindFor('Some pages have too many requests'), { type: 'net', mode: 'types' });
+    assert.deepStrictEqual(evidenceKindFor('Orphan pages detected in the link graph'), { type: 'site-graph' });
+    assert.strictEqual(evidenceKindFor('Deprecated HTML elements detected'), null);
+  });
+
+  void it('renders a head snippet card with a flagged missing-canonical line', () => {
+    const md = buildReportMarkdown(evidenceArts('Canonicals are not set for some pages', mkEvidence()));
+    assert.match(md, /code-card/);
+    assert.match(md, /line-missing/, 'the absent canonical renders as a flagged missing-comment');
+    assert.match(md, /rel="canonical"/);
+  });
+
+  void it('skips the head card when the sampled page contradicts a missing-claim (canonical present)', () => {
+    const ev = mkEvidence({ head: { ...OVERLAYS.head, canonical: 'https://example.com/about' } });
+    const md = buildReportMarkdown(evidenceArts('Canonicals are not set for some pages', ev));
+    assert.doesNotMatch(md, /code-card/);
+    assert.match(md, /evidence-shots/, 'falls back to the plain screenshot pair');
+  });
+
+  void it('renders the network origins panel with third-party rows flagged', () => {
+    const md = buildReportMarkdown(evidenceArts('Large third-party payload detected', mkEvidence()));
+    assert.match(md, /data-panel/);
+    assert.match(md, /tracker\.adtech\.io \(3rd-party\)/);
+    assert.match(md, /bar-flag/, 'third-party bars use the flagged color');
+    assert.match(md, /third-party: 1 req/);
+  });
+
+  void it('renders the by-type network panel for request-count findings', () => {
+    const md = buildReportMarkdown(evidenceArts('Some pages have too many requests', mkEvidence()));
+    assert.match(md, /data-panel/);
+    assert.match(md, /3 requests/);
+    assert.match(md, /script/);
+  });
+
+  void it('renders coverage bars from the persisted CDP summary', () => {
+    const md = buildReportMarkdown(evidenceArts('Unused code exceeds 500KB', mkEvidence()));
+    assert.match(md, /Unused JS/);
+    assert.match(md, /app\.js/);
+    assert.match(md, /\(73%\)/);
+  });
+
+  void it('renders the render-blocking resource list with kind chips', () => {
+    const md = buildReportMarkdown(evidenceArts('Render-blocking resources exceed the threshold', mkEvidence()));
+    assert.match(md, /2 render-blocking resource/);
+    assert.match(md, /rb-style/);
+    assert.match(md, /rb-script/);
+    assert.match(md, /cdn\.example\.net\/lib\.js/);
+  });
+
+  void it('renders an annotated screenshot (crop + highlight boxes) for an overlay kind', () => {
+    const md = buildReportMarkdown(evidenceArts('Some images are missing alt text', mkEvidence()));
+    assert.match(md, /evidence-annotated/);
+    assert.match(md, /class="ev-box"/);
+    assert.match(md, /no alt text/, 'the per-element label is rendered');
+    assert.match(md, /Images without alt text — https:\/\/example\.com\/about/, 'kind caption + page URL');
+    assert.match(md, /src="evidence\/https_example\.com_about\/screenshot\.mobile\.png"/);
+    assert.doesNotMatch(md, /screenshot\.desktop\.png/, 'annotated view replaces the plain mobile+desktop pair');
+  });
+
+  void it('renders the CLS before/after pair with ghost (previous) and solid (current) rects', () => {
+    const md = buildReportMarkdown(evidenceArts('Some pages have CLS more than 0.1', mkEvidence()));
+    assert.match(md, /evidence-pair/);
+    assert.match(md, /screenshot\.firstload\.png/, 'the first-load shot is the "before"');
+    assert.match(md, /On load/);
+    assert.match(md, /ev-box ev-ghost/, 'previous position rendered as dashed ghost');
+    assert.match(md, /CLS 0\.34/);
+  });
+
+  void it('renders a SERP preview with the overflow struck out for a too-long title', () => {
+    const md = buildReportMarkdown(evidenceArts('Pages have titles that are too long', mkEvidence()));
+    assert.match(md, /serp-preview/);
+    assert.match(md, /serp-overflow/, 'the part past the truncation limit is marked');
+    assert.match(md, /75 characters/);
+  });
+
+  void it('skips the SERP card when the sampled value contradicts the claim (falls back to screenshots)', () => {
+    // Finding says "too short" but the sampled description is 140 chars (fine) —
+    // a misleading card must not render; the plain screenshot pair appears.
+    const md = buildReportMarkdown(evidenceArts('Pages have descriptions that are too short', mkEvidence()));
+    assert.doesNotMatch(md, /serp-preview/);
+    assert.match(md, /evidence-shots/);
+  });
+
+  void it('falls back to the plain screenshot pair when overlays.json is absent (older audits)', () => {
+    const ev = mkEvidence();
+    // Same message, but the evidence dir predates overlays.json.
+    const a = evidenceArts('Some images are missing alt text', ev);
+    a.manifest.evidence = {
+      'https_example.com_about': {
+        url: 'https://example.com/about',
+        files: ['screenshot.mobile.png', 'screenshot.desktop.png'],
+      },
+    };
+    const md = buildReportMarkdown(a);
+    assert.doesNotMatch(md, /evidence-annotated/);
+    assert.match(md, /evidence-shots/);
+    assert.match(md, /screenshot\.desktop\.png/);
+  });
+
+  void it('issue-aware rendering stays deterministic across runs', () => {
+    const ev = mkEvidence();
+    const one = buildReportMarkdown(evidenceArts('Some images are missing alt text', ev));
+    const two = buildReportMarkdown(evidenceArts('Some images are missing alt text', ev));
+    assert.strictEqual(one, two);
+  });
+});
+
+// ============================================================
+// Phase 2: slice-3 evidence (LCP, no-JS pair, probe sequence, landmarks,
+// security headers, schema card, link-graph facts)
+// ============================================================
+void describe('phase2: slice-3 evidence', () => {
+  const OVERLAYS3 = {
+    url: 'https://example.com/about',
+    capturedAt: '2026-01-01T00:00:00.000Z',
+    viewport: { width: 414, height: 896 },
+    document: { width: 414, height: 3000 },
+    pageMeta: { title: 'About', description: 'About page' },
+    kinds: {
+      landmarks: [
+        { selector: 'header', rect: { x: 0, y: 0, width: 414, height: 80 }, label: '<header>' },
+        { selector: 'footer', rect: { x: 0, y: 2800, width: 414, height: 200 }, label: '<footer>' },
+      ],
+      'form-label': [{ selector: 'input#q', rect: { x: 20, y: 400, width: 200, height: 40 }, label: 'no label' }],
+    },
+    lcp: {
+      selector: 'img.hero',
+      rect: { x: 0, y: 120, width: 414, height: 300 },
+      value: 4200,
+      subParts: { ttfb: 600, resourceLoad: 1800, resourceDelay: 900, renderDelay: 900 },
+    },
+    schema: { types: ['Organization', 'WebSite'], snippet: '{"@type":"Organization"}' },
+    panels: { securityHeaders: { missing: ['content-security-policy', 'strict-transport-security'] } },
+  };
+
+  function mkEvidence3(over: Record<string, unknown> = {}, extraDirs: Record<string, { url: string; files: string[] }> = {}) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'overlays3-'));
+    const pageDir = path.join(dir, 'evidence', 'https_example.com_about');
+    fs.mkdirSync(pageDir, { recursive: true });
+    fs.writeFileSync(path.join(pageDir, 'overlays.json'), JSON.stringify({ ...OVERLAYS3, ...over }));
+    const files = ['screenshot.mobile.png', 'screenshot.firstload.png', 'screenshot.nojs.png', 'overlays.json'];
+    return { dir, evidence: { 'https_example.com_about': { url: 'https://example.com/about', files }, ...extraDirs } };
+  }
+
+  function arts3(msg: string, ev: { dir: string; evidence: Record<string, { url: string; files: string[] }> }): AuditArtifacts {
+    const a = mkArtifacts([msg], { [msg]: ['https://example.com/about'] });
+    a.runDir = ev.dir;
+    a.manifest.evidence = ev.evidence;
+    return a;
+  }
+
+  void it('maps slice-3 messages to their evidence kinds', () => {
+    assert.deepStrictEqual(evidenceKindFor('Some pages have LCP more than 2500ms'), { type: 'lcp' });
+    assert.deepStrictEqual(evidenceKindFor('Significant content rendered by JavaScript'), { type: 'nojs' });
+    assert.deepStrictEqual(evidenceKindFor('Broken "next" pagination wastes crawl budget'), { type: 'pagination' });
+    assert.deepStrictEqual(evidenceKindFor('Form inputs missing labels'), { type: 'overlay', kind: 'form-label' });
+    assert.deepStrictEqual(evidenceKindFor('Form inputs missing autocomplete attribute'), { type: 'overlay', kind: 'autocomplete' });
+    assert.deepStrictEqual(evidenceKindFor('Missing <main> element'), { type: 'landmarks' });
+    // The mainEntity pitfall: a schema finding must NOT hit the landmarks arm.
+    assert.deepStrictEqual(evidenceKindFor('FAQPage missing mainEntity array'), { type: 'schema' });
+    assert.deepStrictEqual(evidenceKindFor('Missing security headers detected'), { type: 'sec-headers' });
+    // Real analyzer wording is per-header — must hit the same card.
+    assert.deepStrictEqual(evidenceKindFor('Missing Permissions-Policy header'), { type: 'sec-headers' });
+    assert.deepStrictEqual(evidenceKindFor('Missing cross-origin isolation headers'), { type: 'sec-headers' });
+    assert.deepStrictEqual(evidenceKindFor('Orphan page (no internal links point to it)'), { type: 'site-graph' });
+    // noindex-in-sitemap must hit the head/noindex arm, not site-graph.
+    assert.deepStrictEqual(evidenceKindFor('Pages in sitemap are marked noindex'), { type: 'head', aspect: 'noindex' });
+  });
+
+  void it('renders the LCP element highlight + sub-parts breakdown', () => {
+    const md = buildReportMarkdown(arts3('Some pages have LCP more than 2500ms', mkEvidence3()));
+    assert.match(md, /LCP evidence/);
+    assert.match(md, /LCP element — 4\.20s/);
+    assert.match(md, /where the time went/);
+    assert.match(md, /Resource load/);
+  });
+
+  void it('renders the JS-off vs hydrated pair', () => {
+    const md = buildReportMarkdown(arts3('Significant content rendered by JavaScript', mkEvidence3()));
+    assert.match(md, /screenshot\.nojs\.png/);
+    assert.match(md, /JavaScript disabled \(what most crawlers see\)/);
+    assert.match(md, /JavaScript enabled/);
+  });
+
+  void it('renders the pagination probe sequence from a probe evidence dir (unsampled series page)', () => {
+    const probeDir = {
+      'https_example.com_blog--pagination-probe': {
+        url: 'https://example.com/blog',
+        files: ['_meta.json', 'step-0-initial.png', 'step-1-after-first-click.png', 'step-2-after-5-clicks.png'],
+      },
+    };
+    const ev = mkEvidence3({}, probeDir);
+    const msg = 'Broken "next" pagination wastes crawl budget';
+    const a = mkArtifacts([msg], { [msg]: ['https://example.com/blog'] });
+    a.runDir = ev.dir;
+    a.manifest.evidence = ev.evidence;
+    const md = buildReportMarkdown(a);
+    assert.match(md, /pagination probe/);
+    assert.match(md, /Page as loaded/);
+    assert.match(md, /After clicking “next” once/);
+    assert.match(md, /After 5 clicks — “next” still enabled/);
+    assert.match(md, /step-2-after-5-clicks\.png/);
+  });
+
+  void it('renders the landmark overlay when <main> is absent, skips when present', () => {
+    const md = buildReportMarkdown(arts3('Missing <main> element', mkEvidence3()));
+    assert.match(md, /Landmarks present — no &lt;main&gt;/);
+    const withMain = mkEvidence3({
+      kinds: { landmarks: [{ selector: 'main', rect: { x: 0, y: 100, width: 414, height: 2000 }, label: '<main>' }] },
+    });
+    const md2 = buildReportMarkdown(arts3('Missing <main> element', withMain));
+    assert.doesNotMatch(md2, /Landmarks present/);
+  });
+
+  void it('renders the security-headers card from the persisted missing list', () => {
+    const md = buildReportMarkdown(arts3('Missing security headers detected', mkEvidence3()));
+    assert.match(md, /2 security header\(s\) missing/);
+    assert.match(md, /content-security-policy/);
+    assert.match(md, /hdr-miss/);
+  });
+
+  void it('renders the schema card with type chips; skips a missing-claim when types exist', () => {
+    const md = buildReportMarkdown(arts3('Product schema incomplete: missing offers', mkEvidence3()));
+    assert.match(md, /Structured data/);
+    assert.match(md, /Organization/);
+    assert.match(md, /chip/);
+    const md2 = buildReportMarkdown(arts3('Pages missing schema markup', mkEvidence3()));
+    assert.doesNotMatch(md2, /Structured data\*\*/, 'missing-claim contradicted by present types — card skipped');
+  });
+
+  void it('renders link-graph facts for an orphan ABSENT from the incoming-links map (crawled, zero inbound)', () => {
+    // incoming-links.json only contains pages that received links — a true
+    // orphan is missing from it entirely. The crawled set (processedPages)
+    // must resolve that absence to "0 inbound links", not skip the row.
+    const ev = mkEvidence3();
+    fs.writeFileSync(path.join(ev.dir, 'incoming-links.json'), JSON.stringify({ 'https://example.com/': ['https://example.com/blog'] }));
+    fs.writeFileSync(path.join(ev.dir, 'metadata.json'), JSON.stringify({ sitemaps: { urls: { 'https://example.com/': {} } } }));
+    const msg = 'Orphan page (no internal links point to it)';
+    const a = mkArtifacts([msg], { [msg]: ['https://example.com/about'] });
+    a.runDir = ev.dir;
+    a.manifest.evidence = ev.evidence;
+    a.manifest.progress.processedPages = ['https://example.com/', 'https://example.com/about'];
+    const md = buildReportMarkdown(a);
+    assert.match(md, /Link-graph facts/);
+    assert.match(md, /0 inbound links/);
+    assert.match(md, /not in sitemap ✗/);
+  });
+
+  void it('renders link-graph facts for orphan findings from incoming-links + sitemap artifacts', () => {
+    const ev = mkEvidence3();
+    fs.writeFileSync(path.join(ev.dir, 'incoming-links.json'), JSON.stringify({ 'https://example.com/about': [] }));
+    fs.writeFileSync(path.join(ev.dir, 'metadata.json'), JSON.stringify({ sitemaps: { urls: { 'https://example.com/': {} } } }));
+    const md = buildReportMarkdown(arts3('Orphan page (no internal links point to it)', ev));
+    assert.match(md, /Link-graph facts/);
+    assert.match(md, /0 inbound links/);
+    assert.match(md, /not in sitemap ✗/);
+  });
+});

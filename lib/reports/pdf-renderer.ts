@@ -183,6 +183,264 @@ img {
   color: var(--muted);
 }
 
+/* Annotated evidence — the full-page screenshot CSS-cropped to the issue
+   region (aspect-ratio wrapper + oversized img shifted by negative margins),
+   with highlight boxes %-positioned over it. All geometry is inline (computed
+   from overlays.json); these rules style the chrome. */
+.evidence-annotated {
+  margin: 0.6em auto;
+  page-break-inside: avoid;
+  text-align: center;
+}
+.evidence-annotated .ev-crop {
+  position: relative;
+  overflow: hidden;
+  max-width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+.evidence-annotated .ev-crop img {
+  border: none;
+  border-radius: 0;
+}
+.ev-box {
+  position: absolute;
+  border: 2px solid #e0245e;
+  border-radius: 3px;
+  background: rgba(224, 36, 94, 0.08);
+}
+.ev-box.ev-ghost {
+  border-style: dashed;
+  border-color: #64748b;
+  background: transparent;
+}
+.ev-label {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  background: #e0245e;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.3;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ev-fold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px dashed #2563eb;
+}
+.ev-fold-label {
+  position: absolute;
+  right: 2px;
+  top: 1px;
+  color: #2563eb;
+  font-size: 9px;
+  font-weight: 600;
+}
+.evidence-annotated figcaption {
+  font-size: 0.8em;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* CLS before/after pair — first-load shot next to the annotated settled shot */
+.evidence-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0.6em 0;
+  page-break-inside: avoid;
+  align-items: flex-start;
+  justify-content: center;
+}
+.evidence-pair > figure {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+}
+.evidence-pair > figure > img {
+  max-height: 420px;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto 4px;
+}
+.evidence-pair figcaption {
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+/* SERP preview card — how a search engine renders the sampled page's snippet */
+.serp-preview {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 0.6em 0;
+  max-width: 600px;
+  background: #fff;
+  page-break-inside: avoid;
+}
+.serp-url {
+  color: #202124;
+  font-size: 0.8em;
+  margin-bottom: 2px;
+}
+.serp-title {
+  color: #1a0dab;
+  font-size: 1.05em;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.serp-desc {
+  color: #4d5156;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+.serp-overflow {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+.serp-missing {
+  font-style: italic;
+  color: #b00020;
+}
+.serp-note {
+  margin-top: 8px;
+  font-size: 0.8em;
+  color: var(--high);
+  font-weight: 600;
+  border-top: 1px dashed var(--rule);
+  padding-top: 6px;
+}
+
+/* Head snippet card — reconstructed <head> excerpt with the offending line
+   flagged (red) or rendered as a flagged "missing:" comment */
+.code-card {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin: 0.6em 0;
+  max-width: 640px;
+  overflow: hidden;
+  page-break-inside: avoid;
+}
+.code-card-title {
+  font-size: 0.75em;
+  color: var(--muted);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg-code);
+}
+.code-card-pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 0.78em;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: hidden;
+}
+.code-card-pre .line-flag {
+  background: rgba(224, 36, 94, 0.12);
+  outline: 2px solid rgba(224, 36, 94, 0.45);
+  border-radius: 2px;
+}
+.code-card-pre .line-missing {
+  background: rgba(224, 36, 94, 0.12);
+  color: var(--high);
+  font-weight: 600;
+  border-radius: 2px;
+}
+
+/* Data panels — pure-CSS labelled horizontal bars (network, coverage,
+   render-blocking). No JS, PDF-safe. */
+.data-panel {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0.6em 0;
+  max-width: 640px;
+  page-break-inside: avoid;
+}
+.data-panel-title {
+  font-size: 0.8em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75em;
+  margin: 3px 0;
+}
+.bar-name {
+  flex: 0 0 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  color: var(--muted);
+}
+.bar-name-wide {
+  flex: 1 1 auto;
+  text-align: left;
+}
+.bar-track {
+  flex: 1 1 auto;
+  height: 10px;
+  background: var(--bg-code);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+  border-radius: 5px;
+}
+.bar-fill.bar-flag {
+  background: #e0245e;
+}
+.bar-sub {
+  flex: 0 0 130px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.rb-chip {
+  flex: 0 0 auto;
+  font-size: 0.9em;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 3px;
+  color: #fff;
+}
+.rb-chip.rb-script {
+  background: #d97706;
+}
+.rb-chip.rb-style {
+  background: #2563eb;
+}
+.hdr-miss {
+  flex: 0 0 auto;
+  color: #e0245e;
+  font-weight: 700;
+}
+.chip {
+  display: inline-block;
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--bg-code);
+  border: 1px solid var(--rule);
+}
+
 hr {
   border: 0;
   border-top: 1px solid var(--rule);

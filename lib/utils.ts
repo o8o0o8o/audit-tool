@@ -643,6 +643,45 @@ async function fetchWithTimeout(
 }
 
 /**
+ * Read a fetch Response body as text, aborting once `maxBytes` of DECOMPRESSED
+ * data have been read. `fetch()` gunzips transparently, so a few-KB gzipped
+ * response can expand to gigabytes — reading via the stream and cancelling past
+ * the cap prevents an out-of-memory crash (zip-bomb / unbounded response DoS).
+ */
+async function readResponseTextCapped(response: Response, maxBytes: number): Promise<string> {
+  const body = response.body as ReadableStream<Uint8Array> | null;
+  if (!body || typeof body.getReader !== 'function') {
+    // No readable stream (e.g. a mocked Response) — bound the decoded length.
+    const t = await response.text();
+    return t.length > maxBytes ? t.slice(0, maxBytes) : t;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) {
+        chunks.push(value);
+        total += value.length;
+        if (total >= maxBytes) {
+          await reader.cancel().catch(() => undefined);
+          break;
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* already released */
+    }
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf-8').slice(0, maxBytes);
+}
+
+/**
  * Calculate a percentage, returning 0 when total is 0.
  * Result is rounded to the nearest integer.
  */
@@ -1164,6 +1203,7 @@ export {
   shortenUrl,
   escapeHtml,
   fetchWithTimeout,
+  readResponseTextCapped,
   calcPercent,
   incrementCounter,
   getTopEntries,

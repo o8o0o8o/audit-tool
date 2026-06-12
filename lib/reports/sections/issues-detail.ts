@@ -234,7 +234,11 @@ function renderIssueDetail(
       <div style="display:flex;flex-direction:column;gap:2px;">
         ${renderExpandableList(
           examples,
-          (ex) => `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex}</div>`,
+          // Escape at the sink: `examples` come from analyzer `detail` strings
+          // that interpolate attacker-controlled page content (titles, anchor
+          // text, hrefs). Rendering them raw is stored XSS in a report the
+          // author opens locally (often file://). Matches top-issues/quick-wins.
+          (ex) => `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(ex)}</div>`,
           `issue-detail-more-${idx}`,
           VISIBLE,
           count,

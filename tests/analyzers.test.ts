@@ -18,6 +18,59 @@ import { getJsonSummary } from '../lib/utils/cli-summary';
 import { HistoryManager } from '../historyManager';
 import { getContentInsights } from '../lib/reports/sections/content-insights';
 import type { PageInfo } from '../lib/types';
+import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
+
+// ============================================================
+// SSRF guard (validators.isFetchAllowed / isPrivateOrInternalHost)
+// ============================================================
+void describe('SSRF guard', () => {
+  void it('flags private/internal/loopback hosts in every IPv4 encoding', () => {
+    const privateHosts = [
+      'localhost', 'foo.localhost', 'router.local', 'svc.internal',
+      '127.0.0.1', '10.0.0.5', '172.16.0.1', '172.31.255.255', '192.168.1.1',
+      '169.254.169.254', // cloud metadata
+      '100.64.0.1', // CGNAT
+      '0.0.0.0',
+      '2130706433', // decimal 127.0.0.1
+      '0x7f000001', // hex 127.0.0.1
+      '0177.0.0.1', // octal-first-octet 127.0.0.1
+      '::1', '::', 'fe80::1', 'fc00::1', 'fd12:3456::1', '::ffff:127.0.0.1',
+    ];
+    for (const h of privateHosts) {
+      assert.strictEqual(isPrivateOrInternalHost(h), true, `${h} should be private`);
+    }
+  });
+
+  void it('allows ordinary public hosts', () => {
+    for (const h of ['example.com', 'sub.example.co.uk', '8.8.8.8', '93.184.216.34']) {
+      assert.strictEqual(isPrivateOrInternalHost(h), false, `${h} should be public`);
+    }
+  });
+
+  void it('blocks private/non-http URLs but allows public http(s)', () => {
+    assert.strictEqual(isFetchAllowed('https://example.com/sitemap.xml').allowed, true);
+    assert.strictEqual(isFetchAllowed('http://169.254.169.254/latest/meta-data/').allowed, false);
+    assert.strictEqual(isFetchAllowed('file:///etc/passwd').allowed, false);
+    assert.strictEqual(isFetchAllowed('ftp://example.com/x').allowed, false);
+    assert.strictEqual(isFetchAllowed('not a url').allowed, false);
+  });
+
+  void it('allows a private target only when it matches the audit origin host', () => {
+    assert.strictEqual(isFetchAllowed('http://localhost:3000/page', { originHost: 'localhost' }).allowed, true);
+    assert.strictEqual(isFetchAllowed('http://127.0.0.1/page', { originHost: 'localhost' }).allowed, false);
+  });
+
+  void it('honours SEO_AUDIT_ALLOW_PRIVATE=1 escape hatch', () => {
+    const prev = process.env.SEO_AUDIT_ALLOW_PRIVATE;
+    process.env.SEO_AUDIT_ALLOW_PRIVATE = '1';
+    try {
+      assert.strictEqual(isFetchAllowed('http://10.0.0.1/x').allowed, true);
+    } finally {
+      if (prev === undefined) delete process.env.SEO_AUDIT_ALLOW_PRIVATE;
+      else process.env.SEO_AUDIT_ALLOW_PRIVATE = prev;
+    }
+  });
+});
 
 // ============================================================
 // Response Header Analyzer
@@ -2066,7 +2119,10 @@ void describe('finding-verifier', () => {
   void it('confirms oversized / legacy-format image findings from imageOptimization', () => {
     const over = idx({ 'https://e.com/x': { imageOptimization: { oversizedImages: [{}], legacyFormats: 0 } as PageInfo['imageOptimization'] } });
     const legacy = idx({ 'https://e.com/x': { imageOptimization: { oversizedImages: [], legacyFormats: 2 } as PageInfo['imageOptimization'] } });
-    assert.strictEqual(verifyFinding('Some images are significantly larger than their display size', detail(['https://e.com/x']), over).status, 'confirmed');
+    // The byte-size `oversizedImages` list backs the "image files larger than
+    // recommended" message — NOT the display-scaling one (owned by live verifier).
+    assert.strictEqual(verifyFinding('Pages have image files larger than recommended', detail(['https://e.com/x']), over).status, 'confirmed');
+    assert.strictEqual(verifyFinding('Some images are significantly larger than their display size', detail(['https://e.com/x']), over).status, 'unchecked');
     assert.strictEqual(verifyFinding('Pages serve images only as JPG/PNG instead of WebP/AVIF', detail(['https://e.com/x']), legacy).status, 'confirmed');
   });
 
@@ -2176,6 +2232,7 @@ void describe('finding-verifier', () => {
       robotsDisallow: ['/admin/*'],
       robotsUserAgents: ['*'],
       sitemapUrls: new Set<string>(),
+      sitemapCapped: false,
     };
     assert.strictEqual(verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages, site).status, 'confirmed');
     assert.strictEqual(verifyFinding('Page unreachable from homepage via internal links', detail(['https://e.com/orphan']), pages, site).status, 'confirmed');
@@ -2193,6 +2250,7 @@ void describe('finding-verifier', () => {
       robotsDisallow: ['/admin/*'],
       robotsUserAgents: ['*'],
       sitemapUrls: new Set<string>(),
+      sitemapCapped: false,
     };
     assert.strictEqual(verifyFinding('Sensitive paths exposed in robots.txt', detail(['/admin']), pages, site).status, 'confirmed');
     assert.strictEqual(verifyFinding('Pattern matching characters used in robots.txt', detail(['/admin/*']), pages, site).status, 'confirmed');
@@ -2213,11 +2271,16 @@ void describe('finding-verifier', () => {
       robotsDisallow: [],
       robotsUserAgents: [],
       sitemapUrls: new Set<string>(['https://e.com/a']), // /b indexable but absent
+      sitemapCapped: false,
     };
     // Example cites an uncrawled sitemap URL
     assert.strictEqual(verifyFinding('Sitemap URLs were not successfully crawled', detail(['https://e.com/ghost']), pages, site).status, 'confirmed');
     // Count-only finding (no URL) → site-level fallback counts /b
     assert.strictEqual(verifyFinding('Indexable pages missing from sitemap', detail(['45 indexable page(s) are not listed in the sitemap']), pages, site).status, 'confirmed');
+    // …but when the sitemap set may be capped/incomplete, the count-only
+    // fallback must stay unchecked rather than risk a false "not listed".
+    const cappedSite = { ...site, sitemapCapped: true };
+    assert.strictEqual(verifyFinding('Indexable pages missing from sitemap', detail(['45 indexable page(s) are not listed in the sitemap']), pages, cappedSite).status, 'unchecked');
   });
 
   void it('confirms too-many-fonts from fontData.totalFonts', () => {

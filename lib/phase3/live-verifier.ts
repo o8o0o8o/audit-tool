@@ -33,6 +33,20 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT, CRAWL_SETTINGS } from '../constants';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
 import { withTimeout } from '../crawler/resilience';
+import { isFetchAllowed } from '../../validators';
+
+// SSRF guard for the standalone --verify re-fetch: the report's example URLs are
+// re-fetched live, so a private/internal host parsed out of an old report must
+// not be navigated. Set once per verifyReportLive run to the audited site's host
+// (same-host targets are allowed; a public site's stray private URL is blocked).
+let verifyOriginHost: string | undefined;
+/** True when `url` is safe to fetch in the live pass; a blocked URL degrades the
+ *  finding to `unverified` (callers return null / skip). */
+function liveFetchAllowed(url: string): boolean {
+  const gate = isFetchAllowed(url, { originHost: verifyOriginHost });
+  if (!gate.allowed) console.log(`  ⚠️  live-verify skipping blocked URL: ${url} — ${gate.reason}`);
+  return gate.allowed;
+}
 
 export type LiveStatus = 'confirmed' | 'refuted' | 'unverified';
 
@@ -269,6 +283,7 @@ function registrable(host: string): string {
  * to `unverified` rather than a false refutation.
  */
 async function captureOne(browser: Browser, url: string, timeoutMs: number, throttle?: Throttle): Promise<LiveSignals | null> {
+  if (!liveFetchAllowed(url)) return null;
   // Match the crawl's device profile so perf signals are comparable: the
   // crawler always uses the fixed mobile viewport (VIEWPORT) + UA.
   const context = await browser.newContext({
@@ -1106,6 +1121,7 @@ export interface LiveSite {
 
 /** GET text with a timeout; null on any failure / non-2xx. */
 async function fetchText(url: string, timeoutMs: number): Promise<string | null> {
+  if (!liveFetchAllowed(url)) return null;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -1174,6 +1190,7 @@ async function buildReachable(browser: Browser, origin: string, timeoutMs: numbe
     while (queue.length && visited < MAX_PAGES) {
       const url = queue.shift() as string;
       visited++;
+      if (!liveFetchAllowed(url)) continue;
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
         await page.waitForLoadState('networkidle', { timeout: 2000 }).catch(() => undefined);
@@ -1206,6 +1223,7 @@ async function buildReachable(browser: Browser, origin: string, timeoutMs: numbe
 
 /** Light fetch: status + title + description + word count (no heavy instrumentation). */
 async function fetchLight(browser: Browser, url: string, timeoutMs: number): Promise<{ status: number; title: string; description: string | null; h1: string; wordCount: number } | null> {
+  if (!liveFetchAllowed(url)) return null;
   const context = await browser.newContext({ viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT }, userAgent: DEFAULT_USER_AGENT });
   try {
     const page = await context.newPage();
@@ -1494,6 +1512,12 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
   const timeoutMs = opts.timeoutMs ?? THRESHOLDS.PAGE_TIMEOUT;
   const findings = parseReportFindings(reportMd);
   const verdicts: LiveVerdict[] = [];
+
+  // The audited site's host: same-host re-fetches are allowed even if private
+  // (a local-site audit), while a stray private URL parsed from the report is
+  // blocked by the SSRF guard.
+  const siteOriginForGuard = resolveSiteOrigin(findings);
+  verifyOriginHost = siteOriginForGuard ? (() => { try { return new URL(siteOriginForGuard).hostname; } catch { return undefined; } })() : undefined;
 
   const plan = findings.map((f) => {
     const checker = CHECKERS.find((c) => c.match(f.title.toLowerCase()));

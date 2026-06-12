@@ -5,7 +5,17 @@
 
 import { parse, type HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
-import { fetchWithTimeout } from '../utils';
+import { fetchWithTimeout, readResponseTextCapped } from '../utils';
+import { isFetchAllowed } from '../../validators';
+
+/** Origin hostname for the SSRF same-host allowance, or undefined. */
+function hostOf(urlString: string): string | undefined {
+  try {
+    return new URL(urlString).hostname;
+  } catch {
+    return undefined;
+  }
+}
 
 interface SitemapEntry {
   total: number;
@@ -46,14 +56,26 @@ class SitemapParser {
     };
 
     console.log('Analyzing sitemaps...');
+    const originHost = hostOf(origin);
 
     for (const sitemapUrl of sitemapUrls) {
       try {
+        const gate = isFetchAllowed(sitemapUrl, { originHost });
+        if (!gate.allowed) {
+          const message = `Skipping sitemap (blocked): ${sitemapUrl} — ${gate.reason}`;
+          console.log(message);
+          result.errors.push({
+            message: 'Sitemap URL blocked by SSRF guard',
+            detail: message,
+            severity: SEVERITY.HIGH,
+          });
+          continue;
+        }
         console.log(`Fetching sitemap: ${sitemapUrl}`);
 
         const sitemapResponse = await fetchWithTimeout(sitemapUrl, THRESHOLDS.FETCH_TIMEOUT);
 
-        const sitemap = await sitemapResponse.text();
+        const sitemap = await readResponseTextCapped(sitemapResponse, THRESHOLDS.MAX_SITEMAP_FETCH);
         const parsedSitemap = parse(sitemap);
         const urls = parsedSitemap.querySelectorAll('url');
 
@@ -62,15 +84,35 @@ class SitemapParser {
           console.log(`Processing ${urls.length} URLs from sitemap`);
           this.processSitemap(urls, origin, sitemapUrl, result);
         } else {
-          // Sitemap index file - process each nested sitemap independently
-          const nestedSitemaps = parsedSitemap.querySelectorAll('sitemap');
-          console.log(`Sitemap index detected with ${nestedSitemaps.length} nested sitemaps`);
+          // Sitemap index file - process each nested sitemap independently.
+          // Bound the fan-out so a hostile index with millions of nested entries
+          // can't drive an unbounded number of fetches.
+          const allNested = parsedSitemap.querySelectorAll('sitemap');
+          const nestedSitemaps = allNested.slice(0, THRESHOLDS.MAX_NESTED_SITEMAPS);
+          console.log(`Sitemap index detected with ${allNested.length} nested sitemaps`);
+          if (allNested.length > nestedSitemaps.length) {
+            const message = `Sitemap index lists ${allNested.length} nested sitemaps; processing only the first ${nestedSitemaps.length}`;
+            console.log(`  ${message}`);
+            result.errors.push({ message: 'Sitemap index fan-out capped', detail: message, severity: SEVERITY.MEDIUM });
+          }
 
           for (const sitemap of nestedSitemaps) {
             try {
               const sitemapPage = sitemap.querySelector('loc')?.innerText?.trim();
               if (!sitemapPage) {
                 console.log(`  Skipping nested sitemap with empty loc`);
+                continue;
+              }
+
+              const nestedGate = isFetchAllowed(sitemapPage, { originHost });
+              if (!nestedGate.allowed) {
+                const message = `  Skipping nested sitemap (blocked): ${sitemapPage} — ${nestedGate.reason}`;
+                console.log(message);
+                result.errors.push({
+                  message: 'Nested sitemap URL blocked by SSRF guard',
+                  detail: message,
+                  severity: SEVERITY.HIGH,
+                });
                 continue;
               }
 
@@ -88,7 +130,7 @@ class SitemapParser {
                 continue;
               }
 
-              const sitemapPageText = await sitemapPageResponse.text();
+              const sitemapPageText = await readResponseTextCapped(sitemapPageResponse, THRESHOLDS.MAX_SITEMAP_FETCH);
               const parsedSitemapPage = parse(sitemapPageText);
               const nestedUrls = parsedSitemapPage.querySelectorAll('url');
 

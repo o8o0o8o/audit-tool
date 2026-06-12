@@ -4,8 +4,8 @@
  * Includes comprehensive SEO validation and best practices checks
  */
 
-import { SEVERITY } from '../constants';
-import { formatBytes } from '../utils';
+import { SEVERITY, THRESHOLDS } from '../constants';
+import { formatBytes, readResponseTextCapped } from '../utils';
 
 // Maximum robots.txt size (Google's limit is 500KB)
 const MAX_ROBOTS_SIZE = 500 * 1024;
@@ -96,7 +96,8 @@ class RobotsParser {
       result.metadata.contentType = robotsResponse.headers.get('content-type');
 
       if (robotsResponse.status === 200) {
-        const robotsContent = await robotsResponse.text();
+        // Capped read: a gzip-bomb robots.txt would otherwise be fully buffered.
+        const robotsContent = await readResponseTextCapped(robotsResponse, THRESHOLDS.MAX_ROBOTS_FETCH);
         result.metadata.size = robotsContent.length;
 
         // Check content type

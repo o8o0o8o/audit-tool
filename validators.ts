@@ -62,6 +62,132 @@ export function validateURL(urlString: string): ValidationResult {
 }
 
 /**
+ * Parse a hostname that may be an IPv4 address written in dotted, decimal,
+ * octal, or hex form (e.g. `2130706433`, `0x7f000001`, `0177.0.0.1`) into its
+ * 32-bit integer value. Returns null when the host is not an IPv4 literal.
+ * SSRF guards that only string-match `127.` miss these equivalent encodings.
+ */
+function parseIPv4ToInt(host: string): number | null {
+  const h = host.trim();
+  // Single decimal/octal/hex integer form: http://2130706433/
+  if (/^(0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*)$/i.test(h)) {
+    const n =
+      h.startsWith('0x') || h.startsWith('0X')
+        ? parseInt(h, 16)
+        : h.startsWith('0') && h.length > 1
+          ? parseInt(h, 8)
+          : parseInt(h, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 0xffffffff ? n >>> 0 : null;
+  }
+  // Dotted form, each octet decimal/octal/hex: 0177.0.0.1, 0x7f.0.0.1
+  const parts = h.split('.');
+  if (parts.length !== 4) return null;
+  let value = 0;
+  for (const part of parts) {
+    if (!/^(0x[0-9a-f]+|0[0-7]*|[1-9][0-9]*|0)$/i.test(part)) return null;
+    const octet =
+      part.startsWith('0x') || part.startsWith('0X')
+        ? parseInt(part, 16)
+        : part.startsWith('0') && part.length > 1
+          ? parseInt(part, 8)
+          : parseInt(part, 10);
+    if (!Number.isFinite(octet) || octet < 0 || octet > 255) return null;
+    value = (value << 8) | octet;
+  }
+  return value >>> 0;
+}
+
+/** True when a 32-bit IPv4 int falls in a private/loopback/link-local/CGNAT/
+ *  reserved range that must never be fetched cross-origin (SSRF). */
+function isPrivateIPv4Int(n: number): boolean {
+  const a = (n >>> 24) & 0xff;
+  const b = (n >>> 16) & 0xff;
+  return (
+    a === 0 || // 0.0.0.0/8 ("this network")
+    a === 127 || // loopback 127.0.0.0/8
+    a === 10 || // private 10/8
+    (a === 172 && b >= 16 && b <= 31) || // private 172.16/12
+    (a === 192 && b === 168) || // private 192.168/16
+    (a === 169 && b === 254) || // link-local 169.254/16 (incl. cloud metadata)
+    (a === 100 && b >= 64 && b <= 127) || // CGNAT 100.64/10
+    a === 255 // broadcast
+  );
+}
+
+/**
+ * Classifies a hostname as private/internal/loopback — the set of hosts a
+ * crawler must not be tricked into fetching when they appear in a remote site's
+ * sitemap/robots/links (SSRF). Covers IPv4 (all numeric encodings), IPv6
+ * loopback/ULA/link-local/unspecified/IPv4-mapped, and local hostnames.
+ */
+export function isPrivateOrInternalHost(hostname: string): boolean {
+  if (!hostname) return true; // treat unparseable as unsafe
+  let host = hostname.trim().toLowerCase();
+  // Strip IPv6 brackets.
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+
+  // Local hostnames / mDNS.
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
+    return true;
+  }
+
+  // IPv4 in any encoding.
+  const v4 = parseIPv4ToInt(host);
+  if (v4 !== null) return isPrivateIPv4Int(v4);
+
+  // IPv6.
+  if (host.includes(':')) {
+    if (host === '::1' || host === '::') return true; // loopback / unspecified
+    if (host.startsWith('fe80:') || host.startsWith('fe80::')) return true; // link-local
+    // Unique-local fc00::/7 → first byte fc or fd.
+    if (/^f[cd][0-9a-f]{0,2}:/.test(host)) return true;
+    // IPv4-mapped/compat ::ffff:127.0.0.1 etc.
+    const mapped = host.match(/(?:::ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/);
+    if (mapped) {
+      const inner = parseIPv4ToInt(mapped[1]);
+      if (inner !== null && isPrivateIPv4Int(inner)) return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+/**
+ * SSRF gate for every URL the tool fetches/navigates that originates from a
+ * remote site (sitemap `<loc>`, robots `Sitemap:`, discovered links, the
+ * `--verify` re-fetch). Rejects non-http(s) protocols and private/internal
+ * hosts. Auditing your OWN private/local site is allowed: pass `originHost` and
+ * a same-host target passes, or set `SEO_AUDIT_ALLOW_PRIVATE=1` to disable the
+ * private-range block entirely.
+ */
+export function isFetchAllowed(
+  urlString: string,
+  opts: { originHost?: string } = {},
+): { allowed: boolean; reason?: string } {
+  let url: URL;
+  try {
+    url = new URL(urlString);
+  } catch {
+    return { allowed: false, reason: 'unparseable URL' };
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    return { allowed: false, reason: `unsupported protocol ${url.protocol}` };
+  }
+  if (!url.hostname) return { allowed: false, reason: 'missing hostname' };
+
+  if (isPrivateOrInternalHost(url.hostname)) {
+    if (process.env.SEO_AUDIT_ALLOW_PRIVATE === '1') return { allowed: true };
+    const originHost = opts.originHost?.toLowerCase().replace(/^\[|\]$/g, '');
+    if (originHost && url.hostname.toLowerCase().replace(/^\[|\]$/g, '') === originHost) {
+      return { allowed: true }; // same private host as the audit origin — intended
+    }
+    return { allowed: false, reason: `private/internal host ${url.hostname} (set SEO_AUDIT_ALLOW_PRIVATE=1 to allow)` };
+  }
+  return { allowed: true };
+}
+
+/**
  * Sanitizes a filename to prevent path traversal
  */
 export function sanitizeFilename(filename: string): string {

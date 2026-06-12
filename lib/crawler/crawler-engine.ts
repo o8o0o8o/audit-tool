@@ -41,6 +41,21 @@ import { loadConfig } from '../config-loader';
 import { ProgressReporter } from '../utils/progress-reporter';
 import { VitalsCollector } from './vitals-collector';
 import { CrUXAPI } from './crux-api';
+import { isFetchAllowed } from '../../validators';
+
+/** Hostname for the SSRF same-host allowance; '' if unparseable. */
+function hostFromUrl(urlString: string): string | undefined {
+  try {
+    return new URL(urlString).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Resource types whose body we're willing to buffer (text-ish, bounded) when a
+ *  response carries no content-length — large media/binary streams are skipped
+ *  to avoid OOM from an unbounded or decompression-bomb response. */
+const BUFFERABLE_RESOURCE_TYPES = new Set(['document', 'script', 'stylesheet', 'xhr', 'fetch']);
 
 // Extracted modules
 import {
@@ -120,13 +135,16 @@ class CrawlerEngine {
       while (index < tasks.length) {
         const task = tasks[index++];
         attempted++;
-        const summary = await CrUXAPI.fetchPSILabSummary(task.url, { strategy: task.strategy, apiKey });
-        if (summary) {
-          succeeded++;
-          const evidenceDir = this.#options.evidenceDir;
-          if (!evidenceDir) continue;
-          const pageDir = path.join(evidenceDir, createSafeFilename(task.url));
-          try {
+        // Guard the whole task body: a throw from fetchPSILabSummary /
+        // createSafeFilename would otherwise kill this worker lane and abandon
+        // every queued task (Promise.all rejects). Isolate per-task failures.
+        try {
+          const summary = await CrUXAPI.fetchPSILabSummary(task.url, { strategy: task.strategy, apiKey });
+          if (summary) {
+            succeeded++;
+            const evidenceDir = this.#options.evidenceDir;
+            if (!evidenceDir) continue;
+            const pageDir = path.join(evidenceDir, createSafeFilename(task.url));
             fs.mkdirSync(pageDir, { recursive: true });
             // Self-describing meta in case captureRepresentativeEvidence didn't run.
             const metaPath = path.join(pageDir, '_meta.json');
@@ -134,10 +152,10 @@ class CrawlerEngine {
               fs.writeFileSync(metaPath, JSON.stringify({ url: task.url, capturedAt: new Date().toISOString() }, null, 2));
             }
             fs.writeFileSync(path.join(pageDir, `psi.${task.strategy}.json`), JSON.stringify(summary, null, 2));
-          } catch (error: unknown) {
-            if (this.#options.verbose) {
-              console.error(`Failed to write psi.${task.strategy}.json for ${task.url}: ${(error as Error).message}`);
-            }
+          }
+        } catch (error: unknown) {
+          if (this.#options.verbose) {
+            console.error(`PSI capture failed for ${task.url} (${task.strategy}): ${(error as Error).message}`);
           }
         }
       }
@@ -305,9 +323,19 @@ class CrawlerEngine {
       let size: number | null = null;
 
       try {
-        const body = await response.body();
-        size = body.length;
-        totalResponseSize += size;
+        // Prefer the declared content-length so we never buffer the body just
+        // to measure it. Only fall back to reading the body when the header is
+        // absent AND the resource is one we'd parse anyway (document/script/
+        // stylesheet) — buffering a large media/asset stream, or a gzip bomb
+        // with no content-length, would OOM the crawler.
+        const declared = Number(response.headers()['content-length']);
+        if (Number.isFinite(declared) && declared >= 0) {
+          size = declared;
+        } else if (BUFFERABLE_RESOURCE_TYPES.has(response.request().resourceType())) {
+          const body = await response.body();
+          if (body.length <= THRESHOLDS.MAX_BUFFERED_RESPONSE) size = body.length;
+        }
+        if (size !== null) totalResponseSize += size;
       } catch {
         // Body read failed - ignore
       }
@@ -366,6 +394,14 @@ class CrawlerEngine {
           if (this.#options.verbose)
             console.warn(`[coverage] Failed to start coverage for ${url}: ${e instanceof Error ? e.message : e}`);
         });
+      }
+
+      // SSRF guard: a hostile target's sitemap/links could point at private/
+      // internal hosts (cloud metadata, localhost services). Block before goto;
+      // same-host-as-origin and SEO_AUDIT_ALLOW_PRIVATE=1 are allowed.
+      const gate = isFetchAllowed(url, { originHost: hostFromUrl(this.#options.origin) });
+      if (!gate.allowed) {
+        throw new Error(`Blocked by SSRF guard: ${gate.reason}`);
       }
 
       // Navigate to the page with explicit timeout
@@ -467,7 +503,9 @@ class CrawlerEngine {
     // content (crawlable) apart from content injected client-side on scroll.
     let servedHtml: string | undefined;
     try {
-      servedHtml = await response?.text();
+      const text = await response?.text();
+      // Cap retained HTML so a pathologically large document can't blow memory.
+      servedHtml = text !== undefined && text.length > THRESHOLDS.MAX_SERVED_HTML ? text.slice(0, THRESHOLDS.MAX_SERVED_HTML) : text;
     } catch {
       // Body unavailable (e.g. already consumed / non-text) — leave undefined.
     }
@@ -613,10 +651,17 @@ class CrawlerEngine {
 
       // Graceful shutdown on SIGINT (Ctrl+C)
       let abortRequested = false;
+      let forceQuit = false;
       sigintHandler = () => {
         if (abortRequested) {
-          console.log('\n\nForce quit. Progress has been saved.');
-          process.exit(1);
+          // Second Ctrl+C: abandon the in-flight batch too. Do NOT process.exit()
+          // from this library method — that skips the `finally` (browser close,
+          // listener removal) and the top-level handler in robots.ts that
+          // actually persists progress, while falsely printing "Progress saved".
+          // Set a flag and let the loop unwind to `finally`; the caller saves.
+          forceQuit = true;
+          console.log('\n\n⚠️  Force quit — stopping as soon as the current batch settles; progress will be saved by the caller.');
+          return;
         }
         abortRequested = true;
         console.log('\n\n⚠️  Graceful shutdown requested (Ctrl+C again to force quit)...');
@@ -628,8 +673,8 @@ class CrawlerEngine {
       const concurrency = this.#options.concurrency;
 
       for (let batchStart = 0; batchStart < pagesToCrawl.length; batchStart += concurrency) {
-        // Check for graceful shutdown
-        if (abortRequested) {
+        // Check for graceful / force shutdown
+        if (abortRequested || forceQuit) {
           console.log('   Saving checkpoint before exit...');
           break;
         }
@@ -726,6 +771,13 @@ class CrawlerEngine {
             }
           }
           continue; // Move to next batch
+        }
+
+        // Force quit (2nd Ctrl+C) hit during this batch: stop now and let the
+        // loop unwind to `finally` so the caller can persist what we have.
+        if (forceQuit) {
+          console.log('   Force quit — saving checkpoint before exit...');
+          break;
         }
 
         // Handle any rejected promises (unexpected errors not caught by #crawlSinglePage)

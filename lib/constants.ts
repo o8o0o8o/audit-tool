@@ -123,6 +123,20 @@ export const THRESHOLDS = {
   // Page metrics
   PAGE_SIZE: 6_000_000,
   REQUEST_COUNT: 20,
+  // Largest per-response body the crawler will buffer into memory (50 MB). Above
+  // this we trust the content-length header rather than reading the body, so a
+  // multi-GB asset (or a decompression bomb) can't OOM the crawler.
+  MAX_BUFFERED_RESPONSE: 50_000_000,
+  // Cap on the served-HTML string we retain per page (10 MB).
+  MAX_SERVED_HTML: 10_000_000,
+  // Decompressed-byte read caps for robots.txt and sitemap fetches — bounds the
+  // memory a gzip-bomb / unbounded response can consume. robots.txt is allowed a
+  // little past its 500 KB advisory limit so oversize is still detectable; the
+  // sitemap protocol allows up to 50 MB uncompressed.
+  MAX_ROBOTS_FETCH: 2_000_000,
+  MAX_SITEMAP_FETCH: 50_000_000,
+  // Max nested sitemaps processed from a single sitemap-index (fan-out bound).
+  MAX_NESTED_SITEMAPS: 1_000,
 
   // Content
   TITLE_MIN: 30,

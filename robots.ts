@@ -12,7 +12,7 @@ import { parseArgs, calculateSafeConcurrency } from './lib/args-parser';
 import { loadConfig, generateSampleConfig, applyConfigToConstants, getConfigSummary } from './lib/config-loader';
 import * as constants from './lib/constants';
 import { printAuditSummary, getJsonSummary, type AuditResultsExtended } from './lib/utils/cli-summary';
-import { validateArguments, validateURL, validateRepoPath } from './validators';
+import { validateArguments, validateURL, validateRepoPath, isFetchAllowed } from './validators';
 import { generateWorkflow } from './lib/utils/github-actions-generator';
 import { ComparisonAudit } from './lib/comparison/comparison-audit';
 import { RepoOrchestrator } from './lib/orchestrators/repo-orchestrator';
@@ -64,11 +64,29 @@ async function audit() {
         console.error(`File not found: ${args.sites}`);
         process.exit(1);
       }
-      const urls = fs
+      const rawLines = fs
         .readFileSync(args.sites, 'utf-8')
         .split('\n')
         .map((l) => l.trim())
-        .filter((l) => l && !l.startsWith('#') && l.startsWith('http'));
+        .filter((l) => l && !l.startsWith('#'));
+
+      // Apply the SAME validation as --origin to every batch line: reject
+      // malformed URLs and private/internal hosts (SSRF) up front instead of
+      // relying on `startsWith('http')` + the downstream ctor.
+      const urls: string[] = [];
+      for (const line of rawLines) {
+        const v = validateURL(line);
+        if (!v.valid) {
+          console.warn(`Skipping invalid site line: ${line} — ${v.error?.split('\n')[0]}`);
+          continue;
+        }
+        const gate = isFetchAllowed(line);
+        if (!gate.allowed) {
+          console.warn(`Skipping blocked site line: ${line} — ${gate.reason}`);
+          continue;
+        }
+        urls.push(line);
+      }
 
       if (urls.length === 0) {
         console.error('No valid URLs found in sites file');

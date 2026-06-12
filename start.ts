@@ -30,6 +30,8 @@ import { readCompressedJson } from './lib/utils';
 import pkg from './package.json';
 
 const MAX_RESTART_ATTEMPTS = 3;
+/** Escalating delay before each restart attempt (index = restartCount). */
+const RESTART_BACKOFF_MS = [2_000, 5_000, 10_000];
 
 // Global error handlers for unhandled rejections and uncaught exceptions
 process.on('unhandledRejection', (reason, promise) => {
@@ -194,9 +196,13 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
           throw new Error(`Maximum restart attempts (${MAX_RESTART_ATTEMPTS}) reached`);
         }
 
+        // Escalating backoff between restarts so a deterministic fast crash
+        // (e.g. a corrupt manifest) doesn't burn all attempts in milliseconds.
+        const backoffMs = RESTART_BACKOFF_MS[Math.min(restartCount, RESTART_BACKOFF_MS.length - 1)];
         console.log(
-          `🔄 Restarting with --proceed to resume from saved progress (attempt ${restartCount + 1}/${MAX_RESTART_ATTEMPTS})...\n`,
+          `🔄 Restarting with --proceed to resume from saved progress (attempt ${restartCount + 1}/${MAX_RESTART_ATTEMPTS}) after ${backoffMs / 1000}s...\n`,
         );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
 
         // Restart with proceed flag enabled
         await audit({ ...args, proceed: true }, restartCount + 1);

@@ -33,6 +33,7 @@ import * as path from 'path';
 import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+const LLM_API_TIMEOUT_MS = 120_000;
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_VERSION = '2023-06-01';
 
@@ -133,6 +134,8 @@ export function parseVerifyResult(raw: string, validIndices: number[]): VerifyDr
 
 /** One API call. Returns the reply text, or null on any failure. */
 async function callApi(userPrompt: string, apiKey: string, model: string, verbose: boolean): Promise<string | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_API_TIMEOUT_MS);
   try {
     const res = await fetch(ANTHROPIC_ENDPOINT, {
       method: 'POST',
@@ -147,6 +150,7 @@ async function callApi(userPrompt: string, apiKey: string, model: string, verbos
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],
       }),
+      signal: ctrl.signal,
     });
     if (!res.ok) {
       if (verbose) {
@@ -162,6 +166,8 @@ async function callApi(userPrompt: string, apiKey: string, model: string, verbos
       console.warn(`LLM verify failed: ${(error as Error).message}`);
     }
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

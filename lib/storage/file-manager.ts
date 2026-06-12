@@ -206,7 +206,22 @@ class FileManager {
     const compressedSizeMB = compressedData.length / (1024 * 1024);
     const compressionRatio = ((1 - compressedSizeMB / uncompressedSizeMB) * 100).toFixed(1);
 
-    fs.writeFileSync(filePath, compressedData);
+    // Atomic write: a crash/SIGKILL/power-loss mid-write would truncate the file
+    // in place, and a corrupt manifest aborts the whole `--proceed` resume —
+    // defeating the auto-restart guarantee. Write to a temp file then rename
+    // (atomic on a single volume) so the target is never partially written.
+    const tmpPath = `${filePath}.tmp`;
+    try {
+      fs.writeFileSync(tmpPath, compressedData);
+      fs.renameSync(tmpPath, filePath);
+    } catch (err) {
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {
+        /* best-effort cleanup */
+      }
+      throw err;
+    }
 
     return {
       uncompressedSizeMB,

@@ -252,9 +252,13 @@ class ProgressManager {
     } catch (error: unknown) {
       // If JSON.stringify fails (circular refs, etc.), store minimal data
       console.warn(`⚠️  Could not validate page size for ${url}: ${(error as Error).message}`);
+      // The crawler records the HTTP status as `status` (not `statusCode`), so
+      // the salvage record must read `status` or it persists `undefined` and
+      // drops the real status on exactly the broken-page path that matters.
       this.#pendingPages[url] = {
         url: pageData.url,
-        statusCode: pageData.statusCode,
+        status: pageData.status,
+        statusCode: pageData.statusCode ?? pageData.status,
         title: pageData.title,
         error: 'Page data could not be serialized',
       } as PageInfo;

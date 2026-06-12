@@ -36,6 +36,7 @@ import type { AuditArtifacts } from './types';
 import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+const LLM_API_TIMEOUT_MS = 120_000;
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_VERSION = '2023-06-01';
 /** Anthropic rejects images over 5MB; skip vision (signals only) past this. */
@@ -210,6 +211,8 @@ async function callModel(
   }
   content.push({ type: 'text', text: userPrompt });
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_API_TIMEOUT_MS);
   try {
     const res = await fetch(ANTHROPIC_ENDPOINT, {
       method: 'POST',
@@ -224,6 +227,7 @@ async function callModel(
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content }],
       }),
+      signal: ctrl.signal,
     });
     if (!res.ok) {
       if (verbose) {
@@ -237,6 +241,8 @@ async function callModel(
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM anomaly failed: ${(error as Error).message}`);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

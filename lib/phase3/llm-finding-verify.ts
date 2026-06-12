@@ -35,6 +35,9 @@ export { isClaudeCliAvailable, extractCliResult };
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_VERSION = '2023-06-01';
+/** Per-request timeout for the Anthropic API call (a stalled socket would
+ *  otherwise hang the verify phase indefinitely). */
+const LLM_API_TIMEOUT_MS = 120_000;
 /** Findings per request — keeps payloads and parsing manageable. */
 const BATCH_SIZE = 10;
 
@@ -137,6 +140,10 @@ export function parseLlmVerdicts(raw: string, validIndices: number[]): LlmVerdic
 }
 
 async function callModel(userPrompt: string, apiKey: string, model: string, verbose: boolean): Promise<string | null> {
+  // Bound the request so a stalled connection can't hang the verify phase
+  // forever (every other transport — CLI, CrUX — already has a timeout).
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_API_TIMEOUT_MS);
   try {
     const res = await fetch(ANTHROPIC_ENDPOINT, {
       method: 'POST',
@@ -151,6 +158,7 @@ async function callModel(userPrompt: string, apiKey: string, model: string, verb
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],
       }),
+      signal: ctrl.signal,
     });
     if (!res.ok) {
       if (verbose) {
@@ -164,6 +172,8 @@ async function callModel(userPrompt: string, apiKey: string, model: string, verb
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM finding-verify failed: ${(error as Error).message}`);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

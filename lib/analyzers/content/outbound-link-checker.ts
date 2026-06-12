@@ -189,32 +189,33 @@ class OutboundLinkChecker {
     domainRequestTimes.set(hostname, Date.now());
 
     return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        resolve({ status: 0, timeout: true });
-      }, 5000);
-
       const protocol = urlToCheck.startsWith('https') ? https : http;
-      const req = protocol.request(
-        urlToCheck,
-        {
-          method: 'HEAD',
-          timeout: timeoutMs,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
-            Accept: '*/*',
-          },
+      const req = protocol.request(urlToCheck, {
+        method: 'HEAD',
+        timeout: timeoutMs,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
+          Accept: '*/*',
         },
-        (res) => {
-          clearTimeout(timeout);
-          const result = {
-            status: res.statusCode,
-            redirected: res.statusCode! >= 300 && res.statusCode! < 400,
-            redirectTo: res.headers.location ?? null,
-          };
-          urlCache.set(urlToCheck, result);
-          resolve(result);
-        },
-      );
+      });
+
+      // Outer watchdog uses the CONFIGURED timeout (not a hard-coded 5s) and
+      // destroys the socket when it fires, so a hung connection can't linger.
+      const timeout = setTimeout(() => {
+        req.destroy();
+        resolve({ status: 0, timeout: true });
+      }, timeoutMs);
+
+      req.on('response', (res) => {
+        clearTimeout(timeout);
+        const result = {
+          status: res.statusCode,
+          redirected: res.statusCode! >= 300 && res.statusCode! < 400,
+          redirectTo: res.headers.location ?? null,
+        };
+        urlCache.set(urlToCheck, result);
+        resolve(result);
+      });
 
       req.on('error', () => {
         clearTimeout(timeout);

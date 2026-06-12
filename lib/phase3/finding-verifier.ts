@@ -225,8 +225,11 @@ export function loadSiteData(runDir: string, pages: PageIndex): SiteData | null 
   const sitemapUrls = new Set<string>();
   const urlsObj = (metadata?.sitemaps as { urls?: Record<string, unknown> } | undefined)?.urls;
   if (urlsObj && typeof urlsObj === 'object') for (const u of Object.keys(urlsObj)) sitemapUrls.add(normUrl(u));
+  // The parser caps each sitemap at SITEMAP_LIMIT; at/over the cap the persisted
+  // set may be missing URLs from a truncated/unread child sitemap.
+  const sitemapCapped = sitemapUrls.size >= THRESHOLDS.SITEMAP_LIMIT;
 
-  return { incoming, depthFromHome, robotsDisallow, robotsUserAgents, sitemapUrls };
+  return { incoming, depthFromHome, robotsDisallow, robotsUserAgents, sitemapUrls, sitemapCapped };
 }
 
 // IMPORTANT: storage persists only a subset of `PageInfo`. These readers
@@ -341,6 +344,10 @@ export interface SiteData {
   robotsUserAgents: string[];
   /** Normalized URLs declared in the sitemap(s). */
   sitemapUrls: Set<string>;
+  /** True when the persisted sitemap set may be incomplete (hit SITEMAP_LIMIT) —
+   *  pages in an unread/capped child sitemap could be wrongly counted as
+   *  "not listed", so count-only sitemap checks must stay `unchecked`. */
+  sitemapCapped: boolean;
 }
 
 interface VerifierCtx {
@@ -786,6 +793,11 @@ const VERIFIERS: Verifier[] = [
       // has no example URL — fall back to a site-level count from the index.
       const url = ctx.urls[0];
       if ((!url || !ctx.pages.get(url)) && ctx.site && ctx.site.sitemapUrls.size > 0) {
+        // The sitemap set may be partial (capped child sitemaps); a page absent
+        // from it could simply live in an unread sitemap — don't count it.
+        if (ctx.site.sitemapCapped) {
+          return unchecked('not-in-sitemap', 'sitemap set may be incomplete (hit URL cap)');
+        }
         const n = ctx.pages.all().filter((p) => {
           const ix = p.indexability as { isIndexable?: boolean } | undefined;
           return ix?.isIndexable === true && !ctx.site!.sitemapUrls.has(normUrl(p.url));
@@ -868,10 +880,13 @@ const VERIFIERS: Verifier[] = [
     (p) => { const n = emptyAnchorCountOf(p); return typeof n === 'number' ? n > 0 : null; },
     'page has empty-anchor links', 'no empty anchors recorded for this page', false),
 
-  // "Some images are significantly larger than their display size".
-  booleanVerifier('oversized-images', (m) => /images?\b/.test(m) && /larger than (their|the)? ?display/.test(m),
+  // "Pages have image files larger than recommended" — backed by the BYTE-size
+  // `oversizedImages` list. The display-scaling finding ("…larger than their
+  // display size") is a DIFFERENT message backed by different data and is owned
+  // by the live verifier; matching it here would badge it from byte-size data.
+  booleanVerifier('oversized-images', (m) => /image files? larger than recommended/.test(m),
     (p) => { const n = oversizedImageCountOf(p); return typeof n === 'number' ? n > 0 : null; },
-    'page has images larger than their display size', 'no oversized images recorded for this page', false),
+    'page has image files larger than recommended', 'no oversized image files recorded for this page', false),
 
   // "Pages serve images only as JPG/PNG instead of WebP/AVIF".
   booleanVerifier('legacy-image-format', (m) => /(webp|avif)/.test(m) && /(jpg|jpeg|png|legacy|instead)/.test(m),

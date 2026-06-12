@@ -190,7 +190,10 @@ class ThinContentAnalyzer {
       }
     }
 
-    if (lowPercent > 30) {
+    // Gate on the combined share of pages under LOW_WORDS (very-thin + low),
+    // matching the detail message — `lowPercent` alone omits the very-thin band,
+    // so a site that is mostly very-thin would never trigger.
+    if (thinPercent + lowPercent > 30) {
       warnings.push({
         message: 'A notable share of pages have insufficient content',
         detail: `${(thinPercent + lowPercent).toFixed(1)}% of pages have fewer than ${this.THRESHOLDS.LOW_WORDS} words. Consider expanding content on these pages.`,

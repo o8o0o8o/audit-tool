@@ -30,16 +30,30 @@ class KeywordCannibalisationAnalyzer {
   static detectBrandName(pages: Record<string, PageInfo>): Set<string> {
     const brandWords = new Set<string>();
 
+    // Derive the brand token from the MOST COMMON hostname across the crawl, not
+    // the first map entry. The first page may sit on a blog./shop. subdomain (or
+    // map order may vary), which would mis-derive the brand from that subdomain.
+    const hostCounts = new Map<string, number>();
     for (const url of Object.keys(pages)) {
       const hostname = getHostname(url);
-      if (hostname) {
-        // e.g. "ringgo.co.uk" -> "ringgo"
-        const domainPart = hostname.split('.')[0];
-        if (domainPart && domainPart.length >= 3) {
-          brandWords.add(domainPart.toLowerCase());
-        }
+      if (hostname) hostCounts.set(hostname, (hostCounts.get(hostname) ?? 0) + 1);
+    }
+
+    let dominantHost: string | null = null;
+    let bestCount = 0;
+    for (const [host, count] of hostCounts) {
+      if (count > bestCount) {
+        dominantHost = host;
+        bestCount = count;
       }
-      break; // Only need one URL
+    }
+
+    if (dominantHost) {
+      // e.g. "ringgo.co.uk" -> "ringgo"
+      const domainPart = dominantHost.split('.')[0];
+      if (domainPart && domainPart.length >= 3) {
+        brandWords.add(domainPart.toLowerCase());
+      }
     }
 
     return brandWords;

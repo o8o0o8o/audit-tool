@@ -37,6 +37,10 @@ interface DedupGroup {
   primary: RegExp;
   /** Equivalent findings folded into the primary and then removed. */
   members: RegExp[];
+  /** When the members flag DISTINCT page sets (not just the same finding
+   *  worded differently), union the example URLs and count the union instead of
+   *  taking Math.max — otherwise the folded total is under-reported. */
+  distinctSets?: boolean;
 }
 
 /**
@@ -66,6 +70,7 @@ const DEDUP_GROUPS: DedupGroup[] = [
   {
     primary: /orphan pages detected/i,
     members: [/pages are unreachable from homepage via internal links/i],
+    distinctSets: true,
   },
   // Missing <main>: an AEO/semantic finding and an a11y-landmark finding.
   {
@@ -159,11 +164,27 @@ export function consolidateFindings(details: Record<string, IssueDetail>): Recor
     for (const mk of memberKeys) {
       const m = out[mk];
       primary.severity = moreSevere(primary.severity, m.severity);
-      primary.count = Math.max(primary.count ?? 0, m.count ?? 0);
-      // Only borrow examples when the primary has none of its own (keeps the
-      // primary's per-page URLs rather than appending summary prose).
-      if ((primary.examples?.length ?? 0) === 0 && (m.examples?.length ?? 0) > 0) {
-        primary.examples = [...m.examples];
+      if (group.distinctSets) {
+        // Members flag DISTINCT page sets — union the example URLs (dedup) and
+        // keep count at least the size of that union, so Math.max of one set's
+        // size doesn't under-report the combined total.
+        const have = new Set(primary.examples ?? []);
+        const merged = [...(primary.examples ?? [])];
+        for (const ex of m.examples ?? []) {
+          if (!have.has(ex)) {
+            have.add(ex);
+            merged.push(ex);
+          }
+        }
+        primary.examples = merged;
+        primary.count = Math.max(primary.count ?? 0, m.count ?? 0, merged.length);
+      } else {
+        primary.count = Math.max(primary.count ?? 0, m.count ?? 0);
+        // Only borrow examples when the primary has none of its own (keeps the
+        // primary's per-page URLs rather than appending summary prose).
+        if ((primary.examples?.length ?? 0) === 0 && (m.examples?.length ?? 0) > 0) {
+          primary.examples = [...m.examples];
+        }
       }
       delete out[mk];
     }

@@ -135,6 +135,19 @@ class FreshnessAnalyzer {
       }
     }
 
+    // Derive ageInDays from the most recent of ALL captured date signals, not
+    // just the Last-Modified header. A schema-rich, header-poor page would
+    // otherwise keep ageInDays === null and be miscounted site-wide as lacking
+    // any freshness signal (see analyzeSiteWide / pagesWithoutDates).
+    const allDateMs = [freshnessData.lastModified, freshnessData.dateModified, freshnessData.datePublished]
+      .filter((d): d is string => d !== null)
+      .map((d) => new Date(d).getTime())
+      .filter((t) => !isNaN(t));
+    if (allDateMs.length > 0) {
+      const mostRecent = Math.max(...allDateMs);
+      freshnessData.ageInDays = Math.floor((now.getTime() - mostRecent) / (1000 * 60 * 60 * 24));
+    }
+
     // Calculate freshness score (0-100)
     freshnessData.freshnessScore = this.calculateFreshnessScore(freshnessData, now);
 

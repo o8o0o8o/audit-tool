@@ -657,10 +657,18 @@ class TechnologyDetector {
    */
   static #extractMetaTagsFromHtml(html: string) {
     const tags: Record<string, string> = {};
-    const metaRegex = /<meta[^>]*(?:name|property)=["']([^"']+)["'][^>]*content=["']([^"']+)["'][^>]*>/gi;
-    let match;
-    while ((match = metaRegex.exec(html)) !== null) {
-      tags[match[1].toLowerCase()] = match[2].toLowerCase();
+    // Match each <meta> tag, then extract name/property and content
+    // independently so attribute order doesn't matter
+    // (e.g. `<meta content="…" name="generator">` was previously missed).
+    const metaTagRegex = /<meta\b[^>]*>/gi;
+    let tagMatch;
+    while ((tagMatch = metaTagRegex.exec(html)) !== null) {
+      const tag = tagMatch[0];
+      const nameMatch = tag.match(/(?:name|property)=["']([^"']+)["']/i);
+      const contentMatch = tag.match(/content=["']([^"']+)["']/i);
+      if (nameMatch && contentMatch) {
+        tags[nameMatch[1].toLowerCase()] = contentMatch[1].toLowerCase();
+      }
     }
     return tags;
   }

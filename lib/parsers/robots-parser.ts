@@ -6,6 +6,12 @@
 
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { formatBytes, readResponseTextCapped } from '../utils';
+import { fetchTextViaBrowser } from '../crawler/browser-fetch';
+
+/** True when the text contains at least one robots.txt directive (vs. an HTML challenge page). */
+function looksLikeRobots(text: string): boolean {
+  return /(^|\n)\s*(user-agent|disallow|allow|sitemap|crawl-delay|host)\s*:/i.test(text);
+}
 
 // Maximum robots.txt size (Google's limit is 500KB)
 const MAX_ROBOTS_SIZE = 500 * 1024;
@@ -95,9 +101,29 @@ class RobotsParser {
       result.metadata.statusCode = robotsResponse.status;
       result.metadata.contentType = robotsResponse.headers.get('content-type');
 
-      if (robotsResponse.status === 200) {
-        // Capped read: a gzip-bomb robots.txt would otherwise be fully buffered.
-        const robotsContent = await readResponseTextCapped(robotsResponse, THRESHOLDS.MAX_ROBOTS_FETCH);
+      // Capped read: a gzip-bomb robots.txt would otherwise be fully buffered.
+      let effectiveStatus = robotsResponse.status;
+      let robotsContent =
+        robotsResponse.status === 200 ? await readResponseTextCapped(robotsResponse, THRESHOLDS.MAX_ROBOTS_FETCH) : '';
+
+      // A plain fetch can be blocked by bot protection (e.g. a 429 + JS challenge
+      // page) — retry through a real browser, which can clear the challenge, before
+      // treating a non-200 as an error.
+      if (effectiveStatus !== 200) {
+        const viaBrowser = await fetchTextViaBrowser(origin + '/robots.txt', THRESHOLDS.MAX_ROBOTS_FETCH).catch(
+          () => null,
+        );
+        if (viaBrowser && viaBrowser.status === 200 && looksLikeRobots(viaBrowser.text)) {
+          console.log('robots.txt recovered via browser fallback (plain fetch was blocked)');
+          effectiveStatus = 200;
+          robotsContent = viaBrowser.text;
+          result.metadata.statusCode = 200;
+          // The challenge page's Content-Type is meaningless for the recovered file.
+          result.metadata.contentType = null;
+        }
+      }
+
+      if (effectiveStatus === 200) {
         result.metadata.size = robotsContent.length;
 
         // Check content type

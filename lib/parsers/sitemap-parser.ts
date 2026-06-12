@@ -6,6 +6,7 @@
 import { parse, type HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { fetchWithTimeout, readResponseTextCapped } from '../utils';
+import { fetchTextViaBrowser } from '../crawler/browser-fetch';
 import { isFetchAllowed } from '../../validators';
 
 /** Origin hostname for the SSRF same-host allowance, or undefined. */
@@ -15,6 +16,31 @@ function hostOf(urlString: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** True when the text is recognisable sitemap XML (a urlset or a sitemap index). */
+function looksLikeSitemap(text: string): boolean {
+  return /<(urlset|sitemapindex)\b/i.test(text);
+}
+
+/**
+ * Fetch a sitemap document, transparently falling back to a real browser when the
+ * plain fetch is blocked by bot protection (a non-2xx status or an HTML challenge
+ * body in place of XML). Returns the best text obtained; the caller validates it.
+ */
+async function fetchSitemapText(url: string): Promise<{ status: number; text: string }> {
+  const response = await fetchWithTimeout(url, THRESHOLDS.FETCH_TIMEOUT);
+  const text = await readResponseTextCapped(response, THRESHOLDS.MAX_SITEMAP_FETCH);
+  if (response.ok && looksLikeSitemap(text)) {
+    return { status: response.status, text };
+  }
+  // Plain fetch blocked or returned a non-sitemap body — a real browser can clear
+  // a JS bot-protection challenge and reach the actual XML.
+  const viaBrowser = await fetchTextViaBrowser(url, THRESHOLDS.MAX_SITEMAP_FETCH).catch(() => null);
+  if (viaBrowser && looksLikeSitemap(viaBrowser.text)) {
+    return viaBrowser;
+  }
+  return { status: response.status, text };
 }
 
 interface SitemapEntry {
@@ -73,9 +99,20 @@ class SitemapParser {
         }
         console.log(`Fetching sitemap: ${sitemapUrl}`);
 
-        const sitemapResponse = await fetchWithTimeout(sitemapUrl, THRESHOLDS.FETCH_TIMEOUT);
+        const { status: sitemapStatus, text: sitemap } = await fetchSitemapText(sitemapUrl);
 
-        const sitemap = await readResponseTextCapped(sitemapResponse, THRESHOLDS.MAX_SITEMAP_FETCH);
+        // If the response is neither valid sitemap XML after the browser fallback,
+        // surface a clear error instead of silently reporting "0 nested sitemaps".
+        if (!looksLikeSitemap(sitemap)) {
+          const message = `Failed to fetch a valid sitemap from ${sitemapUrl}`;
+          const detail =
+            `Server returned HTTP ${sitemapStatus} and the body is not sitemap XML ` +
+            `(likely a bot-protection challenge page or a non-XML response); the browser fallback also could not reach it.`;
+          console.log(`${message}: ${detail}`);
+          result.errors.push({ message, detail, severity: SEVERITY.HIGH });
+          continue;
+        }
+
         const parsedSitemap = parse(sitemap);
         const urls = parsedSitemap.querySelectorAll('url');
 
@@ -118,19 +155,18 @@ class SitemapParser {
 
               console.log(`  Fetching nested sitemap: ${sitemapPage}`);
 
-              const sitemapPageResponse = await fetchWithTimeout(sitemapPage, THRESHOLDS.FETCH_TIMEOUT);
+              const { status: nestedStatus, text: sitemapPageText } = await fetchSitemapText(sitemapPage);
 
-              if (!sitemapPageResponse.ok) {
-                console.log(`  Error: HTTP ${sitemapPageResponse.status} for nested sitemap ${sitemapPage}`);
+              if (!looksLikeSitemap(sitemapPageText)) {
+                console.log(`  Error: HTTP ${nestedStatus} / non-sitemap body for nested sitemap ${sitemapPage}`);
                 result.errors.push({
                   message: `Failed to fetch nested sitemap`,
-                  detail: `HTTP ${sitemapPageResponse.status} for ${sitemapPage}`,
+                  detail: `HTTP ${nestedStatus} for ${sitemapPage} and the body is not sitemap XML (bot-protection challenge or non-XML response; browser fallback also failed)`,
                   severity: SEVERITY.MEDIUM,
                 });
                 continue;
               }
 
-              const sitemapPageText = await readResponseTextCapped(sitemapPageResponse, THRESHOLDS.MAX_SITEMAP_FETCH);
               const parsedSitemapPage = parse(sitemapPageText);
               const nestedUrls = parsedSitemapPage.querySelectorAll('url');
 

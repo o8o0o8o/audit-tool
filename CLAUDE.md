@@ -19,7 +19,7 @@ This tool performs comprehensive SEO audits by:
 
 ## Technology Stack
 
-- **Language**: TypeScript (strict mode incrementally enabled)
+- **Language**: TypeScript (fully `strict: true`, plus `noImplicitReturns` and `noFallthroughCasesInSwitch`)
 - **Runtime**: Node.js with tsx (TypeScript executor)
 - **Browser Automation**: Playwright (Chromium)
 - **HTML Parsing**: node-html-parser
@@ -31,8 +31,9 @@ This tool performs comprehensive SEO audits by:
 ```
 audit-tool/
 ├── start.ts                    # Entry point - spawns audit with restart capability
-├── robots.ts                   # SEOData class - thin orchestration layer (~380 lines)
-├── generateHTML.ts             # HTML report generator - thin orchestrator (~190 lines)
+├── robots.ts                   # CLI runner / sub-command dispatcher (~620 lines); re-exports SEOData
+├── lib/seo-data.ts             # SEOData class - thin orchestration layer (~620 lines)
+├── generateHTML.ts             # HTML report generator - thin orchestrator (~470 lines)
 ├── generateCSV.ts              # CSV export generator
 ├── generateComparison.ts       # Audit comparison HTML report
 ├── historyManager.ts           # Historical audit tracking
@@ -42,7 +43,7 @@ audit-tool/
 │   ├── config-loader.ts        # Configuration file loading (.seoauditrc)
 │   ├── constants.ts            # Centralized configuration and thresholds
 │   ├── utils.ts                # Shared utility functions
-│   ├── analyzers/
+│   ├── analyzers/               # 89 analyzer modules total; tree below is representative
 │   │   ├── accessibility/
 │   │   │   ├── accessibility-analyzer.ts    # WCAG 2.1 compliance
 │   │   │   └── mobile-friendly-analyzer.ts  # Mobile viewport testing
@@ -63,8 +64,11 @@ audit-tool/
 │   │   │   ├── code-coverage-analyzer.ts    # JS/CSS unused code via CDP Coverage API
 │   │   │   ├── image-optimization-analyzer.ts  # Image optimization
 │   │   │   └── resource-optimization-analyzer.ts  # Render-blocking
+│   │   │   # …and more (16 performance analyzers total)
+│   │   ├── repo/                            # Source-code analysis backing --repo (7 files)
 │   │   ├── security/
 │   │   │   └── security-analyzer.ts         # HTTPS, security headers
+│   │   │   # …and more (10 security analyzers total)
 │   │   ├── seo/
 │   │   │   ├── advanced-schema-validator.ts # Detailed schema validation (FAQ, Product, etc.)
 │   │   │   ├── aeo-analyzer.ts              # AI Search Readiness (AEO), llms.txt, AI crawlers
@@ -130,7 +134,7 @@ audit-tool/
 │       └── cli-summary.ts       # CLI summary output after audit
 ├── package.json
 ├── tests/
-│   └── analyzers.test.ts        # Unit tests for analyzers (node --test)
+│   └── analyzers.test.ts        # Unit tests for analyzers (tsx --test)
 └── README.md
 ```
 
@@ -142,7 +146,11 @@ Entry point that spawns the audit process as a child process. Handles process cr
 
 ### robots.ts
 
-Thin orchestration layer (~380 lines) containing the `SEOData` class. Exports `SEOData` for programmatic use. Delegates heavy lifting to:
+CLI entry/runner (~620 lines): one `audit()` function dispatching the sub-commands (`--sites`, `--validate-config`, `--generate-ci`, `--init-config`, comparison, `--repo`, history) and the main pipeline. Re-exports `SEOData` (which lives in `lib/seo-data.ts`) for programmatic use.
+
+### lib/seo-data.ts
+
+Thin orchestration layer (~620 lines) containing the `SEOData` class. Delegates heavy lifting to:
 
 - `lib/crawler/crawler-engine.ts` - Page crawling and browser management
 - `lib/orchestrators/audit-orchestrator.ts` - Page analysis workflow
@@ -151,7 +159,7 @@ Thin orchestration layer (~380 lines) containing the `SEOData` class. Exports `S
 
 ### generateHTML.ts
 
-Thin HTML report orchestrator (~190 lines). Composes reports using extracted modules:
+Thin HTML report orchestrator (~470 lines). Composes reports using extracted modules:
 
 - `lib/reports/data-processor.ts` - Data loading and processing
 - `lib/reports/html-utils.ts` - HTML helper functions
@@ -188,13 +196,19 @@ Checkpoint persistence and restoration:
 
 ### lib/args-parser.ts
 
-Centralized CLI argument parsing. Supports:
+Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (and `completions.sh`) for the full set; the README usage section is the canonical user-facing list. Common ones:
 
 - `--origin=<url>` - Target website
 - `--proceed` - Resume from saved progress
 - `--perf` - Enable performance metrics
 - `--save-html` - Save HTML snapshots
+- `--screenshots` - Capture page screenshots
 - `--concurrency=<n>` - Parallel crawling (1-20, default: 5)
+- `--verify` - Phase 3 live verification (see Phase 3 above)
+- `--llm-narrative` / `--llm-findings` / `--llm-verify` - optional LLM passes
+- `--phase2` / `--no-phase2` - curated PDF report (on by default)
+- `--no-score` - strip scores from the report
+- `--evidence` / `--no-evidence` / `--evidence-cap=<n>` - per-page evidence capture
 
 ### lib/constants.ts
 
@@ -357,7 +371,7 @@ npx tsx historyManager.ts compare <domain> <old> <new>
 ```
 audit-results/
 └── domain.com/
-    ├── audit-history.json              # Historical snapshots
+    ├── audit-history.json.gz           # Historical snapshots (gzip; legacy .json read as fallback)
     └── YYYY-MM-DD_HH-MM-SS/
         ├── manifest.json.gz             # Multi-file format index + evidence index
         ├── metadata.json.gz             # robots, sitemaps, CrUX, timing

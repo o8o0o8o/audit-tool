@@ -60,6 +60,7 @@ This runs the whole flow: crawl + Lighthouse field data + PSI lab scores per rep
 | `--concurrency=<n>` | 5 | Parallel page workers (1–20) |
 | `--limit=<n>` | none | Stop after N pages (useful for large sites) |
 | `--save-html` | off | Save full HTML snapshot of every crawled page |
+| `--screenshots` | off | Capture mobile + desktop screenshots for sampled pages |
 | `--evidence-cap=<n>` | 10 | Cap on representative-page samples (1–100) |
 | `--no-evidence` | — | Skip the evidence pass entirely (no screenshots, no axe-core, no PSI) |
 | `--no-phase2` | — | Skip curated PDF generation |
@@ -215,6 +216,34 @@ npx tsx start.ts --origin=https://example.com --proceed
 ```
 
 Resume loads checkpoint + archive files automatically.
+
+## Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | Enables the API transport for the LLM passes (`--llm-narrative`, `--llm-findings`, `--llm-verify`). Without it, those passes fall back to spawning the `claude` CLI if it's on `PATH`, else degrade silently. |
+| `CRUX_API_KEY` | API key for CrUX / PageSpeed Insights lab data (`--perf`). Works keyless at reduced rate limits. |
+| `NODE_HEAP_SIZE` | Override the Node `--max-old-space-size` (MB) for very large crawls. |
+| `SEO_AUDIT_VERIFY_OFFLINE` | `1` → `--verify` uses the deterministic on-disk pass instead of the default live re-fetch (reproducible, no network, no key). |
+| `SEO_AUDIT_SKIP_CLAUDE_CLI` | `1` → never spawn the `claude` CLI as an LLM transport. |
+| `SEO_AUDIT_CLAUDE_CLI_BIN` | Override the `claude` CLI binary path/name. |
+| `SEO_AUDIT_ALLOW_PRIVATE` | `1` → disable the SSRF guard's private/internal-host block (for intentionally auditing internal/local sites). A target whose host matches the audit origin is allowed without this. |
+
+The LLM passes additionally rely on the `claude` CLI being on `PATH` when no API key is set.
+
+## Development
+
+```bash
+yarn              # install
+npx playwright install
+
+yarn typecheck    # tsc --noEmit
+yarn lint         # eslint .   (yarn lint:fix to autofix)
+yarn format       # prettier --write   (yarn format:check to verify)
+yarn test         # tsx --test tests/**/*.test.ts
+```
+
+Run `typecheck`, `lint`, `format:check`, and `test` before committing — these are the same checks a CI workflow should gate on.
 
 ## License
 

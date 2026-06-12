@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Type check
+        run: yarn typecheck
+
+      - name: Lint
+        run: yarn lint
+
+      # Advisory until the pre-existing repo-wide formatting debt is cleared
+      # (newly-touched files should still be `yarn format`-clean).
+      - name: Format check
+        run: yarn format:check
+        continue-on-error: true
+
+      - name: Test
+        run: yarn test

@@ -40,11 +40,18 @@ next-env.d.ts
 # audit results
 /http*
 SEOAnalysis*
-*.html
 failedPages.json
 audit-results
+# Generated reports/sitemaps land at the repo root or under audit-results/.
+# Scope the ignore there so committed test fixtures (tests/fixtures/**.html,
+# sample sitemaps) aren't silently excluded by a bare `*.html` / `*.xml`.
+/*.html
+/*.xml
+/audit-results/**/*.html
+/audit-results/**/*.xml
 
-*.xml
+# dual lockfile — this project uses yarn
+package-lock.json
 
 # local fix/review patch notes
 .patches

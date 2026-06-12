@@ -33,9 +33,31 @@ import {
 import type { AuditArtifacts } from '../phase2/types';
 import type { Section } from '../phase2/categorize';
 import type { Anomaly } from '../phase2/llm-anomaly';
-import { loadAllPages, loadSiteData, verifyDetails, collectUncheckedContexts, buildSiteAggregate, firstExample } from './finding-verifier';
-import { llmVerifyFindings, claudeCliVerifyFindings, isClaudeCliAvailable } from './llm-finding-verify';
-import { verifyReportLive, type Throttle, type LiveVerdict } from './live-verifier';
+import {
+  loadAllPages,
+  loadSiteData,
+  verifyDetails,
+  collectUncheckedContexts,
+  buildSiteAggregate,
+  firstExample,
+} from './finding-verifier';
+import {
+  llmVerifyFindings,
+  claudeCliVerifyFindings,
+  isClaudeCliAvailable,
+  llmVerifyFindingsVision,
+  type LlmVerifyItem,
+  type VisionVerifyItem,
+} from './llm-finding-verify';
+import {
+  verifyReportLive,
+  liveSignalsSnapshot,
+  captureAnomalyEvidence,
+  type Throttle,
+  type LiveVerdict,
+  type VerdictReason,
+  type LiveSignals,
+} from './live-verifier';
 
 export interface VerifyPhaseOptions {
   /** Surface API/cache errors and per-finding verdict logs. */
@@ -99,7 +121,9 @@ export async function runVerifyPhase(runDir: string, options: VerifyPhaseOptions
   const artifacts = loadArtifacts(runDir);
   const persisted = loadPhase2State(runDir);
   if (!persisted) {
-    console.log('⚠️  phase2-state.json not found — verifying over the unsuppressed finding set (templated prose, no anomaly findings).');
+    console.log(
+      '⚠️  phase2-state.json not found — verifying over the unsuppressed finding set (templated prose, no anomaly findings).',
+    );
   }
   const state: ResolvedState = {
     narratives: (persisted?.narratives ?? {}) as Partial<Record<Section, string | null>>,
@@ -190,7 +214,13 @@ async function runOfflineVerification(artifacts: AuditArtifacts, state: Resolved
     // Prefer the API when a key is set (fastest, parallel); otherwise spawn the
     // Claude CLI so the LLM pass still runs with no key. Both share the same
     // payload, parsing, and verdict-merge below.
-    const items = contexts.map((c, i) => ({ index: i, message: c.message, example: c.example, pageUrl: c.pageUrl, signals: c.signals }));
+    const items = contexts.map((c, i) => ({
+      index: i,
+      message: c.message,
+      example: c.example,
+      pageUrl: c.pageUrl,
+      signals: c.signals,
+    }));
     const llmOpts = {
       cacheDir: path.join(artifacts.runDir, 'cache', 'llm-finding-verify'),
       verbose: state.verbose,
@@ -270,7 +300,13 @@ async function runOfflineVerification(artifacts: AuditArtifacts, state: Resolved
     const detail = baseDetails[m];
     const res = summary.results.get(m);
     const chosen = detail ? firstExample(detail) : undefined;
-    return { title: m, severity: detail?.severity, kind: res?.kind, exampleUrl: firstExampleUrl(chosen ? [chosen] : undefined), reason: res?.reason ?? 'contradicted by crawl data' };
+    return {
+      title: m,
+      severity: detail?.severity,
+      kind: res?.kind,
+      exampleUrl: firstExampleUrl(chosen ? [chosen] : undefined),
+      reason: res?.reason ?? 'contradicted by crawl data',
+    };
   });
   const refutedPath = writeRefutedReport(artifacts.runDir, artifacts.manifest.domain, 'data', refutedEntries);
   if (refutedPath) console.log(`📄 Refuted findings (dropped): ${refutedPath}`);
@@ -305,11 +341,46 @@ function loadCrawlThrottle(runDir: string): Throttle | undefined {
   try {
     const file = path.join(runDir, 'metadata.json.gz');
     if (!fs.existsSync(file)) return undefined;
-    const meta = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')) as { crawlProfile?: CrawlProfile | null };
+    const meta = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')) as {
+      crawlProfile?: CrawlProfile | null;
+    };
     return crawlProfileToThrottle(meta.crawlProfile);
   } catch {
     return undefined;
   }
+}
+
+/** Human labels for the verdict reason codes, used in the verified report's
+ *  "unverified breakdown" line so each category reads in plain language. */
+const REASON_LABELS: Record<VerdictReason, string> = {
+  confirmed: 'confirmed',
+  refuted: 'refuted',
+  'no-checker': 'no live checker for the kind',
+  'no-example': 'no example URL cited',
+  unreachable: 'page unreachable',
+  'under-observable': 'under-observable at load',
+  'load-dependent': 'load-dependent network aggregate',
+  volatile: 'volatile signal',
+  'site-level': 'site-level / cross-page',
+  'plural-undersampled': 'plural finding undersampled',
+  'llm-unsure': 'LLM could not decide',
+  inconclusive: 'inconclusive',
+};
+
+/**
+ * A blockquote line breaking the `unverified` C/H/M verdicts down by reason code,
+ * most-common first — so the report distinguishes "we checked hard and can't
+ * decide" from "we never tried." Returns '' when nothing was unverified.
+ */
+export function verdictBreakdownLine(verdicts: LiveVerdict[]): string {
+  const byCode = new Map<VerdictReason, number>();
+  for (const v of verdicts)
+    if (v.status === 'unverified') byCode.set(v.reasonCode, (byCode.get(v.reasonCode) ?? 0) + 1);
+  if (byCode.size === 0) return '';
+  const parts = [...byCode.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([c, n]) => `${n} ${REASON_LABELS[c] ?? c}`);
+  return `> **Why findings are unverified** (of the ${verdicts.length} CRITICAL/HIGH/MEDIUM findings live-checked): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
 }
 
 /** First real http(s) URL across a finding's example strings (skips templated
@@ -344,17 +415,31 @@ export interface RefutedEntry {
  * keeping: a recurring refute is a candidate analyzer bug. Returns the path, or
  * null when nothing was refuted (no empty file is written).
  */
-export function writeRefutedReport(runDir: string, domain: string, mode: 'live' | 'data', entries: RefutedEntry[]): string | null {
+export function writeRefutedReport(
+  runDir: string,
+  domain: string,
+  mode: 'live' | 'data',
+  entries: RefutedEntry[],
+): string | null {
   if (entries.length === 0) return null;
   const stamp = `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`;
   const intro =
     mode === 'live'
       ? `> **Refuted by the live verification pass** (${stamp}). Each issue below was in the audit report, but a live re-fetch of its first example **contradicted the claim**, so it was DROPPED from \`audit-report.verified.md\`. These are likely already-fixed issues or analyzer false positives. The live site can change, so this reflects a point in time.`
       : `> **Refuted by the deterministic verification pass.** Each issue below was in the audit report, but the crawl data on disk **contradicted the claim**, so it was DROPPED from \`audit-report.verified.md\`. These are candidate analyzer false positives worth investigating.`;
-  const lines: string[] = [`# ${domain} — refuted findings`, '', intro, '', `**${entries.length} finding(s) dropped.**`, ''];
+  const lines: string[] = [
+    `# ${domain} — refuted findings`,
+    '',
+    intro,
+    '',
+    `**${entries.length} finding(s) dropped.**`,
+    '',
+  ];
   for (const e of entries) {
     lines.push(`## ${stripHtml(e.title)}`, '');
-    const meta = [e.severity ? e.severity.toUpperCase() : null, e.kind ? `kind: \`${e.kind}\`` : null].filter(Boolean).join(' · ');
+    const meta = [e.severity ? e.severity.toUpperCase() : null, e.kind ? `kind: \`${e.kind}\`` : null]
+      .filter(Boolean)
+      .join(' · ');
     if (meta) lines.push(meta, '');
     // The live pass re-fetches a specific URL; the data pass cross-checks crawl
     // data on disk, so call the URL an "Example" there rather than "Re-checked".
@@ -378,6 +463,191 @@ export function writeRefutedReport(runDir: string, domain: string, mode: 'live' 
  * point in time, so the banner is timestamped. The legacy deterministic disk
  * pass is still available via SEO_AUDIT_VERIFY_OFFLINE=1.
  */
+/**
+ * Slice 3 — LLM stage for the LIVE pass. Over the findings the deterministic
+ * live checkers left `unverified` (and which the live pass actually fetched a
+ * page for), package each with the FRESH live signals and ask the LLM whether
+ * the claim holds. Verdicts come from EITHER an injected `verify-verdicts.json`
+ * (no key) OR the API (`ANTHROPIC_API_KEY`) OR the keyless `claude` CLI — same
+ * priority as the offline pass.
+ *
+ * Caution preserved exactly as offline: the LLM may only UPGRADE a finding to
+ * confirmed (rendered `✓ Verified (AI)`). An LLM "refuted" is surfaced as a
+ * kept-but-flagged AI-dispute (logged), NEVER a drop — LLM judgment over partial
+ * evidence is too uncertain to silently remove a finding.
+ *
+ * Returns the set of finding MESSAGES the LLM confirmed, plus the dispute count.
+ */
+async function runLiveLlmStage(
+  verdicts: LiveVerdict[],
+  signalsByUrl: Map<string, LiveSignals | null>,
+  titleToMessage: Map<string, string>,
+  decided: ReadonlySet<string>,
+  runDir: string,
+  verbose: boolean,
+): Promise<{ aiConfirmed: Set<string>; aiDisputed: number }> {
+  const aiConfirmed = new Set<string>();
+  let aiDisputed = 0;
+
+  // Build one LLM item per still-unverified finding that has a fetched page with
+  // signals (no signals → nothing for the model to reason over → skip).
+  const items: LlmVerifyItem[] = [];
+  const keyByIndex: string[] = [];
+  for (const v of verdicts) {
+    if (v.status !== 'unverified' || !v.exampleUrl) continue;
+    const message = titleToMessage.get(v.title) ?? titleToMessage.get(sanitizeProse(v.title));
+    if (!message || decided.has(message)) continue;
+    const signals = signalsByUrl.get(v.exampleUrl);
+    if (!signals) continue; // page wasn't fetched / didn't load → no evidence to send
+    if (keyByIndex.includes(message)) continue; // one item per message
+    const index = items.length;
+    items.push({ index, message, example: v.exampleUrl, pageUrl: v.exampleUrl, signals: liveSignalsSnapshot(signals) });
+    keyByIndex.push(message);
+  }
+
+  const injected = loadInjectedVerdicts(runDir);
+  const verdictByIndex = new Map<number, { verdict: string; reason: string }>();
+
+  if (injected) {
+    for (let i = 0; i < keyByIndex.length; i++) {
+      const v = injected.get(keyByIndex[i]);
+      if (v) verdictByIndex.set(i, v);
+    }
+    if (verdictByIndex.size > 0)
+      console.log(
+        `  … applying ${verdictByIndex.size} injected verdict(s) from verify-verdicts.json (no API key needed)`,
+      );
+  } else if (items.length > 0 && (process.env.ANTHROPIC_API_KEY || isClaudeCliAvailable())) {
+    const llmOpts = { cacheDir: path.join(runDir, 'cache', 'llm-finding-verify-live'), verbose };
+    const useApi = !!process.env.ANTHROPIC_API_KEY;
+    console.log(
+      `  … ${useApi ? 'LLM-verifying' : 'verifying via Claude CLI (no API key)'} ${items.length} unverified finding(s) against fresh live signals`,
+    );
+    const llmVerdicts = useApi
+      ? await llmVerifyFindings(items, llmOpts)
+      : await claudeCliVerifyFindings(items, llmOpts);
+    for (const lv of llmVerdicts) verdictByIndex.set(lv.index, { verdict: lv.verdict, reason: lv.reason });
+  } else if (verbose) {
+    console.warn(
+      '--verify (live): no verify-verdicts.json, no ANTHROPIC_API_KEY, and no Claude CLI; skipping the live LLM stage.',
+    );
+  }
+
+  for (let i = 0; i < keyByIndex.length; i++) {
+    const v = verdictByIndex.get(i);
+    if (!v) continue;
+    if (v.verdict === 'confirmed') aiConfirmed.add(keyByIndex[i]);
+    else if (v.verdict === 'refuted') {
+      aiDisputed++;
+      console.log(
+        `  ⚠ AI disputes (kept, not dropped): ${stripHtml(keyByIndex[i])}${v.reason ? ` — ${v.reason}` : ''}`,
+      );
+    }
+  }
+
+  return { aiConfirmed, aiDisputed };
+}
+
+/**
+ * Slice 4 — vision verification of AI-discovered (anomaly) findings. Each
+ * anomaly's cited page is re-fetched and screenshotted; the LLM is asked whether
+ * the emergent UX/layout bug still manifests. Vision runs on the API transport;
+ * the keyless CLI falls back to signals-only (text), and an injected
+ * verify-verdicts.json (keyed by the anomaly title) wins over both — same
+ * priority as every other LLM stage.
+ *
+ * Caution preserved: the LLM may only UPGRADE an anomaly to confirmed (rendered
+ * `✓ Verified (AI)`); a refute is a kept-but-flagged dispute, NEVER a drop.
+ * Returns the set of anomaly TITLES confirmed, plus the dispute count.
+ */
+async function verifyAnomaliesLive(
+  anomalies: Anomaly[],
+  throttle: Throttle | undefined,
+  runDir: string,
+  verbose: boolean,
+): Promise<{ aiConfirmed: Set<string>; aiDisputed: number }> {
+  const aiConfirmed = new Set<string>();
+  let aiDisputed = 0;
+  const withUrl = anomalies.filter((a) => /^https?:\/\//.test(a.url));
+  if (withUrl.length === 0) return { aiConfirmed, aiDisputed };
+
+  console.log(
+    `🖼️  Live verification: re-checking ${withUrl.length} AI-discovered finding(s) against fresh screenshots…`,
+  );
+  const evidence = await captureAnomalyEvidence(
+    withUrl.map((a) => a.url),
+    { throttle, verbose },
+  );
+
+  // Signals each transport sees (the CLI path is text-only — no screenshot).
+  const signalsFor = (a: Anomaly): Record<string, unknown> => {
+    const e = evidence.get(a.url);
+    return { status: e?.status ?? 0, finalUrl: e?.finalUrl ?? a.url, section: a.section, originalEvidence: a.evidence };
+  };
+  const titleByIndex = withUrl.map((a) => a.title);
+
+  const injected = loadInjectedVerdicts(runDir);
+  const verdictByIndex = new Map<number, { verdict: string; reason: string }>();
+
+  if (injected) {
+    for (let i = 0; i < withUrl.length; i++) {
+      const v = injected.get(withUrl[i].title);
+      if (v) verdictByIndex.set(i, v);
+    }
+    if (verdictByIndex.size > 0)
+      console.log(`  … applying ${verdictByIndex.size} injected anomaly verdict(s) from verify-verdicts.json`);
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    const items: VisionVerifyItem[] = withUrl.map((a, index) => {
+      const shot = evidence.get(a.url)?.screenshot;
+      return {
+        index,
+        message: a.title,
+        example: `${a.evidence} — ${a.url}`,
+        pageUrl: a.url,
+        signals: signalsFor(a),
+        image: shot ? { data: shot, mediaType: 'image/png' } : null,
+      };
+    });
+    console.log(`  … vision-verifying ${items.length} AI-discovered finding(s) via the API`);
+    for (const lv of await llmVerifyFindingsVision(items, {
+      cacheDir: path.join(runDir, 'cache', 'llm-anomaly-verify'),
+      verbose,
+    }))
+      verdictByIndex.set(lv.index, { verdict: lv.verdict, reason: lv.reason });
+  } else if (isClaudeCliAvailable()) {
+    // Keyless CLI: text-only (no screenshot), so it judges on signals + the
+    // original evidence text. Reuses the standard batched verify transport.
+    const items: LlmVerifyItem[] = withUrl.map((a, index) => ({
+      index,
+      message: a.title,
+      example: `${a.evidence} — ${a.url}`,
+      pageUrl: a.url,
+      signals: signalsFor(a),
+    }));
+    console.log(`  … verifying ${items.length} AI-discovered finding(s) via Claude CLI (signals-only, no screenshot)`);
+    for (const lv of await claudeCliVerifyFindings(items, {
+      cacheDir: path.join(runDir, 'cache', 'llm-anomaly-verify'),
+      verbose,
+    }))
+      verdictByIndex.set(lv.index, { verdict: lv.verdict, reason: lv.reason });
+  } else if (verbose) {
+    console.warn('--verify (live): no key and no Claude CLI; skipping AI-discovered finding verification.');
+  }
+
+  for (let i = 0; i < titleByIndex.length; i++) {
+    const v = verdictByIndex.get(i);
+    if (!v) continue;
+    if (v.verdict === 'confirmed') aiConfirmed.add(titleByIndex[i]);
+    else if (v.verdict === 'refuted') {
+      aiDisputed++;
+      console.log(
+        `  ⚠ AI disputes its own earlier finding (kept, not dropped): ${stripHtml(titleByIndex[i])}${v.reason ? ` — ${v.reason}` : ''}`,
+      );
+    }
+  }
+  return { aiConfirmed, aiDisputed };
+}
+
 async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedState): Promise<string | null> {
   const reportPath = path.join(artifacts.runDir, 'audit-report.md');
   if (!fs.existsSync(reportPath)) {
@@ -390,8 +660,8 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   // ran with --perf) so live perf signals (TTFB/CLS/TBT) are comparable.
   const throttle = loadCrawlThrottle(artifacts.runDir);
 
-  console.log("🔎 Live verification: re-fetching each finding's first example and re-asserting the claim…");
-  const verdicts = await verifyReportLive(reportMd, { verbose: state.verbose, throttle });
+  console.log("🔎 Live verification: re-fetching each finding's example(s) and re-asserting the claim…");
+  const { verdicts, signalsByUrl } = await verifyReportLive(reportMd, { verbose: state.verbose, throttle });
 
   // Map parsed report titles → in-memory finding messages. The renderer emits
   // `### ${sanitizeProse(message)}`, so a parsed title equals
@@ -418,9 +688,12 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
       }
     }
 
-    if (v.status === 'refuted' && message) console.log(`  ✗ live refuted (dropped): ${stripHtml(v.title)} — ${v.reason}`);
-    else if (v.status === 'refuted') console.log(`  · live refuted but unmatched (kept): ${stripHtml(v.title)} — ${v.reason}`);
-    else if (state.verbose) console.log(`  ${v.status === 'confirmed' ? '✓' : '·'} live ${v.status}: ${stripHtml(v.title)} — ${v.reason}`);
+    if (v.status === 'refuted' && message)
+      console.log(`  ✗ live refuted (dropped): ${stripHtml(v.title)} — ${v.reason}`);
+    else if (v.status === 'refuted')
+      console.log(`  · live refuted but unmatched (kept): ${stripHtml(v.title)} — ${v.reason}`);
+    else if (state.verbose)
+      console.log(`  ${v.status === 'confirmed' ? '✓' : '·'} live ${v.status}: ${stripHtml(v.title)} — ${v.reason}`);
   }
 
   // Confirm wins over refute on a title collision: if two distinct findings
@@ -429,32 +702,71 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   // counts below can't double-count one message.
   for (const m of confirmed) refutedMessages.delete(m);
 
+  // Slice 3 — LLM stage over the still-unverified findings, using the fresh live
+  // signals captured above. Only upgrades to confirmed (✓ Verified (AI)); an LLM
+  // refute is a kept-but-flagged dispute, never a drop. Findings the
+  // deterministic pass already decided are excluded.
+  const decided = new Set<string>([...confirmed, ...refutedMessages]);
+  const llmStage = await runLiveLlmStage(
+    verdicts,
+    signalsByUrl,
+    titleToMessage,
+    decided,
+    artifacts.runDir,
+    state.verbose,
+  );
+  // aiConfirmed is the RENDERING set (badges); it grows to include anomaly titles.
+  const aiConfirmed = new Set<string>(llmStage.aiConfirmed);
+  let aiDisputed = llmStage.aiDisputed;
+  // Only baseDetails-derived AI confirmations count toward the renderedTotal
+  // identity below — anomaly findings render from state.anomalies and are NOT in
+  // baseDetails, so subtracting them would corrupt the unverified tally.
+  const findingAiConfirmedCount = llmStage.aiConfirmed.size;
+
+  // Slice 4 — vision verification of AI-discovered (anomaly) findings.
+  if (state.anomalies.length > 0) {
+    const anomalyStage = await verifyAnomaliesLive(state.anomalies, throttle, artifacts.runDir, state.verbose);
+    for (const title of anomalyStage.aiConfirmed) aiConfirmed.add(title);
+    aiDisputed += anomalyStage.aiDisputed;
+  }
+
   // Count over the FULL rendered set so the banner reconciles with the badges.
   // buildReportMarkdown labels every rendered finding (all severities — LOW and
-  // unmatched included): confirmed → ✓ Verified, everything else → unverified,
-  // refuted → dropped. So total = all prepared findings; unverified is the
-  // remainder after confirmed + refuted. (Mirrors the disk pass, whose total is
-  // also over baseDetails.) Counting over verdicts.length alone (C/H/M only)
-  // would understate the total and under-count the unverified badges shown.
+  // unmatched included): confirmed → ✓ Verified, AI-confirmed → ✓ Verified (AI),
+  // everything else → unverified, refuted → dropped. So total = all prepared
+  // findings; unverified is the remainder after confirmed + ai-confirmed +
+  // refuted. (Mirrors the disk pass, whose total is also over baseDetails.)
   const confirmedCount = confirmed.size;
   const refutedCount = refutedMessages.size;
   const renderedTotal = Object.keys(baseDetails).length;
-  const unverifiedCount = Math.max(0, renderedTotal - confirmedCount - refutedCount);
+  const unverifiedCount = Math.max(0, renderedTotal - confirmedCount - refutedCount - findingAiConfirmedCount);
 
+  const aiNote = aiConfirmed.size > 0 ? ` + ${aiConfirmed.size} AI-confirmed` : '';
+  const disputeNote = aiDisputed > 0 ? `, ${aiDisputed} AI-disputed (kept)` : '';
   console.log(
-    `✓ Live verification: ${confirmedCount} confirmed, ${refutedCount} refuted (dropped), ${unverifiedCount} unverified (of ${renderedTotal}; ${verdicts.length} CRITICAL/HIGH/MEDIUM findings parsed).`,
+    `✓ Live verification: ${confirmedCount} confirmed${aiNote}, ${refutedCount} refuted (dropped)${disputeNote}, ${unverifiedCount} unverified (of ${renderedTotal}; ${verdicts.length} CRITICAL/HIGH/MEDIUM findings parsed).`,
   );
 
   const stamp = `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`;
   const banner =
-    `> **🔎 Live verification pass.** Each CRITICAL/HIGH/MEDIUM issue's first concrete example was **re-fetched live** ` +
+    `> **🔎 Live verification pass.** Each CRITICAL/HIGH/MEDIUM issue's example(s) were **re-fetched live** ` +
     `(${stamp}) and its claim re-checked against the current page — not the crawl-time snapshot. ` +
-    `**${confirmedCount} confirmed**, **${refutedCount} refuted** (dropped as no-longer-true / false positive), ` +
+    `**${confirmedCount} confirmed**${aiConfirmed.size > 0 ? `, **${aiConfirmed.size} confirmed by AI review**` : ''}, **${refutedCount} refuted** (dropped as no-longer-true / false positive), ` +
     `${unverifiedCount} *unverified* — i.e. lower-severity findings (not live-checked), site-level / cross-page claims, multi-page findings whose other pages weren't sampled, or those needing instrumentation a single live load can't provide (not a defect). ` +
-    `Because the live site can change, this report reflects a point in time. Each issue below carries its status.\n`;
+    `The AI review only adds confirmations; it never drops a finding. ` +
+    `Because the live site can change, this report reflects a point in time. Each issue below carries its status.\n` +
+    verdictBreakdownLine(verdicts);
 
   const combinedSuppressed = new Set<string>([...state.suppressed, ...refutedMessages]);
-  const markdown = buildReportMarkdown(artifacts, state.narratives, state.anomalies, combinedSuppressed, { confirmed }, banner, state.noScore);
+  const markdown = buildReportMarkdown(
+    artifacts,
+    state.narratives,
+    state.anomalies,
+    combinedSuppressed,
+    { confirmed, aiConfirmed },
+    banner,
+    state.noScore,
+  );
 
   const mdPath = path.join(artifacts.runDir, 'audit-report.verified.md');
   fs.writeFileSync(mdPath, markdown);
@@ -469,7 +781,13 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   // Capture the dropped findings in a separate report (candidate false positives).
   const refutedEntries: RefutedEntry[] = [...refutedMessages].map((m) => {
     const v = refutedByMessage.get(m);
-    return { title: v?.title ?? m, severity: v?.severity, kind: v?.kind, exampleUrl: v?.exampleUrl, reason: v?.reason ?? 'contradicted by the live page' };
+    return {
+      title: v?.title ?? m,
+      severity: v?.severity,
+      kind: v?.kind,
+      exampleUrl: v?.exampleUrl,
+      reason: v?.reason ?? 'contradicted by the live page',
+    };
   });
   const refutedPath = writeRefutedReport(artifacts.runDir, artifacts.manifest.domain, 'live', refutedEntries);
   if (refutedPath) console.log(`📄 Refuted findings (dropped): ${refutedPath}`);

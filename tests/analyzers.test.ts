@@ -26,15 +26,27 @@ import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
 void describe('SSRF guard', () => {
   void it('flags private/internal/loopback hosts in every IPv4 encoding', () => {
     const privateHosts = [
-      'localhost', 'foo.localhost', 'router.local', 'svc.internal',
-      '127.0.0.1', '10.0.0.5', '172.16.0.1', '172.31.255.255', '192.168.1.1',
+      'localhost',
+      'foo.localhost',
+      'router.local',
+      'svc.internal',
+      '127.0.0.1',
+      '10.0.0.5',
+      '172.16.0.1',
+      '172.31.255.255',
+      '192.168.1.1',
       '169.254.169.254', // cloud metadata
       '100.64.0.1', // CGNAT
       '0.0.0.0',
       '2130706433', // decimal 127.0.0.1
       '0x7f000001', // hex 127.0.0.1
       '0177.0.0.1', // octal-first-octet 127.0.0.1
-      '::1', '::', 'fe80::1', 'fc00::1', 'fd12:3456::1', '::ffff:127.0.0.1',
+      '::1',
+      '::',
+      'fe80::1',
+      'fc00::1',
+      'fd12:3456::1',
+      '::ffff:127.0.0.1',
     ];
     for (const h of privateHosts) {
       assert.strictEqual(isPrivateOrInternalHost(h), true, `${h} should be private`);
@@ -834,7 +846,10 @@ void describe('buildReportMarkdown determinism', () => {
     );
     // The template may still appear in the finding header (it identifies the
     // series), but never as a clickable affected-page link.
-    assert.ok(!md.includes('(https://e.com/insights/page/{N})'), 'templated {N} URL must not be linked as an affected page');
+    assert.ok(
+      !md.includes('(https://e.com/insights/page/{N})'),
+      'templated {N} URL must not be linked as an affected page',
+    );
     assert.ok(md.includes('insights/page/6'), 'real affected pages must still be listed');
   });
 
@@ -913,7 +928,9 @@ void describe('worst-first example ordering', () => {
     assert.strictEqual(exampleMetric('https://e.com/x has Total Blocking Time 3273ms (threshold: 200ms)'), 3273);
     assert.strictEqual(exampleMetric('https://e.com/x: 96% of CSS is unused (5.5 MB of 5.7 MB)'), 96);
     // Byte units normalise so MB outranks KB even though 1.7 < 512 numerically.
-    assert.ok(exampleMetric('https://e.com/x: 1.7 MB of unused code') > exampleMetric('https://e.com/y: 512 KB of unused code'));
+    assert.ok(
+      exampleMetric('https://e.com/x: 1.7 MB of unused code') > exampleMetric('https://e.com/y: 512 KB of unused code'),
+    );
     // Digits inside the URL path must not be mistaken for the metric.
     assert.strictEqual(exampleMetric('https://e.com/5-year-anniversary/'), -Infinity);
   });
@@ -1829,9 +1846,7 @@ void describe('PaginationAnalyzer.analyzeSiteWide — infinite scroll', () => {
     const result = PaginationAnalyzer.analyzeSiteWide(pages as Record<string, PageInfo>);
     // One issue per affected page (count-free, stable message), so the report's
     // occurrence count matches the affected-page list instead of contradicting it.
-    const findings = result.issues.filter((i) =>
-      /infinite scroll without pagination fallback/i.test(i.message ?? ''),
-    );
+    const findings = result.issues.filter((i) => /infinite scroll without pagination fallback/i.test(i.message ?? ''));
     assert.strictEqual(findings.length, 2, 'expected one finding per non-crawlable page');
     // The crawlable page must not appear; both non-crawlable ones must.
     const details = findings.map((f) => f.detail ?? '').join('\n');
@@ -1968,11 +1983,7 @@ void describe('inlineExample', () => {
 // ============================================================
 // Finding verifier (--verify) — re-checks a finding's first example
 // ============================================================
-import {
-  PageIndex,
-  verifyFinding,
-  verifyDetails,
-} from '../lib/phase3/finding-verifier';
+import { PageIndex, verifyFinding, verifyDetails } from '../lib/phase3/finding-verifier';
 import type { IssueDetail as VIssueDetail } from '../lib/phase2/types';
 
 function idx(pages: Record<string, Partial<PageInfo>>): PageIndex {
@@ -1993,7 +2004,8 @@ void describe('finding-verifier', () => {
       'https://e.com/a': { title: 'Shared Title' },
       'https://e.com/b': { title: 'Shared Title' },
     });
-    const ex = 'The title "Shared Title" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
+    const ex =
+      'The title "Shared Title" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
     const r = verifyFinding('Some pages have duplicate title', detail([ex]), pages);
     assert.strictEqual(r.status, 'confirmed');
   });
@@ -2003,7 +2015,8 @@ void describe('finding-verifier', () => {
       'https://e.com/a': { title: 'Title One' },
       'https://e.com/b': { title: 'Title Two' },
     });
-    const ex = 'The title "Title One" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
+    const ex =
+      'The title "Title One" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
     const r = verifyFinding('Duplicate page titles found', detail([ex]), pages);
     assert.strictEqual(r.status, 'refuted');
   });
@@ -2071,10 +2084,19 @@ void describe('finding-verifier', () => {
     const some = idx({ 'https://e.com/x': { imagesWithoutAltCount: 3 } });
     const zero = idx({ 'https://e.com/x': { imagesWithoutAltCount: 0 } });
     const absent = idx({ 'https://e.com/x': {} });
-    assert.strictEqual(verifyFinding('Image links without alt text', detail(['https://e.com/x']), some).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Image links without alt text', detail(['https://e.com/x']), some).status,
+      'confirmed',
+    );
     // 0 / absent → unchecked, NEVER refuted (the count is a broader proxy).
-    assert.strictEqual(verifyFinding('Image links without alt text', detail(['https://e.com/x']), zero).status, 'unchecked');
-    assert.strictEqual(verifyFinding('Image links without alt text', detail(['https://e.com/x']), absent).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Image links without alt text', detail(['https://e.com/x']), zero).status,
+      'unchecked',
+    );
+    assert.strictEqual(
+      verifyFinding('Image links without alt text', detail(['https://e.com/x']), absent).status,
+      'unchecked',
+    );
   });
 
   void it('leaves AI-discovered findings unchecked', () => {
@@ -2091,12 +2113,20 @@ void describe('finding-verifier', () => {
 
   // ── New confirm-only verifiers backed by rich analyzer sub-objects ────────
   void it('confirms empty-anchor from anchorTextData.emptyAnchors, never refutes', () => {
-    const has = idx({ 'https://e.com/x': { anchorTextData: { emptyAnchors: ['/', '/'] } as PageInfo['anchorTextData'] } });
+    const has = idx({
+      'https://e.com/x': { anchorTextData: { emptyAnchors: ['/', '/'] } as PageInfo['anchorTextData'] },
+    });
     const none = idx({ 'https://e.com/x': { anchorTextData: { emptyAnchors: [] } as PageInfo['anchorTextData'] } });
     const absent = idx({ 'https://e.com/x': {} });
     assert.strictEqual(verifyFinding('Empty anchor text', detail(['https://e.com/x']), has).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Links with empty anchor text', detail(['https://e.com/x']), has).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Some pages have links without any text', detail(['https://e.com/x']), has).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Links with empty anchor text', detail(['https://e.com/x']), has).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Some pages have links without any text', detail(['https://e.com/x']), has).status,
+      'confirmed',
+    );
     // confirm-only: 0 / absent → unchecked, NEVER refuted
     assert.strictEqual(verifyFinding('Empty anchor text', detail(['https://e.com/x']), none).status, 'unchecked');
     assert.strictEqual(verifyFinding('Empty anchor text', detail(['https://e.com/x']), absent).status, 'unchecked');
@@ -2107,33 +2137,81 @@ void describe('finding-verifier', () => {
     // keyword, not one page with several H1s. The single-page H1 count (0/1)
     // must not auto-drop it.
     const pages = idx({ 'https://e.com/x': { headings: { h1Count: 1 } as PageInfo['headings'] } });
-    assert.strictEqual(verifyFinding('Multiple pages target the same keyword in their H1', detail(['https://e.com/x']), pages).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Multiple pages target the same keyword in their H1', detail(['https://e.com/x']), pages).status,
+      'unchecked',
+    );
   });
 
   void it('does NOT match other anchor findings as empty-anchor', () => {
     const pages = idx({ 'https://e.com/x': { anchorTextData: { emptyAnchors: [] } as PageInfo['anchorTextData'] } });
-    assert.strictEqual(verifyFinding('Anchor text over-optimization detected', detail(['https://e.com/x']), pages).status, 'unchecked');
-    assert.strictEqual(verifyFinding('Same anchor text links to different pages', detail(['https://e.com/x']), pages).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Anchor text over-optimization detected', detail(['https://e.com/x']), pages).status,
+      'unchecked',
+    );
+    assert.strictEqual(
+      verifyFinding('Same anchor text links to different pages', detail(['https://e.com/x']), pages).status,
+      'unchecked',
+    );
   });
 
   void it('confirms oversized / legacy-format image findings from imageOptimization', () => {
-    const over = idx({ 'https://e.com/x': { imageOptimization: { oversizedImages: [{}], legacyFormats: 0 } as PageInfo['imageOptimization'] } });
-    const legacy = idx({ 'https://e.com/x': { imageOptimization: { oversizedImages: [], legacyFormats: 2 } as PageInfo['imageOptimization'] } });
+    const over = idx({
+      'https://e.com/x': {
+        imageOptimization: { oversizedImages: [{}], legacyFormats: 0 } as PageInfo['imageOptimization'],
+      },
+    });
+    const legacy = idx({
+      'https://e.com/x': {
+        imageOptimization: { oversizedImages: [], legacyFormats: 2 } as PageInfo['imageOptimization'],
+      },
+    });
     // The byte-size `oversizedImages` list backs the "image files larger than
     // recommended" message — NOT the display-scaling one (owned by live verifier).
-    assert.strictEqual(verifyFinding('Pages have image files larger than recommended', detail(['https://e.com/x']), over).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Some images are significantly larger than their display size', detail(['https://e.com/x']), over).status, 'unchecked');
-    assert.strictEqual(verifyFinding('Pages serve images only as JPG/PNG instead of WebP/AVIF', detail(['https://e.com/x']), legacy).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Pages have image files larger than recommended', detail(['https://e.com/x']), over).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Some images are significantly larger than their display size', detail(['https://e.com/x']), over)
+        .status,
+      'unchecked',
+    );
+    assert.strictEqual(
+      verifyFinding('Pages serve images only as JPG/PNG instead of WebP/AVIF', detail(['https://e.com/x']), legacy)
+        .status,
+      'confirmed',
+    );
   });
 
   void it('confirms unused-code / unused-css against codeCoverage, leaves within-bounds unchecked', () => {
-    const heavy = idx({ 'https://e.com/x': { codeCoverage: { js: { unused: 600_000 }, css: { unused: 50_000, ratio: 70 } } as PageInfo['codeCoverage'] } });
-    const light = idx({ 'https://e.com/x': { codeCoverage: { js: { unused: 1_000 }, css: { unused: 1_000, ratio: 5 } } as PageInfo['codeCoverage'] } });
-    assert.strictEqual(verifyFinding('Large amount of unused code', detail(['https://e.com/x']), heavy).status, 'confirmed');
-    assert.strictEqual(verifyFinding('High percentage of unused CSS', detail(['https://e.com/x']), heavy).status, 'confirmed');
+    const heavy = idx({
+      'https://e.com/x': {
+        codeCoverage: { js: { unused: 600_000 }, css: { unused: 50_000, ratio: 70 } } as PageInfo['codeCoverage'],
+      },
+    });
+    const light = idx({
+      'https://e.com/x': {
+        codeCoverage: { js: { unused: 1_000 }, css: { unused: 1_000, ratio: 5 } } as PageInfo['codeCoverage'],
+      },
+    });
+    assert.strictEqual(
+      verifyFinding('Large amount of unused code', detail(['https://e.com/x']), heavy).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('High percentage of unused CSS', detail(['https://e.com/x']), heavy).status,
+      'confirmed',
+    );
     // confirm-only → within bounds stays unchecked, not refuted
-    assert.strictEqual(verifyFinding('Large amount of unused code', detail(['https://e.com/x']), light).status, 'unchecked');
-    assert.strictEqual(verifyFinding('High percentage of unused CSS', detail(['https://e.com/x']), light).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Large amount of unused code', detail(['https://e.com/x']), light).status,
+      'unchecked',
+    );
+    assert.strictEqual(
+      verifyFinding('High percentage of unused CSS', detail(['https://e.com/x']), light).status,
+      'unchecked',
+    );
   });
 
   void it('confirms render-blocking / dom-children / third-party payload from persisted metrics', () => {
@@ -2144,34 +2222,80 @@ void describe('finding-verifier', () => {
         thirdPartyData: { totalSize: 900_000 } as PageInfo['thirdPartyData'],
       },
     });
-    assert.strictEqual(verifyFinding('Some pages have too many render-blocking resources', detail(['https://e.com/x']), p).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Element with too many children', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Some pages have too many render-blocking resources', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Element with too many children', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
     assert.strictEqual(verifyFinding('Excessive DOM size', detail(['https://e.com/x']), p).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Excessive third-party payload', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Excessive third-party payload', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
   });
 
   void it('does NOT match render-blocking THIRD-PARTY scripts as the generic render-blocking kind', () => {
-    const p = idx({ 'https://e.com/x': { resourceOptimization: { renderBlocking: { totalBlocking: 0 } } as PageInfo['resourceOptimization'] } });
+    const p = idx({
+      'https://e.com/x': {
+        resourceOptimization: { renderBlocking: { totalBlocking: 0 } } as PageInfo['resourceOptimization'],
+      },
+    });
     // This finding is about third-party scripts specifically → left for the LLM/CLI pass.
-    assert.strictEqual(verifyFinding('Render-blocking third-party scripts', detail(['https://e.com/x']), p).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Render-blocking third-party scripts', detail(['https://e.com/x']), p).status,
+      'unchecked',
+    );
   });
 
   void it('confirms tracking-before-consent from consentData, never refutes', () => {
-    const has = idx({ 'https://e.com/x': { consentData: { trackingBeforeConsent: ['googletagmanager.com'], cookiesBeforeConsent: [] } as unknown as PageInfo['consentData'] } });
-    const none = idx({ 'https://e.com/x': { consentData: { trackingBeforeConsent: [], cookiesBeforeConsent: [] } as unknown as PageInfo['consentData'] } });
-    assert.strictEqual(verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), has).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), none).status, 'unchecked');
+    const has = idx({
+      'https://e.com/x': {
+        consentData: {
+          trackingBeforeConsent: ['googletagmanager.com'],
+          cookiesBeforeConsent: [],
+        } as unknown as PageInfo['consentData'],
+      },
+    });
+    const none = idx({
+      'https://e.com/x': {
+        consentData: { trackingBeforeConsent: [], cookiesBeforeConsent: [] } as unknown as PageInfo['consentData'],
+      },
+    });
+    assert.strictEqual(
+      verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), has).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Multiple tracking cookies set before consent', detail(['https://e.com/x']), none).status,
+      'unchecked',
+    );
   });
 
   void it('confirms color-contrast AAA vs AA against colorContrastData without cross-matching', () => {
-    const p = idx({ 'https://e.com/x': { colorContrastData: { aaFailures: 5, aaaFailures: 20 } as PageInfo['colorContrastData'] } });
+    const p = idx({
+      'https://e.com/x': { colorContrastData: { aaFailures: 5, aaaFailures: 20 } as PageInfo['colorContrastData'] },
+    });
     // "passes AA but fails AAA" → AAA reader (must NOT hit the AA matcher despite containing "AA")
-    assert.strictEqual(verifyFinding('Color contrast passes AA but fails AAA (20 elements)', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Color contrast passes AA but fails AAA (20 elements)', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
     // "fails WCAG AA" → AA reader
-    assert.strictEqual(verifyFinding('Color contrast fails WCAG AA (5 elements)', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Color contrast fails WCAG AA (5 elements)', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
     // 0 failures → confirm-only stays unchecked
-    const none = idx({ 'https://e.com/x': { colorContrastData: { aaFailures: 0, aaaFailures: 0 } as PageInfo['colorContrastData'] } });
-    assert.strictEqual(verifyFinding('Color contrast passes AA but fails AAA (3 elements)', detail(['https://e.com/x']), none).status, 'unchecked');
+    const none = idx({
+      'https://e.com/x': { colorContrastData: { aaFailures: 0, aaaFailures: 0 } as PageInfo['colorContrastData'] },
+    });
+    assert.strictEqual(
+      verifyFinding('Color contrast passes AA but fails AAA (3 elements)', detail(['https://e.com/x']), none).status,
+      'unchecked',
+    );
   });
 
   void it('confirms SRI / Permissions-Policy / cross-origin / reduced-motion / autocomplete from persisted signals', () => {
@@ -2184,11 +2308,26 @@ void describe('finding-verifier', () => {
         formData: { inputsWithoutAutocomplete: 3 } as PageInfo['formData'],
       },
     });
-    assert.strictEqual(verifyFinding('External scripts missing Subresource Integrity (SRI)', detail(['https://e.com/x']), p).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Missing Permissions-Policy header', detail(['https://e.com/x']), p).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Missing cross-origin isolation headers', detail(['https://e.com/x']), p).status, 'confirmed');
-    assert.strictEqual(verifyFinding('No prefers-reduced-motion CSS support', detail(['https://e.com/x']), p).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Form inputs missing autocomplete attribute', detail(['https://e.com/x']), p).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('External scripts missing Subresource Integrity (SRI)', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Missing Permissions-Policy header', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Missing cross-origin isolation headers', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('No prefers-reduced-motion CSS support', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Form inputs missing autocomplete attribute', detail(['https://e.com/x']), p).status,
+      'confirmed',
+    );
   });
 
   void it('confirms a single-cited "identical title" finding by scanning the full index (exact + truncated)', () => {
@@ -2201,18 +2340,32 @@ void describe('finding-verifier', () => {
     assert.strictEqual(verifyFinding('Some pages have identical titles', detail([ex]), pages).status, 'confirmed');
     // Truncated description quote ("…") matched by prefix across pages
     const dpages = idx({
-      'https://e.com/a': { description: 'EasyCare and Siro show how EasyCoach uses AI to analyze calls and coach reps' },
-      'https://e.com/b': { description: 'EasyCare and Siro show how EasyCoach uses AI to analyze calls and coach reps' },
+      'https://e.com/a': {
+        description: 'EasyCare and Siro show how EasyCoach uses AI to analyze calls and coach reps',
+      },
+      'https://e.com/b': {
+        description: 'EasyCare and Siro show how EasyCoach uses AI to analyze calls and coach reps',
+      },
     });
-    const dex = 'Description "EasyCare and Siro show how EasyCoach uses AI to an..." is duplicated for this page <a href="https://e.com/a">a</a>';
-    assert.strictEqual(verifyFinding('Some pages have identical descriptions', detail([dex]), dpages).status, 'confirmed');
+    const dex =
+      'Description "EasyCare and Siro show how EasyCoach uses AI to an..." is duplicated for this page <a href="https://e.com/a">a</a>';
+    assert.strictEqual(
+      verifyFinding('Some pages have identical descriptions', detail([dex]), dpages).status,
+      'confirmed',
+    );
   });
 
   void it('reads too-many-h2 from the persisted h2Count field (confirm-only)', () => {
     const over = idx({ 'https://e.com/x': { headings: { h2Count: 17 } as PageInfo['headings'] } });
     const under = idx({ 'https://e.com/x': { headings: { h2Count: 2 } as PageInfo['headings'] } });
-    assert.strictEqual(verifyFinding('Some pages have more than 10 h2 tags', detail(['https://e.com/x']), over).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Some pages have more than 10 h2 tags', detail(['https://e.com/x']), under).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Some pages have more than 10 h2 tags', detail(['https://e.com/x']), over).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Some pages have more than 10 h2 tags', detail(['https://e.com/x']), under).status,
+      'unchecked',
+    );
   });
 
   void it('confirms link-graph findings (orphan / unreachable / click-depth / low-equity) from SiteData', () => {
@@ -2228,18 +2381,38 @@ void describe('finding-verifier', () => {
         ['https://e.com/low', ['https://e.com/a', 'https://e.com/b']],
         ['https://e.com/orphan', []],
       ]),
-      depthFromHome: new Map<string, number>([['https://e.com', 0], ['https://e.com/deep', 22]]),
+      depthFromHome: new Map<string, number>([
+        ['https://e.com', 0],
+        ['https://e.com/deep', 22],
+      ]),
       robotsDisallow: ['/admin/*'],
       robotsUserAgents: ['*'],
       sitemapUrls: new Set<string>(),
       sitemapCapped: false,
     };
-    assert.strictEqual(verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages, site).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Page unreachable from homepage via internal links', detail(['https://e.com/orphan']), pages, site).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Page is more than 4 clicks from homepage', detail(['https://e.com/deep']), pages, site).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Page has very low internal link equity', detail(['https://e.com/low']), pages, site).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages, site)
+        .status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Page unreachable from homepage via internal links', detail(['https://e.com/orphan']), pages, site)
+        .status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Page is more than 4 clicks from homepage', detail(['https://e.com/deep']), pages, site).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Page has very low internal link equity', detail(['https://e.com/low']), pages, site).status,
+      'confirmed',
+    );
     // No SiteData → unchecked, never a false drop
-    assert.strictEqual(verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Orphan page (no internal links point to it)', detail(['https://e.com/orphan']), pages).status,
+      'unchecked',
+    );
   });
 
   void it('confirms robots.txt findings from SiteData', () => {
@@ -2252,12 +2425,24 @@ void describe('finding-verifier', () => {
       sitemapUrls: new Set<string>(),
       sitemapCapped: false,
     };
-    assert.strictEqual(verifyFinding('Sensitive paths exposed in robots.txt', detail(['/admin']), pages, site).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Pattern matching characters used in robots.txt', detail(['/admin/*']), pages, site).status, 'confirmed');
-    assert.strictEqual(verifyFinding('No explicit AI crawler rules in robots.txt', detail(['x']), pages, site).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Sensitive paths exposed in robots.txt', detail(['/admin']), pages, site).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Pattern matching characters used in robots.txt', detail(['/admin/*']), pages, site).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('No explicit AI crawler rules in robots.txt', detail(['x']), pages, site).status,
+      'confirmed',
+    );
     // When GPTBot IS named → the AI-rules finding is left unchecked (not confirmed)
     const withAi = { ...site, robotsUserAgents: ['*', 'gptbot'] };
-    assert.strictEqual(verifyFinding('No explicit AI crawler rules in robots.txt', detail(['x']), pages, withAi).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('No explicit AI crawler rules in robots.txt', detail(['x']), pages, withAi).status,
+      'unchecked',
+    );
   });
 
   void it('confirms sitemap findings (uncrawled URLs + indexable-not-in-sitemap count)', () => {
@@ -2274,20 +2459,45 @@ void describe('finding-verifier', () => {
       sitemapCapped: false,
     };
     // Example cites an uncrawled sitemap URL
-    assert.strictEqual(verifyFinding('Sitemap URLs were not successfully crawled', detail(['https://e.com/ghost']), pages, site).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Sitemap URLs were not successfully crawled', detail(['https://e.com/ghost']), pages, site).status,
+      'confirmed',
+    );
     // Count-only finding (no URL) → site-level fallback counts /b
-    assert.strictEqual(verifyFinding('Indexable pages missing from sitemap', detail(['45 indexable page(s) are not listed in the sitemap']), pages, site).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding(
+        'Indexable pages missing from sitemap',
+        detail(['45 indexable page(s) are not listed in the sitemap']),
+        pages,
+        site,
+      ).status,
+      'confirmed',
+    );
     // …but when the sitemap set may be capped/incomplete, the count-only
     // fallback must stay unchecked rather than risk a false "not listed".
     const cappedSite = { ...site, sitemapCapped: true };
-    assert.strictEqual(verifyFinding('Indexable pages missing from sitemap', detail(['45 indexable page(s) are not listed in the sitemap']), pages, cappedSite).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding(
+        'Indexable pages missing from sitemap',
+        detail(['45 indexable page(s) are not listed in the sitemap']),
+        pages,
+        cappedSite,
+      ).status,
+      'unchecked',
+    );
   });
 
   void it('confirms too-many-fonts from fontData.totalFonts', () => {
     const many = idx({ 'https://e.com/x': { fontData: { totalFonts: 7 } as PageInfo['fontData'] } });
     const few = idx({ 'https://e.com/x': { fontData: { totalFonts: 2 } as PageInfo['fontData'] } });
-    assert.strictEqual(verifyFinding('Too many font files loaded', detail(['https://e.com/x']), many).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Too many font files loaded', detail(['https://e.com/x']), few).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Too many font files loaded', detail(['https://e.com/x']), many).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Too many font files loaded', detail(['https://e.com/x']), few).status,
+      'unchecked',
+    );
   });
 
   void it('verifyDetails partitions findings into confirmed / refuted / unchecked', () => {
@@ -2334,26 +2544,44 @@ void describe('finding-verifier — persisted-field readers', () => {
 
   void it('confirms missing-canonical on an analyzed page with no canonical field', () => {
     const pages = idx({ 'https://e.com/x': { ...analyzed } });
-    assert.strictEqual(verifyFinding('Canonicals are not set for some pages', detail(['https://e.com/x']), pages).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Canonicals are not set for some pages', detail(['https://e.com/x']), pages).status,
+      'confirmed',
+    );
   });
 
   void it('still UNCHECKED when the page was not analyzed (no indexability)', () => {
     const pages = idx({ 'https://e.com/x': {} });
-    assert.strictEqual(verifyFinding('Canonicals are not set for some pages', detail(['https://e.com/x']), pages).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Canonicals are not set for some pages', detail(['https://e.com/x']), pages).status,
+      'unchecked',
+    );
   });
 
   void it('confirms missing-description on an analyzed page with no description', () => {
     const pages = idx({ 'https://e.com/x': { ...analyzed } });
-    assert.strictEqual(verifyFinding('Description meta tag is missing', detail(['https://e.com/x']), pages).status, 'confirmed');
+    assert.strictEqual(
+      verifyFinding('Description meta tag is missing', detail(['https://e.com/x']), pages).status,
+      'confirmed',
+    );
   });
 
   void it('reads noindex from indexability.hasNoindexTag (confirm) and can refute', () => {
     const yes = idx({ 'https://e.com/x': { indexability: { hasNoindexTag: true } } as Partial<PageInfo> });
     const no = idx({ 'https://e.com/x': { indexability: { hasNoindexTag: false } } as Partial<PageInfo> });
     const unknown = idx({ 'https://e.com/x': {} });
-    assert.strictEqual(verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), yes).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), no).status, 'refuted');
-    assert.strictEqual(verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), unknown).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), yes).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), no).status,
+      'refuted',
+    );
+    assert.strictEqual(
+      verifyFinding('Pages in sitemap are marked noindex', detail(['https://e.com/x']), unknown).status,
+      'unchecked',
+    );
   });
 
   void it('reads redirect from hasRedirects (confirm) and refutes when not redirecting', () => {
@@ -2364,8 +2592,12 @@ void describe('finding-verifier — persisted-field readers', () => {
   });
 
   void it('verifies soft-404 from the persisted soft404 block', () => {
-    const yes = idx({ 'https://e.com/x': { soft404: { isSoft404: true, confidence: 80, signals: [] } } as Partial<PageInfo> });
-    const no = idx({ 'https://e.com/x': { soft404: { isSoft404: false, confidence: 0, signals: [] } } as Partial<PageInfo> });
+    const yes = idx({
+      'https://e.com/x': { soft404: { isSoft404: true, confidence: 80, signals: [] } } as Partial<PageInfo>,
+    });
+    const no = idx({
+      'https://e.com/x': { soft404: { isSoft404: false, confidence: 0, signals: [] } } as Partial<PageInfo>,
+    });
     assert.strictEqual(verifyFinding('Soft 404 page', detail(['https://e.com/x']), yes).status, 'confirmed');
     assert.strictEqual(verifyFinding('Soft 404 page', detail(['https://e.com/x']), no).status, 'refuted');
   });
@@ -2376,38 +2608,77 @@ void describe('finding-verifier — threshold & boolean verifiers', () => {
     const bad = idx({ 'https://e.com/x': { LCP: 4000 } });
     const ok = idx({ 'https://e.com/x': { LCP: 1800 } });
     const none = idx({ 'https://e.com/x': {} });
-    assert.strictEqual(verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), bad).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), ok).status, 'refuted');
-    assert.strictEqual(verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), none).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), bad).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), ok).status,
+      'refuted',
+    );
+    assert.strictEqual(
+      verifyFinding('Some pages have LCP more than 2500ms', detail(['https://e.com/x']), none).status,
+      'unchecked',
+    );
   });
 
   void it('does NOT match a non-threshold metric mention ("LCP image not preloaded")', () => {
     const pages = idx({ 'https://e.com/x': { LCP: 1000 } });
-    assert.strictEqual(verifyFinding('LCP image not preloaded', detail(['https://e.com/x']), pages).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('LCP image not preloaded', detail(['https://e.com/x']), pages).status,
+      'unchecked',
+    );
   });
 
   void it('verifies title/description length against the same bar the analyzer used', () => {
     const longTitle = idx({ 'https://e.com/x': { titleLength: 72 } });
     const shortTitle = idx({ 'https://e.com/x': { titleLength: 20 } });
-    assert.strictEqual(verifyFinding('Some pages have titles that are too long', detail(['https://e.com/x']), longTitle).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Some pages have titles that are too long', detail(['https://e.com/x']), shortTitle).status, 'refuted');
+    assert.strictEqual(
+      verifyFinding('Some pages have titles that are too long', detail(['https://e.com/x']), longTitle).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Some pages have titles that are too long', detail(['https://e.com/x']), shortTitle).status,
+      'refuted',
+    );
     // "too short" must not fire on a 0-length (that's "missing", a different finding).
     const zero = idx({ 'https://e.com/x': { titleLength: 0 } });
-    assert.strictEqual(verifyFinding('Some pages have titles that are too short', detail(['https://e.com/x']), zero).status, 'refuted');
+    assert.strictEqual(
+      verifyFinding('Some pages have titles that are too short', detail(['https://e.com/x']), zero).status,
+      'refuted',
+    );
   });
 
   void it('thin content is confirm-only (never refutes — the analyzer bar varies)', () => {
     const thin = idx({ 'https://e.com/x': { contentQuality: { wordCount: 50 } as PageInfo['contentQuality'] } });
     const fat = idx({ 'https://e.com/x': { contentQuality: { wordCount: 1200 } as PageInfo['contentQuality'] } });
-    assert.strictEqual(verifyFinding('Page has very thin content', detail(['https://e.com/x']), thin).status, 'confirmed');
-    assert.strictEqual(verifyFinding('Page has very thin content', detail(['https://e.com/x']), fat).status, 'unchecked');
+    assert.strictEqual(
+      verifyFinding('Page has very thin content', detail(['https://e.com/x']), thin).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyFinding('Page has very thin content', detail(['https://e.com/x']), fat).status,
+      'unchecked',
+    );
   });
 
   void it('verifies console errors and per-page broken outbound links', () => {
-    const errs = idx({ 'https://e.com/x': { consoleAnalysis: { errorCount: 3, warningCount: 0 } as PageInfo['consoleAnalysis'] } });
-    assert.strictEqual(verifyFinding('JavaScript console errors detected', detail(['https://e.com/x']), errs).status, 'confirmed');
-    const broken = idx({ 'https://e.com/x': { outboundLinkHealth: { broken: [{ url: 'x' }] } as unknown as PageInfo['outboundLinkHealth'] } });
-    assert.strictEqual(verifyFinding('Page has 2 broken outbound link(s)', detail(['https://e.com/x']), broken).status, 'confirmed');
+    const errs = idx({
+      'https://e.com/x': { consoleAnalysis: { errorCount: 3, warningCount: 0 } as PageInfo['consoleAnalysis'] },
+    });
+    assert.strictEqual(
+      verifyFinding('JavaScript console errors detected', detail(['https://e.com/x']), errs).status,
+      'confirmed',
+    );
+    const broken = idx({
+      'https://e.com/x': {
+        outboundLinkHealth: { broken: [{ url: 'x' }] } as unknown as PageInfo['outboundLinkHealth'],
+      },
+    });
+    assert.strictEqual(
+      verifyFinding('Page has 2 broken outbound link(s)', detail(['https://e.com/x']), broken).status,
+      'confirmed',
+    );
   });
 });
 
@@ -2419,7 +2690,8 @@ import { buildPageSignals, collectUncheckedContexts } from '../lib/phase3/findin
 
 void describe('llm finding-verify parsing', () => {
   void it('keeps only known indices and normalizes unknown verdicts to unsure', () => {
-    const raw = '```json\n{"verdicts":[{"index":0,"verdict":"confirmed","reason":"ok"},{"index":1,"verdict":"weird"},{"index":9,"verdict":"refuted"}]}\n```';
+    const raw =
+      '```json\n{"verdicts":[{"index":0,"verdict":"confirmed","reason":"ok"},{"index":1,"verdict":"weird"},{"index":9,"verdict":"refuted"}]}\n```';
     const out = parseLlmVerdicts(raw, [0, 1]);
     assert.strictEqual(out.length, 2);
     assert.strictEqual(out[0].verdict, 'confirmed');
@@ -2434,7 +2706,11 @@ void describe('llm finding-verify parsing', () => {
 
   void it('extractCliResult unwraps the --output-format json envelope and tolerates raw text', () => {
     // CLI JSON envelope: the assistant text lives in `.result`.
-    const env = JSON.stringify({ type: 'result', result: '{"verdicts":[{"index":0,"verdict":"confirmed"}]}', is_error: false });
+    const env = JSON.stringify({
+      type: 'result',
+      result: '{"verdicts":[{"index":0,"verdict":"confirmed"}]}',
+      is_error: false,
+    });
     assert.ok(extractCliResult(env).includes('"verdicts"'));
     // Verdicts parse straight out of the unwrapped result.
     assert.strictEqual(parseLlmVerdicts(extractCliResult(env), [0])[0].verdict, 'confirmed');
@@ -2459,12 +2735,22 @@ void describe('llm finding-verify context collection', () => {
     const idxObj = idx({ 'https://e.com/x': { status: 200, titleLength: 40 } });
     const details: Record<string, P2IssueDetail> = {
       'Content may lack topical focus': { severity: 'low', count: 1, examples: ['https://e.com/x'] }, // no verifier → unchecked
-      'Duplicate page titles found': { severity: 'high', count: 2, examples: ['t "A" used on 2: https://e.com/x https://e.com/y'] },
+      'Duplicate page titles found': {
+        severity: 'high',
+        count: 2,
+        examples: ['t "A" used on 2: https://e.com/x https://e.com/y'],
+      },
     };
     const summary = verifyDetails(details, idxObj);
     const ctxs = collectUncheckedContexts(details, summary.results, idxObj);
-    assert.ok(ctxs.some((c) => c.key === 'Content may lack topical focus'), 'unchecked finding is collected');
-    assert.ok(ctxs.every((c) => c.message && c.example), 'each context has message + example');
+    assert.ok(
+      ctxs.some((c) => c.key === 'Content may lack topical focus'),
+      'unchecked finding is collected',
+    );
+    assert.ok(
+      ctxs.every((c) => c.message && c.example),
+      'each context has message + example',
+    );
   });
 });
 
@@ -2598,18 +2884,60 @@ void describe('live-verifier: parseReportFindings — scan bounds & exclusions',
   });
 });
 
-import { checkFindingSignals, brokenOutboundVerdict, titleDescriptionVerdict, sharedTitleKeyword, resolveSiteOrigin, cannibalisationElement, type LiveSignals } from '../lib/phase3/live-verifier';
+import {
+  checkFindingSignals,
+  brokenOutboundVerdict,
+  titleDescriptionVerdict,
+  sharedTitleKeyword,
+  resolveSiteOrigin,
+  cannibalisationElement,
+  type LiveSignals,
+} from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: checker refute contract', () => {
   // A clean baseline page (no defects present at load).
   const base: LiveSignals = {
-    url: 'https://x.example/', finalUrl: 'https://x.example/', status: 200, ttfbMs: 100,
-    htmlBytes: 1000, totalBytes: 1000, totalRequests: 1, title: 'T', description: 'd', canonical: 'https://x.example/',
-    h1Count: 1, iframeCount: 0, wordCount: 800, semanticRatio: 0.5, emptyAnchorCount: 0, inputsWithoutAutocomplete: 0,
-    scriptsNoSri: 0, maxChildren: 5, jpgPngImages: 0, modernImages: 2, renderBlockingTotal: 0, renderBlockingThirdParty: 0,
-    thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0, adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0,
-    clsValue: 0, tbtMs: 0, unusedCssRatio: -1, unusedJsRatio: -1, preConsentTrackingCookies: 0, contrastViolations: -1,
-    mainCount: 1, resourceHintCount: 2, privacyLinkCount: 1, tlsMs: 50, eeatSignals: 2,
+    url: 'https://x.example/',
+    finalUrl: 'https://x.example/',
+    status: 200,
+    ttfbMs: 100,
+    htmlBytes: 1000,
+    totalBytes: 1000,
+    totalRequests: 1,
+    title: 'T',
+    description: 'd',
+    canonical: 'https://x.example/',
+    h1Count: 1,
+    iframeCount: 0,
+    wordCount: 800,
+    semanticRatio: 0.5,
+    emptyAnchorCount: 0,
+    inputsWithoutAutocomplete: 0,
+    scriptsNoSri: 0,
+    maxChildren: 5,
+    jpgPngImages: 0,
+    modernImages: 2,
+    renderBlockingTotal: 0,
+    renderBlockingThirdParty: 0,
+    thirdPartyOrigins: 0,
+    thirdPartyRequests: 0,
+    thirdPartyBytes: 0,
+    adScriptBytes: 0,
+    largestImageBytes: 0,
+    oversizedImages: 0,
+    clsValue: 0,
+    tbtMs: 0,
+    unusedCssRatio: -1,
+    unusedJsRatio: -1,
+    preConsentTrackingCookies: 0,
+    contrastViolations: -1,
+    mainCount: 1,
+    resourceHintCount: 2,
+    privacyLinkCount: 1,
+    tlsMs: 50,
+    eeatSignals: 2,
+    headers: {},
+    htmlLang: 'en',
   };
 
   void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
@@ -2618,7 +2946,11 @@ void describe('live-verifier: checker refute contract', () => {
   });
 
   void it('autocomplete confirms when inputs without autocomplete are present at load', () => {
-    const r = checkFindingSignals('Form inputs missing autocomplete attribute', { ...base, inputsWithoutAutocomplete: 4 }, 1);
+    const r = checkFindingSignals(
+      'Form inputs missing autocomplete attribute',
+      { ...base, inputsWithoutAutocomplete: 4 },
+      1,
+    );
     assert.strictEqual(r.status, 'confirmed');
   });
 
@@ -2636,20 +2968,49 @@ void describe('live-verifier: checker refute contract', () => {
   // ---- registry-gap closers: every category-A finding kind is now OWNED ----
 
   void it('title-length confirms a too-short title and refutes one within range', () => {
-    assert.strictEqual(checkFindingSignals('Some pages have titles that are too short', { ...base, title: 'short' }, 1).status, 'confirmed');
-    assert.strictEqual(checkFindingSignals('Some pages have titles that are too short', { ...base, title: 'A perfectly adequate descriptive page title' }, 1).status, 'refuted');
+    assert.strictEqual(
+      checkFindingSignals('Some pages have titles that are too short', { ...base, title: 'short' }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some pages have titles that are too short',
+        { ...base, title: 'A perfectly adequate descriptive page title' },
+        1,
+      ).status,
+      'refuted',
+    );
   });
 
   void it('description-length confirms a too-long description and refutes one within range', () => {
-    assert.strictEqual(checkFindingSignals('Some pages have descriptions that are too long', { ...base, description: 'x'.repeat(365) }, 1).status, 'confirmed');
-    assert.strictEqual(checkFindingSignals('Some pages have descriptions that are too long', { ...base, description: 'y'.repeat(140) }, 1).status, 'refuted');
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some pages have descriptions that are too long',
+        { ...base, description: 'x'.repeat(365) },
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some pages have descriptions that are too long',
+        { ...base, description: 'y'.repeat(140) },
+        1,
+      ).status,
+      'refuted',
+    );
   });
 
   void it('length checkers do NOT own other "too long" findings (URL/headline/manifest) — locks matcher scope vs future wording drift', () => {
     // These real corpus messages contain "too long" but neither "title" nor
     // "description", so they must fall through, never be refuted against the
     // page's title/description length.
-    for (const t of ['Article headline too long for rich results', 'Some URLs are too long', 'Manifest name too long', 'URL is too long (120 chars, max recommended: 100)']) {
+    for (const t of [
+      'Article headline too long for rich results',
+      'Some URLs are too long',
+      'Manifest name too long',
+      'URL is too long (120 chars, max recommended: 100)',
+    ]) {
       const r = checkFindingSignals(t, { ...base, title: 'short', description: 'x'.repeat(400) }, 1);
       assert.notStrictEqual(r.status, 'refuted', `"${t}" must not be refuted by a length checker`);
       assert.match(r.reason, /no live checker/i, `"${t}" should not route to title/description-length`);
@@ -2657,14 +3018,23 @@ void describe('live-verifier: checker refute contract', () => {
   });
 
   void it('missing-main confirms when no <main> landmark and refutes when present', () => {
-    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(
+      checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status,
+      'confirmed',
+    );
     assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 1 }, 1).status, 'refuted');
   });
 
   void it('missing-main matches the <main> titles but NOT <nav>/<header> landmark titles (which it must not refute against mainCount)', () => {
     // Real report titles that SHOULD route to the <main> checker.
-    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status, 'confirmed');
-    assert.strictEqual(checkFindingSignals('Many pages missing <main> landmark', { ...base, mainCount: 0 }, 1).status, 'confirmed');
+    assert.strictEqual(
+      checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Many pages missing <main> landmark', { ...base, mainCount: 0 }, 1).status,
+      'confirmed',
+    );
     // A <nav>/<header> landmark finding, or one whose text merely contains "main"
     // as a substring (FAQPage missing mainEntity), must NOT be owned by
     // missing-main — a present <main> would otherwise falsely refute (drop) it.
@@ -2676,12 +3046,21 @@ void describe('live-verifier: checker refute contract', () => {
   });
 
   void it('privacy-link confirms when absent and refutes when present', () => {
-    assert.strictEqual(checkFindingSignals('No privacy policy link found', { ...base, privacyLinkCount: 0 }, 1).status, 'confirmed');
-    assert.strictEqual(checkFindingSignals('No privacy policy link found', { ...base, privacyLinkCount: 1 }, 1).status, 'refuted');
+    assert.strictEqual(
+      checkFindingSignals('No privacy policy link found', { ...base, privacyLinkCount: 0 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('No privacy policy link found', { ...base, privacyLinkCount: 1 }, 1).status,
+      'refuted',
+    );
   });
 
   void it('a multi-occurrence missing-main refute is downgraded to unverified (only the first page was checked)', () => {
-    assert.strictEqual(checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 1 }, 19).status, 'unverified');
+    assert.strictEqual(
+      checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 1 }, 19).status,
+      'unverified',
+    );
   });
 
   void it('tls is confirm-only: slow handshake confirms, fast/reused stays unverified (never refutes)', () => {
@@ -2691,13 +3070,25 @@ void describe('live-verifier: checker refute contract', () => {
   });
 
   void it('resource-hints (site-wide page) confirms when the homepage has none, stays unverified when present', () => {
-    assert.strictEqual(checkFindingSignals('Most pages lack resource hints', { ...base, resourceHintCount: 0 }, 1).status, 'confirmed');
-    assert.strictEqual(checkFindingSignals('Most pages lack resource hints', { ...base, resourceHintCount: 3 }, 1).status, 'unverified');
+    assert.strictEqual(
+      checkFindingSignals('Most pages lack resource hints', { ...base, resourceHintCount: 0 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Most pages lack resource hints', { ...base, resourceHintCount: 3 }, 1).status,
+      'unverified',
+    );
   });
 
   void it('eeat (site-wide page) confirms when no signals on the homepage, stays unverified otherwise', () => {
-    assert.strictEqual(checkFindingSignals('Low E-E-A-T signals across site', { ...base, eeatSignals: 0 }, 1).status, 'confirmed');
-    assert.strictEqual(checkFindingSignals('Low E-E-A-T signals across site', { ...base, eeatSignals: 3 }, 1).status, 'unverified');
+    assert.strictEqual(
+      checkFindingSignals('Low E-E-A-T signals across site', { ...base, eeatSignals: 0 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Low E-E-A-T signals across site', { ...base, eeatSignals: 3 }, 1).status,
+      'unverified',
+    );
   });
 
   void it('cross-page topic aggregates are OWNED (unverified with reason), not a "no live checker" gap', () => {
@@ -2721,9 +3112,24 @@ void describe('live-verifier: checker refute contract', () => {
       'Missing `<main>` element',
       'High-opportunity content gaps identified',
       'Slow TLS negotiation',
+      // Slice 2 — header / robots kinds must all be owned (never the fallback).
+      'Page blocked via X-Robots-Tag: noindex (HTTP header)',
+      'Missing Permissions-Policy header',
+      'Missing cross-origin isolation headers',
+      'Server technology disclosed in response headers',
+      'Page uses Vary: User-Agent (dynamic serving)',
+      'Content-Language header mismatches html lang attribute',
+      'Page served without compression',
+      'Brotli compression not detected',
+      'No explicit AI crawler rules in robots.txt',
+      'AI crawlers blocked in robots.txt',
     ];
     for (const t of titles) {
-      assert.doesNotMatch(checkFindingSignals(t, base, 1).reason, /no live checker for this finding kind/i, `"${t}" should be owned by a checker`);
+      assert.doesNotMatch(
+        checkFindingSignals(t, base, 1).reason,
+        /no live checker for this finding kind/i,
+        `"${t}" should be owned by a checker`,
+      );
     }
   });
 });
@@ -2752,7 +3158,13 @@ void describe('live-verifier: registry-gap pure helpers', () => {
   });
 
   void it('resolveSiteOrigin picks the most-cited on-site origin, ignoring external links', () => {
-    const f = (urls: string[]): ReportFinding => ({ title: 't', severity: 'HIGH', count: 1, exampleUrl: urls[0], exampleUrls: urls });
+    const f = (urls: string[]): ReportFinding => ({
+      title: 't',
+      severity: 'HIGH',
+      count: 1,
+      exampleUrl: urls[0],
+      exampleUrls: urls,
+    });
     const origin = resolveSiteOrigin([
       f(['https://site.com/a', 'https://site.com/b']),
       f(['https://site.com/c']),
@@ -2847,8 +3259,12 @@ void describe('buildReportMarkdown screenshot embedding', () => {
   void it('output is identical regardless of evidence-key insertion order', () => {
     const msg = 'Canonicals are not set for some pages';
     const reversed = Object.fromEntries(Object.entries(evidence).reverse());
-    const fwd = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), evidence));
-    const rev = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), reversed));
+    const fwd = buildReportMarkdown(
+      withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), evidence),
+    );
+    const rev = buildReportMarkdown(
+      withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), reversed),
+    );
     assert.strictEqual(fwd, rev);
   });
 
@@ -2862,8 +3278,12 @@ void describe('buildReportMarkdown screenshot embedding', () => {
       zzz_dir: { url: 'https://example.com/about/', files: ['screenshot.mobile.png', 'screenshot.desktop.png'] },
     };
     const reversed = Object.fromEntries(Object.entries(collide).reverse());
-    const fwd = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), collide));
-    const rev = buildReportMarkdown(withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), reversed));
+    const fwd = buildReportMarkdown(
+      withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), collide),
+    );
+    const rev = buildReportMarkdown(
+      withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), reversed),
+    );
     assert.strictEqual(fwd, rev, 'collision pick is insertion-order independent');
     // The lexicographically-first dir key wins, in either order.
     assert.match(fwd, /src="evidence\/aaa_dir\/screenshot\.mobile\.png"/);
@@ -2871,10 +3291,21 @@ void describe('buildReportMarkdown screenshot embedding', () => {
   });
 });
 
-import { verifySitemapMembership, verifyReachability, type LiveSite, type ReportFinding } from '../lib/phase3/live-verifier';
+import {
+  verifySitemapMembership,
+  verifyReachability,
+  type LiveSite,
+  type ReportFinding,
+} from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: site-level verifiers', () => {
-  const f = (title: string, url: string): ReportFinding => ({ title, severity: 'HIGH', count: 1, exampleUrl: url, exampleUrls: [url] });
+  const f = (title: string, url: string): ReportFinding => ({
+    title,
+    severity: 'HIGH',
+    count: 1,
+    exampleUrl: url,
+    exampleUrls: [url],
+  });
   const site: LiveSite = {
     sitemapUrls: new Set(['https://e.com/a']),
     sitemapCapped: false,
@@ -2883,8 +3314,14 @@ void describe('live-verifier: site-level verifiers', () => {
   };
 
   void it('sitemap: cited page absent from sitemap → confirmed; present → refuted', () => {
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/orphan'), site).status, 'confirmed');
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/a'), site).status, 'refuted');
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/orphan'), site).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/a'), site).status,
+      'refuted',
+    );
   });
 
   void it('reachability: unreachable → confirmed; reachable → refuted', () => {
@@ -2898,13 +3335,57 @@ void describe('live-verifier: site-level verifiers', () => {
   });
 
   void it('sitemap: no sitemap fetched → unverified', () => {
-    const empty: LiveSite = { sitemapUrls: new Set(), sitemapCapped: false, reachable: new Set(), reachabilityCapped: false };
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/x'), empty).status, 'unverified');
+    const empty: LiveSite = {
+      sitemapUrls: new Set(),
+      sitemapCapped: false,
+      reachable: new Set(),
+      reachabilityCapped: false,
+    };
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/x'), empty).status,
+      'unverified',
+    );
   });
 });
 
-import { crawlProfileToThrottle, firstExampleUrl, writeRefutedReport, loadPhase2State } from '../lib/phase3/verify-runner';
+import {
+  crawlProfileToThrottle,
+  firstExampleUrl,
+  writeRefutedReport,
+  loadPhase2State,
+  verdictBreakdownLine,
+} from '../lib/phase3/verify-runner';
 import { NETWORK_CONDITIONS, CPU_CONDITIONS } from '../lib/constants';
+import type { LiveVerdict } from '../lib/phase3/live-verifier';
+
+void describe('phase3: verdictBreakdownLine (Slice 0 taxonomy)', () => {
+  const v = (status: LiveVerdict['status'], reasonCode: LiveVerdict['reasonCode']): LiveVerdict => ({
+    title: 't',
+    severity: 'HIGH',
+    status,
+    reason: 'r',
+    reasonCode,
+    confidence: 'medium',
+    kind: 'k',
+  });
+
+  void it('breaks the unverified set down by reason code, most-common first', () => {
+    const line = verdictBreakdownLine([
+      v('confirmed', 'confirmed'),
+      v('unverified', 'site-level'),
+      v('unverified', 'site-level'),
+      v('unverified', 'volatile'),
+    ]);
+    assert.match(line, /2 site-level \/ cross-page/);
+    assert.match(line, /1 volatile signal/);
+    assert.ok(line.indexOf('site-level') < line.indexOf('volatile'), 'most common category comes first');
+    assert.ok(!/confirmed/.test(line), 'confirmed findings are not part of the unverified breakdown');
+  });
+
+  void it('returns empty string when nothing is unverified', () => {
+    assert.strictEqual(verdictBreakdownLine([v('confirmed', 'confirmed'), v('refuted', 'refuted')]), '');
+  });
+});
 
 void describe('phase3: phase2-state.json boundary', () => {
   void it('round-trips the Phase 2 render state (suppression, narratives, anomalies, noScore)', () => {
@@ -2914,7 +3395,16 @@ void describe('phase3: phase2-state.json boundary', () => {
       generatedAt: '2026-06-04T00:00:00.000Z',
       suppressed: ['Duplicate page titles found'],
       narratives: { seo: 'Anchored narrative.' },
-      anomalies: [{ section: 'ux', title: 'Dead button', severity: 'high', url: 'https://e.com/', evidence: 'e', recommendation: 'r' }],
+      anomalies: [
+        {
+          section: 'ux',
+          title: 'Dead button',
+          severity: 'high',
+          url: 'https://e.com/',
+          evidence: 'e',
+          recommendation: 'r',
+        },
+      ],
       noScore: true,
     };
     fs.writeFileSync(path.join(dir, 'phase2-state.json'), JSON.stringify(state));
@@ -2928,15 +3418,24 @@ void describe('phase3: phase2-state.json boundary', () => {
     assert.strictEqual(loadPhase2State(dir), null, 'malformed JSON');
     fs.writeFileSync(path.join(dir, 'phase2-state.json'), JSON.stringify({ version: 1, narratives: {} }));
     assert.strictEqual(loadPhase2State(dir), null, 'suppressed must be an array');
-    fs.writeFileSync(path.join(dir, 'phase2-state.json'), JSON.stringify({ version: 2, suppressed: [], narratives: {}, anomalies: [], noScore: false }));
+    fs.writeFileSync(
+      path.join(dir, 'phase2-state.json'),
+      JSON.stringify({ version: 2, suppressed: [], narratives: {}, anomalies: [], noScore: false }),
+    );
     assert.strictEqual(loadPhase2State(dir), null, 'unknown version degrades to the absent-state fallback');
   });
 });
 
 void describe('phase3: refuted-findings report', () => {
   void it('firstExampleUrl extracts the first real URL and skips templated {N} series keys', () => {
-    assert.strictEqual(firstExampleUrl(['The page <a href="https://e.com/x">x</a> has a short title']), 'https://e.com/x');
-    assert.strictEqual(firstExampleUrl(['[https://e.com/insights/page/{N}](https://e.com/insights/page/{N})', 'https://e.com/real']), 'https://e.com/real');
+    assert.strictEqual(
+      firstExampleUrl(['The page <a href="https://e.com/x">x</a> has a short title']),
+      'https://e.com/x',
+    );
+    assert.strictEqual(
+      firstExampleUrl(['[https://e.com/insights/page/{N}](https://e.com/insights/page/{N})', 'https://e.com/real']),
+      'https://e.com/real',
+    );
     assert.strictEqual(firstExampleUrl(['no url here']), undefined);
     assert.strictEqual(firstExampleUrl(undefined), undefined);
     // Trailing sentence punctuation on a bare URL is trimmed.
@@ -2953,7 +3452,13 @@ void describe('phase3: refuted-findings report', () => {
   void it('writeRefutedReport writes a report listing each dropped finding with its reason', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refuted-'));
     const out = writeRefutedReport(dir, 'e.com', 'live', [
-      { title: 'Some URLs are not listed in sitemap', severity: 'medium', kind: 'site-graph', exampleUrl: 'https://e.com/', reason: 'cited page IS present in the sitemap' },
+      {
+        title: 'Some URLs are not listed in sitemap',
+        severity: 'medium',
+        kind: 'site-graph',
+        exampleUrl: 'https://e.com/',
+        reason: 'cited page IS present in the sitemap',
+      },
     ]);
     assert.ok(out, 'returns the written path');
     const md = fs.readFileSync(out as string, 'utf8');
@@ -2968,7 +3473,13 @@ void describe('phase3: refuted-findings report', () => {
   void it('the data (offline) pass labels the URL "Example", not the live-only "Re-checked"', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'refuted-data-'));
     const out = writeRefutedReport(dir, 'e.com', 'data', [
-      { title: 'Duplicate page titles found', severity: 'medium', kind: 'duplicate-title', exampleUrl: 'https://e.com/a', reason: 'titles differ in the crawl data' },
+      {
+        title: 'Duplicate page titles found',
+        severity: 'medium',
+        kind: 'duplicate-title',
+        exampleUrl: 'https://e.com/a',
+        reason: 'titles differ in the crawl data',
+      },
     ]);
     const md = fs.readFileSync(out as string, 'utf8');
     assert.match(md, /\*\*Example:\*\*/);
@@ -2981,7 +3492,10 @@ void describe('live-verifier: crawl throttle round-trip', () => {
     // This is exactly what the crawler records (crawler-engine selects
     // networkConditions.slow4g + cpuConditions.normal).
     const t = crawlProfileToThrottle({ perf: true, network: NETWORK_CONDITIONS.slow4g, cpu: CPU_CONDITIONS.normal });
-    assert.ok(t, 'a perf crawl yields a throttle (regression guard: the map-vs-condition shape bug returned undefined)');
+    assert.ok(
+      t,
+      'a perf crawl yields a throttle (regression guard: the map-vs-condition shape bug returned undefined)',
+    );
     assert.strictEqual(t?.downloadBps, NETWORK_CONDITIONS.slow4g.download);
     assert.strictEqual(t?.latencyMs, NETWORK_CONDITIONS.slow4g.latency);
     assert.strictEqual(t?.cpuRate, undefined, 'normal cpu is noThrottle → no CPU rate');
@@ -3000,13 +3514,47 @@ void describe('live-verifier: crawl throttle round-trip', () => {
 
 void describe('live-verifier: broken-outbound match split', () => {
   const sig = (status: number): LiveSignals => ({
-    url: 'https://e.com/p', finalUrl: 'https://e.com/p', status, ttfbMs: 100, htmlBytes: 1000, totalBytes: 1000, totalRequests: 1,
-    title: 'T', description: 'd', canonical: 'https://e.com/p', h1Count: 1, iframeCount: 0, wordCount: 800, semanticRatio: 0.5,
-    emptyAnchorCount: 0, inputsWithoutAutocomplete: 0, scriptsNoSri: 0, maxChildren: 5, jpgPngImages: 0, modernImages: 2,
-    renderBlockingTotal: 0, renderBlockingThirdParty: 0, thirdPartyOrigins: 0, thirdPartyRequests: 0, thirdPartyBytes: 0,
-    adScriptBytes: 0, largestImageBytes: 0, oversizedImages: 0, clsValue: 0, tbtMs: 0, unusedCssRatio: -1, unusedJsRatio: -1,
-    preConsentTrackingCookies: 0, contrastViolations: -1,
-    mainCount: 1, resourceHintCount: 2, privacyLinkCount: 1, tlsMs: 50, eeatSignals: 2,
+    url: 'https://e.com/p',
+    finalUrl: 'https://e.com/p',
+    status,
+    ttfbMs: 100,
+    htmlBytes: 1000,
+    totalBytes: 1000,
+    totalRequests: 1,
+    title: 'T',
+    description: 'd',
+    canonical: 'https://e.com/p',
+    h1Count: 1,
+    iframeCount: 0,
+    wordCount: 800,
+    semanticRatio: 0.5,
+    emptyAnchorCount: 0,
+    inputsWithoutAutocomplete: 0,
+    scriptsNoSri: 0,
+    maxChildren: 5,
+    jpgPngImages: 0,
+    modernImages: 2,
+    renderBlockingTotal: 0,
+    renderBlockingThirdParty: 0,
+    thirdPartyOrigins: 0,
+    thirdPartyRequests: 0,
+    thirdPartyBytes: 0,
+    adScriptBytes: 0,
+    largestImageBytes: 0,
+    oversizedImages: 0,
+    clsValue: 0,
+    tbtMs: 0,
+    unusedCssRatio: -1,
+    unusedJsRatio: -1,
+    preConsentTrackingCookies: 0,
+    contrastViolations: -1,
+    mainCount: 1,
+    resourceHintCount: 2,
+    privacyLinkCount: 1,
+    tlsMs: 50,
+    eeatSignals: 2,
+    headers: {},
+    htmlLang: 'en',
   });
 
   void it('per-page "Page has N broken outbound link(s)" does NOT refute on a 200 container page', () => {
@@ -3024,34 +3572,289 @@ void describe('live-verifier: broken-outbound match split', () => {
 });
 
 void describe('live-verifier: path-case is significant in site-graph drop decisions', () => {
-  const f = (title: string, url: string): ReportFinding => ({ title, severity: 'HIGH', count: 1, exampleUrl: url, exampleUrls: [url] });
+  const f = (title: string, url: string): ReportFinding => ({
+    title,
+    severity: 'HIGH',
+    count: 1,
+    exampleUrl: url,
+    exampleUrls: [url],
+  });
 
   void it('sitemap: /Foo cited but only /foo in sitemap → NOT refuted (distinct resources)', () => {
-    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/foo']), sitemapCapped: false, reachable: new Set(), reachabilityCapped: true };
+    const site: LiveSite = {
+      sitemapUrls: new Set(['https://e.com/foo']),
+      sitemapCapped: false,
+      reachable: new Set(),
+      reachabilityCapped: true,
+    };
     // /Foo is genuinely missing; case-insensitive matching would wrongly drop it.
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/Foo'), site).status, 'confirmed');
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/Foo'), site).status,
+      'confirmed',
+    );
   });
 
   void it('sitemap: exact case match → refuted', () => {
-    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/Foo']), sitemapCapped: false, reachable: new Set(), reachabilityCapped: true };
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/Foo'), site).status, 'refuted');
+    const site: LiveSite = {
+      sitemapUrls: new Set(['https://e.com/Foo']),
+      sitemapCapped: false,
+      reachable: new Set(),
+      reachabilityCapped: true,
+    };
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/Foo'), site).status,
+      'refuted',
+    );
   });
 
   void it('sitemap: truncated index + page absent → unverified, NOT a false confirm', () => {
-    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/foo']), sitemapCapped: true, reachable: new Set(), reachabilityCapped: true };
+    const site: LiveSite = {
+      sitemapUrls: new Set(['https://e.com/foo']),
+      sitemapCapped: true,
+      reachable: new Set(),
+      reachabilityCapped: true,
+    };
     // The page could live in an unread child sitemap → must not assert "absent".
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/other'), site).status, 'unverified');
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/other'), site).status,
+      'unverified',
+    );
     // A present page still refutes even when truncated (presence is authoritative).
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/foo'), site).status, 'refuted');
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/foo'), site).status,
+      'refuted',
+    );
   });
 
   void it('host case is ignored (URL normalizes host), path case is preserved', () => {
-    const site: LiveSite = { sitemapUrls: new Set(['https://e.com/foo']), sitemapCapped: false, reachable: new Set(), reachabilityCapped: true };
-    assert.strictEqual(verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://E.com/foo'), site).status, 'refuted');
+    const site: LiveSite = {
+      sitemapUrls: new Set(['https://e.com/foo']),
+      sitemapCapped: false,
+      reachable: new Set(),
+      reachabilityCapped: true,
+    };
+    assert.strictEqual(
+      verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://E.com/foo'), site).status,
+      'refuted',
+    );
   });
 });
 
-import { duplicateVerdict } from '../lib/phase3/live-verifier';
+import { duplicateVerdict, robotsAiVerdict } from '../lib/phase3/live-verifier';
+
+void describe('live-verifier: Slice 2 header checkers', () => {
+  const base: LiveSignals = {
+    url: 'https://x.example/',
+    finalUrl: 'https://x.example/',
+    status: 200,
+    ttfbMs: 100,
+    htmlBytes: 1000,
+    totalBytes: 1000,
+    totalRequests: 1,
+    title: 'T',
+    description: 'd',
+    canonical: 'https://x.example/',
+    h1Count: 1,
+    iframeCount: 0,
+    wordCount: 800,
+    semanticRatio: 0.5,
+    emptyAnchorCount: 0,
+    inputsWithoutAutocomplete: 0,
+    scriptsNoSri: 0,
+    maxChildren: 5,
+    jpgPngImages: 0,
+    modernImages: 2,
+    renderBlockingTotal: 0,
+    renderBlockingThirdParty: 0,
+    thirdPartyOrigins: 0,
+    thirdPartyRequests: 0,
+    thirdPartyBytes: 0,
+    adScriptBytes: 0,
+    largestImageBytes: 0,
+    oversizedImages: 0,
+    clsValue: 0,
+    tbtMs: 0,
+    unusedCssRatio: -1,
+    unusedJsRatio: -1,
+    preConsentTrackingCookies: 0,
+    contrastViolations: -1,
+    mainCount: 1,
+    resourceHintCount: 2,
+    privacyLinkCount: 1,
+    tlsMs: 50,
+    eeatSignals: 2,
+    headers: {},
+    htmlLang: 'en',
+  };
+  const withHeaders = (h: Record<string, string>): LiveSignals => ({ ...base, headers: h });
+
+  void it('empty header map → unverified (unreachable), never a false refute', () => {
+    const r = checkFindingSignals('Page blocked via X-Robots-Tag: noindex (HTTP header)', base, 1);
+    assert.strictEqual(r.status, 'unverified');
+    assert.strictEqual(r.code, 'unreachable');
+  });
+
+  void it('x-robots noindex: present → confirmed, absent → refuted', () => {
+    assert.strictEqual(
+      checkFindingSignals(
+        'Page blocked via X-Robots-Tag: noindex (HTTP header)',
+        withHeaders({ 'x-robots-tag': 'noindex, nofollow' }),
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Page blocked via X-Robots-Tag: noindex (HTTP header)',
+        withHeaders({ 'content-type': 'text/html' }),
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('missing Permissions-Policy: absent → confirmed, present → refuted', () => {
+    assert.strictEqual(
+      checkFindingSignals('Missing Permissions-Policy header', withHeaders({ 'content-type': 'text/html' }), 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Missing Permissions-Policy header',
+        withHeaders({ 'permissions-policy': 'geolocation=()' }),
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('cross-origin isolation: needs BOTH COOP and COEP to refute', () => {
+    assert.strictEqual(
+      checkFindingSignals(
+        'Missing cross-origin isolation headers',
+        withHeaders({ 'cross-origin-opener-policy': 'same-origin' }),
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Missing cross-origin isolation headers',
+        withHeaders({ 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' }),
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('server disclosure: Server/X-Powered-By present → confirmed', () => {
+    assert.strictEqual(
+      checkFindingSignals(
+        'Server technology disclosed in response headers',
+        withHeaders({ 'x-powered-by': 'Express' }),
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Server version disclosed in response headers',
+        withHeaders({ 'content-type': 'text/html' }),
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('compression: generic finding confirmed when uncompressed, refuted when gzip/br', () => {
+    assert.strictEqual(
+      checkFindingSignals('Page served without compression', withHeaders({ 'content-type': 'text/html' }), 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Page served without compression', withHeaders({ 'content-encoding': 'gzip' }), 1).status,
+      'refuted',
+    );
+  });
+
+  void it('compression: Brotli-specific finding refuted only by br encoding', () => {
+    assert.strictEqual(
+      checkFindingSignals('Brotli compression not detected', withHeaders({ 'content-encoding': 'gzip' }), 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Brotli compression not detected', withHeaders({ 'content-encoding': 'br' }), 1).status,
+      'refuted',
+    );
+  });
+
+  void it('content-language mismatch: differing primary subtags confirm, matching refute, missing → inconclusive', () => {
+    assert.strictEqual(
+      checkFindingSignals(
+        'Content-Language header mismatches html lang attribute',
+        { ...withHeaders({ 'content-language': 'fr' }), htmlLang: 'en' },
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Content-Language header mismatches html lang attribute',
+        { ...withHeaders({ 'content-language': 'en-US' }), htmlLang: 'en' },
+        1,
+      ).status,
+      'refuted',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Content-Language header mismatches html lang attribute',
+        { ...withHeaders({ 'content-language': 'fr' }), htmlLang: '' },
+        1,
+      ).code,
+      'inconclusive',
+    );
+  });
+});
+
+void describe('live-verifier: robotsAiVerdict', () => {
+  void it('"no explicit AI crawler rules": confirmed when none named, refuted when present', () => {
+    assert.strictEqual(
+      robotsAiVerdict('No explicit AI crawler rules in robots.txt', 'User-agent: *\nDisallow: /admin').status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      robotsAiVerdict(
+        'No explicit AI crawler rules in robots.txt',
+        'User-agent: GPTBot\nDisallow: /\nUser-agent: *\nAllow: /',
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('"AI crawlers blocked": confirmed when an AI bot has Disallow: /, refuted otherwise', () => {
+    assert.strictEqual(
+      robotsAiVerdict('AI crawlers blocked in robots.txt', 'User-agent: ClaudeBot\nDisallow: /').status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      robotsAiVerdict('AI crawlers blocked in robots.txt', 'User-agent: GPTBot\nDisallow: /private').status,
+      'refuted',
+    );
+  });
+
+  void it('consecutive user-agent lines share the following directives', () => {
+    assert.strictEqual(
+      robotsAiVerdict('AI crawlers blocked in robots.txt', 'User-agent: GPTBot\nUser-agent: CCBot\nDisallow: /').status,
+      'confirmed',
+    );
+  });
+
+  void it('unfetchable robots.txt → unverified (unreachable)', () => {
+    const r = robotsAiVerdict('AI crawlers blocked in robots.txt', null);
+    assert.strictEqual(r.status, 'unverified');
+    assert.strictEqual(r.code, 'unreachable');
+  });
+});
 
 void describe('live-verifier: duplicateVerdict count-coverage', () => {
   void it('matching values → confirmed regardless of count', () => {
@@ -3072,14 +3875,147 @@ void describe('live-verifier: duplicateVerdict count-coverage', () => {
   });
 });
 
+import {
+  aggregateSampledVerdict,
+  defaultConfidence,
+  MAX_SAMPLES_PER_FINDING,
+  type CheckResult,
+} from '../lib/phase3/live-verifier';
+
+void describe('live-verifier: aggregateSampledVerdict (Slice 1 multi-example sampling)', () => {
+  const C: CheckResult = { status: 'confirmed', reason: 'defect here', code: 'confirmed' };
+  const R: CheckResult = { status: 'refuted', reason: 'clean now', code: 'refuted' };
+  const U: CheckResult = { status: 'unverified', reason: 'lazy content', code: 'under-observable' };
+
+  void it('any sampled page defective → confirmed (high when all, medium when partial)', () => {
+    assert.strictEqual(aggregateSampledVerdict([C, C, C], 3).confidence, 'high');
+    const mixed = aggregateSampledVerdict([C, R, R], 3);
+    assert.strictEqual(mixed.status, 'confirmed');
+    assert.strictEqual(mixed.confidence, 'medium');
+  });
+
+  void it('all sampled clean AND sample covers the finding (sampled ≥ count) → refuted', () => {
+    assert.strictEqual(aggregateSampledVerdict([R, R, R], 3).status, 'refuted');
+    assert.strictEqual(aggregateSampledVerdict([R], 1).status, 'refuted'); // single-occurrence
+  });
+
+  void it('all sampled clean but sample does NOT cover the finding → plural-undersampled, never refuted', () => {
+    const r = aggregateSampledVerdict([R, R, R], 44);
+    assert.strictEqual(r.status, 'unverified');
+    assert.strictEqual(r.code, 'plural-undersampled');
+  });
+
+  void it('confirm-only checker (no refutes) never drops — clean sample stays unverified', () => {
+    const r = aggregateSampledVerdict([U, U], 2);
+    assert.strictEqual(r.status, 'unverified');
+    assert.strictEqual(r.code, 'under-observable');
+  });
+
+  void it('a mix of clean + unreachable does not refute (sample not fully clean-observed)', () => {
+    const unreachable: CheckResult = { status: 'unverified', reason: 'could not load', code: 'unreachable' };
+    const r = aggregateSampledVerdict([R, unreachable], 2);
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('empty results (nothing loaded) → unreachable', () => {
+    assert.strictEqual(aggregateSampledVerdict([], 3).code, 'unreachable');
+  });
+
+  void it('MAX_SAMPLES_PER_FINDING is bounded (cost guard)', () => {
+    assert.ok(MAX_SAMPLES_PER_FINDING >= 1 && MAX_SAMPLES_PER_FINDING <= 5);
+  });
+});
+
+import { liveSignalsSnapshot } from '../lib/phase3/live-verifier';
+
+void describe('live-verifier: liveSignalsSnapshot (Slice 3 LLM evidence)', () => {
+  const sig = {
+    url: 'https://x.example/a',
+    finalUrl: 'https://x.example/a',
+    status: 200,
+    ttfbMs: 120,
+    htmlBytes: 2000,
+    totalBytes: 5000,
+    totalRequests: 12,
+    title: 'A title here',
+    description: 'desc',
+    canonical: 'https://x.example/a',
+    h1Count: 1,
+    iframeCount: 0,
+    wordCount: 500,
+    semanticRatio: 0.4321,
+    emptyAnchorCount: 2,
+    inputsWithoutAutocomplete: 0,
+    scriptsNoSri: 1,
+    maxChildren: 9,
+    jpgPngImages: 3,
+    modernImages: 1,
+    renderBlockingTotal: 2,
+    renderBlockingThirdParty: 1,
+    thirdPartyOrigins: 4,
+    thirdPartyRequests: 6,
+    thirdPartyBytes: 1234,
+    adScriptBytes: 0,
+    largestImageBytes: 9000,
+    oversizedImages: 1,
+    clsValue: 0.123456,
+    tbtMs: 90,
+    unusedCssRatio: 0.62,
+    unusedJsRatio: -1,
+    preConsentTrackingCookies: 1,
+    contrastViolations: -1,
+    mainCount: 0,
+    resourceHintCount: 0,
+    privacyLinkCount: 0,
+    tlsMs: 40,
+    eeatSignals: 1,
+    headers: { 'content-encoding': 'br', 'x-frame-options': 'DENY', 'set-cookie': 'big', 'x-custom': 'noise' },
+    htmlLang: 'en',
+  };
+
+  void it('summarises signals, rounds ratios, nulls unmeasured coverage/contrast, and keeps only relevant headers', () => {
+    const snap = liveSignalsSnapshot(sig);
+    assert.strictEqual(snap.titleLength, 'A title here'.length);
+    assert.strictEqual(snap.semanticRatio, 0.43);
+    assert.strictEqual(snap.clsValue, 0.123);
+    assert.strictEqual(snap.unusedCssPct, 62);
+    assert.strictEqual(snap.unusedJsPct, null, 'unmeasured JS coverage → null');
+    assert.strictEqual(snap.contrastViolations, null, 'unmeasured contrast → null');
+    const headers = snap.headers as Record<string, string>;
+    assert.ok(headers['content-encoding'] === 'br' && headers['x-frame-options'] === 'DENY');
+    assert.ok(!('set-cookie' in headers) && !('x-custom' in headers), 'irrelevant headers dropped');
+  });
+});
+
+void describe('live-verifier: defaultConfidence', () => {
+  void it('confirmed/refuted on a stable signal are high-confidence', () => {
+    assert.strictEqual(defaultConfidence('confirmed', 'confirmed'), 'high');
+    assert.strictEqual(defaultConfidence('refuted', 'refuted'), 'high');
+  });
+  void it('LLM verdicts are low-confidence; other unverified are medium', () => {
+    assert.strictEqual(defaultConfidence('confirmed', 'llm-unsure'), 'low');
+    assert.strictEqual(defaultConfidence('unverified', 'site-level'), 'medium');
+  });
+});
+
 import { isSuspectedInfinitePagination } from '../lib/analyzers/seo/pagination-analyzer';
 
 void describe('pagination probe: isSuspectedInfinitePagination', () => {
-  const base = { clicks: 3, controlPersists: true, urlAdvanced: true, emptyAfterClick: false, contentChanged: true, duplicateStreak: 0 };
+  const base = {
+    clicks: 3,
+    controlPersists: true,
+    urlAdvanced: true,
+    emptyAfterClick: false,
+    contentChanged: true,
+    duplicateStreak: 0,
+  };
 
   void it('FALSE POSITIVE GUARD: in-page/hash "next" that never advances the URL is never flagged', () => {
     // agntcms /docs case: clicking "next" only changed the hash, content identical.
-    assert.strictEqual(isSuspectedInfinitePagination({ ...base, urlAdvanced: false, contentChanged: false, duplicateStreak: 3 }), false);
+    assert.strictEqual(
+      isSuspectedInfinitePagination({ ...base, urlAdvanced: false, contentChanged: false, duplicateStreak: 3 }),
+      false,
+    );
   });
 
   void it('healthy pagination (URL advances, content changes) is not flagged', () => {
@@ -3096,7 +4032,10 @@ void describe('pagination probe: isSuspectedInfinitePagination', () => {
 
   void it('no clicks or control gone → not flagged', () => {
     assert.strictEqual(isSuspectedInfinitePagination({ ...base, clicks: 0 }), false);
-    assert.strictEqual(isSuspectedInfinitePagination({ ...base, controlPersists: false, emptyAfterClick: true }), false);
+    assert.strictEqual(
+      isSuspectedInfinitePagination({ ...base, controlPersists: false, emptyAfterClick: true }),
+      false,
+    );
   });
 });
 
@@ -3167,7 +4106,13 @@ void describe('phase2: issue-aware visual evidence', () => {
     fs.writeFileSync(path.join(pageDir, 'requests.json'), JSON.stringify(REQUESTS));
     return {
       dir,
-      files: ['screenshot.mobile.png', 'screenshot.desktop.png', 'screenshot.firstload.png', 'overlays.json', 'requests.json'],
+      files: [
+        'screenshot.mobile.png',
+        'screenshot.desktop.png',
+        'screenshot.firstload.png',
+        'overlays.json',
+        'requests.json',
+      ],
     };
   }
 
@@ -3179,14 +4124,23 @@ void describe('phase2: issue-aware visual evidence', () => {
   }
 
   void it('maps finding messages to their evidence kind', () => {
-    assert.deepStrictEqual(evidenceKindFor('Some images are missing alt text'), { type: 'overlay', kind: 'missing-alt' });
+    assert.deepStrictEqual(evidenceKindFor('Some images are missing alt text'), {
+      type: 'overlay',
+      kind: 'missing-alt',
+    });
     // "Image links without alt text" must hit missing-alt, NOT empty-anchor.
     assert.deepStrictEqual(evidenceKindFor('Image links without alt text'), { type: 'overlay', kind: 'missing-alt' });
     assert.deepStrictEqual(evidenceKindFor('Some pages have CLS more than 0.1'), { type: 'cls' });
     assert.deepStrictEqual(evidenceKindFor('Pages have titles that are too long'), { type: 'serp', field: 'title' });
     assert.deepStrictEqual(evidenceKindFor('Links with empty anchor text'), { type: 'overlay', kind: 'empty-anchor' });
-    assert.deepStrictEqual(evidenceKindFor('Insufficient color contrast detected'), { type: 'overlay', kind: 'contrast' });
-    assert.deepStrictEqual(evidenceKindFor('Canonicals are not set for some pages'), { type: 'head', aspect: 'canonical' });
+    assert.deepStrictEqual(evidenceKindFor('Insufficient color contrast detected'), {
+      type: 'overlay',
+      kind: 'contrast',
+    });
+    assert.deepStrictEqual(evidenceKindFor('Canonicals are not set for some pages'), {
+      type: 'head',
+      aspect: 'canonical',
+    });
     assert.deepStrictEqual(evidenceKindFor('Pages in sitemap are marked noindex'), { type: 'head', aspect: 'noindex' });
     // "Render-blocking third-party scripts" must hit the render-blocking panel, not net/origins.
     assert.deepStrictEqual(evidenceKindFor('Render-blocking third-party scripts present'), { type: 'render-blocking' });
@@ -3328,7 +4282,10 @@ void describe('phase2: slice-3 evidence', () => {
     panels: { securityHeaders: { missing: ['content-security-policy', 'strict-transport-security'] } },
   };
 
-  function mkEvidence3(over: Record<string, unknown> = {}, extraDirs: Record<string, { url: string; files: string[] }> = {}) {
+  function mkEvidence3(
+    over: Record<string, unknown> = {},
+    extraDirs: Record<string, { url: string; files: string[] }> = {},
+  ) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'overlays3-'));
     const pageDir = path.join(dir, 'evidence', 'https_example.com_about');
     fs.mkdirSync(pageDir, { recursive: true });
@@ -3337,7 +4294,10 @@ void describe('phase2: slice-3 evidence', () => {
     return { dir, evidence: { 'https_example.com_about': { url: 'https://example.com/about', files }, ...extraDirs } };
   }
 
-  function arts3(msg: string, ev: { dir: string; evidence: Record<string, { url: string; files: string[] }> }): AuditArtifacts {
+  function arts3(
+    msg: string,
+    ev: { dir: string; evidence: Record<string, { url: string; files: string[] }> },
+  ): AuditArtifacts {
     const a = mkArtifacts([msg], { [msg]: ['https://example.com/about'] });
     a.runDir = ev.dir;
     a.manifest.evidence = ev.evidence;
@@ -3349,7 +4309,10 @@ void describe('phase2: slice-3 evidence', () => {
     assert.deepStrictEqual(evidenceKindFor('Significant content rendered by JavaScript'), { type: 'nojs' });
     assert.deepStrictEqual(evidenceKindFor('Broken "next" pagination wastes crawl budget'), { type: 'pagination' });
     assert.deepStrictEqual(evidenceKindFor('Form inputs missing labels'), { type: 'overlay', kind: 'form-label' });
-    assert.deepStrictEqual(evidenceKindFor('Form inputs missing autocomplete attribute'), { type: 'overlay', kind: 'autocomplete' });
+    assert.deepStrictEqual(evidenceKindFor('Form inputs missing autocomplete attribute'), {
+      type: 'overlay',
+      kind: 'autocomplete',
+    });
     assert.deepStrictEqual(evidenceKindFor('Missing <main> element'), { type: 'landmarks' });
     // The mainEntity pitfall: a schema finding must NOT hit the landmarks arm.
     assert.deepStrictEqual(evidenceKindFor('FAQPage missing mainEntity array'), { type: 'schema' });
@@ -3428,8 +4391,14 @@ void describe('phase2: slice-3 evidence', () => {
     // orphan is missing from it entirely. The crawled set (processedPages)
     // must resolve that absence to "0 inbound links", not skip the row.
     const ev = mkEvidence3();
-    fs.writeFileSync(path.join(ev.dir, 'incoming-links.json'), JSON.stringify({ 'https://example.com/': ['https://example.com/blog'] }));
-    fs.writeFileSync(path.join(ev.dir, 'metadata.json'), JSON.stringify({ sitemaps: { urls: { 'https://example.com/': {} } } }));
+    fs.writeFileSync(
+      path.join(ev.dir, 'incoming-links.json'),
+      JSON.stringify({ 'https://example.com/': ['https://example.com/blog'] }),
+    );
+    fs.writeFileSync(
+      path.join(ev.dir, 'metadata.json'),
+      JSON.stringify({ sitemaps: { urls: { 'https://example.com/': {} } } }),
+    );
     const msg = 'Orphan page (no internal links point to it)';
     const a = mkArtifacts([msg], { [msg]: ['https://example.com/about'] });
     a.runDir = ev.dir;
@@ -3444,7 +4413,10 @@ void describe('phase2: slice-3 evidence', () => {
   void it('renders link-graph facts for orphan findings from incoming-links + sitemap artifacts', () => {
     const ev = mkEvidence3();
     fs.writeFileSync(path.join(ev.dir, 'incoming-links.json'), JSON.stringify({ 'https://example.com/about': [] }));
-    fs.writeFileSync(path.join(ev.dir, 'metadata.json'), JSON.stringify({ sitemaps: { urls: { 'https://example.com/': {} } } }));
+    fs.writeFileSync(
+      path.join(ev.dir, 'metadata.json'),
+      JSON.stringify({ sitemaps: { urls: { 'https://example.com/': {} } } }),
+    );
     const md = buildReportMarkdown(arts3('Orphan page (no internal links point to it)', ev));
     assert.match(md, /Link-graph facts/);
     assert.match(md, /0 inbound links/);

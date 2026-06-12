@@ -102,7 +102,14 @@ function buildUserPrompt(items: LlmVerifyItem[], siteContext?: Record<string, un
 }
 
 function cacheKey(model: string, user: string): string {
-  return crypto.createHash('sha256').update(model).update('\0').update(SYSTEM_PROMPT).update('\0').update(user).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(model)
+    .update('\0')
+    .update(SYSTEM_PROMPT)
+    .update('\0')
+    .update(user)
+    .digest('hex');
 }
 
 /**
@@ -132,7 +139,8 @@ export function parseLlmVerdicts(raw: string, validIndices: number[]): LlmVerdic
     const rawVerdict = (v as { verdict?: unknown })?.verdict;
     const verdict: LlmVerdictValue =
       rawVerdict === 'confirmed' ? 'confirmed' : rawVerdict === 'refuted' ? 'refuted' : 'unsure';
-    const reason = typeof (v as { reason?: unknown })?.reason === 'string' ? (v as { reason: string }).reason.trim() : '';
+    const reason =
+      typeof (v as { reason?: unknown })?.reason === 'string' ? (v as { reason: string }).reason.trim() : '';
     seen.add(idx);
     out.push({ index: idx, verdict, reason: reason || verdict });
   }
@@ -224,6 +232,106 @@ export async function llmVerifyFindings(items: LlmVerifyItem[], options: LlmVeri
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Vision transport (Slice 4) — verify AI-discovered (anomaly) findings against a
+// fresh screenshot of the cited page. API-only (the keyless CLI is text-only, so
+// the live pass falls back to signals-only there, exactly like llm-anomaly).
+// One call per item (each carries its own image), parallel + disk-cached.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** A finding to verify WITH a screenshot of the cited page. */
+export interface VisionVerifyItem extends LlmVerifyItem {
+  image?: { data: string; mediaType: string } | null;
+}
+
+async function callModelVision(
+  userPrompt: string,
+  image: { data: string; mediaType: string } | null,
+  apiKey: string,
+  model: string,
+  verbose: boolean,
+): Promise<string | null> {
+  const content: unknown[] = [];
+  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } });
+  content.push({ type: 'text', text: userPrompt });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_API_TIMEOUT_MS);
+  try {
+    const res = await fetch(ANTHROPIC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION },
+      body: JSON.stringify({ model, max_tokens: 1500, system: SYSTEM_PROMPT, messages: [{ role: 'user', content }] }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      if (verbose) console.warn(`LLM vision-verify HTTP ${res.status}`);
+      return null;
+    }
+    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
+  } catch (error: unknown) {
+    if (verbose) console.warn(`LLM vision-verify failed: ${(error as Error).message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Verify one finding with its screenshot; cached by (model, prompt, image bytes). */
+async function verifyOneVision(
+  item: VisionVerifyItem,
+  apiKey: string,
+  options: LlmVerifyOptions,
+): Promise<LlmVerdict | null> {
+  const model = options.model ?? DEFAULT_MODEL;
+  // Render the single item at index 0; remap the parsed verdict to its real index.
+  const base = buildUserPrompt([{ ...item, index: 0 }], options.siteContext);
+  const userPrompt =
+    (item.image ? 'A screenshot of the cited page is attached — use it to judge visual/layout/UX claims. ' : '') + base;
+  const key = `vision-${cacheKey(model, `${userPrompt}\0${item.image?.data ?? 'no-image'}`)}`;
+
+  let cacheFile: string | null = null;
+  if (options.cacheDir) {
+    try {
+      fs.mkdirSync(options.cacheDir, { recursive: true });
+      cacheFile = path.join(options.cacheDir, `${key}.json`);
+      if (fs.existsSync(cacheFile)) {
+        const v = parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), [0])[0];
+        return v ? { index: item.index, verdict: v.verdict, reason: v.reason } : null;
+      }
+    } catch {
+      cacheFile = null;
+    }
+  }
+
+  const text = await callModelVision(userPrompt, item.image ?? null, apiKey, model, options.verbose ?? false);
+  if (!text) return null;
+  if (cacheFile) {
+    try {
+      fs.writeFileSync(cacheFile, text);
+    } catch {
+      // best effort
+    }
+  }
+  const v = parseLlmVerdicts(text, [0])[0];
+  return v ? { index: item.index, verdict: v.verdict, reason: v.reason } : null;
+}
+
+/**
+ * Verify findings WITH screenshots (vision). Returns [] on no key / no items /
+ * any failure, so the caller keeps the deterministic result unchanged. Returned
+ * indices match the `index` values passed in.
+ */
+export async function llmVerifyFindingsVision(
+  items: VisionVerifyItem[],
+  options: LlmVerifyOptions = {},
+): Promise<LlmVerdict[]> {
+  const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
+  if (!apiKey || items.length === 0) return [];
+  const results = await Promise.all(items.map((it) => verifyOneVision(it, apiKey, options)));
+  return results.filter((r): r is LlmVerdict => r !== null);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Keyless transport — spawn the Claude Code CLI (`claude -p`) instead of the
 // API. Same prompt, same parsing; the only difference is where the model runs.
 // This lets `--verify` reason over the unchecked findings WITHOUT an
@@ -270,7 +378,10 @@ async function cliVerifyBatch(items: LlmVerifyItem[], options: LlmVerifyOptions)
  * deterministic result unchanged. Batched like the API path. Returned indices
  * match the `index` values passed in.
  */
-export async function claudeCliVerifyFindings(items: LlmVerifyItem[], options: LlmVerifyOptions = {}): Promise<LlmVerdict[]> {
+export async function claudeCliVerifyFindings(
+  items: LlmVerifyItem[],
+  options: LlmVerifyOptions = {},
+): Promise<LlmVerdict[]> {
   if (items.length === 0 || !isClaudeCliAvailable()) return [];
 
   const batches: LlmVerifyItem[][] = [];

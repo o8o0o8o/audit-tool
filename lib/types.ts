@@ -1656,6 +1656,7 @@ export interface ParsedArgs {
   phase2: boolean;
   llmNarrative: boolean;
   llmFindings: boolean;
+  llmRepo: boolean;
   llmVerify: boolean;
   verify: boolean;
   noScore: boolean;

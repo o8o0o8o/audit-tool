@@ -81,6 +81,7 @@ function parseArgs(args: string[]): ParsedArgs {
     phase2: true, // Generate Phase 2 curated PDF report (--no-phase2 to skip)
     llmNarrative: false, // Use Claude to rewrite per-section Analysis prose
     llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
+    llmRepo: false, // Use Claude to reason over the source repo (find more / confirm / fix) atop --repo
     llmVerify: false, // Use Claude to revalidate findings + drop confirmed duplicates/false positives before the final report
     verify: false, // Phase 3 verification — re-check each finding's first example (live by default; crawl data with SEO_AUDIT_VERIFY_OFFLINE=1), emit a separate verified report
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
@@ -120,14 +121,17 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.llmNarrative = true;
     } else if (arg === '--llm-findings') {
       parsed.llmFindings = true;
+    } else if (arg === '--llm-repo') {
+      parsed.llmRepo = true;
     } else if (arg === '--llm-verify') {
       parsed.llmVerify = true;
     } else if (arg === '--verify') {
       parsed.verify = true;
     } else if (arg === '--llm') {
-      // Umbrella flag — enable the full AI pass set (narrative + findings + verify).
+      // Umbrella flag — enable the full AI pass set (narrative + findings + repo + verify).
       parsed.llmNarrative = true;
       parsed.llmFindings = true;
+      parsed.llmRepo = true;
       parsed.llmVerify = true;
     } else if (arg === '--no-score') {
       parsed.noScore = true;

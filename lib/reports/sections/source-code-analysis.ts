@@ -39,6 +39,7 @@ function getSourceCodeAnalysis(data: ReportSectionData) {
   const configHtml = getConfigValidation(repo);
   const routeHtml = getRouteCoverage(repo);
   const sourceMappingHtml = getSourceMapping(repo);
+  const llmHtml = getLlmFindings(repo);
 
   return `
     <div class="section" id="source-code-analysis">
@@ -48,6 +49,55 @@ function getSourceCodeAnalysis(data: ReportSectionData) {
       ${configHtml}
       ${routeHtml}
       ${sourceMappingHtml}
+      ${llmHtml}
+    </div>
+  `;
+}
+
+/**
+ * AI repo findings (--llm-repo): additive insights layered on the deterministic
+ * core — novel issues, confirmations of crawl findings, and code-aware fixes.
+ */
+function getLlmFindings(repo: Record<string, unknown>) {
+  const findings = (repo.llmFindings ?? []) as Array<Record<string, unknown>>;
+  if (!Array.isArray(findings) || findings.length === 0) return '';
+
+  const rows = findings
+    .map((f) => {
+      const kind = String(f.kind ?? 'novel');
+      const kindLabel = kind === 'confirmation' ? '✓ Confirms crawl finding' : '✨ New issue';
+      const fileRow = f.file ? `<div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><code>${escapeHtml(String(f.file))}</code></div>` : '';
+      const fixRow = f.fix
+        ? `<div style="margin-top: 6px; font-size: var(--font-size-sm);"><strong>Fix:</strong> ${renderRepoDetailHtml(String(f.fix))}</div>`
+        : '';
+      return `
+    <tr>
+      <td style="padding: 10px 12px; vertical-align: top;">${getSeverityBadge(String(f.severity ?? 'medium'))}</td>
+      <td style="padding: 10px 12px; vertical-align: top;">
+        <div style="font-weight: var(--font-weight-medium);">${escapeHtml(String(f.message ?? ''))}</div>
+        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin: 2px 0;">${escapeHtml(kindLabel)}</div>
+        ${fileRow}
+        <div style="font-size: var(--font-size-sm); color: #4b5563; margin-top: 4px;">${renderRepoDetailHtml(String(f.detail ?? ''))}</div>
+        ${fixRow}
+      </td>
+    </tr>`;
+    })
+    .join('');
+
+  return `
+    <div style="margin-top: 25px;">
+      <h3 style="display: flex; align-items: center; gap: 8px;">🔍 AI-discovered insights
+        <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); color: var(--color-text-muted);">(additive — layered on the deterministic analysis)</span>
+      </h3>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+        <thead>
+          <tr style="border-bottom: 2px solid var(--color-border);">
+            <th style="padding: 8px 12px; text-align: left;">Severity</th>
+            <th style="padding: 8px 12px; text-align: left;">Finding &amp; fix</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>
   `;
 }

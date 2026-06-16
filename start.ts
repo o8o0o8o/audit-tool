@@ -151,6 +151,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.phase2 === false) childArgs.push('--no-phase2');
     if (args.llmNarrative) childArgs.push('--llm-narrative');
     if (args.llmFindings) childArgs.push('--llm-findings');
+    if (args.llmRepo) childArgs.push('--llm-repo');
     if (args.llmVerify) childArgs.push('--llm-verify');
     if (args.verify) childArgs.push('--verify');
     if (args.noScore) childArgs.push('--no-score');

@@ -1617,6 +1617,122 @@ void describe('FrameworkConfigValidator — Next.js app-dir resolution & comment
   });
 });
 
+// ============================================================
+// LLM repo analyzer (--llm-repo) — pure / bounded logic only.
+// The populated model path is intentionally NOT unit-tested (it would hit the
+// network); we test parsing, source gathering, and the no-source degrade.
+// ============================================================
+import {
+  parseLlmRepoFindings,
+  gatherSourceFiles,
+  analyzeRepoWithLlm,
+  type RepoContext,
+} from '../lib/analyzers/repo/llm-repo-analyzer';
+
+const EMPTY_CTX: RepoContext = {
+  framework: 'Next.js',
+  version: '14.2.0',
+  router: 'app',
+  configFile: null,
+  knownIssues: [],
+  crawlFindings: [],
+  sourceMapFiles: [],
+};
+
+void describe('parseLlmRepoFindings', () => {
+  void it('parses valid findings and validates enums', () => {
+    const text = JSON.stringify([
+      { severity: 'high', title: 'CSR for main content', detail: 'd', fix: 'f', kind: 'novel', file: 'app/page.tsx' },
+      { severity: 'medium', title: 'Confirms dupe titles', detail: 'd2', fix: 'f2', kind: 'confirmation' },
+    ]);
+    const out = parseLlmRepoFindings(text, new Set(['app/page.tsx']));
+    assert.strictEqual(out.length, 2);
+    assert.strictEqual(out[0].message, 'CSR for main content');
+    assert.strictEqual(out[0].file, 'app/page.tsx');
+    assert.strictEqual(out[1].kind, 'confirmation');
+  });
+
+  void it('drops a finding citing a file that was not provided (anti-hallucination)', () => {
+    const text = JSON.stringify([
+      { severity: 'high', title: 'Phantom', detail: 'd', fix: 'f', kind: 'novel', file: 'app/does-not-exist.tsx' },
+    ]);
+    assert.strictEqual(parseLlmRepoFindings(text, new Set(['app/page.tsx'])).length, 0);
+  });
+
+  void it('drops items with invalid severity or kind', () => {
+    const text = JSON.stringify([
+      { severity: 'urgent', title: 'bad sev', detail: '', fix: '', kind: 'novel' },
+      { severity: 'low', title: 'bad kind', detail: '', fix: '', kind: 'made-up' },
+    ]);
+    assert.strictEqual(parseLlmRepoFindings(text, new Set()).length, 0);
+  });
+
+  void it('strips ```json fences and tolerates leading prose', () => {
+    const text = 'Here you go:\n```json\n[{"severity":"low","title":"t","detail":"","fix":"","kind":"novel"}]\n```';
+    assert.strictEqual(parseLlmRepoFindings(text, new Set()).length, 1);
+  });
+
+  void it('returns [] on garbage / empty', () => {
+    assert.deepStrictEqual(parseLlmRepoFindings('not json at all', new Set()), []);
+    assert.deepStrictEqual(parseLlmRepoFindings('', new Set()), []);
+    assert.deepStrictEqual(parseLlmRepoFindings('{"not":"array"}', new Set()), []);
+  });
+});
+
+void describe('gatherSourceFiles', () => {
+  void it('gathers existing entry + source-map files, caps count, truncates large files', () => {
+    const root = fakeTree({
+      'app/layout.tsx': 'export default function L(){return null}',
+      'app/page.tsx': 'export default function P(){return null}',
+      'components/Big.tsx': 'x'.repeat(20000),
+    });
+    const ctx = { ...EMPTY_CTX, sourceMapFiles: ['components/Big.tsx'] };
+    const files = gatherSourceFiles(root, ctx, 10);
+    fs.rmSync(root, { recursive: true, force: true });
+    const paths = files.map((f) => f.path);
+    assert.ok(paths.includes('app/layout.tsx'));
+    assert.ok(paths.includes('app/page.tsx'));
+    assert.ok(paths.includes('components/Big.tsx'));
+    const big = files.find((f) => f.path === 'components/Big.tsx');
+    assert.ok((big?.content.length ?? 0) < 20000, 'large file must be truncated');
+    assert.ok(big?.content.includes('truncated'));
+  });
+
+  void it('respects the maxFiles cap', () => {
+    const root = fakeTree({
+      'app/layout.tsx': 'a',
+      'app/page.tsx': 'b',
+      'pages/_app.tsx': 'c',
+    });
+    const files = gatherSourceFiles(root, EMPTY_CTX, 2);
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.strictEqual(files.length, 2);
+  });
+
+  void it('refuses a source-map path that escapes the repo root (traversal guard)', () => {
+    const root = fakeTree({ 'app/layout.tsx': 'ok' });
+    // Plant a file OUTSIDE the repo root and try to reach it via ../
+    const outside = path.join(path.dirname(root), 'secret.txt');
+    fs.writeFileSync(outside, 'TOPSECRET');
+    const ctx = { ...EMPTY_CTX, sourceMapFiles: [`../${path.basename(outside)}`] };
+    const files = gatherSourceFiles(root, ctx, 10);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { force: true });
+    assert.ok(!files.some((f) => f.content.includes('TOPSECRET')), 'must not read files outside the repo');
+  });
+});
+
+void describe('analyzeRepoWithLlm — degrade', () => {
+  void it('returns [] (no model call) when no source files are gatherable', async () => {
+    const root = fakeTree({ 'README.md': 'no source here' });
+    // Empty dir of source entry points → gatherSourceFiles yields [] → returns []
+    // before any transport call, so this is network-free regardless of env keys.
+    const out = await analyzeRepoWithLlm(root, EMPTY_CTX, { cacheDir: path.join(root, '.cache') });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.deepStrictEqual(out, []);
+  });
+});
+
 void describe('RouteExtractor — Remix flat-route escape', () => {
   void it('unwraps a [.] literal escape into a real dot (not a stray bracket / dynamic)', () => {
     const root = fakeTree({

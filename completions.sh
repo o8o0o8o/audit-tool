@@ -6,7 +6,7 @@
 
 _seo_audit_completions() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
-  local opts="--origin= --sitemap= --compare= --compare-sitemap= --proceed --perf --save-html --screenshots --concurrency= --repo= --config= --init-config --open --verbose --heap-size= --ci= --json --exclude= --limit= --dry-run --preset= --webhook= --slack= --sites= --watch= --brand-logo= --brand-name= --generate-ci --validate-config --verify --llm-narrative --llm-findings --llm-verify --phase2 --no-phase2 --no-score --evidence --no-evidence --evidence-cap= --version --help"
+  local opts="--origin= --sitemap= --compare= --compare-sitemap= --proceed --perf --save-html --screenshots --concurrency= --repo= --config= --init-config --open --verbose --heap-size= --ci= --json --exclude= --limit= --dry-run --preset= --webhook= --slack= --sites= --watch= --brand-logo= --brand-name= --generate-ci --validate-config --verify --llm-narrative --llm-findings --llm-repo --llm-verify --phase2 --no-phase2 --no-score --evidence --no-evidence --evidence-cap= --version --help"
 
   COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
 

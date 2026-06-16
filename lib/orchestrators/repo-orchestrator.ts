@@ -10,6 +10,7 @@ import { RouteSitemapComparator } from '../analyzers/repo/route-sitemap-comparat
 import { SourceMapper } from '../analyzers/repo/source-mapper';
 import { PackageAnalyzer } from '../analyzers/repo/package-analyzer';
 import { SourcePatternAnalyzer } from '../analyzers/repo/source-pattern-analyzer';
+import type { LlmRepoFinding } from '../analyzers/repo/llm-repo-analyzer';
 import type { Issue, SitemapUrl } from '../types';
 
 interface FrameworkInfo {
@@ -39,6 +40,8 @@ interface RepoAnalysisResult {
   issues: Issue[];
   warnings: Issue[];
   routeDetails?: unknown;
+  /** Optional LLM-layer findings (--llm-repo); additive, never replaces the above. */
+  llmFindings?: LlmRepoFinding[];
 }
 
 class RepoOrchestrator {

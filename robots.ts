@@ -16,6 +16,7 @@ import { validateArguments, validateURL, validateRepoPath, isFetchAllowed } from
 import { generateWorkflow } from './lib/utils/github-actions-generator';
 import { ComparisonAudit } from './lib/comparison/comparison-audit';
 import { RepoOrchestrator } from './lib/orchestrators/repo-orchestrator';
+import { analyzeRepoWithLlm, type RepoContext } from './lib/analyzers/repo/llm-repo-analyzer';
 import { HistoryManager } from './historyManager';
 import { generateBadgeSVG } from './lib/utils/badge-generator';
 
@@ -52,6 +53,66 @@ process.on('uncaughtException', (error) => {
   console.error('Stack:', error.stack);
   process.exit(1);
 });
+
+/** Severity ordering for prioritising which crawl findings to send to the LLM. */
+const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+/**
+ * Assemble the grounding context for the LLM repo pass from the deterministic
+ * result + the crawl aggregator. Pure data shaping — no I/O.
+ */
+function buildRepoContext(
+  repoAnalysis: {
+    framework?: string | null;
+    version?: string | null;
+    router?: string | null;
+    configFile?: string | null;
+    issues?: Array<{ message?: string; severity?: string }>;
+    warnings?: Array<{ message?: string; severity?: string }>;
+    sourceMapping?: Record<string, unknown>;
+  },
+  seoData: { analysis?: { details?: Record<string, { severity?: string; examples?: string[] }> } } | null,
+): RepoContext {
+  const knownIssues = [...(repoAnalysis.issues ?? []), ...(repoAnalysis.warnings ?? [])].map((i) => ({
+    message: String(i.message ?? ''),
+    severity: String(i.severity ?? 'medium'),
+  }));
+
+  const sanitize = (s: string) =>
+    s
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 200);
+
+  const details = seoData?.analysis?.details ?? {};
+  const crawlFindings = Object.entries(details)
+    .map(([message, d]) => ({
+      message,
+      severity: String(d?.severity ?? 'medium'),
+      example: Array.isArray(d?.examples) && d.examples.length ? sanitize(String(d.examples[0])) : undefined,
+    }))
+    .sort((a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4));
+
+  const sourceMapFiles = Array.from(
+    new Set(
+      Object.values(repoAnalysis.sourceMapping ?? {})
+        .flatMap((locs) => (Array.isArray(locs) ? locs : []))
+        .map((loc) => (loc && typeof loc === 'object' ? (loc as { file?: unknown }).file : undefined))
+        .filter((f): f is string => typeof f === 'string' && f.length > 0),
+    ),
+  );
+
+  return {
+    framework: repoAnalysis.framework ?? null,
+    version: repoAnalysis.version ?? null,
+    router: repoAnalysis.router ?? null,
+    configFile: repoAnalysis.configFile ?? null,
+    knownIssues,
+    crawlFindings,
+    sourceMapFiles,
+  };
+}
 
 async function audit() {
   try {
@@ -381,7 +442,32 @@ async function audit() {
       } else {
         console.log(`\n📂 Running source code analysis on: ${repoValidation.resolvedPath}`);
         try {
-          const repoAnalysis = RepoOrchestrator.analyze(repoValidation.resolvedPath ?? args.repo, seo.data);
+          const repoPath = repoValidation.resolvedPath ?? args.repo;
+          const repoAnalysis = RepoOrchestrator.analyze(repoPath, seo.data);
+
+          // Optional LLM layer on top of the deterministic core (never replaces
+          // it): finds issues no rule enumerates, confirms crawl findings against
+          // the source, and proposes code-aware fixes. Own try/catch + silent
+          // degradation so a failure can never lose the deterministic result.
+          if (args.llmRepo) {
+            try {
+              console.log('🤖 Running LLM repo analysis (find more / confirm / fix)…');
+              const ctx = buildRepoContext(repoAnalysis, seo.data);
+              const llmFindings = await analyzeRepoWithLlm(repoPath, ctx, {
+                cacheDir: path.join(seo.fileManager.resultsDir, 'llm-cache'),
+                verbose: args.verbose === true,
+              });
+              if (llmFindings.length > 0) {
+                repoAnalysis.llmFindings = llmFindings;
+                console.log(`🤖 LLM repo analysis: ${llmFindings.length} AI finding(s)`);
+              } else {
+                console.log('🤖 LLM repo analysis: no additional findings (or no transport).');
+              }
+            } catch (e: unknown) {
+              console.error('⚠️  LLM repo analysis failed (deterministic result kept):', (e as Error).message);
+            }
+          }
+
           seo.data.repoAnalysis = repoAnalysis;
           seo.fileManager.writeRepoAnalysis(repoAnalysis);
 
@@ -392,8 +478,16 @@ async function audit() {
           for (const warning of repoAnalysis.warnings || []) {
             seo.saveError(warning.message ?? '', warning.detail ?? '', warning.severity);
           }
+          // LLM findings are additive — surface them (tagged) alongside the rest.
+          for (const f of repoAnalysis.llmFindings ?? []) {
+            const detail = `🔍 AI-discovered. ${f.detail}${f.fix ? ` — Fix: ${f.fix}` : ''}`;
+            seo.saveError(f.message ?? '', detail, f.severity);
+          }
 
-          const issueCount = (repoAnalysis.issues?.length || 0) + (repoAnalysis.warnings?.length || 0);
+          const issueCount =
+            (repoAnalysis.issues?.length ?? 0) +
+            (repoAnalysis.warnings?.length ?? 0) +
+            (repoAnalysis.llmFindings?.length ?? 0);
           console.log(`✅ Repo analysis complete: ${issueCount} finding(s)`);
         } catch (error: unknown) {
           console.error('⚠️  Repo analysis failed:', (error as Error).message);

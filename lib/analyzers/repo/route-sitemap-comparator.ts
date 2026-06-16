@@ -14,6 +14,11 @@ interface RouteEntry {
   [key: string]: unknown;
 }
 
+/** Strip a leading `www.` so apex and www hosts of the same site compare equal. */
+function normalizeHost(host: string): string {
+  return host.replace(/^www\./i, '');
+}
+
 class RouteSitemapComparator {
   /**
    * Compare routes extracted from code with sitemap URLs
@@ -22,7 +27,7 @@ class RouteSitemapComparator {
    * @param {string} origin - Site origin (e.g., https://example.com)
    * @returns {{ issues: Array, warnings: Array, stats: object, details: object }}
    */
-  static compare(routes: RouteEntry[], sitemapUrls: Record<string, unknown>, _origin: string) {
+  static compare(routes: RouteEntry[], sitemapUrls: Record<string, unknown>, origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
@@ -35,12 +40,28 @@ class RouteSitemapComparator {
       };
     }
 
+    // Resolve the site host so cross-origin sitemap entries (CDN, staging, partner
+    // hosts that some sitemaps leak) aren't counted as covering a local route.
+    // Only filter when a valid origin is supplied — otherwise match on path alone.
+    // A leading `www.` is normalized away on both sides: a site reached via the
+    // apex (`--origin=example.com`) whose sitemap lists the canonical `www.`
+    // host (or vice-versa) is the SAME site, and must still match.
+    let originHost: string | null = null;
+    if (origin) {
+      try {
+        originHost = normalizeHost(new URL(origin).host);
+      } catch {
+        originHost = null;
+      }
+    }
+
     const urlPaths = new Set<string>();
 
     // Extract URL paths from sitemap (strip origin, normalize trailing slashes)
     for (const url of Object.keys(sitemapUrls || {})) {
       try {
         const parsed = new URL(url);
+        if (originHost && normalizeHost(parsed.host) !== originHost) continue; // skip off-origin entries
         // Normalize: strip trailing slash unless it's the root path
         const rawPath = parsed.pathname;
         const urlPath = removeTrailingSlash(rawPath);
@@ -193,14 +214,15 @@ class RouteSitemapComparator {
     // Split the pattern into segments and convert each one
     const segments = pattern.split('/');
     const regexSegments = segments.map((seg) => {
-      // Catch-all: [...slug] or [[...slug]]
-      if (/^\[\[?\.\.\.\w+\]?\]$/.test(seg)) return '.+';
-      // Dynamic segment: [slug], [id]
-      if (/^\[\w+\]$/.test(seg)) return '[^/]+';
+      // Catch-all: [...slug] or [[...slug]] — allow any param-name chars (dashes, etc.)
+      if (/^\[\[?\.\.\.[^\]]+\]?\]$/.test(seg)) return '.+';
+      // Dynamic segment: [slug], [id], [product-id] — param names can contain dashes
+      if (/^\[[^\]]+\]$/.test(seg)) return '[^/]+';
       // Gatsby dynamic: {Model.field}
       if (/^\{[^}]+\}$/.test(seg)) return '[^/]+';
-      // Literal segment - escape regex special chars
-      return seg.replace(/[.*+?^${}()|\\]/g, '\\$&');
+      // Literal segment - escape regex special chars (incl. [ ] so a stray
+      // unmatched bracket can never make `new RegExp` throw)
+      return seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     });
 
     let regexStr = regexSegments.join('/');

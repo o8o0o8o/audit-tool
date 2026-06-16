@@ -8,6 +8,22 @@ import { escapeHtml, getSeverityBadge } from '../html-utils';
 import type { ReportSectionData } from '../../types';
 
 /**
+ * Render a repo-analyzer `detail` string as HTML. The analyzers intentionally
+ * embed `<code>` (and `<br>`) markup but interpolate repo-derived file paths
+ * raw, so we escape EVERYTHING first (neutralizing any `<script>`/attribute
+ * injection from a crafted filename) and then restore only the attribute-less
+ * formatting tags the analyzers emit. Restoring `<code>`/`<br>` is inert — they
+ * carry no attributes and cannot execute — so this stays XSS-safe while letting
+ * the intended inline-code styling render instead of showing literal tags.
+ */
+function renderRepoDetailHtml(detail: string): string {
+  return escapeHtml(detail)
+    .replace(/&lt;code&gt;/g, '<code>')
+    .replace(/&lt;\/code&gt;/g, '</code>')
+    .replace(/&lt;br\s*\/?&gt;/g, '<br>');
+}
+
+/**
  * Generate the source code analysis section
  * @param {Object} data - Report data
  * @param {Object} data.jsonData - Full JSON audit data
@@ -95,7 +111,7 @@ function getConfigValidation(repo: Record<string, unknown>) {
     <tr>
       <td style="padding: 10px 12px;">${getSeverityBadge(f.severity as string)}</td>
       <td style="padding: 10px 12px; font-weight: var(--font-weight-medium);">${escapeHtml(f.message)}</td>
-      <td style="padding: 10px 12px; font-size: var(--font-size-sm); color: #4b5563;">${escapeHtml((f.detail as string) ?? '')}</td>
+      <td style="padding: 10px 12px; font-size: var(--font-size-sm); color: #4b5563;">${renderRepoDetailHtml((f.detail as string) ?? '')}</td>
     </tr>
   `,
     )
@@ -278,4 +294,4 @@ function getSourceMapping(repo: Record<string, unknown>) {
   `;
 }
 
-export { getSourceCodeAnalysis };
+export { getSourceCodeAnalysis, renderRepoDetailHtml };

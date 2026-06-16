@@ -133,7 +133,21 @@ class RouteExtractor {
     };
 
     walk(absDir, '');
-    return routes;
+    // Parallel-route @slots (and other slot-style pages) can yield a page.tsx
+    // that resolves to a URL pattern already produced by the main tree. Slots
+    // render into a layout slot of an existing URL — they are not navigable
+    // URLs of their own — so collapse to one route per pattern.
+    return this.#dedupeByPattern(routes);
+  }
+
+  /** Keep the first route for each distinct URL pattern, preserving order. */
+  static #dedupeByPattern(routes: RouteEntry[]) {
+    const seen = new Set<string>();
+    return routes.filter((r) => {
+      if (seen.has(r.pattern)) return false;
+      seen.add(r.pattern);
+      return true;
+    });
   }
 
   /**
@@ -409,13 +423,13 @@ class RouteExtractor {
               pattern = pathPrefix;
             } else {
               // Flat route segments within a directory
-              const segments = basename.split('.').map((s) => this.#remixSegmentToPattern(s));
+              const segments = this.#splitRemixFlat(basename).map((s) => this.#remixSegmentToPattern(s));
               const joined = segments.filter((s) => s).join('/');
               pattern = joined ? `${pathPrefix}/${joined}` : pathPrefix;
             }
           } else {
             // Flat routes at top level: blog.$slug.tsx -> /blog/[slug]
-            const segments = basename.split('.').map((s) => this.#remixSegmentToPattern(s));
+            const segments = this.#splitRemixFlat(basename).map((s) => this.#remixSegmentToPattern(s));
             const joined = segments.filter((s) => s).join('/');
             pattern = '/' + joined;
           }
@@ -432,20 +446,70 @@ class RouteExtractor {
   }
 
   /**
+   * Split a Remix flat-route basename on the `.` segment separator, but NOT on a
+   * `.` that sits inside a `[ ]` escape group. In Remix `[ ]` escapes literal
+   * characters, so `concerts.trending[.]json` is two segments — `concerts` and
+   * `trending[.]json` (a literal `trending.json`) — not four.
+   */
+  static #splitRemixFlat(basename: string): string[] {
+    const out: string[] = [];
+    let cur = '';
+    let depth = 0;
+    for (const ch of basename) {
+      if (ch === '[') {
+        depth++;
+        cur += ch;
+      } else if (ch === ']') {
+        depth = Math.max(0, depth - 1);
+        cur += ch;
+      } else if (ch === '.' && depth === 0) {
+        out.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out;
+  }
+
+  /**
    * Convert a Remix route segment to a pattern segment
-   * $slug -> [slug], _index -> '' (empty), _prefix -> layout (skip)
+   * $slug -> [slug], _index -> '' (empty), _prefix -> layout (skip),
+   * trending[.]json -> trending.json (unwrap `[ ]` literal escapes),
+   * $id[.]json -> [id].json (dynamic param + escaped literal suffix in one segment)
    */
   static #remixSegmentToPattern(segment: string) {
     if (segment === '_index' || segment === 'index') return '';
-    // $ prefix = dynamic parameter
+    // $ prefix = dynamic parameter. The param NAME is the leading identifier;
+    // anything after it is a literal suffix (with `[ ]` escapes unwrapped), e.g.
+    // `$id[.]json` -> `[id]` + `.json`. Without this split the escape would be
+    // swallowed into the param name (`[id[.]json]`).
     if (segment.startsWith('$')) {
-      const param = segment.substring(1);
-      if (param === '') return '[...catchall]'; // $ alone = catch-all (splat)
-      return `[${param}]`;
+      const rest = segment.substring(1);
+      if (rest === '') return '[...catchall]'; // $ alone = catch-all (splat)
+      // Param name = leading identifier run. Unicode letters/digits are allowed
+      // (JS/Remix identifiers permit them, e.g. `$слаг`), so the leading run is
+      // NOT escaped/escape-bracketed; the `[ ]`-escaped suffix is unwrapped below.
+      const m = rest.match(/^([\p{L}\p{N}_]+)([\s\S]*)$/u);
+      if (!m) {
+        // No leading identifier (e.g. `$[.]json`) — treat the whole rest as literal.
+        return this.#unwrapRemixEscapes(rest);
+      }
+      const param = m[1];
+      const suffix = this.#unwrapRemixEscapes(m[2]);
+      return `[${param}]${suffix}`;
     }
     // _ prefix = pathless layout route (doesn't add to URL)
     if (segment.startsWith('_')) return '';
-    return segment;
+    // Literal segment: unwrap `[ ]` escapes (`[.]` -> `.`, `[$]` -> `$`) so an
+    // escaped special char becomes the literal it represents, not a stray bracket.
+    return this.#unwrapRemixEscapes(segment);
+  }
+
+  /** Unwrap Remix `[ ]` literal escapes: `[.]` -> `.`, `[$]` -> `$`. */
+  static #unwrapRemixEscapes(s: string): string {
+    return s.replace(/\[([^\]]*)\]/g, '$1');
   }
 }
 

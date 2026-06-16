@@ -92,12 +92,22 @@ class FrameworkConfigValidator {
 
     // App Router specific checks
     if (router === 'app' || router === 'both') {
-      const appDir =
-        fs.existsSync(path.join(repoPath, 'app', 'layout.tsx')) ||
-        fs.existsSync(path.join(repoPath, 'app', 'layout.js')) ||
-        fs.existsSync(path.join(repoPath, 'app', 'page.tsx'))
-          ? 'app'
-          : 'src/app';
+      // Resolve the app dir by checking ALL valid Next.js extensions for the
+      // root entry files — a `.jsx`/`.ts`-only top-level `app/` project must
+      // not fall through to `src/app`, or the robots/sitemap/metadata checks
+      // below run against the wrong (nonexistent) directory.
+      const appEntryFiles = [
+        'layout.tsx',
+        'layout.jsx',
+        'layout.js',
+        'layout.ts',
+        'page.tsx',
+        'page.jsx',
+        'page.js',
+        'page.ts',
+      ];
+      const hasAppEntry = (base: string) => appEntryFiles.some((f) => fs.existsSync(path.join(repoPath, base, f)));
+      const appDir = hasAppEntry('app') ? 'app' : 'src/app';
 
       // Check for robots.ts
       if (!this.#fileExists(repoPath, appDir, 'robots.ts') && !this.#fileExists(repoPath, appDir, 'robots.js')) {
@@ -122,7 +132,7 @@ class FrameworkConfigValidator {
       }
 
       // Check root layout for metadata export
-      const layoutFile = this.#findFile(repoPath, appDir, ['layout.tsx', 'layout.jsx', 'layout.js']);
+      const layoutFile = this.#findFile(repoPath, appDir, ['layout.tsx', 'layout.jsx', 'layout.js', 'layout.ts']);
       if (layoutFile) {
         const layoutContent = this.#readFile(repoPath, layoutFile);
         if (layoutContent && !this.#hasMetadataExport(layoutContent)) {
@@ -426,8 +436,9 @@ class FrameworkConfigValidator {
    * @returns {boolean}
    */
   static #hasConfigKey(content: string, key: string) {
-    // Strip single-line comments to avoid false positives
-    const stripped = content.replace(/\/\/.*$/gm, '');
+    // Strip block comments first, then single-line comments, so a key that only
+    // appears inside a commented-out example config isn't read as configured.
+    const stripped = content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     // Match as object key: key:, "key":, 'key':
     const keyPattern = new RegExp(`(?:^|[{,\\s])['"]?${key}['"]?\\s*:`, 'm');
     return keyPattern.test(stripped);

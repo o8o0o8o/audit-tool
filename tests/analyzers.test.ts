@@ -1067,6 +1067,30 @@ void describe('PackageAnalyzer', () => {
     assert.ok(r.warnings.some((w) => /wildcard/i.test(w.message ?? '')));
   });
 
+  void it('flags realistic unpinned ranges (>= , > , x-ranges) and leaves normal pins alone', () => {
+    const flagged = PackageAnalyzer.analyze({
+      dependencies: { a: '>=2.0.0', b: '>1', c: '1.x', d: '18.x' },
+    });
+    // All four are unpinned → the warning fires and the safe pins below do not.
+    assert.ok(flagged.warnings.some((w) => /wildcard|open-ended/i.test(w.message ?? '')));
+
+    const safe = PackageAnalyzer.analyze({
+      dependencies: { a: '^1.2.3', b: '~1.2.0', c: '1.2.3', d: 'github:user/repo' },
+    });
+    assert.ok(!safe.warnings.some((w) => /wildcard|open-ended/i.test(w.message ?? '')));
+  });
+
+  void it('version-checks Next/React even when next is a devDependency', () => {
+    const r = PackageAnalyzer.analyze({
+      devDependencies: { next: '^13.4.0' },
+      dependencies: { react: '^17.0.2' },
+    });
+    assert.ok(
+      r.issues.some((i) => /newer React/i.test(i.message ?? '')),
+      'Next-in-devDependencies must still trigger the React-mismatch check',
+    );
+  });
+
   void it('flags Next/React major mismatch as HIGH', () => {
     const r = PackageAnalyzer.analyze({ dependencies: { next: '^13.4.0', react: '^17.0.2' } });
     const mismatch = r.issues.find((i) => /newer React/i.test(i.message ?? ''));
@@ -1280,7 +1304,7 @@ function find<T extends { message?: string }>(arr: T[], fragment: string): T | u
 void describe('SourcePatternAnalyzer', () => {
   void it('returns nothing for non-Next.js frameworks', () => {
     const root = fakeRepo('app/page.tsx', `export default function P() { return null; }`);
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nuxt', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Nuxt', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.strictEqual(r.issues.length, 0);
     assert.strictEqual(r.warnings.length, 0);
@@ -1291,7 +1315,7 @@ void describe('SourcePatternAnalyzer', () => {
       'app/fetcher.ts',
       `export async function load() {\n  return fetch('/api/x', { cache: "no-store" });\n}\n`,
     );
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(find(r.warnings, 'disable the Next.js data cache'));
   });
@@ -1301,7 +1325,7 @@ void describe('SourcePatternAnalyzer', () => {
       'app/page.tsx',
       `import dynamic from 'next/dynamic';\nconst Heavy = dynamic(() => import('./Heavy'), { ssr: false });\nexport default function P() { return <Heavy />; }\n`,
     );
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     const hit = find(r.issues, 'ssr: false break SEO');
     assert.ok(hit, `expected ssr:false finding, got ${JSON.stringify([...r.issues, ...r.warnings])}`);
@@ -1313,14 +1337,14 @@ void describe('SourcePatternAnalyzer', () => {
       'app/icon.tsx',
       `export const dynamic = 'force-dynamic';\nexport default function Icon() { return null; }\n`,
     );
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(find(r.warnings, 'force-dynamic'));
   });
 
   void it('flags full-lib lodash imports', () => {
     const root = fakeRepo('app/utils.ts', `import _ from 'lodash';\nexport const d = _.debounce(() => {}, 100);\n`);
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(find(r.warnings, 'lodash imported as a whole library'));
   });
@@ -1330,7 +1354,7 @@ void describe('SourcePatternAnalyzer', () => {
       'app/utils.ts',
       `import debounce from 'lodash.debounce';\nimport throttle from 'lodash/throttle';\nexport { debounce, throttle };\n`,
     );
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(!find([...r.issues, ...r.warnings], 'lodash imported as a whole library'));
   });
@@ -1340,7 +1364,7 @@ void describe('SourcePatternAnalyzer', () => {
       'pages/_app.tsx',
       `import fs from 'fs';\nexport default function App() {\n  return <style dangerouslySetInnerHTML={{ __html: fs.readFileSync('a.css','utf8') }} />;\n}\n`,
     );
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['pages'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['pages'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(find(r.warnings, 'CSS inlined via dangerouslySetInnerHTML in _app'));
   });
@@ -1350,7 +1374,7 @@ void describe('SourcePatternAnalyzer', () => {
       'pages/index.tsx',
       `import fs from 'fs';\nexport default function P() {\n  return <style dangerouslySetInnerHTML={{ __html: fs.readFileSync('a.css','utf8') }} />;\n}\n`,
     );
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['pages'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['pages'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(!find([...r.issues, ...r.warnings], 'CSS inlined'));
   });
@@ -1361,9 +1385,341 @@ void describe('SourcePatternAnalyzer', () => {
     fs.mkdirSync(nm, { recursive: true });
     // place a violating pattern inside node_modules
     fs.writeFileSync(path.join(nm, 'leaked.ts'), `export const dynamic = 'force-dynamic';\n`);
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'nextjs', srcDirs: ['app'] });
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.ok(!find([...r.issues, ...r.warnings], 'force-dynamic'));
+  });
+});
+
+// ============================================================
+// Detector ↔ analyzer name parity (latent-trap guard)
+//
+// SourcePatternAnalyzer once gated on the literal 'nextjs' while the detector
+// emits 'Next.js', so the analyzer silently never ran in production. Hand-built
+// frameworkInfo in the unit tests masked it. These integration tests run the
+// REAL detector output straight into the downstream analyzers, so any future
+// drift in the framework name string fails here.
+// ============================================================
+import { RepoFrameworkDetector } from '../lib/analyzers/repo/framework-detector';
+
+void describe('repo framework name parity', () => {
+  void it('detects a Next.js repo as exactly "Next.js"', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-parity-'));
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ dependencies: { next: '^14.2.0' } }));
+    fs.mkdirSync(path.join(root, 'app'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'app', 'page.tsx'), `export default function P() { return null; }`);
+    const info = RepoFrameworkDetector.detect(root);
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.strictEqual(info.framework, 'Next.js');
+  });
+
+  void it('feeds detector output into SourcePatternAnalyzer and the Next.js checks fire', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-parity-'));
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ dependencies: { next: '^14.2.0' } }));
+    fs.mkdirSync(path.join(root, 'app'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'app', 'page.tsx'), `export default function P() { return null; }`);
+    fs.writeFileSync(
+      path.join(root, 'app', 'fetcher.ts'),
+      `export async function load() {\n  return fetch('/api/x', { cache: "no-store" });\n}\n`,
+    );
+
+    const info = RepoFrameworkDetector.detect(root);
+    // Pass the detector's OWN output through — not a hand-built literal.
+    const r = SourcePatternAnalyzer.analyze(root, { framework: info.framework, srcDirs: info.srcDirs });
+    fs.rmSync(root, { recursive: true, force: true });
+
+    assert.ok(
+      find(r.warnings, 'disable the Next.js data cache'),
+      'SourcePatternAnalyzer must fire on the detector-reported framework name',
+    );
+  });
+});
+
+// ============================================================
+// Repo-analysis bug fixes (route extraction / comparison / detection / mapping)
+// ============================================================
+import { RouteExtractor } from '../lib/analyzers/repo/route-extractor';
+import { RouteSitemapComparator } from '../lib/analyzers/repo/route-sitemap-comparator';
+import { FrameworkConfigValidator } from '../lib/analyzers/repo/framework-config-validator';
+import { SourceMapper } from '../lib/analyzers/repo/source-mapper';
+import { renderRepoDetailHtml } from '../lib/reports/sections/source-code-analysis';
+
+/** Build a multi-file fake repo under a temp dir; returns the root. */
+function fakeTree(files: Record<string, string>): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fix-'));
+  for (const [rel, contents] of Object.entries(files)) {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, contents);
+  }
+  return root;
+}
+
+const NEXT_FI: {
+  framework: string;
+  router: string | null;
+  version: string | null;
+  packageJson: Record<string, unknown>;
+  srcDirs: string[];
+  configFile: string | null;
+} = {
+  framework: 'Next.js',
+  router: 'app',
+  version: null,
+  packageJson: {},
+  srcDirs: ['app', 'src'],
+  configFile: null,
+};
+
+void describe('RouteSitemapComparator — dynamic-segment regex safety', () => {
+  void it('does not throw and covers a dashed dynamic segment ([product-id])', () => {
+    const r = RouteSitemapComparator.compare(
+      [{ pattern: '/shop/[product-id]', file: 'p.tsx', isDynamic: true }],
+      { 'https://ex.com/shop/abc': {} },
+      'https://ex.com',
+    );
+    assert.strictEqual(r.stats.coveredRoutes, 1);
+  });
+
+  void it('treats a dashed catch-all ([...all-slugs]) as a catch-all match', () => {
+    const r = RouteSitemapComparator.compare(
+      [{ pattern: '/docs/[...all-slugs]', file: 'p.tsx', isDynamic: true }],
+      { 'https://ex.com/docs/a/b/c': {} },
+      'https://ex.com',
+    );
+    assert.strictEqual(r.stats.coveredRoutes, 1);
+  });
+});
+
+void describe('RouteSitemapComparator — origin host filtering', () => {
+  void it('does not count a cross-origin sitemap URL as covering a local route', () => {
+    const r = RouteSitemapComparator.compare(
+      [{ pattern: '/pricing', file: 'p.tsx', isDynamic: false }],
+      { 'https://staging.other.com/pricing': {} },
+      'https://example.com',
+    );
+    assert.strictEqual(r.stats.coveredRoutes, 0);
+    assert.strictEqual(r.stats.uncoveredRoutes, 1);
+  });
+
+  void it('still covers a same-origin sitemap URL', () => {
+    const r = RouteSitemapComparator.compare(
+      [{ pattern: '/pricing', file: 'p.tsx', isDynamic: false }],
+      { 'https://example.com/pricing': {} },
+      'https://example.com',
+    );
+    assert.strictEqual(r.stats.coveredRoutes, 1);
+  });
+
+  void it('treats apex and www as the same site (no false uncovered on a www-canonical sitemap)', () => {
+    // apex origin, www sitemap (a 301-to-www site reached via the apex)
+    const r = RouteSitemapComparator.compare(
+      [{ pattern: '/pricing', file: 'p.tsx', isDynamic: false }],
+      { 'https://www.example.com/pricing': {} },
+      'https://example.com',
+    );
+    assert.strictEqual(r.stats.coveredRoutes, 1);
+    assert.strictEqual(r.stats.uncoveredRoutes, 0);
+
+    // and the inverse: www origin, apex sitemap
+    const r2 = RouteSitemapComparator.compare(
+      [{ pattern: '/pricing', file: 'p.tsx', isDynamic: false }],
+      { 'https://example.com/pricing': {} },
+      'https://www.example.com',
+    );
+    assert.strictEqual(r2.stats.coveredRoutes, 1);
+  });
+
+  void it('matches on path alone when no origin is supplied (back-compat)', () => {
+    const r = RouteSitemapComparator.compare(
+      [{ pattern: '/pricing', file: 'p.tsx', isDynamic: false }],
+      { 'https://anything.com/pricing': {} },
+      '',
+    );
+    assert.strictEqual(r.stats.coveredRoutes, 1);
+  });
+});
+
+void describe('RouteExtractor — Next.js parallel routes', () => {
+  void it('collapses @slot pages into a single route per URL pattern', () => {
+    const root = fakeTree({
+      'app/dashboard/page.tsx': 'export default function P(){return null}',
+      'app/dashboard/@team/page.tsx': 'export default function P(){return null}',
+      'app/dashboard/@analytics/page.tsx': 'export default function P(){return null}',
+    });
+    const routes = RouteExtractor.extract(root, { ...NEXT_FI });
+    fs.rmSync(root, { recursive: true, force: true });
+    const dashboard = routes.filter((r) => r.pattern === '/dashboard');
+    assert.strictEqual(dashboard.length, 1, `expected one /dashboard route, got ${JSON.stringify(routes)}`);
+  });
+});
+
+void describe('RepoFrameworkDetector — router detection & version cleaning', () => {
+  void it('does not count a pages/ dir holding only _document as a Pages Router', () => {
+    const root = fakeTree({
+      'package.json': JSON.stringify({ dependencies: { next: '^14' } }),
+      'app/layout.tsx': 'x',
+      'app/page.tsx': 'x',
+      'pages/_document.tsx': 'x',
+    });
+    const info = RepoFrameworkDetector.detect(root);
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.strictEqual(info.router, 'app');
+  });
+
+  void it('returns null version for a non-semver git specifier instead of fabricating one', () => {
+    const root = fakeTree({
+      'package.json': JSON.stringify({ dependencies: { next: 'github:vercel/next.js#v14.1.0' } }),
+    });
+    const info = RepoFrameworkDetector.detect(root);
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.strictEqual(info.version, null);
+  });
+
+  void it('still cleans a normal caret range', () => {
+    const root = fakeTree({ 'package.json': JSON.stringify({ dependencies: { next: '^14.2.0' } }) });
+    const info = RepoFrameworkDetector.detect(root);
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.strictEqual(info.version, '14.2.0');
+  });
+});
+
+void describe('FrameworkConfigValidator — Next.js app-dir resolution & comment stripping', () => {
+  void it('resolves a top-level app/ built with .jsx (no false robots/sitemap, metadata check still runs)', () => {
+    const root = fakeTree({
+      'app/layout.jsx': 'export default function L(){return null}', // no metadata export
+      'app/page.jsx': 'export default function P(){return null}',
+      'app/robots.ts': 'export default ()=>({})',
+      'app/sitemap.ts': 'export default ()=>([])',
+    });
+    const r = FrameworkConfigValidator.validate(root, { ...NEXT_FI, srcDirs: ['app'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    const msgs = [...r.issues, ...r.warnings].map((i) => i.message ?? '');
+    assert.ok(!msgs.some((m) => /Missing robots/.test(m)), 'robots.ts exists under app/ — no false missing');
+    assert.ok(!msgs.some((m) => /Missing sitemap/.test(m)), 'sitemap.ts exists under app/ — no false missing');
+    assert.ok(msgs.some((m) => /metadata/i.test(m)), 'metadata check must run on the real app dir');
+  });
+
+  void it('does not read a config key that appears only inside a /* */ comment', () => {
+    const root = fakeTree({
+      'next.config.js': '/* example:\n  images: { formats: [] },\n  trailingSlash: true,\n*/\nmodule.exports = {};\n',
+    });
+    const r = FrameworkConfigValidator.validate(root, {
+      ...NEXT_FI,
+      router: null,
+      srcDirs: [],
+      configFile: 'next.config.js',
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+    const msgs = [...r.issues, ...r.warnings].map((i) => i.message ?? '');
+    assert.ok(msgs.some((m) => /trailingSlash/.test(m)), 'commented-out trailingSlash must not count as configured');
+    assert.ok(msgs.some((m) => /images/.test(m)), 'commented-out images must not count as configured');
+  });
+});
+
+void describe('RouteExtractor — Remix flat-route escape', () => {
+  void it('unwraps a [.] literal escape into a real dot (not a stray bracket / dynamic)', () => {
+    const root = fakeTree({
+      'app/routes/concerts.trending[.]json.tsx': 'export default ()=>null',
+      'app/routes/blog.$slug.tsx': 'export default ()=>null',
+    });
+    const routes = RouteExtractor.extract(root, {
+      framework: 'Remix',
+      router: null,
+      version: null,
+      packageJson: {},
+      srcDirs: ['app'],
+      configFile: null,
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+    const escaped = routes.find((r) => r.file.includes('trending'));
+    assert.strictEqual(escaped?.pattern, '/concerts/trending.json');
+    assert.strictEqual(escaped?.isDynamic, false);
+    // $-dynamic still works alongside the escape handling
+    assert.ok(routes.some((r) => r.pattern === '/blog/[slug]' && r.isDynamic));
+  });
+
+  void it('splits a $-dynamic param from a trailing escaped literal in the same segment', () => {
+    const root = fakeTree({
+      'app/routes/users.$id[.]json.tsx': 'export default ()=>null',
+      'app/routes/$.tsx': 'export default ()=>null',
+    });
+    const routes = RouteExtractor.extract(root, {
+      framework: 'Remix',
+      router: null,
+      version: null,
+      packageJson: {},
+      srcDirs: ['app'],
+      configFile: null,
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+    // $id[.]json -> dynamic param `id` + literal `.json`, not a bracket-swallowing [id[.]json]
+    const resource = routes.find((r) => r.file.includes('users'));
+    assert.strictEqual(resource?.pattern, '/users/[id].json');
+    assert.strictEqual(resource?.isDynamic, true);
+    // bare $ is still the catch-all splat
+    assert.ok(routes.some((r) => r.pattern === '/[...catchall]'));
+  });
+
+  void it('keeps a non-ASCII dynamic param name dynamic (no regression to literal)', () => {
+    const root = fakeTree({ 'app/routes/users.$слаг.tsx': 'export default ()=>null' });
+    const routes = RouteExtractor.extract(root, {
+      framework: 'Remix',
+      router: null,
+      version: null,
+      packageJson: {},
+      srcDirs: ['app'],
+      configFile: null,
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+    const r = routes.find((x) => x.file.includes('users'));
+    assert.strictEqual(r?.pattern, '/users/[слаг]');
+    assert.strictEqual(r?.isDynamic, true);
+  });
+});
+
+void describe('SourceMapper — Open Graph / structured-data key remap', () => {
+  void it('fires the OG and structured-data mappers on the real "Low … coverage" messages', () => {
+    const root = fakeTree({
+      'app/layout.tsx': 'export const metadata = {}; export default ()=>null',
+    });
+    const fi = { ...NEXT_FI, srcDirs: ['app'] };
+    const og = SourceMapper.map({ 'Low Open Graph tag coverage across the site': 1 }, root, fi);
+    const sd = SourceMapper.map({ 'Low structured data coverage detected': 1 }, root, fi);
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(Object.keys(og).length > 0, 'Open Graph mapper must match "Low Open Graph tag coverage"');
+    assert.ok(Object.keys(sd).length > 0, 'structured-data mapper must match "Low structured data coverage"');
+  });
+});
+
+void describe('renderRepoDetailHtml — whitelist HTML rendering', () => {
+  void it('renders intended <code>/<br> markup but escapes injected tags', () => {
+    assert.strictEqual(
+      renderRepoDetailHtml('Found <code>app/page.tsx</code> issue'),
+      'Found <code>app/page.tsx</code> issue',
+    );
+    const xss = renderRepoDetailHtml('file <code><script>alert(1)</script>.tsx</code>');
+    assert.ok(!xss.includes('<script>'), 'injected <script> must be escaped, never emitted raw');
+    assert.ok(xss.includes('&lt;script&gt;'), 'injected tag is escaped');
+    assert.ok(xss.includes('<code>'), 'intended <code> still renders');
+  });
+});
+
+void describe('SourceMapper — alt detection & key merge', () => {
+  void it('flags an <img> whose only alt-like attribute is a hyphenated data-alt', () => {
+    const root = fakeTree({ 'src/D.tsx': 'export default ()=> <img data-alt="x" src="y" />' });
+    const m = SourceMapper.map({ 'Pages have images without alt text': 1 }, root, { ...NEXT_FI });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(JSON.stringify(m).includes('D.tsx'), 'data-alt must not satisfy the has-alt check');
+  });
+
+  void it('merges locations when one analysis key matches two mapper substrings', () => {
+    const root = fakeTree({ 'app/page.tsx': 'export default ()=> <img src="y" />' });
+    const m = SourceMapper.map({ 'titles that are too short and images without alt text': 1 }, root, { ...NEXT_FI });
+    fs.rmSync(root, { recursive: true, force: true });
+    const contexts = new Set((Object.values(m)[0] ?? []).map((l) => l.context));
+    assert.ok(contexts.has('page without metadata export'), 'title mapper locations must survive');
+    assert.ok(contexts.has('image without alt attribute'), 'alt mapper locations must survive');
   });
 });
 

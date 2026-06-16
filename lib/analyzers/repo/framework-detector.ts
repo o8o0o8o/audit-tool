@@ -165,14 +165,19 @@ class RepoFrameworkDetector {
   }
 
   /**
-   * Check if directory is a valid Next.js Pages Router directory
-   * Must contain at least one page file (index, _app, or any .tsx/.jsx)
+   * Check if directory is a valid Next.js Pages Router directory.
+   * Must contain at least one real route file. `_app`/`_document`/`_error` are
+   * framework wrappers, NOT routes — a `pages/` holding only those (a common
+   * App-Router-with-legacy-config or mid-migration layout) must not be counted
+   * as a Pages Router, or it produces a false `both`/`pages` detection.
    */
   static #isPagesRouterDir(dir: string) {
     if (!fs.existsSync(dir)) return false;
     try {
       const entries = fs.readdirSync(dir);
-      return entries.some((e) => /\.(tsx|jsx|js|ts)$/.test(e) && !e.startsWith('.'));
+      return entries.some(
+        (e) => /\.(tsx|jsx|js|ts)$/.test(e) && !e.startsWith('.') && !/^(_app|_document|_error)\./.test(e),
+      );
     } catch {
       return false;
     }
@@ -185,7 +190,14 @@ class RepoFrameworkDetector {
    */
   static #cleanVersion(version: string | null) {
     if (!version) return null;
-    return version.replace(/^[^0-9]*/, '') || version;
+    // Non-semver specifiers (git, file, link, workspace, alias, URL) carry no
+    // knowable installed version — don't fabricate one from an embedded digit
+    // (e.g. `github:org/repo#v1.2.3` must not become "1.2.3").
+    if (/^(?:github:|git\+|git:|https?:|file:|link:|workspace:|npm:|portal:)/i.test(version)) {
+      return null;
+    }
+    const cleaned = version.replace(/^[^0-9]*/, '');
+    return /^\d/.test(cleaned) ? cleaned : version;
   }
 }
 

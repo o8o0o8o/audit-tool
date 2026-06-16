@@ -18,8 +18,14 @@ interface PackageJson {
   peerDependencies?: Record<string, string>;
 }
 
-/** Match unpinned ranges that introduce build non-determinism. */
-const WILDCARD_RANGE = /^(\*|latest|x|>=\s*\d|>\s*\d)$/i;
+/**
+ * Match unpinned ranges that introduce build non-determinism.
+ * Covers: `*`, `latest`, bare `x`, x-ranges (`1.x`, `1.2.x`), and open-ended
+ * `>`/`>=` ranges of any length (`>=2.0.0`, `>2`). Anchored at both ends so a
+ * normal pin/caret/tilde (`1.2.3`, `^1.2.3`, `~1.2.0`) and arbitrary tags
+ * (`xyz`) are NOT flagged.
+ */
+const WILDCARD_RANGE = /^(?:\*|latest|x|\d+(?:\.\d+)*\.x|>=?\s*\d[\w.\-]*)$/i;
 
 const STYLING_LIBS = ['styled-components', '@emotion/react', '@emotion/styled', 'tailwindcss', 'sass', 'less'];
 
@@ -57,9 +63,12 @@ class PackageAnalyzer {
       });
     }
 
-    // 3. Next.js / React major-version sanity check
-    const nextVersion = parseMajor(packageJson.dependencies?.next);
-    const reactVersion = parseMajor(packageJson.dependencies?.react);
+    // 3. Next.js / React major-version sanity check.
+    // Read from the merged dep set (deps + devDeps) so a `next` pinned in
+    // devDependencies — which the framework detector still recognises — is
+    // version-checked too, rather than silently skipped.
+    const nextVersion = parseMajor(allDeps.next);
+    const reactVersion = parseMajor(allDeps.react);
     if (nextVersion !== null && reactVersion !== null) {
       // Next 13+ requires React 18+; Next 14+ requires React 18+; Next 15 supports React 18 + 19
       if (nextVersion >= 13 && reactVersion < 18) {

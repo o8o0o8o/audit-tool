@@ -68,7 +68,10 @@ class SourceMapper {
       try {
         const locations = mapper.call(this, repoPath, framework ?? '', srcDirs);
         if (locations.length > 0) {
-          mapping[matchedKey] = locations;
+          // Merge rather than overwrite: a single analysis key can contain two
+          // distinct mapper substrings (e.g. "titles too short and images
+          // without alt"), and each mapper's locations must be kept.
+          mapping[matchedKey] = (mapping[matchedKey] ?? []).concat(locations);
         }
       } catch {
         // Skip if mapper fails
@@ -91,8 +94,11 @@ class SourceMapper {
     'descriptions that are too long': SourceMapper.#mapMissingDescription,
     'Canonicals are not set': SourceMapper.#mapMissingCanonical,
     'more than one h1 tag': SourceMapper.#mapH1Issues,
-    'Missing structured data': SourceMapper.#mapMissingStructuredData,
-    'Missing Open Graph': SourceMapper.#mapMissingOpenGraph,
+    // Substrings must be CONTAINED in the analyzer's emitted message. The schema
+    // and Open Graph analyzers emit "Low structured data coverage" / "Low Open
+    // Graph tag coverage" (not "Missing …"), so match on the shared phrase.
+    'structured data': SourceMapper.#mapMissingStructuredData,
+    'Open Graph': SourceMapper.#mapMissingOpenGraph,
     'images without alt': SourceMapper.#mapMissingAltText,
     'alt text is missing': SourceMapper.#mapMissingAltText,
   };
@@ -371,7 +377,9 @@ class SourceMapper {
     // Find files with images missing alt text
     locations.push(
       ...this.#findInFilesWithLineSearch(repoPath, srcDirs, componentPattern, {
-        linePattern: /<img\s(?![^>]*\balt\s*=)[^>]*>|<Image\s(?![^>]*\balt\s*=)[^>]*>/,
+        // `(?<![-\w])alt` so a hyphenated attribute like `data-alt` does not
+        // satisfy the "has alt" lookahead and mask a genuinely missing alt.
+        linePattern: /<img\s(?![^>]*(?<![-\w])alt\s*=)[^>]*>|<Image\s(?![^>]*(?<![-\w])alt\s*=)[^>]*>/,
         suggestion: 'Add descriptive alt text to all <img> and <Image> elements',
         context: 'image without alt attribute',
       }),

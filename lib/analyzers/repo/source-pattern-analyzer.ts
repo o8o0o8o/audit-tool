@@ -98,8 +98,9 @@ class SourcePatternAnalyzer {
 
     // Only Next.js for now — the patterns above are Next-specific. Other
     // frameworks can be added when we have human-report data showing their
-    // common anti-patterns.
-    if (framework.framework !== 'nextjs') {
+    // common anti-patterns. NOTE: the framework name must match what
+    // RepoFrameworkDetector emits ('Next.js'), not a lowercased slug.
+    if (framework.framework !== 'Next.js') {
       return { issues, warnings };
     }
 

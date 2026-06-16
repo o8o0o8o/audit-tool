@@ -40,7 +40,7 @@ interface RepoAnalysisResult {
   issues: Issue[];
   warnings: Issue[];
   routeDetails?: unknown;
-  /** Optional LLM-layer findings (--llm-repo); additive, never replaces the above. */
+  /** Optional LLM-layer findings (--llm, with --repo); additive, never replaces the above. */
   llmFindings?: LlmRepoFinding[];
 }
 

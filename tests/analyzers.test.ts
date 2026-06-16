@@ -1618,7 +1618,7 @@ void describe('FrameworkConfigValidator — Next.js app-dir resolution & comment
 });
 
 // ============================================================
-// LLM repo analyzer (--llm-repo) — pure / bounded logic only.
+// LLM repo analyzer (the --llm repo pass) — pure / bounded logic only.
 // The populated model path is intentionally NOT unit-tested (it would hit the
 // network); we test parsing, source gathering, and the no-source degrade.
 // ============================================================

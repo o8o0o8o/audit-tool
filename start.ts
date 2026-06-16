@@ -149,10 +149,8 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     // dropped (the child never sees them, so no LLM pass / no verified report).
     if (args.config) childArgs.push(`--config=${args.config}`);
     if (args.phase2 === false) childArgs.push('--no-phase2');
-    if (args.llmNarrative) childArgs.push('--llm-narrative');
-    if (args.llmFindings) childArgs.push('--llm-findings');
-    if (args.llmRepo) childArgs.push('--llm-repo');
-    if (args.llmVerify) childArgs.push('--llm-verify');
+    // The four LLM passes are an all-or-nothing set behind a single flag.
+    if (args.llmNarrative || args.llmFindings || args.llmRepo || args.llmVerify) childArgs.push('--llm');
     if (args.verify) childArgs.push('--verify');
     if (args.noScore) childArgs.push('--no-score');
     if (args.evidence === false) childArgs.push('--no-evidence');

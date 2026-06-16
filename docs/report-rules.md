@@ -19,7 +19,7 @@ that reader and for honesty over flattery:
 - **No filler.** Low-signal boilerplate checks (web-app manifest, service
   worker, theme-color, Apple touch icon, noscript, Shadow DOM, …) collapse into
   a compact "Minor & informational" list rather than headline findings.
-  Screenshots are captured to `evidence/` (they feed `--llm-findings`) but are
+  Screenshots are captured to `evidence/` (they feed the `--llm` findings pass) but are
   **not** padded into the report body.
 - **Honest scores.** The overall score is min-aware
   (`mean·0.55 + worst·0.45`, `SCORING.OVERALL_MEAN_WEIGHT`) so a failing category
@@ -134,7 +134,7 @@ order of `analysis.details` keys and of each finding's `examples` array — is
 - **Live performance metrics** (TTFB, LCP, CLS, …) depend on the network and
   machine running the crawl. The *findings and ranking* derived from them are
   stable given the same measurements, but the raw numbers will differ.
-- **Optional LLM passes** (`--llm-narrative`, `--llm-findings`, `--llm-verify`)
+- **Optional LLM passes** (the `--llm` flag: narrative, findings, repo, revalidation)
   are model-driven and not bit-reproducible. They are opt-in; the default
   template-driven report is deterministic. Results are disk-cached per audit so
   re-runs of the *same* audit are stable.

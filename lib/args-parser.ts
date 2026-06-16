@@ -79,10 +79,11 @@ function parseArgs(args: string[]): ParsedArgs {
     ci: null, // CI mode: exit code 1 if score < threshold
     json: false, // Output JSON summary to stdout
     phase2: true, // Generate Phase 2 curated PDF report (--no-phase2 to skip)
-    llmNarrative: false, // Use Claude to rewrite per-section Analysis prose
-    llmFindings: false, // Use Claude (vision + signals) to find emergent functional/UX anomalies
-    llmRepo: false, // Use Claude to reason over the source repo (find more / confirm / fix) atop --repo
-    llmVerify: false, // Use Claude to revalidate findings + drop confirmed duplicates/false positives before the final report
+    // The four LLM passes below are all enabled together by the single `--llm` flag.
+    llmNarrative: false, // Rewrite per-section Analysis prose
+    llmFindings: false, // Vision + signals pass for emergent functional/UX anomalies
+    llmRepo: false, // Reason over the source repo (find more / confirm / fix) atop --repo
+    llmVerify: false, // Revalidate findings + drop confirmed duplicates/false positives before the final report
     verify: false, // Phase 3 verification — re-check each finding's first example (live by default; crawl data with SEO_AUDIT_VERIFY_OFFLINE=1), emit a separate verified report
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
@@ -117,18 +118,21 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.phase2 = false;
     } else if (arg === '--phase2') {
       parsed.phase2 = true;
-    } else if (arg === '--llm-narrative') {
-      parsed.llmNarrative = true;
-    } else if (arg === '--llm-findings') {
-      parsed.llmFindings = true;
-    } else if (arg === '--llm-repo') {
-      parsed.llmRepo = true;
-    } else if (arg === '--llm-verify') {
-      parsed.llmVerify = true;
     } else if (arg === '--verify') {
       parsed.verify = true;
+    } else if (
+      arg === '--llm-narrative' ||
+      arg === '--llm-findings' ||
+      arg === '--llm-repo' ||
+      arg === '--llm-verify'
+    ) {
+      // Removed in favour of the single `--llm` flag — warn rather than silently no-op.
+      parsed.warnings.push(`${arg} was removed — use --llm to enable all AI passes.`);
     } else if (arg === '--llm') {
-      // Umbrella flag — enable the full AI pass set (narrative + findings + repo + verify).
+      // Single flag for the whole AI pass set: section-narrative rewrite,
+      // emergent-bug findings, source-repo reasoning (with --repo), and
+      // finding-revalidation before the final report. (Phase 3 `--verify` is
+      // separate — it is deterministic-first and runs offline without a key.)
       parsed.llmNarrative = true;
       parsed.llmFindings = true;
       parsed.llmRepo = true;

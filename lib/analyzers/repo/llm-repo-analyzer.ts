@@ -8,7 +8,7 @@
  *   2. CONFIRM — does the source actually explain a crawl finding, and why?
  *   3. FIX — a concrete, code-aware suggestion against the real cited file
  *
- * Same contract as the other LLM passes (`--llm-findings` / `--verify`):
+ * Same contract as the other `--llm` passes (and the keyless `--verify`):
  *   • With `ANTHROPIC_API_KEY` it POSTs the API; otherwise, if the `claude` CLI
  *     is on PATH it spawns it headless (keyless) via the shared transport.
  *   • Disk-cached by SHA of (transport, model, system, prompt) so re-runs are free.

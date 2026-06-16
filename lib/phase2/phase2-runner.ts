@@ -1152,7 +1152,7 @@ async function prepareNarratives(
   // to templated prose when neither transport is reachable.
   if (!process.env.ANTHROPIC_API_KEY && !isClaudeCliAvailable()) {
     if (options.verbose) {
-      console.warn('--llm-narrative requested but no ANTHROPIC_API_KEY and no claude CLI found; falling back to templated prose.');
+      console.warn('--llm requested but no ANTHROPIC_API_KEY and no claude CLI found; falling back to templated prose.');
     }
     return {};
   }
@@ -2357,7 +2357,7 @@ async function prepareSuppression(artifacts: AuditArtifacts, options: Phase2Opti
   if (!options.llmVerify) return empty;
   if (!process.env.ANTHROPIC_API_KEY && !isClaudeCliAvailable()) {
     if (options.verbose) {
-      console.warn('--llm-verify requested but no ANTHROPIC_API_KEY and no claude CLI found; keeping all findings.');
+      console.warn('--llm requested but no ANTHROPIC_API_KEY and no claude CLI found; keeping all findings.');
     }
     return empty;
   }

@@ -51,11 +51,11 @@ Options:
   --version, -V             Show version number
   --help, -h                Show this help message
 
-AI passes (require ANTHROPIC_API_KEY; degrade silently without it):
-  --llm-narrative           Rewrite each section's Analysis paragraph
-  --llm-findings            Vision pass for emergent functional/UX bugs
-  --llm-verify              Revalidate findings + drop confirmed duplicates/false positives before the final report
-  --llm                     Enable all of the above (full AI mode)
+AI passes (use ANTHROPIC_API_KEY, else the keyless claude CLI; degrade silently):
+  --llm                     Full AI mode — enables all optional LLM passes:
+                            section-narrative rewrite, emergent-bug findings,
+                            source-repo reasoning (with --repo), and
+                            finding-revalidation before the final report.
 
 Verification:
   --verify                  Re-check each finding's first example against the crawl

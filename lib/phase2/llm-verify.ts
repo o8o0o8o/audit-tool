@@ -9,8 +9,8 @@
  *   • a likely false positive given the finding text.
  *
  * Dropping that noise is what makes the report "more concise and readable" —
- * the prose tightening is handled by the separate `--llm-narrative` pass, and
- * both are enabled together by the umbrella `--llm` flag.
+ * the prose tightening is handled by the separate narrative pass — both run
+ * under the single `--llm` flag.
  *
  * Design mirrors llm-narrative.ts / llm-anomaly.ts:
  *   • No SDK dependency. Anthropic's API is a vanilla HTTPS POST.

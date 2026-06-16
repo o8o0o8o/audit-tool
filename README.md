@@ -11,7 +11,7 @@ URL ──▶ Phase 1: mechanical crawl ──▶ artifacts/ ──▶ Phase 2: 
 
 **Phase 1** is fully deterministic — Playwright crawl + analyzers + evidence capture for sampled pages. No LLM, no judgement calls.
 
-**Phase 2** consumes the Phase 1 artifacts and produces `audit-report.pdf` in the human-audit style: cover, summary with Top 3 Priority Issues + Quick Wins + Long-term Recommendations, six sections (Performance / SEO / Privacy / Accessibility / UX / Technical), and an appendix with screenshots + PSI Lighthouse scores per representative page. Template-driven by default; opt into Claude prose with `--llm-narrative`. Persists `phase2-state.json` — the exact render inputs — as the boundary the next phase re-renders from.
+**Phase 2** consumes the Phase 1 artifacts and produces `audit-report.pdf` in the human-audit style: cover, summary with Top 3 Priority Issues + Quick Wins + Long-term Recommendations, six sections (Performance / SEO / Privacy / Accessibility / UX / Technical), and an appendix with screenshots + PSI Lighthouse scores per representative page. Template-driven by default; opt into Claude prose (and the other AI passes) with `--llm`. Persists `phase2-state.json` — the exact render inputs — as the boundary the next phase re-renders from.
 
 **Phase 3** (opt-in via `--verify`) fact-checks the report Phase 2 just wrote: it re-fetches each CRITICAL/HIGH/MEDIUM finding's example(s) live — sampling up to 3 distinct pages for a multi-page finding — and re-asserts the claim against the current page(s), then emits a **separate** `audit-report.verified.{md,pdf}` (confirmed findings badged ✓ Verified, AI-confirmed ones ✓ Verified (AI), refuted ones dropped into `audit-report.refuted.md`; the main report is never touched). Each `unverified` finding carries a categorized reason (the banner breaks them down), a fully-sampled clean multi-page finding can refute, response-header/robots checkers and an LLM stage (API or keyless `claude` CLI) run live, and AI-discovered findings are re-checked against fresh screenshots (vision, API). Standalone re-runnable: everything it needs is on disk, so you can re-verify an existing audit at any later time without re-crawling — `runVerifyPhase(runDir)` from `lib/phase3/verify-runner.ts`.
 
@@ -35,14 +35,14 @@ Output: `audit-results/example.com/<timestamp>/audit-report.pdf`
 ### Full audit (recommended)
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...   # required only for --llm-narrative
+export ANTHROPIC_API_KEY=sk-ant-...   # optional; --llm uses it, else the keyless claude CLI
 export CRUX_API_KEY=AIza...           # optional — unblocks PSI rate limits
 
 npx tsx start.ts \
   --origin=https://example.com \
   --perf \
   --repo=/path/to/local/source \
-  --llm-narrative
+  --llm
 ```
 
 This runs the whole flow: crawl + Lighthouse field data + PSI lab scores per representative page + source-code analysis + Claude-generated narrative prose.
@@ -54,9 +54,7 @@ This runs the whole flow: crawl + Lighthouse field data + PSI lab scores per rep
 | `--origin=<url>`      | (required)    | Website to audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `--perf`              | off           | Capture Core Web Vitals + per-URL PSI Lighthouse scores (mobile + desktop) for sampled pages                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `--repo=<path>`       | off           | Run source-code analysis against a local repo (framework detection, Next.js anti-patterns, package.json hygiene)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `--llm-narrative`     | off           | Use Claude to rewrite the per-section "Analysis" paragraphs. Requires `ANTHROPIC_API_KEY`. Disk-cached so re-renders are free. ~$0.02–$0.03 per audit at Sonnet pricing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `--llm-findings`      | off           | Use Claude (vision + signals) to find emergent functional/UX bugs the rule-based analyzers miss — dead buttons, CTAs to 404s, never-terminating pagination, forms posting nowhere, visually broken layout. Reasons over each representative page's screenshot + structured signals; findings merge into their section tagged "🔍 AI-discovered". Requires `ANTHROPIC_API_KEY`. Disk-cached. ~$0.02–$0.05 per sampled page.                                                                                                                                                                                                                          |
-| `--llm-repo`          | off           | Layer Claude reasoning on top of `--repo` (requires `--repo`): finds source issues no rule enumerates, confirms whether the source explains each crawl finding, and proposes code-aware fixes. Grounded by the deterministic result + bounded source slices; never drops a deterministic finding and drops any finding citing a file it wasn't shown. Keyless `claude` CLI fallback like `--verify`. Disk-cached. Findings render tagged "🔍 AI-discovered" with a **Fix**.                                                                                                                                                                          |
+| `--llm`               | off           | Enable all optional LLM passes (one flag): rewrite per-section "Analysis" prose; find emergent functional/UX bugs the rule-based analyzers miss (dead buttons, CTAs to 404s, never-terminating pagination, broken layout) via screenshot + signals; reason over the source repo (with `--repo`) to find issues no rule enumerates, confirm whether the source explains each crawl finding, and propose code-aware fixes; and revalidate findings (drop confirmed dupes/false positives) before the final report. Uses `ANTHROPIC_API_KEY`, else the keyless `claude` CLI, else degrades silently. AI findings are additive (never drop a deterministic one), tagged "🔍 AI-discovered". Disk-cached. ~$0.02–$0.05 per sampled page. |
 | `--verify`            | off           | Phase 3: fact-check every reported finding and emit a separate `audit-report.verified.{md,pdf}` (the normal report is never touched). Default is a live re-fetch of each finding's first example; `SEO_AUDIT_VERIFY_OFFLINE=1` selects the deterministic disk pass (no network), whose stage 2 hands the leftovers to Claude via whichever transport is available — an injected `verify-verdicts.json`, the API (`ANTHROPIC_API_KEY`), or, with **no key**, the `claude` CLI spawned headless (disable with `SEO_AUDIT_SKIP_CLAUDE_CLI=1`). Standalone re-runnable: re-verify an existing audit anytime via `runVerifyPhase(runDir)` — no re-crawl. |
 | `--concurrency=<n>`   | 5             | Parallel page workers (1–20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `--limit=<n>`         | none          | Stop after N pages (useful for large sites)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -120,7 +118,7 @@ audit-results/
 
 **UX / UI.** Responsive layout, mobile viewport, form accessibility, CTA detection.
 
-**Source code (with `--repo`).** Framework + version detection (Next.js / Nuxt / Gatsby / Astro). For Next.js: `cache: "no-store"` fetcher anti-pattern, `ssr: false` dynamic imports of main content, `force-dynamic` exports on static-looking routes, full-lib `lodash` imports, CSS inlined in `_app.tsx`. Package.json: wildcard semver ranges, Next/React major-version mismatch, multiple styling solutions. Add `--llm-repo` to layer Claude on top (find issues no rule enumerates, confirm crawl findings against the source, suggest code-aware fixes) — additive only, grounded by the deterministic result.
+**Source code (with `--repo`).** Framework + version detection (Next.js / Nuxt / Gatsby / Astro). For Next.js: `cache: "no-store"` fetcher anti-pattern, `ssr: false` dynamic imports of main content, `force-dynamic` exports on static-looking routes, full-lib `lodash` imports, CSS inlined in `_app.tsx`. Package.json: wildcard semver ranges, Next/React major-version mismatch, multiple styling solutions. Add `--llm` to layer Claude on top of `--repo` (find issues no rule enumerates, confirm crawl findings against the source, suggest code-aware fixes) — additive only, grounded by the deterministic result.
 
 **Site-wide.** Duplicate titles/descriptions, near-duplicate content (Jaccard similarity), keyword cannibalisation, orphan pages, content gap analysis, link depth.
 
@@ -189,7 +187,7 @@ npx tsx generateComparison.ts example.com 0 1
 
 ## Wall time and cost
 
-| Site size   | Crawl time | LLM cost (with `--llm-narrative`) |
+| Site size   | Crawl time | LLM cost (with `--llm`) |
 | ----------- | ---------- | --------------------------------- |
 | 50 pages    | ~5 min     | ~$0.03                            |
 | 500 pages   | ~30 min    | ~$0.03                            |
@@ -201,7 +199,7 @@ PSI Lighthouse calls dominate wall time when `--perf` is on without a `CRUX_API_
 
 Every optional step degrades silently if its dependency is unavailable:
 
-- `--llm-narrative` without `ANTHROPIC_API_KEY` → falls back to templated prose with top-3 finding names
+- `--llm` without `ANTHROPIC_API_KEY` → uses the keyless `claude` CLI if on `PATH`, else degrades silently (templated prose, all findings kept)
 - `--perf` when PSI quota is exhausted → PSI files skipped, audit completes normally
 - `--repo` with an invalid path → repo section omitted
 - `--evidence-cap=N` exceeding what the sampler can find → captures what it can
@@ -222,7 +220,7 @@ Resume loads checkpoint + archive files automatically.
 
 | Variable                    | Purpose                                                                                                                                                                                                       |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`         | Enables the API transport for the LLM passes (`--llm-narrative`, `--llm-findings`, `--llm-verify`). Without it, those passes fall back to spawning the `claude` CLI if it's on `PATH`, else degrade silently. |
+| `ANTHROPIC_API_KEY`         | Enables the API transport for the `--llm` passes (and the `--verify` LLM fallback). Without it, those passes fall back to spawning the `claude` CLI if it's on `PATH`, else degrade silently. |
 | `CRUX_API_KEY`              | API key for CrUX / PageSpeed Insights lab data (`--perf`). Works keyless at reduced rate limits.                                                                                                              |
 | `NODE_HEAP_SIZE`            | Override the Node `--max-old-space-size` (MB) for very large crawls.                                                                                                                                          |
 | `SEO_AUDIT_VERIFY_OFFLINE`  | `1` → `--verify` uses the deterministic on-disk pass instead of the default live re-fetch (reproducible, no network, no key).                                                                                 |

@@ -1,7 +1,7 @@
 /**
  * Shared keyless transport — spawn the Claude Code CLI (`claude -p`) instead of
- * the Anthropic API. Lets the optional LLM passes (`--verify`, `--llm-narrative`,
- * `--llm-findings`) reason WITHOUT an `ANTHROPIC_API_KEY`, using the user's
+ * the Anthropic API. Lets the optional LLM passes (`--verify` and the `--llm`
+ * pass set) reason WITHOUT an `ANTHROPIC_API_KEY`, using the user's
  * existing `claude` login.
  *
  * Same contract everywhere it is used: it degrades silently. No binary / spawn

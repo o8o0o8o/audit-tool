@@ -55,7 +55,7 @@ function getSourceCodeAnalysis(data: ReportSectionData) {
 }
 
 /**
- * AI repo findings (--llm-repo): additive insights layered on the deterministic
+ * AI repo findings (--llm, with --repo): additive insights layered on the deterministic
  * core — novel issues, confirmations of crawl findings, and code-aware fixes.
  */
 function getLlmFindings(repo: Record<string, unknown>) {

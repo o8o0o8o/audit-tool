@@ -5,6 +5,7 @@
 
 import type { FailureTracker, BackoffState, CrawlResults, ReportIssueFn } from './crawler-types';
 import { CRAWL_SETTINGS } from '../constants';
+import { getPaginationSeriesKey } from '../utils';
 
 const CIRCUIT_THRESHOLD = CRAWL_SETTINGS.CIRCUIT_BREAKER_THRESHOLD;
 const CIRCUIT_COOLDOWN = CRAWL_SETTINGS.CIRCUIT_BREAKER_COOLDOWN_MS;
@@ -77,6 +78,45 @@ export function recordSuccess(tracker: FailureTracker, backoffState: Map<string,
   tracker.consecutiveFailures = 0;
   // Clear backoff state on success
   backoffState.clear();
+}
+
+/**
+ * Update the per-series broken-pagination streak for one crawled URL.
+ *
+ * Only URLs that belong to a pagination series (`…/page/{N}`, `?page=N`)
+ * participate — broken pagination is a self-referential "next" link advancing
+ * into nonexistent pages, a per-series phenomenon. A not-found response (hard
+ * 404 or soft 404) extends that series' streak; any real response ends it.
+ * Dead one-off URLs (e.g. stale sitemap entries) never touch any streak, so a
+ * finite set of dead pages is crawled and reported rather than aborting, and
+ * several independently-paginated sections each ending with one trailing 404
+ * can't aggregate into a false abort.
+ */
+export function recordPaginationNotFound(tracker: FailureTracker, url: string, isNotFound: boolean): void {
+  const seriesKey = getPaginationSeriesKey(url);
+  if (!seriesKey) return;
+  if (isNotFound) {
+    tracker.paginationNotFoundStreak.set(seriesKey, (tracker.paginationNotFoundStreak.get(seriesKey) ?? 0) + 1);
+    tracker.last404Url = url;
+  } else {
+    tracker.paginationNotFoundStreak.set(seriesKey, 0);
+  }
+}
+
+/**
+ * Return the pagination series with the longest current not-found streak (the
+ * candidate for a broken-pagination abort), or count 0 when no series is dead.
+ */
+export function worstPaginationStreak(tracker: FailureTracker): { series?: string; count: number } {
+  let series: string | undefined;
+  let count = 0;
+  for (const [s, c] of tracker.paginationNotFoundStreak) {
+    if (c > count) {
+      count = c;
+      series = s;
+    }
+  }
+  return { series, count };
 }
 
 /**

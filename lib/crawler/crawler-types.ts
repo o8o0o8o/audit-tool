@@ -44,7 +44,17 @@ export interface FailureTracker {
   lastFailureTime: number;
   circuitOpen: boolean;
   circuitOpenTime: number;
-  consecutive404Count: number;
+  /**
+   * Consecutive not-found responses (HTTP 404 or soft 404) keyed by pagination
+   * series key (`…/page/{N}`, `?page=N`). Broken pagination is a per-series
+   * phenomenon — a single series whose "next" links advance into nonexistent
+   * pages — so the streak is counted within each series, not globally. This
+   * keeps the abort precise: dead one-off URLs (e.g. stale sitemap entries)
+   * never participate, and several independently-paginated sections each ending
+   * with a trailing 404 can't aggregate into a false abort.
+   */
+  paginationNotFoundStreak: Map<string, number>;
+  /** Last not-found URL recorded for a pagination series, for reporting. */
   last404Url?: string;
 }
 
@@ -142,6 +152,8 @@ export interface CrawlResults {
       reason: string;
       threshold: number;
       lastUrl?: string;
+      /** The pagination series key whose broken streak tripped the abort. */
+      series?: string;
     };
     truncatedPaginationSeries?: Record<string, number>;
   };

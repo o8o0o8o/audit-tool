@@ -21,6 +21,103 @@ import { HistoryManager } from '../historyManager';
 import { getContentInsights } from '../lib/reports/sections/content-insights';
 import type { PageInfo } from '../lib/types';
 import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
+import { getPaginationSeriesKey } from '../lib/utils';
+import { recordPaginationNotFound, worstPaginationStreak } from '../lib/crawler/resilience';
+import type { FailureTracker } from '../lib/crawler/crawler-types';
+
+// ============================================================
+// Broken-pagination abort scoping (crawler-engine consecutive-404 streak)
+// ============================================================
+// The crawler aborts on N consecutive not-found responses as a broken-pagination
+// fast-fail. That streak is scoped to pagination-series URLs only: a run of dead
+// one-off URLs (e.g. stale sitemap entries) is a finite, known set that must be
+// crawled and reported, never used to abort. getPaginationSeriesKey is the exact
+// classifier the abort uses, so guarding it guards the regression.
+const THRESHOLD = 10; // CRAWL_SETTINGS.CONSECUTIVE_404_THRESHOLD
+
+function mkTracker(): FailureTracker {
+  return {
+    consecutiveFailures: 0,
+    lastFailureTime: 0,
+    circuitOpen: false,
+    circuitOpenTime: 0,
+    paginationNotFoundStreak: new Map<string, number>(),
+  };
+}
+
+void describe('broken-pagination abort scoping', () => {
+  void it('does NOT classify one-off content URLs as a pagination series', () => {
+    // The plentific regression: 10 dead /resource-center/blog/* sitemap URLs in
+    // a row tripped the abort and stopped the crawl after 10 of 551 URLs.
+    const oneOffUrls = [
+      'https://www.plentific.com/resource-center/blog/plentific-welcomes-kaifu-nordland/',
+      'https://www.plentific.com/resource-center/blog/vnw-managementforum-2025/',
+      'https://example.com/about',
+      'https://example.com/products/widget-3000',
+      'https://example.com/2024/05/some-post',
+    ];
+    for (const url of oneOffUrls) {
+      assert.strictEqual(
+        getPaginationSeriesKey(url),
+        null,
+        `${url} must not count toward the broken-pagination streak`,
+      );
+    }
+  });
+
+  void it('DOES classify genuine pagination URLs as a series', () => {
+    assert.strictEqual(getPaginationSeriesKey('https://e.com/insights/page/7'), 'https://e.com/insights/page/{N}');
+    assert.strictEqual(
+      getPaginationSeriesKey('https://e.com/list?page=5&sort=asc'),
+      'https://e.com/list?page={N}&sort=asc',
+    );
+    // Pages in the same series share a key so the streak accumulates across them.
+    assert.strictEqual(
+      getPaginationSeriesKey('https://e.com/blog/page/9998'),
+      getPaginationSeriesKey('https://e.com/blog/page/9999'),
+    );
+  });
+
+  void it('never accumulates a streak for dead one-off URLs (the plentific regression)', () => {
+    const t = mkTracker();
+    // 50 dead one-off blog URLs in a row — far past the threshold.
+    for (let i = 0; i < 50; i++) {
+      recordPaginationNotFound(t, `https://www.plentific.com/resource-center/blog/post-${i}/`, true);
+    }
+    assert.strictEqual(worstPaginationStreak(t).count, 0, 'one-off dead URLs must never trip the abort');
+  });
+
+  void it('accumulates within a single broken series and trips the threshold', () => {
+    const t = mkTracker();
+    for (let n = 1; n <= THRESHOLD; n++) {
+      recordPaginationNotFound(t, `https://e.com/blog/page/${n}`, true);
+    }
+    const worst = worstPaginationStreak(t);
+    assert.strictEqual(worst.count, THRESHOLD);
+    assert.strictEqual(worst.series, 'https://e.com/blog/page/{N}');
+    assert.ok(worst.count >= THRESHOLD, 'a genuinely runaway series must still abort');
+  });
+
+  void it('does NOT aggregate trailing 404s across independent series', () => {
+    // Many independently-paginated sections, each ending with ONE trailing 404
+    // (the natural one-past-the-end). The old global counter would sum these to
+    // THRESHOLD and false-abort; per-series tracking keeps each at 1.
+    const t = mkTracker();
+    for (let s = 0; s < THRESHOLD + 5; s++) {
+      recordPaginationNotFound(t, `https://e.com/section-${s}/page/2`, false); // a real page
+      recordPaginationNotFound(t, `https://e.com/section-${s}/page/3`, true); // one trailing 404
+    }
+    assert.strictEqual(worstPaginationStreak(t).count, 1, 'one trailing 404 per series must never aggregate');
+  });
+
+  void it('a real (non-404) page resets its own series streak', () => {
+    const t = mkTracker();
+    for (let n = 1; n <= 5; n++) recordPaginationNotFound(t, `https://e.com/blog/page/${n}`, true);
+    assert.strictEqual(worstPaginationStreak(t).count, 5);
+    recordPaginationNotFound(t, 'https://e.com/blog/page/6', false); // a real page mid-series
+    assert.strictEqual(worstPaginationStreak(t).count, 0, 'a live page ends the broken-pagination streak');
+  });
+});
 
 // ============================================================
 // SSRF guard (validators.isFetchAllowed / isPrivateOrInternalHost)

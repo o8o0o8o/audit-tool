@@ -63,6 +63,8 @@ import {
   isCircuitOpen,
   recordFailure,
   recordSuccess,
+  recordPaginationNotFound,
+  worstPaginationStreak,
   withTimeout,
   categorizeError,
   handlePageError,
@@ -275,7 +277,7 @@ class CrawlerEngine {
       lastFailureTime: 0,
       circuitOpen: false,
       circuitOpenTime: 0,
-      consecutive404Count: 0,
+      paginationNotFoundStreak: new Map<string, number>(),
     };
 
     // Initialize backoff state per error type
@@ -836,23 +838,29 @@ class CrawlerEngine {
           }
         }
 
-        // Abort crawl on broken-pagination signal: too many consecutive
-        // not-found responses (hard 404 status or soft 404 content on 200 pages).
-        if (this.#failureTracker.consecutive404Count >= CRAWL_SETTINGS.CONSECUTIVE_404_THRESHOLD) {
-          const count = this.#failureTracker.consecutive404Count;
+        // Abort crawl on broken-pagination signal: any single pagination series
+        // with too many consecutive not-found responses (hard 404 status or
+        // soft 404 content on 200 pages). Counting per-series — not globally —
+        // means the abort fires for a genuinely runaway "next" link, not for a
+        // scattering of dead URLs across the site.
+        const { series: worstSeries, count: worstCount } = worstPaginationStreak(this.#failureTracker);
+        if (worstCount >= CRAWL_SETTINGS.CONSECUTIVE_404_THRESHOLD) {
           const lastUrl = this.#failureTracker.last404Url;
-          const reason = `Crawl stopped: ${count} consecutive not-found responses detected (likely broken pagination)`;
+          const reason = `Crawl stopped: ${worstCount} consecutive not-found pages in the "${worstSeries}" pagination series (likely broken pagination)`;
           console.warn(`\n⚠️  ${reason}${lastUrl ? ` — last URL: ${lastUrl}` : ''}`);
           results.pageData.crawlAborted = {
             reason,
             threshold: CRAWL_SETTINGS.CONSECUTIVE_404_THRESHOLD,
             lastUrl,
+            series: worstSeries,
           };
           this.#callbacks.saveError(
             'Crawl aborted: broken pagination detected',
-            `${escapeHtml(count.toString())} consecutive not-found responses were detected (HTTP 404 or soft 404)${
+            `${escapeHtml(worstCount.toString())} consecutive not-found responses (HTTP 404 or soft 404) were detected in the <code>${escapeHtml(
+              worstSeries ?? '',
+            )}</code> pagination series${
               lastUrl ? ` — last: <a href="${escapeHtml(lastUrl)}">${escapeHtml(lastUrl)}</a>` : ''
-            }. The crawl was stopped to avoid wasting time on a broken pagination series. Verify the site's pagination links point to existing pages.`,
+            }. The crawl was stopped to avoid wasting time on a broken pagination series. Verify that this series' "next" links point to existing pages.`,
             SEVERITY.HIGH,
           );
           abortRequested = true;
@@ -1315,14 +1323,10 @@ class CrawlerEngine {
       (results.pageData.byError[statusKey] as string[]).push(url);
       results.pageData.byError[`total${statusKey}`] = (results.pageData.byError[`total${statusKey}`] as number) + 1;
 
-      // Track consecutive 404s to detect broken pagination
-      if (status === 404) {
-        this.#failureTracker.consecutive404Count++;
-        this.#failureTracker.last404Url = url;
-      } else {
-        // Any other non-200 status (e.g. 500, 301) breaks the 404 streak
-        this.#failureTracker.consecutive404Count = 0;
-      }
+      // Track consecutive not-found responses per pagination series to detect
+      // broken pagination (see recordPaginationNotFound). A non-404 response
+      // (200, 301, 500, …) on a pagination URL ends that series' streak.
+      recordPaginationNotFound(this.#failureTracker, url, status === 404);
 
       results.pageData.processedPages.add(url);
 
@@ -1424,15 +1428,13 @@ class CrawlerEngine {
       });
     }
 
-    // Update the consecutive-404 streak using soft-404 detection from analyzers.
-    // A page that returned HTTP 200 but is actually a soft 404 (e.g. Next.js SPA
-    // catch-all) still indicates broken pagination, so count it the same way.
-    if (pageData.soft404?.isSoft404) {
-      this.#failureTracker.consecutive404Count++;
-      this.#failureTracker.last404Url = url;
-    } else {
-      this.#failureTracker.consecutive404Count = 0;
-    }
+    // Update the broken-pagination streak using soft-404 detection from the
+    // analyzers. A page that returned HTTP 200 but is actually a soft 404 (e.g.
+    // a Next.js SPA catch-all) still indicates broken pagination within its
+    // series, so count it the same way (recordPaginationNotFound scopes it to
+    // pagination URLs — a soft 404 on a one-off page is a content finding, not
+    // a reason to abort).
+    recordPaginationNotFound(this.#failureTracker, url, !!pageData.soft404?.isSoft404);
 
     // Check Core Web Vitals thresholds
     checkVitalsThresholds(pageData, url, TTFB ?? 0, FCP ?? 0, LCP ?? 0, CLS ?? 0, this.#reportIssue);

@@ -201,20 +201,24 @@ export function processMetaTags(
 /**
  * Check for duplicate alternates
  */
-function checkAlternateDuplicates(alternates: AlternateEntry[], url: string, reportIssue: ReportIssueFn): void {
+export function checkAlternateDuplicates(alternates: AlternateEntry[], url: string, reportIssue: ReportIssueFn): void {
   const escapedUrl = escapeHtml(url);
-  for (const alternate of alternates) {
-    const count = alternates.reduce((acc, cur) => {
-      if (cur.href === alternate.href) {
-        return acc + 1;
-      }
-      return acc;
-    }, 0);
 
+  // Count occurrences per distinct href first, then report each duplicated href
+  // ONCE. The old code iterated every alternate and emitted on each occurrence,
+  // so a duplicated href ([A, A]) was reported twice — listing the same page
+  // twice identically in the report. Map insertion order (first-seen) keeps the
+  // emission deterministic.
+  const counts = new Map<string, number>();
+  for (const alternate of alternates) {
+    counts.set(alternate.href, (counts.get(alternate.href) ?? 0) + 1);
+  }
+
+  for (const [href, count] of counts) {
     if (count > 1) {
       reportIssue(
         `Some alternates are duplicated in head links`,
-        `Alternate ${escapeHtml(alternate.href)} is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
+        `Alternate ${escapeHtml(href)} is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
         SEVERITY.MEDIUM,
       );
     }

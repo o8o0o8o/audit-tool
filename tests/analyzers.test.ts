@@ -687,7 +687,42 @@ void describe('RepresentativeSampler', () => {
 // ============================================================
 // populateIncomingLinksCount — incoming-links key normalization
 // ============================================================
-import { populateIncomingLinksCount } from '../lib/crawler/page-data-builder';
+import { populateIncomingLinksCount, checkAlternateDuplicates } from '../lib/crawler/page-data-builder';
+
+void describe('checkAlternateDuplicates', () => {
+  const collect = (alternates: { href: string }[]) => {
+    const issues: { message: string; detail: string }[] = [];
+    checkAlternateDuplicates(
+      alternates as Parameters<typeof checkAlternateDuplicates>[0],
+      'https://example.com/page',
+      (message, detail) => issues.push({ message, detail }),
+    );
+    return issues;
+  };
+
+  void it('reports a duplicated alternate ONCE, not once per occurrence', () => {
+    // Regression: the old loop emitted on every occurrence, so [A, A] reported
+    // the same page twice identically in the report.
+    const issues = collect([{ href: 'https://example.com/page' }, { href: 'https://example.com/page' }]);
+    assert.strictEqual(issues.length, 1, `expected one finding, got ${issues.length}`);
+    assert.match(issues[0].detail, /https:\/\/example\.com\/page is duplicated/);
+  });
+
+  void it('reports each distinct duplicated href once; ignores non-duplicates', () => {
+    const issues = collect([
+      { href: 'https://example.com/a' },
+      { href: 'https://example.com/a' },
+      { href: 'https://example.com/b' }, // unique → not flagged
+      { href: 'https://example.com/c' },
+      { href: 'https://example.com/c' },
+    ]);
+    assert.strictEqual(issues.length, 2);
+  });
+
+  void it('reports nothing when all alternates are unique', () => {
+    assert.strictEqual(collect([{ href: 'https://example.com/a' }, { href: 'https://example.com/b' }]).length, 0);
+  });
+});
 
 void describe('populateIncomingLinksCount', () => {
   const build = (pageUrls: string[], incomingLinks: Record<string, string[]>) =>

@@ -2045,6 +2045,14 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'Interaction-to-Next-Paint is slow. Reduce main-thread work in event handlers: defer non-critical work, debounce, use requestIdleCallback for non-urgent tasks.',
     resources: [{ text: 'Optimize INP', url: 'https://web.dev/articles/inp' }],
   },
+  'Some pages have TBT more than 200ms': {
+    effort: '1-2 hours',
+    fix: 'High Total Blocking Time means long JavaScript tasks are freezing the main thread. Code-split large bundles and defer non-critical scripts, break long tasks into smaller chunks (yield with scheduler.yield/setTimeout), remove unused JS, and move heavy work to a Web Worker.',
+    resources: [
+      { text: 'Optimize TBT', url: 'https://web.dev/articles/tbt' },
+      { text: 'Long tasks', url: 'https://web.dev/articles/optimize-long-tasks' },
+    ],
+  },
   'Some pages have too many requests': {
     effort: '30 minutes',
     fix: 'Page makes too many HTTP requests. Combine assets, use sprites/icon-fonts/inline-SVG, lazy-load below-the-fold resources.',
@@ -2055,5 +2063,44 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'Replace generic <div> with semantic elements (<header>, <nav>, <main>, <article>, <section>, <footer>). Helps accessibility, SEO, and AI extraction.',
     example: '<main>\n  <article>\n    <header><h1>...</h1></header>\n    <section>...</section>\n  </article>\n</main>',
     resources: [{ text: 'HTML Semantics', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements#content_sectioning' }],
+  },
+  // ─── SEO: titles / descriptions / anchors / authorship ────────────────────
+  'Some pages have titles that are too long': {
+    effort: '30 minutes',
+    fix: 'Trim titles to ~60 characters (≈600px) so Google does not truncate them in the SERP. Front-load the primary keyword, drop redundant boilerplate, and keep the brand suffix short ("| Brand").',
+    example: '<title>Headless CMS Migration Services | FocusReactive</title>',
+    resources: [{ text: 'Title link best practices', url: 'https://developers.google.com/search/docs/appearance/title-link' }],
+  },
+  'Some pages have descriptions that are too long': {
+    effort: '30 minutes',
+    fix: 'Shorten meta descriptions to ~150-160 characters so they are not cut off in search results. Lead with the page\'s unique value and a call to action; write one distinct description per page.',
+    example: '<meta name="description" content="Migrate to a headless CMS with zero downtime — our team handles content modelling, data migration and Next.js integration.">',
+    resources: [{ text: 'Meta descriptions', url: 'https://developers.google.com/search/docs/appearance/snippet' }],
+  },
+  'Multiple pages target the same keyword in their titles': {
+    effort: '1-2 hours',
+    fix: 'Several pages compete for the same query (keyword cannibalisation), splitting ranking signals. Give each page a distinct primary keyword and intent, consolidate near-duplicates into one stronger page (301 the rest), and differentiate the titles accordingly.',
+    resources: [{ text: 'Keyword cannibalisation', url: 'https://moz.com/learn/seo/keyword-cannibalization' }],
+  },
+  'Duplicate anchor text': {
+    effort: '30 minutes',
+    fix: 'The same anchor text repeats across many links, diluting its relevance signal. Use descriptive, varied anchor text that reflects each link\'s destination instead of generic repeated phrases.',
+    resources: [{ text: 'Anchor text best practices', url: 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' }],
+  },
+  'Same anchor text links to different pages': {
+    effort: '30 minutes',
+    fix: 'Identical anchor text points to different destinations, confusing users and crawlers about each target\'s topic. Make anchor text uniquely describe its specific destination.',
+    resources: [{ text: 'Anchor text best practices', url: 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' }],
+  },
+  'No author information found': {
+    effort: '1 hour',
+    fix: 'Add a visible author byline and machine-readable authorship (Person schema + rel="author") so search engines can attribute expertise — an E-E-A-T signal, especially for YMYL and editorial content.',
+    example: '<script type="application/ld+json">{"@type":"Article","author":{"@type":"Person","name":"Jane Doe"}}</script>',
+    resources: [{ text: 'E-E-A-T', url: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content' }],
+  },
+  'Low text-to-HTML ratio': {
+    effort: '1-2 hours',
+    fix: 'Markup heavily outweighs visible text. Trim wrapper <div> nesting and inline styles/scripts, move CSS/JS to external files, and ensure substantive text content is server-rendered rather than buried in markup.',
+    resources: [{ text: 'DOM size', url: 'https://developer.chrome.com/docs/lighthouse/performance/dom-size' }],
   },
 };

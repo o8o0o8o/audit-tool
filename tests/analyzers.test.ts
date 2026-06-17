@@ -4320,6 +4320,19 @@ void describe('buildReportMarkdown screenshot embedding', () => {
     assert.doesNotMatch(md, /\*\*Screenshot\*\*/);
   });
 
+  void it('renders no screenshot for a finding with no illustrable evidence kind, even when sampled', () => {
+    // Regression: cross-page / network / header claims (keyword cannibalisation,
+    // TBT, missing SRI, broken outbound links) match no evidence kind. A
+    // context-free full-page screenshot illustrates nothing about them, so none
+    // should be attached — even though the cited page WAS sampled.
+    const msg = 'External scripts missing Subresource Integrity (SRI)';
+    assert.strictEqual(evidenceKindFor(msg), null, 'guard: this finding has no evidence kind');
+    const arts = withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about'] }), evidence);
+    const md = buildReportMarkdown(arts);
+    assert.doesNotMatch(md, /\*\*Screenshot\*\*/);
+    assert.doesNotMatch(md, /evidence-shots/);
+  });
+
   void it('matches a trailing-slash / fragment variant of the sampled URL', () => {
     const msg = 'Canonicals are not set for some pages';
     const arts = withEvidence(mkArtifacts([msg], { [msg]: ['https://example.com/about/#section'] }), evidence);

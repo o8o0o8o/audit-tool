@@ -1591,8 +1591,12 @@ function buildScreenshotBlock(
 //                      (ghost = position before the shift)
 //   • title/description findings → a SERP-style preview card with the
 //                      truncation/absence visualised
-// Everything degrades to the plain screenshot pair when the data is absent
-// (older audits, unsampled pages, --no-evidence).
+// A matched kind whose rich data is absent (older audits, unsampled pages,
+// --no-evidence) degrades to the plain screenshot pair — the cited page is at
+// least topically relevant. A finding that matches NO kind (cross-page /
+// network / header / structural claims like keyword cannibalisation, TBT, SRI,
+// broken outbound links) renders NO evidence block rather than a context-free
+// screenshot that illustrates nothing about it.
 
 type HeadAspect = 'canonical' | 'noindex' | 'hreflang' | 'lang' | 'charset' | 'doctype';
 type EvidenceKind =
@@ -2395,6 +2399,15 @@ function buildEvidenceBlock(
                   : buildRenderBlockingPanel(ref);
     if (block) return block;
   }
+  // No issue-specific evidence kind matched — keyword cannibalisation, TBT,
+  // missing SRI, broken outbound links, iframe counts, redirect chains, etc.
+  // These are cross-page / network / header / structural claims a context-free
+  // full-page screenshot can't illustrate; attaching one reads as filler ("here
+  // is a screenshot" that shows nothing about the finding). Render no evidence
+  // block instead. A MATCHED kind whose rich render was unavailable (old audits
+  // / unsampled / --no-evidence) still degrades to the page screenshot below —
+  // there the shot is at least the page the issue is on.
+  if (kind === null) return null;
   return buildScreenshotBlock(shown, screenshots, embedded);
 }
 

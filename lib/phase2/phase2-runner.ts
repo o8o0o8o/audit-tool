@@ -456,19 +456,93 @@ function bucketDetails(details: Record<string, IssueDetail>): Record<Section, Ar
 }
 
 /**
+ * Consolidate per-page LLM anomalies into one finding per defect CLASS.
+ *
+ * The anomaly pass runs once per representative page, so a template-level bug
+ * (e.g. a Clutch badge 403, a GET contact form) surfaces as N near-identical
+ * anomalies — one per page, each "affects 1 occurrence". This collapses them
+ * into a single anomaly carrying every page as an `occurrences[]` entry, so the
+ * report shows one finding with N occurrences instead of N near-duplicates.
+ *
+ * Grouping key:
+ *   - the model-supplied stable `kind` slug when present — grouped ACROSS
+ *     sections, since the same defect is sometimes filed under `ux` on one page
+ *     and `technical` on another (which previously split it into two findings
+ *     with different severities); else
+ *   - the normalized title, kept section-scoped (conservative — generic prose
+ *     can mean different things in different sections) for older caches that
+ *     predate the `kind` field.
+ * Within one run every anomaly shares the same prompt, so `kind` is present for
+ * all or none — the two strategies never mix mid-run.
+ *
+ * The representative keeps the worst severity in the group and the first item's
+ * title/recommendation; the group lands in its dominant (most-frequent) section;
+ * occurrences are de-duplicated by URL. Order is stable (first-seen) so the same
+ * crawl yields the same report.
+ */
+export function consolidateAnomalies(anomalies: Anomaly[]): Anomaly[] {
+  const SEV_RANK: Record<Anomaly['severity'], number> = { critical: 3, high: 2, medium: 1, low: 0 };
+  const groups = new Map<string, Anomaly[]>();
+  const order: string[] = [];
+  for (const a of anomalies) {
+    const key = a.kind
+      ? `kind:${a.kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+      : `${a.section}::title:${_normalizeMessage(a.title).toLowerCase()}`;
+    let grp = groups.get(key);
+    if (!grp) {
+      grp = [];
+      groups.set(key, grp);
+      order.push(key);
+    }
+    grp.push(a);
+  }
+  const out: Anomaly[] = [];
+  for (const key of order) {
+    const grp = groups.get(key)!;
+    // Representative: worst severity, ties broken by first-seen order.
+    let rep = grp[0];
+    for (const a of grp) if (SEV_RANK[a.severity] > SEV_RANK[rep.severity]) rep = a;
+    // Dominant section: most occurrences, ties broken by first-seen.
+    const sectionCounts = new Map<Section, number>();
+    for (const a of grp) sectionCounts.set(a.section, (sectionCounts.get(a.section) ?? 0) + 1);
+    let section = rep.section;
+    let bestCount = -1;
+    for (const a of grp) {
+      const n = sectionCounts.get(a.section)!;
+      if (n > bestCount) {
+        bestCount = n;
+        section = a.section;
+      }
+    }
+    const seen = new Set<string>();
+    const occurrences: Array<{ url: string; evidence: string }> = [];
+    for (const a of grp) {
+      if (seen.has(a.url)) continue;
+      seen.add(a.url);
+      occurrences.push({ url: a.url, evidence: a.evidence });
+    }
+    out.push({ ...rep, section, occurrences });
+  }
+  return out;
+}
+
+/**
  * Fold LLM-discovered anomalies into the section buckets as synthetic
  * findings, tagged `aiDiscovered` so the report can label them and so they're
  * never confused with deterministic results. Re-sorts the touched sections by
- * impact. No-op when `anomalies` is empty.
+ * impact. No-op when `anomalies` is empty. Expects the consolidated list
+ * (see `consolidateAnomalies`): one anomaly per defect, carrying `occurrences`.
  */
 function mergeAnomalies(buckets: Record<Section, Array<[string, IssueDetail]>>, anomalies: Anomaly[]): void {
   const touched = new Set<Section>();
   for (const a of anomalies) {
+    // Self-describing examples: each cited page's evidence + the page it saw.
+    // Falls back to the single url/evidence for an un-consolidated anomaly.
+    const occ = a.occurrences && a.occurrences.length > 0 ? a.occurrences : [{ url: a.url, evidence: a.evidence }];
     const detail: IssueDetail = {
       severity: a.severity,
-      count: 1,
-      // Self-describing example: the evidence the model cited + the page it saw.
-      examples: [`${a.evidence} — ${a.url}`],
+      count: occ.length,
+      examples: occ.map((o) => `${o.evidence} — ${o.url}`),
       aiDiscovered: true,
       recommendation: a.recommendation,
     };
@@ -641,7 +715,7 @@ function buildSummary(
     ranked.forEach(([message, d], i) => {
       seen.add(summaryIdentity(message));
       lines.push(
-        `${i + 1}. ${sevSpan(d.severity)} — ${stripHtml(message)} *(${d.count} occurrence${d.count === 1 ? '' : 's'})*`,
+        `${i + 1}. ${sevSpan(d.severity)} — ${sanitizeProse(message)} *(${d.count} occurrence${d.count === 1 ? '' : 's'})*`,
       );
     });
     lines.push('');
@@ -689,7 +763,7 @@ function buildSummary(
       fallback.forEach(([message, d]) => {
         seen.add(summaryIdentity(message));
         lines.push(
-          `- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${d.count} occurrence${d.count === 1 ? '' : 's'} — contained)*`,
+          `- ${sevSpan(d.severity)} **${sanitizeProse(message)}** *(${d.count} occurrence${d.count === 1 ? '' : 's'} — contained)*`,
         );
       });
       lines.push('');
@@ -744,7 +818,7 @@ function buildSummary(
         seen.add(summaryIdentity(message));
         const count = d.count ?? 0;
         const scope = count > 20 ? `${count} occurrences — systemic` : `${count} occurrence${count === 1 ? '' : 's'}`;
-        lines.push(`- ${sevSpan(d.severity)} **${stripHtml(message)}** *(${scope})*`);
+        lines.push(`- ${sevSpan(d.severity)} **${sanitizeProse(message)}** *(${scope})*`);
       });
       lines.push('');
     }
@@ -994,10 +1068,10 @@ function buildAnalysisProse(primary: Array<[string, IssueDetail]>, minorCount: n
   const [topMsg, topDetail] = primary[0];
   const topPages = topDetail.count ?? 0;
   const breadth = topPages > 1 ? `, affecting ${topPages} pages` : '';
-  const lead = `The most impactful is *${stripHtml(topMsg)}*${breadth}.`;
+  const lead = `The most impactful is *${sanitizeProse(topMsg)}*${breadth}.`;
   const others = primary
     .slice(1, 3)
-    .map(([m]) => `*${stripHtml(m)}*`)
+    .map(([m]) => `*${sanitizeProse(m)}*`)
     .join(', ');
   const also = others ? ` Also notable: ${others}.` : '';
   const minorNote =
@@ -1078,7 +1152,7 @@ function buildSection(
     lines.push('');
     for (const [message, detail] of minor) {
       const c = detail.count ?? 0;
-      lines.push(`- ${stripHtml(message)}${c > 1 ? ` *(${c} pages)*` : ''}`);
+      lines.push(`- ${sanitizeProse(message)}${c > 1 ? ` *(${c} pages)*` : ''}`);
     }
     lines.push('');
   }
@@ -2319,9 +2393,13 @@ export function inlineExample(ex: string): string {
   const lead = ex.split(/<br\s*\/?>|<ul\b|<ol\b|<\/p>|\n/i)[0];
   return (
     lead
-      // Strip every tag EXCEPT anchors first, so the angle-bracket destination
-      // emitted below (e.g. `<https://…(1)>`) isn't itself mistaken for a tag.
-      .replace(/<(?!\/?a\b)[^>]*>/gi, '')
+      // Literal element MENTIONS that are content, not markup (e.g. "use
+      // <main>, <article>") → inline code, so they survive rather than getting
+      // silently deleted ("Use semantic elements (<main>, <article>)" → "(, )").
+      // Done BEFORE anchor conversion so the `<https://…>` link destinations it
+      // emits are never seen here. The strict tag shape and the `(?!a\b)`
+      // guard skip real `<a>` markup and `://`-bearing URLs alike.
+      .replace(/<\/?(?!a\b)[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>/g, (m) => `\`${m}\``)
       // Anchor → markdown link.
       .replace(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, text: string) =>
         mdLink(text.trim() || href, href),
@@ -2340,7 +2418,9 @@ export function inlineExample(ex: string): string {
  */
 function clusterLabel(s: string): string {
   const idx = s.search(/<a\b|https?:\/\//i);
-  return stripHtml(idx >= 0 ? s.slice(0, idx) : s)
+  // sanitizeProse (not stripHtml) so literal element mentions in the label
+  // ("Pages missing <main>") render as inline code instead of vanishing.
+  return sanitizeProse(idx >= 0 ? s.slice(0, idx) : s)
     .replace(/[:\s]+$/, '')
     .trim();
 }
@@ -2445,7 +2525,7 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   const suppressed = await prepareSuppression(artifacts, options);
   // Optional LLM anomaly pass — returns [] when disabled, no API key, or no
   // evidence. Never blocks report generation. Runs in parallel with narratives.
-  const [narratives, anomalies] = await Promise.all([
+  const [narratives, rawAnomalies] = await Promise.all([
     prepareNarratives(artifacts, options, suppressed),
     options.llmFindings
       ? detectAnomalies(artifacts, {
@@ -2454,6 +2534,10 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
         })
       : Promise.resolve([] as Anomaly[]),
   ]);
+  // Collapse per-page anomalies into one finding per defect class BEFORE both
+  // the report and the persisted Phase 2→3 state, so the verified report and
+  // the live verify pass operate on the same consolidated set.
+  const anomalies = consolidateAnomalies(rawAnomalies);
   const markdown = buildReportMarkdown(artifacts, narratives, anomalies, suppressed, undefined, undefined, options.noScore === true);
 
   const mdPath = path.join(runDir, 'audit-report.md');

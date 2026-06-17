@@ -116,6 +116,10 @@ class KeywordCannibalisationAnalyzer {
     for (const [url, page] of Object.entries(pages)) {
       // Skip error pages
       if (page.status !== 200) continue;
+      // Skip redirect sources (e.g. trailing-slash twin /x → /x/): they hold the
+      // destination's title, so they'd register as the destination cannibalising
+      // its own keywords. The redirect is reported separately per-page.
+      if (page.hasRedirects) continue;
 
       // Extract and normalize title keywords
       if (page.title) {

@@ -27,6 +27,11 @@ class ContentSimilarityAnalyzer {
     // Build fingerprints for each page from content quality data
     const fingerprints = [];
     for (const [url, pageData] of pages) {
+      // Skip redirect sources — a redirected URL (e.g. trailing-slash twin
+      // `/x` → `/x/`) holds its destination's content, so it would register as
+      // a 100%-identical near-duplicate of that destination. Not a real pair.
+      if (pageData.hasRedirects) continue;
+
       const contentQuality = pageData.contentQuality;
       if (!contentQuality) continue;
 

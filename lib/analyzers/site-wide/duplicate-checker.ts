@@ -24,6 +24,14 @@ class DuplicateChecker {
     for (const url in allPages) {
       const page = allPages[url];
 
+      // Skip redirect sources: a URL that redirected (e.g. the no-slash
+      // `/x` → `/x/`, or an old path → new path) was followed to its final
+      // page, so its title/description are the DESTINATION's, not a second
+      // distinct page. Counting it would report the destination's own title as
+      // a "duplicate" of itself — the classic trailing-slash twin inflation.
+      // The redirect itself is already surfaced as a per-page redirect finding.
+      if (page.hasRedirects) continue;
+
       // Track titles (skip empty ones as they're already reported)
       if (page.title?.trim()) {
         const title = page.title.trim();

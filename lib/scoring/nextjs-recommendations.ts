@@ -210,12 +210,23 @@ export function nextjsOverrideFor(message: string): Partial<FixRecommendation> |
  * Whether an audit looks like a Next.js project. Prefers an explicit framework
  * label (from `--repo`); otherwise falls back to the `/_next/` build-output
  * fingerprint that appears in analyzer example strings.
+ *
+ * A positive non-Next framework from `--repo` is AUTHORITATIVE: the repo
+ * detector checks Next.js (the `next` dependency) before every other framework
+ * and only falls back to "React"/"Vue"/… when no meta-framework is present, so
+ * a non-Next label reliably means the source tree is not Next. In that case we
+ * must NOT let a stray `/_next/` URL in crawl data (a third-party embed, an
+ * analytics tag, a linked asset) flip the report into Next.js fix advice that
+ * contradicts the actual `src/_includes/*.html` / non-Next files. The `/_next/`
+ * fingerprint is a fallback only when no `--repo` framework was detected.
  */
 export function isNextjsAudit(
   framework: string | null | undefined,
   detailExamples: Iterable<string>,
 ): boolean {
   if (/next/i.test(framework ?? '')) return true;
+  // Explicit non-Next framework → trust it, ignore the crawl fingerprint.
+  if ((framework ?? '').trim()) return false;
   for (const ex of detailExamples) {
     if (/\/_next\/|__NEXT_DATA__/i.test(ex)) return true;
   }

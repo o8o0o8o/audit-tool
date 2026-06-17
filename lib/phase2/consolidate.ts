@@ -109,6 +109,14 @@ const DEDUP_GROUPS: DedupGroup[] = [
     primary: /^page has very thin content/i,
     members: [/% of pages have very thin content/i],
   },
+  // Empty / text-less anchors reported two ways: the per-page SEO finding
+  // ("Empty anchor text", which carries the visual overlay evidence) and a
+  // per-link enumeration ("Some pages have links without any text", one row per
+  // anchor). Same defect — keep the cleaner per-page finding, fold the rest.
+  {
+    primary: /^empty anchor text/i,
+    members: [/^some pages have links without any text/i, /^link without text content/i],
+  },
 ];
 
 /**

@@ -53,6 +53,21 @@ export interface Anomaly {
   url: string;
   evidence: string;
   recommendation: string;
+  /**
+   * Stable kebab-case slug naming the defect CLASS (e.g. `clutch-badge-403`,
+   * `contact-form-get-action`). The model is asked to reuse the same slug for
+   * the same defect across pages so identical findings consolidate into one
+   * multi-occurrence finding (see `consolidateAnomalies`). Optional: absent on
+   * caches predating this field, which fall back to title-based grouping.
+   */
+  kind?: string;
+  /**
+   * All pages where this defect class was found, populated by
+   * `consolidateAnomalies`. When present, the report renders one finding with
+   * these as its occurrences instead of one finding per page. Undefined before
+   * consolidation (one anomaly == one page via `url`/`evidence`).
+   */
+  occurrences?: Array<{ url: string; evidence: string }>;
 }
 
 export interface AnomalyOptions {
@@ -83,7 +98,8 @@ Rules:
 - section = the single best of: performance | seo | privacy | accessibility | ux | technical. Functional/visual bugs are usually "ux" or "technical".
 
 Output ONLY a JSON array (no prose, no markdown fences). Each item:
-{"title": string (<=80 chars), "severity": "critical|high|medium|low", "section": "...", "evidence": string, "recommendation": string}
+{"title": string (<=80 chars), "kind": string, "severity": "critical|high|medium|low", "section": "...", "evidence": string, "recommendation": string}
+"kind" is a short stable kebab-case slug naming the DEFECT CLASS, not the page — e.g. "clutch-badge-403", "contact-form-get-action", "hero-image-404". Use the SAME slug whenever you see the same kind of defect, so identical issues found on different pages can be grouped. Be consistent and generic in the slug; keep page-specific detail in "evidence".
 Return [] when nothing is wrong.`;
 
 /** Compact, token-frugal view of a page's interactive signals. */
@@ -192,7 +208,8 @@ export function parseAnomalies(text: string, url: string): Anomaly[] {
     const severity = (VALID_SEVERITIES.includes(o.severity as string) ? o.severity : 'medium') as Anomaly['severity'];
     const section = (VALID_SECTIONS.includes(o.section as Section) ? o.section : 'technical') as Section;
     const recommendation = typeof o.recommendation === 'string' ? o.recommendation.trim() : '';
-    out.push({ section, title: title.slice(0, 120), severity, url, evidence, recommendation });
+    const kind = typeof o.kind === 'string' && o.kind.trim() ? o.kind.trim().slice(0, 80) : undefined;
+    out.push({ section, title: title.slice(0, 120), severity, url, evidence, recommendation, kind });
   }
   return out;
 }

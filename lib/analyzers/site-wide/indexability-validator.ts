@@ -144,6 +144,7 @@ class IndexabilityValidator {
     if (haveSitemap) {
       for (const url in allPages) {
         const page = allPages[url];
+        if (page.hasRedirects) continue; // redirect source, not a real indexable page
         if (page.indexability?.isIndexable && !inSitemap(url)) {
           indexableNotInSitemap++;
         }

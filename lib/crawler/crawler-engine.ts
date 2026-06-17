@@ -306,6 +306,14 @@ class CrawlerEngine {
   ): Promise<BasicTestResult> {
     const requests: Record<string, RequestInfo> = {};
     let totalResponseSize = 0;
+    // Accurate page transfer size is the sum of actual bytes received per request
+    // (`request.sizes().responseBodySize`, resolved on 'requestfinished'), NOT the
+    // declared `content-length`. A range/streamed media response (video/audio)
+    // advertises the FULL asset length in content-length while transferring only a
+    // slice, so summing content-length inflated totalResponseSize into the hundreds
+    // of MB and tripped the 6 MB threshold falsely. responseBodySize reflects what
+    // was really transferred (encoded, incl. chunked). Mirrors lib/phase3 captureOne.
+    const sizings: Promise<void>[] = [];
 
     // Set up console error tracking
     const consoleTracker = ConsoleErrorAnalyzer.createConsoleTracker(page);
@@ -323,11 +331,14 @@ class CrawlerEngine {
       let size: number | null = null;
 
       try {
-        // Prefer the declared content-length so we never buffer the body just
-        // to measure it. Only fall back to reading the body when the header is
-        // absent AND the resource is one we'd parse anyway (document/script/
-        // stylesheet) — buffering a large media/asset stream, or a gzip bomb
-        // with no content-length, would OOM the crawler.
+        // Per-request size for the `requests` map (consumed by the compression /
+        // font / critical-path analyzers): prefer the declared content-length so
+        // we never buffer the body just to measure it. Only fall back to reading
+        // the body when the header is absent AND the resource is one we'd parse
+        // anyway (document/script/stylesheet) — buffering a large media/asset
+        // stream, or a gzip bomb with no content-length, would OOM the crawler.
+        // NOTE: this value feeds the per-request map only; totalResponseSize is
+        // summed separately from real transfer bytes (see `sizings` above).
         const declared = Number(response.headers()['content-length']);
         if (Number.isFinite(declared) && declared >= 0) {
           size = declared;
@@ -335,7 +346,6 @@ class CrawlerEngine {
           const body = await response.body();
           if (body.length <= THRESHOLDS.MAX_BUFFERED_RESPONSE) size = body.length;
         }
-        if (size !== null) totalResponseSize += size;
       } catch {
         // Body read failed - ignore
       }
@@ -352,8 +362,25 @@ class CrawlerEngine {
       };
     };
 
+    // Accumulate the true page transfer size from per-request transfer bytes.
+    // `request.sizes()` resolves only after the request finishes; collect the
+    // pending lookups and await them before reading totalResponseSize.
+    const requestFinishedHandler = (request: PlaywrightRequest) => {
+      sizings.push(
+        (async () => {
+          try {
+            const s = await request.sizes();
+            if (s.responseBodySize > 0) totalResponseSize += s.responseBodySize;
+          } catch {
+            // Request had no recordable size (cached, aborted, redirect) - ignore.
+          }
+        })(),
+      );
+    };
+
     page.on('request', requestHandler);
     page.on('response', responseHandler);
+    page.on('requestfinished', requestFinishedHandler);
 
     let response: PlaywrightResponse | null | undefined,
       status: number | undefined,
@@ -480,7 +507,12 @@ class CrawlerEngine {
       // Remove event listeners to prevent memory leaks - always runs even on error
       page.off('request', requestHandler);
       page.off('response', responseHandler);
+      page.off('requestfinished', requestFinishedHandler);
     }
+
+    // Resolve any in-flight request.sizes() lookups so totalResponseSize is
+    // complete before we return it.
+    await Promise.all(sizings);
 
     // Get console data and cleanup
     const consoleData = consoleTracker.getResults();

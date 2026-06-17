@@ -536,7 +536,13 @@ export function collectLinks(
       // Surface the full <a> markup so the empty link is locatable in source.
       // These anchors usually wrap an icon/image, so the tag is what identifies
       // them — the bare href is often ambiguous (many anchors share one href).
-      const rawTag = (link.outerHTML || '').replace(/\s+/g, ' ').trim();
+      const rawTag = (link.outerHTML || '')
+        .replace(/\s+/g, ' ')
+        // Collapse inline data: URIs (often multi-KB base64 image blobs in a
+        // background-image/src) to a short stub — the payload identifies nothing
+        // and otherwise floods the report past the 300-char cap below.
+        .replace(/data:[^\s"')]{40,}/gi, (m) => `${m.slice(0, 40)}…`)
+        .trim();
       const tag = rawTag.length > 300 ? `${rawTag.slice(0, 300)}…` : rawTag;
       const markup = tag ? ` Markup: <code>${escapeHtml(tag)}</code>` : '';
       reportIssue(

@@ -39,6 +39,11 @@ class StructuredDataValidator {
     for (const url in allPages) {
       const page = allPages[url];
 
+      // Skip redirect sources (e.g. trailing-slash twins): they carry the
+      // destination's schema, so they'd flag the destination's own Article/
+      // Product as a cross-page duplicate of itself.
+      if (page.hasRedirects) continue;
+
       if (!page.structuredData?.hasStructuredData) {
         schemaStats.pagesWithoutSchema++;
         continue;

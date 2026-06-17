@@ -224,6 +224,60 @@ void describe('ContentSimilarityAnalyzer', () => {
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
   });
+
+  void it('excludes redirect sources (trailing-slash twins) from near-duplicate detection', () => {
+    const kw = [
+      { word: 'seo', density: 3 },
+      { word: 'audit', density: 2.5 },
+      { word: 'tool', density: 2 },
+      { word: 'website', density: 1.5 },
+      { word: 'performance', density: 1 },
+    ];
+    const allPages = {
+      'https://example.com/x/': { contentQuality: { wordCount: 500, topKeywords: kw } },
+      // The no-slash twin redirected to /x/ and carries the same content — must
+      // not register as a 100%-identical near-duplicate of /x/.
+      'https://example.com/x': { hasRedirects: true, contentQuality: { wordCount: 500, topKeywords: kw } },
+    };
+    ContentSimilarityAnalyzer.analyze(allPages as unknown as Record<string, PageInfo>);
+    const slash = allPages['https://example.com/x/'] as Record<string, unknown>;
+    const sim = slash.contentSimilarity as { similarPages?: unknown[] } | undefined;
+    assert.strictEqual(sim?.similarPages?.length ?? 0, 0);
+  });
+});
+
+// ============================================================
+// Redirect-source exclusion across site-wide validators (trailing-slash twins)
+// ============================================================
+import { DuplicateChecker } from '../lib/analyzers/site-wide/duplicate-checker';
+import { IndexabilityValidator } from '../lib/analyzers/site-wide/indexability-validator';
+
+void describe('redirect-source exclusion (trailing-slash twin inflation)', () => {
+  void it('DuplicateChecker ignores a redirect source sharing the destination title', () => {
+    const out = DuplicateChecker.checkDuplicates({
+      'https://e.com/x/': { title: 'Shared Title', description: 'Shared description text' },
+      // /x → /x/ redirect: holds the destination's title, must not count as a duplicate.
+      'https://e.com/x': { title: 'Shared Title', description: 'Shared description text', hasRedirects: true },
+    } as unknown as Record<string, PageInfo>);
+    assert.strictEqual(out.duplicateTitles.size, 0, 'twin must not register a duplicate title');
+    assert.strictEqual(out.duplicateDescriptions.size, 0, 'twin must not register a duplicate description');
+  });
+
+  void it('IndexabilityValidator does not flag a redirect source as missing from sitemap', () => {
+    const out = IndexabilityValidator.validateIndexabilityCrawlability(
+      {
+        'https://e.com/new/': { indexability: { isIndexable: true } },
+        // /old redirects to /new/ (in sitemap) but /old itself is not — without the
+        // skip it would be counted as an indexable page missing from the sitemap.
+        'https://e.com/old': { indexability: { isIndexable: true }, hasRedirects: true },
+      } as unknown as Record<string, PageInfo>,
+      { 'https://e.com/new/': true },
+    );
+    assert.ok(
+      !out.issues.some((i) => /missing from sitemap/i.test(i.message ?? '')),
+      'redirect source must not inflate the missing-from-sitemap count',
+    );
+  });
 });
 
 // ============================================================
@@ -747,6 +801,16 @@ void describe('consolidateFindings (Phase 2 de-dup)', () => {
     const keys = Object.keys(out);
     assert.ok(keys.includes('Page has very thin content'));
     assert.ok(!keys.some((k) => /% of pages have very thin content/.test(k)), 'aggregate restatement should fold away');
+  });
+
+  void it('folds the per-link "links without any text" enumeration into "Empty anchor text"', () => {
+    const out = consolidateFindings({
+      'Empty anchor text': det({ severity: 'medium', count: 369 }),
+      'Some pages have links without any text': det({ severity: 'medium', count: 1568 }),
+    });
+    const keys = Object.keys(out);
+    assert.ok(keys.includes('Empty anchor text'));
+    assert.ok(!keys.some((k) => /links without any text/.test(k)), 'per-link enumeration should fold away');
   });
 });
 
@@ -2096,6 +2160,130 @@ void describe('parseAnomalies', () => {
     assert.strictEqual(parseAnomalies('[]', URL).length, 0);
     assert.strictEqual(parseAnomalies('not json at all', URL).length, 0);
     assert.strictEqual(parseAnomalies('[broken', URL).length, 0);
+  });
+
+  void it('extracts a kind slug when present, leaves it undefined otherwise', () => {
+    const withKind = parseAnomalies(
+      '[{"title":"T","kind":"clutch-badge-403","evidence":"e","severity":"medium","section":"ux"}]',
+      URL,
+    );
+    assert.strictEqual(withKind[0].kind, 'clutch-badge-403');
+    const without = parseAnomalies('[{"title":"T","evidence":"e","severity":"medium","section":"ux"}]', URL);
+    assert.strictEqual(without[0].kind, undefined);
+  });
+});
+
+// Anomaly consolidation — one finding per defect class across pages
+import { consolidateAnomalies } from '../lib/phase2/phase2-runner';
+import type { Anomaly } from '../lib/phase2/llm-anomaly';
+
+void describe('consolidateAnomalies', () => {
+  const mk = (over: Partial<Anomaly>): Anomaly => ({
+    section: 'ux',
+    title: 'Some issue',
+    severity: 'medium',
+    url: 'https://example.com/a',
+    evidence: 'e',
+    recommendation: 'fix it',
+    ...over,
+  });
+
+  void it('groups reworded titles sharing a kind into one finding with N occurrences', () => {
+    const out = consolidateAnomalies([
+      mk({ kind: 'clutch-badge-403', title: 'Clutch badges fail to load (403)', url: 'https://example.com/1' }),
+      mk({ kind: 'clutch-badge-403', title: 'Four Clutch embeds return HTTP 403', url: 'https://example.com/2' }),
+      mk({ kind: 'clutch-badge-403', title: 'Clutch trust badges 403 Forbidden', url: 'https://example.com/3' }),
+    ]);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].occurrences?.length, 3);
+    // Representative keeps the first item's title.
+    assert.strictEqual(out[0].title, 'Clutch badges fail to load (403)');
+  });
+
+  void it('keeps the worst severity in the group as the representative', () => {
+    const out = consolidateAnomalies([
+      mk({ kind: 'k', severity: 'medium', url: 'https://example.com/1' }),
+      mk({ kind: 'k', severity: 'high', url: 'https://example.com/2' }),
+      mk({ kind: 'k', severity: 'low', url: 'https://example.com/3' }),
+    ]);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].severity, 'high');
+  });
+
+  void it('falls back to normalized title when kind is absent (older caches)', () => {
+    const out = consolidateAnomalies([
+      mk({ title: 'Contact form submits via GET (3 fields)', url: 'https://example.com/1' }),
+      mk({ title: 'Contact form submits via GET (7 fields)', url: 'https://example.com/2' }),
+    ]);
+    // normalizeMessage strips the trailing "(N …)" so both titles collapse.
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].occurrences?.length, 2);
+  });
+
+  void it('keeps distinct kinds separate', () => {
+    const out = consolidateAnomalies([
+      mk({ kind: 'a', section: 'ux', url: 'https://example.com/1' }),
+      mk({ kind: 'b', section: 'ux', url: 'https://example.com/2' }),
+    ]);
+    assert.strictEqual(out.length, 2);
+  });
+
+  void it('merges the same kind across sections into the dominant section', () => {
+    const out = consolidateAnomalies([
+      mk({ kind: 'form-get', section: 'ux', severity: 'high', url: 'https://example.com/1' }),
+      mk({ kind: 'form-get', section: 'ux', severity: 'medium', url: 'https://example.com/2' }),
+      mk({ kind: 'form-get', section: 'technical', severity: 'medium', url: 'https://example.com/3' }),
+    ]);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].occurrences?.length, 3);
+    // ux appears twice vs technical once → dominant section is ux.
+    assert.strictEqual(out[0].section, 'ux');
+    // worst severity across the group is kept.
+    assert.strictEqual(out[0].severity, 'high');
+  });
+
+  void it('keeps title-fallback grouping section-scoped when kind is absent', () => {
+    const out = consolidateAnomalies([
+      mk({ title: 'Broken thing', section: 'ux', url: 'https://example.com/1' }),
+      mk({ title: 'Broken thing', section: 'technical', url: 'https://example.com/2' }),
+    ]);
+    // No kind → conservative: different sections stay separate.
+    assert.strictEqual(out.length, 2);
+  });
+
+  void it('de-duplicates occurrences by url and is order-stable', () => {
+    const out = consolidateAnomalies([
+      mk({ kind: 'k', url: 'https://example.com/dup' }),
+      mk({ kind: 'k', url: 'https://example.com/dup' }),
+      mk({ kind: 'k', url: 'https://example.com/other' }),
+    ]);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].occurrences?.length, 2);
+    assert.deepStrictEqual(
+      out[0].occurrences?.map((o) => o.url),
+      ['https://example.com/dup', 'https://example.com/other'],
+    );
+  });
+});
+
+import { isNextjsAudit } from '../lib/scoring/nextjs-recommendations';
+
+void describe('isNextjsAudit (framework vs crawl fingerprint)', () => {
+  void it('returns true for an explicit Next.js framework', () => {
+    assert.strictEqual(isNextjsAudit('Next.js', []), true);
+  });
+
+  void it('uses the /_next/ fingerprint only when no --repo framework is known', () => {
+    assert.strictEqual(isNextjsAudit(null, ['GET https://x.com/_next/static/chunk.js 200']), true);
+    assert.strictEqual(isNextjsAudit(undefined, ['__NEXT_DATA__ present']), true);
+    assert.strictEqual(isNextjsAudit('', ['no fingerprint here']), false);
+  });
+
+  void it('does NOT flip a non-Next repo to Next.js on a stray /_next/ URL', () => {
+    // The bug: an 11ty/React source tree whose LIVE site links a /_next/ asset
+    // was getting Next.js fix advice on top of src/_includes/*.html files.
+    assert.strictEqual(isNextjsAudit('React', ['GET https://x.com/_next/static/chunk.js 200']), false);
+    assert.strictEqual(isNextjsAudit('Astro', ['__NEXT_DATA__ leaked from an embed']), false);
   });
 });
 

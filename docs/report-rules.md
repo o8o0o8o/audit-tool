@@ -88,6 +88,16 @@ vs `52 form inputs across site missing labels`). These must fold to one entry
 via `DEDUP_GROUPS` in `lib/phase2/consolidate.ts`; otherwise the same issue
 appears twice across summary sub-sections.
 
+**Redirect sources are not distinct pages.** A requested URL that redirected
+(e.g. the trailing-slash twin `/x` → `/x/`, or an old path → new path) is
+followed to its destination, so the stored `PageInfo` holds the *destination's*
+title/description/content keyed under the *requested* URL. Site-wide validators
+that compare pages across the crawl (`duplicate-checker`, `content-similarity-analyzer`)
+must skip pages with `hasRedirects`, or the destination's own title/content
+registers as a "duplicate"/"near-duplicate" of itself — the classic
+trailing-slash inflation. The redirect itself is already surfaced as a per-page
+redirect finding.
+
 **Tier-twin findings (one metric, two severity bands) must not exist.** A
 per-page analyzer measuring a single quantity must emit **one** message string
 regardless of which threshold band the page falls in — the band it crossed goes

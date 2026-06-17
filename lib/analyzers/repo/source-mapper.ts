@@ -29,6 +29,27 @@ interface FindCriteria {
   context: string;
   countPattern?: RegExp;
   minCount?: number;
+  /**
+   * Skip include/partial/embed files. These fragments (a slider partial, an
+   * iframe-embed document) have no document `<head>` of their own — or a
+   * throwaway one — so citing them for a missing page-level `<title>`,
+   * description, canonical or Open Graph tag is wrong and misleading. Set on the
+   * head-level mappers; left off for h1/alt mappers, where a partial IS the
+   * right place to fix the markup.
+   */
+  skipFragments?: boolean;
+}
+
+/**
+ * Is this an include/partial/embed fragment rather than a full page/document?
+ * Recognises the underscore-prefixed-partial convention (11ty/Jekyll/Sass) and
+ * common fragment directory names.
+ */
+function isFragmentPath(relPath: string): boolean {
+  const segs = relPath.split(/[\\/]/);
+  const base = segs[segs.length - 1];
+  if (base.startsWith('_')) return true;
+  return segs.some((s) => /^(_?includes?|partials?|components?|fragments?|embeds?|embed|snippets?)$/i.test(s));
 }
 
 interface LineSearchCriteria {
@@ -176,10 +197,13 @@ class SourceMapper {
       default:
         locations.push(
           ...this.#findInFiles(repoPath, srcDirs, /\.(html|htm)$/, {
-            positive: null,
+            // Require a real document <head> so include/partial fragments (which
+            // have none) aren't flagged for a "missing" title they never own.
+            positive: /<head[\s>]/i,
             negative: /<title>/i,
             suggestion: 'Add a <title> tag in the <head> section',
-            context: 'HTML file without title',
+            context: 'HTML document without title',
+            skipFragments: true,
           }),
         );
     }
@@ -227,10 +251,13 @@ class SourceMapper {
       default:
         locations.push(
           ...this.#findInFiles(repoPath, srcDirs, /\.(html|htm)$/, {
-            positive: null,
+            // Require a real document <head> so include/partial fragments aren't
+            // flagged for a "missing" meta description they never own.
+            positive: /<head[\s>]/i,
             negative: /meta\s+name=["']description["']/i,
             suggestion: 'Add <meta name="description" content="..."> to the <head>',
-            context: 'HTML file without meta description',
+            context: 'HTML document without meta description',
+            skipFragments: true,
           }),
         );
     }
@@ -271,7 +298,11 @@ class SourceMapper {
             positive: /<head[\s>]/,
             negative: /rel=["']canonical["']/i,
             suggestion: 'Add <link rel="canonical" href="..."> to the head',
-            context: 'file without canonical link',
+            context: 'document without canonical link',
+            // Skip iframe-embed standalone docs (e.g. src/embed/*.html): they
+            // have a <head> but aren't crawlable pages, so a "missing canonical"
+            // page finding shouldn't point at them.
+            skipFragments: true,
           }),
         );
     }
@@ -362,7 +393,8 @@ class SourceMapper {
             positive: /<head[\s>]/,
             negative: /og:title|property=["']og:/i,
             suggestion: 'Add Open Graph meta tags for social sharing',
-            context: 'file without OG tags',
+            context: 'document without OG tags',
+            skipFragments: true,
           }),
         );
     }
@@ -422,6 +454,9 @@ class SourceMapper {
         const relPath = path.relative(repoPath, filePath);
         if (seen.has(relPath)) return;
         seen.add(relPath);
+
+        // Head-level findings must not cite include/partial/embed fragments.
+        if (criteria.skipFragments && isFragmentPath(relPath)) return;
 
         let content;
         try {

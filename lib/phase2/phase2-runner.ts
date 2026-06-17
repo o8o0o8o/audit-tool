@@ -482,23 +482,61 @@ function bucketDetails(details: Record<string, IssueDetail>): Record<Section, Ar
  */
 export function consolidateAnomalies(anomalies: Anomaly[]): Anomaly[] {
   const SEV_RANK: Record<Anomaly['severity'], number> = { critical: 3, high: 2, medium: 1, low: 0 };
-  const groups = new Map<string, Anomaly[]>();
-  const order: string[] = [];
-  for (const a of anomalies) {
-    const key = a.kind
-      ? `kind:${a.kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
-      : `${a.section}::title:${_normalizeMessage(a.title).toLowerCase()}`;
-    let grp = groups.get(key);
+  // Union-find over multiple label kinds: a defect merges when ANY label
+  // matches another's. A single key (kind XOR title) missed two real splits:
+  //   • the LLM gives the SAME defect different `kind` slugs across pages
+  //     ("contact-form-get-action" vs "contact-form-empty-action") — identical
+  //     titles then split into separate findings with different severities;
+  //   • the LLM keeps one `kind` but varies the wording slightly.
+  // So when `kind` is present we add BOTH a kind label and a section-agnostic
+  // title label (the same defect is sometimes filed under `ux` here, `technical`
+  // there). When `kind` is absent (caches predating the field) we keep the
+  // conservative section-scoped title key only — no cross-section merging.
+  const parent = anomalies.map((_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    // Keep the lower (first-seen) index as the root so group order is stable.
+    if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+  };
+  const labelToFirst = new Map<string, number>();
+  const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  anomalies.forEach((a, i) => {
+    const labels: string[] = [];
+    if (a.kind) {
+      labels.push(`kind:${slug(a.kind)}`);
+      labels.push(`title:${_normalizeMessage(a.title).toLowerCase()}`);
+    } else {
+      labels.push(`${a.section}::title:${_normalizeMessage(a.title).toLowerCase()}`);
+    }
+    for (const label of labels) {
+      const first = labelToFirst.get(label);
+      if (first === undefined) labelToFirst.set(label, i);
+      else union(first, i);
+    }
+  });
+  const groups = new Map<number, Anomaly[]>();
+  const order: number[] = [];
+  anomalies.forEach((a, i) => {
+    const root = find(i);
+    let grp = groups.get(root);
     if (!grp) {
       grp = [];
-      groups.set(key, grp);
-      order.push(key);
+      groups.set(root, grp);
+      order.push(root);
     }
     grp.push(a);
-  }
+  });
   const out: Anomaly[] = [];
-  for (const key of order) {
-    const grp = groups.get(key)!;
+  for (const root of order) {
+    const grp = groups.get(root)!;
     // Representative: worst severity, ties broken by first-seen order.
     let rep = grp[0];
     for (const a of grp) if (SEV_RANK[a.severity] > SEV_RANK[rep.severity]) rep = a;
@@ -944,7 +982,7 @@ function buildFindingBlock(
       const urls = extractAllUrls(ex);
       if (urls.length > 1) {
         const label = clusterLabel(ex);
-        lines.push(`- ${label || 'Shared value'}`);
+        lines.push(`- ${label || 'Pages sharing this value'}`);
         for (const u of urls.slice(0, PAGES_PER_CLUSTER)) lines.push(`    - ${mdLink(u, u)}`);
         if (urls.length > PAGES_PER_CLUSTER) {
           lines.push(
@@ -2417,7 +2455,11 @@ export function inlineExample(ex: string): string {
  * HTML and a trailing colon stripped.
  */
 function clusterLabel(s: string): string {
-  const idx = s.search(/<a\b|https?:\/\//i);
+  // Stop at the first link OR the first list/break markup. Duplicate-title and
+  // duplicate-description details wrap their page list in `<ul><li>`; without
+  // cutting there too, the stray `<ul>`/`<li>` tags fall inside the label and
+  // sanitizeProse renders them as literal inline code (`\`<ul>\`\`<li>\``).
+  const idx = s.search(/<a\b|<ul\b|<ol\b|<li\b|<br\s*\/?>|https?:\/\//i);
   // sanitizeProse (not stripHtml) so literal element mentions in the label
   // ("Pages missing <main>") render as inline code instead of vanishing.
   return sanitizeProse(idx >= 0 ? s.slice(0, idx) : s)

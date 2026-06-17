@@ -523,7 +523,7 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
   // ─── Performance: third-party / fonts / DOM ──────────────────────────────
   'Excessive third-party payload': {
     effort: '2-4 hours',
-    fix: 'Total third-party JS/CSS exceeds 1MB. Audit /third-party-summary in Chrome DevTools, defer non-critical, lazy-load embeds, and remove unused vendors.',
+    fix: 'Third-party resources (scripts, embeds, media, fonts) exceed the budget. Audit /third-party-summary in Chrome DevTools: defer non-critical scripts, lazy-load embeds and videos, self-host or compress heavy media, and remove unused vendors.',
     example: '<script src="analytics.js" defer></script>\n<!-- Use lite-youtube-embed instead of full YouTube iframe -->',
     resources: [{ text: 'Optimizing 3rd-Party', url: 'https://web.dev/articles/optimizing-third-party-javascript' }],
   },

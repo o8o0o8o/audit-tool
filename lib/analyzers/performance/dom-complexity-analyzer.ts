@@ -81,11 +81,16 @@ class DOMComplexityAnalyzer {
             }
           }
 
-          // Check children count
-          const childCount = el.children.length;
-          if (childCount > maxChildren) {
-            maxChildren = childCount;
-            widestTag = getSelector(el);
+          // Check children count. Exclude <head>: it legitimately holds many
+          // <meta>/<link>/<script> children, but that is not the wide *content*
+          // container this check targets, and the finding's fix ("virtualize or
+          // paginate the long list") is nonsensical for head metadata.
+          if (tag !== 'head') {
+            const childCount = el.children.length;
+            if (childCount > maxChildren) {
+              maxChildren = childCount;
+              widestTag = getSelector(el);
+            }
           }
         }
 
@@ -148,9 +153,15 @@ class DOMComplexityAnalyzer {
       const thresholdNote = overFailure
         ? `over Lighthouse's failure threshold of ${THRESHOLDS.TOTAL_NODES_FAILURE}`
         : `over Lighthouse's warning threshold of ${THRESHOLDS.TOTAL_NODES_WARNING}`;
+      // Render tag names WITHOUT angle brackets ("div ×401" not "<div>: 401").
+      // The curated report's inlineExample() splits a detail on `<ul`/`<ol`/`</p>`
+      // to drop list markup analyzers append — literal `<ul>:`/`<p>:` element
+      // counts here would be mistaken for that markup and truncate the sentence
+      // mid-list, leaving a dangling comma. Bracket-free is also correct for the
+      // legacy HTML report, where `<div>: 401` would render as a real element.
       const topElements = Object.entries(info.elementCounts)
         .slice(0, 5)
-        .map(([tag, count]) => `<${tag}>: ${count}`)
+        .map(([tag, count]) => `${tag} ×${count}`)
         .join(', ');
       warnings.push({
         message: `Excessive DOM size`,

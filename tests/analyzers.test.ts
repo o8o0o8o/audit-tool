@@ -2220,12 +2220,25 @@ void describe('consolidateAnomalies', () => {
     assert.strictEqual(out[0].occurrences?.length, 2);
   });
 
-  void it('keeps distinct kinds separate', () => {
+  void it('keeps distinct kinds with distinct titles separate', () => {
     const out = consolidateAnomalies([
-      mk({ kind: 'a', section: 'ux', url: 'https://example.com/1' }),
-      mk({ kind: 'b', section: 'ux', url: 'https://example.com/2' }),
+      mk({ kind: 'a', title: 'Defect A', section: 'ux', url: 'https://example.com/1' }),
+      mk({ kind: 'b', title: 'Defect B', section: 'ux', url: 'https://example.com/2' }),
     ]);
     assert.strictEqual(out.length, 2);
+  });
+
+  void it('merges identical titles even when the LLM assigned different kinds', () => {
+    // The LLM sometimes files the SAME defect under inconsistent kind slugs
+    // across pages (the contact-form-GET split). An identical normalized title
+    // is a strong same-defect signal, so they still consolidate into one finding
+    // rather than rendering as near-duplicate findings with split severities.
+    const out = consolidateAnomalies([
+      mk({ kind: 'contact-form-get', title: 'Contact form submits via GET', url: 'https://example.com/1' }),
+      mk({ kind: 'contact-form-empty-action', title: 'Contact form submits via GET', url: 'https://example.com/2' }),
+    ]);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].occurrences?.length, 2);
   });
 
   void it('merges the same kind across sections into the dominant section', () => {

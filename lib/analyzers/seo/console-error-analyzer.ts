@@ -173,7 +173,7 @@ class ConsoleErrorAnalyzer {
 
       issues.push({
         message: 'Critical JavaScript errors detected',
-        detail: `<a href="${url}">${url}</a> has ${criticalErrors.length} critical JS error(s) that may affect functionality:<br>${examples}`,
+        detail: `<a href="${url}">${url}</a> has ${criticalErrors.length} critical JS error(s) that may affect functionality.<br>${examples}`,
         severity: SEVERITY.HIGH,
       });
     }

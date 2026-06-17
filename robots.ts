@@ -471,12 +471,19 @@ async function audit() {
           seo.data.repoAnalysis = repoAnalysis;
           seo.fileManager.writeRepoAnalysis(repoAnalysis);
 
-          // Merge repo issues into the main error aggregator
+          // Merge repo issues into the main error aggregator. Tag the message so
+          // they read as source-tree/build checks, not live-crawl findings — they
+          // inspect the committed source (e.g. a robots.txt under public/), and
+          // sitting untagged among crawl findings they can contradict the live
+          // site (which may serve a dynamically-generated robots.txt/sitemap the
+          // repo check can't see). The Source Code Analysis section still renders
+          // them from repoAnalysis directly with their plain messages.
+          const REPO_TAG = '🗂 Repo/build check';
           for (const issue of repoAnalysis.issues || []) {
-            seo.saveError(issue.message ?? '', issue.detail ?? '', issue.severity);
+            seo.saveError(`${REPO_TAG}: ${issue.message ?? ''}`, issue.detail ?? '', issue.severity);
           }
           for (const warning of repoAnalysis.warnings || []) {
-            seo.saveError(warning.message ?? '', warning.detail ?? '', warning.severity);
+            seo.saveError(`${REPO_TAG}: ${warning.message ?? ''}`, warning.detail ?? '', warning.severity);
           }
           // LLM findings are additive — surface them (tagged) alongside the rest.
           for (const f of repoAnalysis.llmFindings ?? []) {

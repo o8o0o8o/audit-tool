@@ -57,11 +57,11 @@ class ThinContentAnalyzer {
 
     // Check word count
     if (metrics.wordCount < this.THRESHOLDS.MIN_WORDS) {
-      issues.push({
-        message: 'Page has very thin content',
-        detail: `<a href="${url}">${shortenUrl(url)}</a> has only ${metrics.wordCount} words (minimum: ${this.THRESHOLDS.MIN_WORDS})`,
-        severity: SEVERITY.HIGH,
-      });
+      // The site-wide pass (analyzeSiteWide) owns the "Page has very thin
+      // content" finding: it gates severity on the share of thin pages and lists
+      // each page once. Emitting it here too listed every thin page a SECOND time
+      // under the same finding (with slightly different wording), inflating the
+      // occurrence count. Keep only the metric flag here.
       metrics.isThinContent = true;
     } else if (metrics.wordCount < this.THRESHOLDS.LOW_WORDS) {
       warnings.push({
@@ -179,7 +179,7 @@ class ThinContentAnalyzer {
       for (const p of thinPagesList) {
         const finding = {
           message: 'Page has very thin content',
-          detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — only ${p.wordCount} words (minimum ${this.THRESHOLDS.MIN_WORDS}); thin content can harm rankings.`,
+          detail: `<a href="${p.url}">${shortenUrl(p.url)}</a> — only ${p.wordCount} words (recommended: ≥${this.THRESHOLDS.LOW_WORDS}); thin content can harm rankings.`,
           severity: thinSeverity,
         };
         if (thinSeverity === SEVERITY.HIGH) {

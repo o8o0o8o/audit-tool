@@ -334,7 +334,10 @@ class TechnicalSEOAnalyzer {
     if (contentIframes.length > 0) {
       warnings.push({
         message: 'Content may be hidden in iframes',
-        detail: `<a href="${url}">${url}</a> has ${contentIframes.length} iframe(s) that may contain indexable content: ${contentIframes.slice(0, 3).join(', ')}. Content inside iframes is not indexed as part of the parent page.`,
+        // Don't inline the iframe src list: comma-joined URLs leak a trailing
+        // comma into each autolinked link and make the curated report mis-cluster
+        // this single-page finding under a "Pages sharing this value" group.
+        detail: `<a href="${url}">${url}</a> has ${contentIframes.length} iframe(s) that may contain indexable content. Content inside iframes is not indexed as part of the parent page.`,
         severity: SEVERITY.MEDIUM,
       });
     }

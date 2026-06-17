@@ -377,13 +377,11 @@ class PWAAnalyzer {
       });
     }
 
-    if (stats.pagesWithServiceWorker === 0) {
-      warnings.push({
-        message: 'No service worker detected',
-        detail: 'Service workers enable offline support and better performance. Consider implementing one.',
-        severity: SEVERITY.LOW,
-      });
-    }
+    // NOTE: do NOT emit a site-wide "No service worker detected" here. The
+    // per-page analyze() already reports it for every page lacking a SW (one
+    // occurrence each); adding a site-wide copy under the identical message
+    // incremented the aggregated count by one extra (368 pages → "369 pages"),
+    // an off-by-one against the crawl total shown everywhere else.
 
     // Check manifest consistency
     if (stats.pagesWithManifest > 0 && stats.pagesWithManifest < totalPages) {

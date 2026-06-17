@@ -30,7 +30,14 @@ function moreSevere(a: string, b: string): string {
  * the content-bearing variants ("…content in Shadow DOM") are kept and carry
  * the genuine SEO signal.
  */
-const SUPPRESS: RegExp[] = [/^no declarative shadow dom fallback/i, /^heavy shadow dom usage/i];
+const SUPPRESS: RegExp[] = [
+  /^no declarative shadow dom fallback/i,
+  /^heavy shadow dom usage/i,
+  // The per-page LOW "Low semantic HTML usage" (one row per page, hundreds of
+  // them) restates the site-wide MEDIUM "Site-wide low semantic HTML usage for
+  // AI readiness" headline. Drop the per-page enumeration; keep the headline.
+  /^low semantic html usage$/i,
+];
 
 interface DedupGroup {
   /** The kept ("primary") finding — its message + examples win. */
@@ -65,12 +72,18 @@ const DEDUP_GROUPS: DedupGroup[] = [
   },
   // Orphan pages (no inbound internal links) and pages unreachable from the
   // homepage via internal links are the same internal-linking discoverability
-  // problem reported by one analyzer two ways. Keep the orphan finding (the
-  // more specific signal); fold the unreachable one in.
+  // problem reported by one analyzer two ways — in practice the same page set.
+  // Keep the orphan finding (the more specific signal); fold the unreachable one
+  // in. NOT distinctSets: the two phrasings describe the SAME pages, so unioning
+  // example strings would list each page twice (once per wording).
   {
-    primary: /orphan pages detected/i,
-    members: [/pages are unreachable from homepage via internal links/i],
-    distinctSets: true,
+    // Match both the per-page wording the analyzer actually emits ("Orphan page
+    // (no internal links point to it)" / "Page unreachable from homepage via
+    // internal links") and any aggregate "N orphan pages detected" / "N pages
+    // are unreachable…" restatement. The previous, narrower patterns matched
+    // ONLY a never-emitted aggregate form, so the two findings never merged.
+    primary: /orphan page/i,
+    members: [/unreachable from homepage/i],
   },
   // Missing <main>: an AEO/semantic finding and an a11y-landmark finding.
   {
@@ -97,11 +110,14 @@ const DEDUP_GROUPS: DedupGroup[] = [
     primary: /^infinite scroll without pagination fallback/i,
     members: [/pages use infinite scroll without pagination fallback/i],
   },
-  // Missing form labels — per-page finding vs site-wide aggregate ("N form
-  // inputs across site missing labels").
+  // Missing form labels — per-page finding vs the site-wide aggregate
+  // ("Form inputs across the site are missing labels").
   {
     primary: /^form inputs missing labels/i,
-    members: [/form inputs across site missing labels/i],
+    // Match the analyzer's real wording ("Form inputs across the site are
+    // missing labels") and any "N form inputs across site missing labels"
+    // aggregate restatement.
+    members: [/form inputs across (the )?site.*missing labels/i],
   },
   // Thin content — per-page finding vs site-wide aggregate ("N% of pages have
   // very thin content").
@@ -115,7 +131,29 @@ const DEDUP_GROUPS: DedupGroup[] = [
   // anchor). Same defect — keep the cleaner per-page finding, fold the rest.
   {
     primary: /^empty anchor text/i,
-    members: [/^some pages have links without any text/i, /^link without text content/i],
+    members: [
+      /^some pages have links without any text/i,
+      /^link without text content/i,
+      // The anchor-text analyzer's per-page ("Links with empty anchor text") and
+      // site-wide ("Many links with empty anchor text") restatements of the same
+      // empty-anchor defect the SEO finding already carries.
+      /^links with empty anchor text/i,
+      /^many links with empty anchor text/i,
+    ],
+  },
+  // Soft 404 — the per-page detection ("Potential soft 404 detected") and the
+  // site-wide restatement ("Potential soft 404 page needs review") are the same
+  // pages. Keep the per-page finding; fold the restatement.
+  {
+    primary: /^potential soft 404 detected/i,
+    members: [/^potential soft 404 page needs review/i],
+  },
+  // Author attribution — the EEAT analyzer ("Most content pages lack author
+  // attribution") and the AEO analyzer ("Most pages lack author attribution")
+  // report the same site-wide gap.
+  {
+    primary: /^most content pages lack author attribution/i,
+    members: [/^most pages lack author attribution/i],
   },
 ];
 

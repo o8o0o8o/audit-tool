@@ -145,7 +145,12 @@ class ImageOptimizationAnalyzer {
             imageAnalysis.issues.push({
               severity: SEVERITY.MEDIUM,
               message: `Some images are significantly larger than their display size`,
-              detail: `<a href="${url}">${url}</a>: Image ${img.src.substring(0, 80)} is ${img.naturalWidth}x${img.naturalHeight} but displayed as ${Math.round(img.displayWidth)}x${Math.round(img.displayHeight)}`,
+              // Don't embed the raw image src: CDN URLs are opaque hashes that
+              // truncate badly and, as a second URL in the detail, make the
+              // curated report mis-cluster this single-page finding under a
+              // "Pages sharing this value" group. The page + dimensions are the
+              // actionable signal.
+              detail: `<a href="${url}">${url}</a> serves an image at ${img.naturalWidth}×${img.naturalHeight} but displays it at ${Math.round(img.displayWidth)}×${Math.round(img.displayHeight)} — downscaled in the browser, wasting bandwidth.`,
             });
           }
         }
@@ -247,14 +252,14 @@ class ImageOptimizationAnalyzer {
     }
 
     if (imageAnalysis.oversizedImages.length > 0) {
-      const oversizedSrcs = imageAnalysis.oversizedImages
-        .slice(0, 3)
-        .map((i) => i.src?.substring(0, 60))
-        .join(', ');
+      // Report the count only. The raw image srcs were CDN-hash URLs that got
+      // substring-truncated mid-string and, comma-joined into the detail, leaked
+      // a trailing comma into each link and made the curated report mis-cluster
+      // this single-page finding under a "Pages sharing this value" group.
       imageAnalysis.issues.push({
         severity: SEVERITY.HIGH,
         message: `Pages have image files larger than recommended`,
-        detail: `<a href="${url}">${url}</a> has ${imageAnalysis.oversizedImages.length} image file(s) over ${Math.round(THRESHOLDS.IMAGE_SIZE_MAX / 1000)}KB each: ${oversizedSrcs}`,
+        detail: `<a href="${url}">${url}</a> has ${imageAnalysis.oversizedImages.length} image file(s) over ${Math.round(THRESHOLDS.IMAGE_SIZE_MAX / 1000)}KB each.`,
       });
     }
 

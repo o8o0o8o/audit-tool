@@ -377,10 +377,17 @@ export function verdictBreakdownLine(verdicts: LiveVerdict[]): string {
   for (const v of verdicts)
     if (v.status === 'unverified') byCode.set(v.reasonCode, (byCode.get(v.reasonCode) ?? 0) + 1);
   if (byCode.size === 0) return '';
+  // State the unverified COUNT against the total explicitly ("15 of the 45").
+  // Without it a reader saw only "of the 45 live-checked" followed by reasons
+  // summing to 15 and read it as broken arithmetic — the missing 30 were the
+  // confirmed/refuted findings, which by definition aren't part of an
+  // "unverified" breakdown. (The main banner's much larger unverified count is a
+  // different, full-finding-set basis, not this CRITICAL/HIGH/MEDIUM subset.)
+  const unverifiedCount = [...byCode.values()].reduce((a, b) => a + b, 0);
   const parts = [...byCode.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([c, n]) => `${n} ${REASON_LABELS[c] ?? c}`);
-  return `> **Why findings are unverified** (of the ${verdicts.length} CRITICAL/HIGH/MEDIUM findings live-checked): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
+  return `> **Why findings are unverified** (${unverifiedCount} of the ${verdicts.length} CRITICAL/HIGH/MEDIUM findings live-checked): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
 }
 
 /** First real http(s) URL across a finding's example strings (skips templated

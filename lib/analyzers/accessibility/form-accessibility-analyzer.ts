@@ -357,11 +357,17 @@ class FormAccessibilityAnalyzer {
       }
     }
 
-    if (totalInputsWithoutLabels > 0) {
-      const percentage = calcPercent(totalInputsWithoutLabels, totalInputs);
+    // Only emit the SITE-WIDE "across the site" finding when the problem spans
+    // more than one page. For a single page, the per-page "Form inputs missing
+    // labels" finding already covers it — emitting both produced a misleading
+    // "across the site … (0% of all inputs)" duplicate for a lone input.
+    if (totalInputsWithoutLabels > 0 && pagesWithFormIssues > 1) {
+      const rawPct = totalInputs > 0 ? (totalInputsWithoutLabels / totalInputs) * 100 : 0;
+      // Never render "0%" for a non-zero count — show "<1" when it rounds down.
+      const pctLabel = rawPct > 0 && rawPct < 1 ? '<1' : Math.round(rawPct);
       issues.push({
         message: 'Form inputs across the site are missing labels',
-        detail: `${totalInputsWithoutLabels} form input(s) (${percentage}% of all inputs) lack proper labels. This is a WCAG 2.1 Level A failure affecting screen reader users.`,
+        detail: `${totalInputsWithoutLabels} form input(s) across ${pagesWithFormIssues} pages (${pctLabel}% of all inputs) lack proper labels. This is a WCAG 2.1 Level A failure affecting screen reader users.`,
         severity: SEVERITY.HIGH,
       });
     }

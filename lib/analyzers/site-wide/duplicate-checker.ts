@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList, escapeHtml, truncateText } from '../../utils';
+import { formatUrlList, escapeHtml, truncateText, normalizeUrlForComparison } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -19,6 +19,14 @@ class DuplicateChecker {
     const titleMap: Record<string, string[]> = {}; // title -> array of URLs
     const descriptionMap: Record<string, string[]> = {}; // description -> array of URLs
     const issues: Issue[] = [];
+    // Per-value sets of already-counted URLs (normalized), so a page that the
+    // crawl reached under both its slash and no-slash form — `/x` and `/x/`,
+    // when NEITHER redirects (both serve 200) — is counted once. Without this,
+    // a single page (e.g. the homepage `https://site.com` vs `https://site.com/`)
+    // is reported as a "duplicate title" of itself: a false positive that also
+    // inflates every duplicate finding's occurrence count.
+    const titleSeen: Record<string, Set<string>> = {};
+    const descriptionSeen: Record<string, Set<string>> = {};
 
     // Build maps of titles and descriptions
     for (const url in allPages) {
@@ -32,22 +40,26 @@ class DuplicateChecker {
       // The redirect itself is already surfaced as a per-page redirect finding.
       if (page.hasRedirects) continue;
 
+      const normUrl = normalizeUrlForComparison(url);
+
       // Track titles (skip empty ones as they're already reported)
       if (page.title?.trim()) {
         const title = page.title.trim();
-        if (!titleMap[title]) {
-          titleMap[title] = [];
+        const seen = (titleSeen[title] ??= new Set());
+        if (!seen.has(normUrl)) {
+          seen.add(normUrl);
+          (titleMap[title] ??= []).push(url);
         }
-        titleMap[title].push(url);
       }
 
       // Track descriptions (skip empty ones as they're already reported)
       if (page.description?.trim()) {
         const description = page.description.trim();
-        if (!descriptionMap[description]) {
-          descriptionMap[description] = [];
+        const seen = (descriptionSeen[description] ??= new Set());
+        if (!seen.has(normUrl)) {
+          seen.add(normUrl);
+          (descriptionMap[description] ??= []).push(url);
         }
-        descriptionMap[description].push(url);
       }
     }
 

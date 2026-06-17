@@ -260,12 +260,16 @@ export const SCORING = {
 
   /**
    * Per-metric weights for the Performance composite (Core Web Vitals + lab).
-   * Mirrors Lighthouse 10 weighting with TBT swapped for INP (per Web Vitals).
-   * Sums to 100 so the result is a percentage.
+   * Mirrors Lighthouse 10 weighting but scores TBT, not INP: INP needs real user
+   * interaction to measure, and a non-interacting crawler records it as 0ms on
+   * every page — which `logNormalScore` treats as a perfect score, silently
+   * locking 30% of the composite at ~100 and inflating Performance toward 100.
+   * TBT is the lab-measurable main-thread-blocking proxy Lighthouse uses in its
+   * place, and we already collect it per page. Sums to 100 (a percentage).
    */
   PERFORMANCE_METRIC_WEIGHTS: {
     LCP: 25,
-    INP: 30,
+    TBT: 30,
     CLS: 25,
     FCP: 10,
     TTFB: 10,
@@ -279,7 +283,7 @@ export const SCORING = {
    */
   PERFORMANCE_CONTROL_POINTS: {
     LCP: { p10: 1220, median: 2500 },
-    INP: { p10: 50, median: 200 },
+    TBT: { p10: 150, median: 350 },
     CLS: { p10: 0.025, median: 0.1 },
     FCP: { p10: 934, median: 1800 },
     TTFB: { p10: 200, median: 800 },

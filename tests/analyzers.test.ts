@@ -394,15 +394,36 @@ void describe('ScoreCalculator', () => {
   });
 
   void it('Performance score uses log-normal CDF on per-page metrics', () => {
-    // A page with LCP=1220 (p10) should score ~90 for LCP.
-    const fastPages = { 'https://example.com/': { LCP: 1220, INP: 50, CLS: 0.025, FCP: 934, TTFB: 200 } };
-    const slowPages = { 'https://example.com/': { LCP: 4000, INP: 500, CLS: 0.25, FCP: 3000, TTFB: 1800 } };
+    // A page at each metric's p10 should score ~90. The composite scores TBT
+    // (lab-measurable), not INP — a non-interacting crawler records INP as 0ms,
+    // which would otherwise score as perfect and inflate the result.
+    const fastPages = { 'https://example.com/': { LCP: 1220, TBT: 150, CLS: 0.025, FCP: 934, TTFB: 200 } };
+    const slowPages = { 'https://example.com/': { LCP: 4000, TBT: 800, CLS: 0.25, FCP: 3000, TTFB: 1800 } };
     const empty = { bySeverity: { critical: [], high: [], medium: [], low: [] }, details: {} };
 
     const fast = ScoreCalculator.calculateCategoryScores(empty, fastPages as unknown as Record<string, PageInfo>);
     const slow = ScoreCalculator.calculateCategoryScores(empty, slowPages as unknown as Record<string, PageInfo>);
     assert.ok(fast.performance > 80, `Expected fast performance > 80, got ${fast.performance}`);
     assert.ok(slow.performance < 30, `Expected slow performance < 30, got ${slow.performance}`);
+  });
+
+  void it('Performance score is not inflated by crawler INP=0; heavy TBT pulls it down', () => {
+    // Regression: the composite weighted INP at 30%, but a non-interacting
+    // crawler records INP=0ms (a perfect log-normal score), so a page with fast
+    // paint scored ~100 even with severe main-thread blocking. The composite now
+    // scores TBT instead. A page with great LCP/CLS/FCP/TTFB but a 1200ms TBT
+    // must reflect that blocking, not ignore it.
+    const heavyTbt = {
+      'https://example.com/': { LCP: 500, INP: 0, CLS: 0.01, FCP: 500, TTFB: 60, TBT: 1200 },
+    };
+    const scores = ScoreCalculator.calculateCategoryScores(
+      { bySeverity: { critical: [], high: [], medium: [], low: [] }, details: {} },
+      heavyTbt as unknown as Record<string, PageInfo>,
+    );
+    assert.ok(
+      scores.performance < 80,
+      `Expected heavy-TBT performance < 80 (was ~100 with the INP=0 bug), got ${scores.performance}`,
+    );
   });
 
   void it('SEO score scales with breadth of affected pages', () => {

@@ -281,7 +281,7 @@ function scorePerformance(pages: PageInfo[], issues: EnrichedIssue[], totalPages
 
   for (const page of pages) {
     const lcp = page.LCP ?? page.lcp;
-    const inp = page.INP ?? page.inp;
+    const tbt = page.TBT ?? page.tbt;
     const cls = page.CLS ?? page.cls;
     const fcp = page.FCP ?? page.fcp;
     const ttfb = page.TTFB ?? page.ttfb;
@@ -292,9 +292,13 @@ function scorePerformance(pages: PageInfo[], issues: EnrichedIssue[], totalPages
       weighted += ws.LCP * logNormalScore(lcp as number, cps.LCP.p10, cps.LCP.median);
       totalWeight += ws.LCP;
     }
-    if (Number.isFinite(inp as number)) {
-      weighted += ws.INP * logNormalScore(inp as number, cps.INP.p10, cps.INP.median);
-      totalWeight += ws.INP;
+    // TBT, not INP: INP needs interaction the crawler never performs, so it
+    // records 0ms (a perfect score) on every page. TBT is the lab-measurable
+    // main-thread-blocking proxy and is collected per page. See
+    // SCORING.PERFORMANCE_METRIC_WEIGHTS.
+    if (Number.isFinite(tbt as number)) {
+      weighted += ws.TBT * logNormalScore(tbt as number, cps.TBT.p10, cps.TBT.median);
+      totalWeight += ws.TBT;
     }
     if (Number.isFinite(cls as number)) {
       weighted += ws.CLS * logNormalScore(cls as number, cps.CLS.p10, cps.CLS.median);

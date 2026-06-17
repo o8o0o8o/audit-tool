@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import { ResponseHeaderAnalyzer } from '../lib/analyzers/seo/response-header-analyzer';
 import { LanguageDetectionAnalyzer } from '../lib/analyzers/content/language-detection-analyzer';
 import { ContentSimilarityAnalyzer } from '../lib/analyzers/site-wide/content-similarity-analyzer';
+import { KeywordCannibalisationAnalyzer } from '../lib/analyzers/site-wide/keyword-cannibalisation-analyzer';
 import { InternalPageRankAnalyzer } from '../lib/analyzers/site-wide/internal-pagerank-analyzer';
 import { CodeCoverageAnalyzer } from '../lib/analyzers/performance/code-coverage-analyzer';
 import { CTADetectorAnalyzer } from '../lib/analyzers/content/cta-detector-analyzer';
@@ -223,6 +224,28 @@ void describe('ContentSimilarityAnalyzer', () => {
     const result = ContentSimilarityAnalyzer.analyze(allPages as unknown as Record<string, PageInfo>);
     assert.ok(result);
     assert.ok(Array.isArray(result.issues));
+  });
+
+  void it('extractKeywords rejects boundary-stopword and brand-trailing phrases', () => {
+    // Regression: 3-word phrases were emitted with no stopword check ("visual
+    // editing and"), and the "… | Brand" title suffix spawned brand-trailing
+    // phrases ("case study focusreactive"). Both are junk n-grams, not keywords.
+    const brand = new Set(['focusreactive']);
+    const kws = KeywordCannibalisationAnalyzer.extractKeywords(
+      'Arrive case study | FocusReactive visual editing and more',
+      brand,
+    );
+    for (const k of kws) {
+      const words = k.split(' ');
+      assert.ok(!KeywordCannibalisationAnalyzer.isStopword(words[0]), `phrase starts with stopword: "${k}"`);
+      assert.ok(
+        !KeywordCannibalisationAnalyzer.isStopword(words[words.length - 1]),
+        `phrase ends with stopword: "${k}"`,
+      );
+      assert.ok(!k.includes('focusreactive'), `brand token leaked into keyword: "${k}"`);
+    }
+    // Sanity: a legitimate phrase still survives.
+    assert.ok(kws.includes('case study'), `expected "case study" in ${JSON.stringify(kws)}`);
   });
 
   void it('excludes redirect sources (trailing-slash twins) from near-duplicate detection', () => {

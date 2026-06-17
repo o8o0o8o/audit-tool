@@ -123,7 +123,7 @@ class KeywordCannibalisationAnalyzer {
 
       // Extract and normalize title keywords
       if (page.title) {
-        const keywords = this.extractKeywords(page.title);
+        const keywords = this.extractKeywords(page.title, brandWords);
         for (const keyword of keywords) {
           if (!titleKeywords.has(keyword)) {
             titleKeywords.set(keyword, []);
@@ -135,7 +135,7 @@ class KeywordCannibalisationAnalyzer {
       // Extract H1 keywords
       if (page.headings?.h1?.[0]) {
         const h1 = page.headings.h1[0];
-        const keywords = this.extractKeywords(h1);
+        const keywords = this.extractKeywords(h1, brandWords);
         for (const keyword of keywords) {
           if (!h1Keywords.has(keyword)) {
             h1Keywords.set(keyword, []);
@@ -233,7 +233,7 @@ class KeywordCannibalisationAnalyzer {
   /**
    * Extract significant keywords from text
    */
-  static extractKeywords(text: string): string[] {
+  static extractKeywords(text: string, brandWords: Set<string> = new Set()): string[] {
     if (!text) return [];
 
     // Normalize text
@@ -243,8 +243,12 @@ class KeywordCannibalisationAnalyzer {
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Extract 2-4 word phrases
-    const words = normalized.split(' ').filter((w) => w.length > 2);
+    // Drop the brand token(s) up front. Titles commonly carry a "… | Brand"
+    // suffix, which would otherwise spawn spurious brand-trailing phrases
+    // ("case study focusreactive", "migration focusreactive") that appear to
+    // cannibalise across the whole site — noise, not a real shared target
+    // keyword.
+    const words = normalized.split(' ').filter((w) => w.length > 2 && !brandWords.has(w));
     const keywords = new Set<string>();
 
     // Single significant words (4+ chars, not stopwords)
@@ -254,18 +258,17 @@ class KeywordCannibalisationAnalyzer {
       }
     }
 
-    // Two-word phrases
-    for (let i = 0; i < words.length - 1; i++) {
-      const phrase = `${words[i]} ${words[i + 1]}`;
-      if (!this.isStopword(words[i]) || !this.isStopword(words[i + 1])) {
-        keywords.add(phrase);
+    // 2- and 3-word phrases. A phrase whose FIRST or LAST token is a stopword
+    // ("visual editing and", "headless cms for") is a junk n-gram, not a target
+    // keyword — reject it at the boundaries. Interior stopwords stay ("migrate
+    // from wix"). This also closes the old gap where 3-word phrases were added
+    // with no stopword check at all.
+    for (let n = 2; n <= 3; n++) {
+      for (let i = 0; i + n <= words.length; i++) {
+        const phraseWords = words.slice(i, i + n);
+        if (this.isStopword(phraseWords[0]) || this.isStopword(phraseWords[n - 1])) continue;
+        keywords.add(phraseWords.join(' '));
       }
-    }
-
-    // Three-word phrases
-    for (let i = 0; i < words.length - 2; i++) {
-      const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
-      keywords.add(phrase);
     }
 
     return Array.from(keywords);

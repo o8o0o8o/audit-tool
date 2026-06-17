@@ -2103,4 +2103,15 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'Markup heavily outweighs visible text. Trim wrapper <div> nesting and inline styles/scripts, move CSS/JS to external files, and ensure substantive text content is server-rendered rather than buried in markup.',
     resources: [{ text: 'DOM size', url: 'https://developer.chrome.com/docs/lighthouse/performance/dom-size' }],
   },
+  'CSS/JS files may be blocked': {
+    effort: '15 minutes',
+    fix: 'robots.txt disallows CSS/JS resources, so Googlebot cannot fully render the page and may misjudge layout, mobile-friendliness, and content. Remove the Disallow rules that block .css/.js (and other render-critical assets) so crawlers can fetch them.',
+    example: 'User-agent: *\nAllow: /*.css$\nAllow: /*.js$',
+    resources: [{ text: 'Blocked resources', url: 'https://developers.google.com/search/docs/crawling-indexing/robots/intro' }],
+  },
+  'Too many on-page links': {
+    effort: '1-2 hours',
+    fix: 'A very high link count per page dilutes the link equity each link passes and makes the page harder to crawl and read. Trim navigation/footer link dumps, paginate long link lists, and keep links focused on the page\'s primary intent.',
+    resources: [{ text: 'Crawl budget', url: 'https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget' }],
+  },
 };

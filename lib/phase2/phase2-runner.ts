@@ -707,6 +707,21 @@ function resolveQuickWin(q: QuickWin, isNextjs: boolean): { fix: string; example
   return { fix: q.fix, example: q.example, lang: 'html' };
 }
 
+/**
+ * Render a quick-win / long-term example as indented summary lines: a prose
+ * guidance sentence as an indented paragraph, real code in a fenced block.
+ * Mirrors the per-finding Example rendering so prose ("Replace dead links with
+ * archived versions…") never lands in a ```html fence.
+ */
+function renderIndentedExample(example: string, lang: string): string[] {
+  const ex = example.trim();
+  if (looksLikeProseExample(ex)) return ['', `  ${ex}`];
+  const out = ['', `  \`\`\`${lang}`];
+  for (const line of ex.split('\n')) out.push(`  ${line}`);
+  out.push('  ```');
+  return out;
+}
+
 /** Effort level for the report — delegates to the shared scoring helper so the
  *  low/medium/high thresholds stay in one place. */
 const effortLevel = (effort: string | undefined, effortMinutes?: number) =>
@@ -777,12 +792,7 @@ function buildSummary(
         `- **${sanitizeProse(q.issue)}** — ${sanitizeProse(rw.fix.split('.').slice(0, 1).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`,
       );
       if (rw.example && rw.example.trim()) {
-        lines.push('');
-        lines.push(`  \`\`\`${rw.lang}`);
-        for (const line of rw.example.trim().split('\n')) {
-          lines.push(`  ${line}`);
-        }
-        lines.push('  ```');
+        lines.push(...renderIndentedExample(rw.example, rw.lang));
       }
     });
     lines.push('');
@@ -824,12 +834,7 @@ function buildSummary(
         `- ${sanitizeProse(q.issue)} — ${sanitizeProse(rw.fix.split('.').slice(0, 2).join('.'))}. *(effort: ${effortLevel(q.effort, q.effortMinutes)})*`,
       );
       if (rw.example && rw.example.trim()) {
-        lines.push('');
-        lines.push(`  \`\`\`${rw.lang}`);
-        for (const line of rw.example.trim().split('\n')) {
-          lines.push(`  ${line}`);
-        }
-        lines.push('  ```');
+        lines.push(...renderIndentedExample(rw.example, rw.lang));
       }
     });
     lines.push('');

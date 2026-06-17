@@ -321,6 +321,30 @@ export interface LiveSignals {
   headers: Record<string, string>;
   /** `<html lang="…">` attribute value (for the Content-Language mismatch check); '' when unset. */
   htmlLang: string;
+  /** Total bytes of inline `<style>` content in the document (Large inline CSS). */
+  inlineCssBytes: number;
+  /** Form controls (text-like inputs / textarea / select) with no associated label,
+   *  aria-label/-labelledby, or title. Under-observable (forms can hydrate) → confirm-only. */
+  inputsWithoutLabel: number;
+  /** Duplicate hreflang values among `<link rel="alternate" hreflang>` in the head
+   *  (same hreflang declared more than once). Server-rendered + stable. */
+  duplicateHreflang: number;
+  /** `<script type="application/ld+json">` blocks on the page (structured-data coverage). */
+  jsonLdBlocks: number;
+  /** True when the page has Open Graph (`og:*`) or Twitter Card social meta tags. */
+  hasSocialTags: boolean;
+  /** Total `<img>` elements on the page. */
+  imageCount: number;
+  /** `<img>` elements using `loading="lazy"`. */
+  lazyImageCount: number;
+  /** `<video>` elements on the page. */
+  videoCount: number;
+  /** True when a VideoObject is declared in JSON-LD structured data. */
+  hasVideoObjectSchema: boolean;
+  /** `<video>` elements with no `<track kind="captions"|"subtitles">`. */
+  videosWithoutCaptions: number;
+  /** Same-origin (internal) anchors with an href — for the dead-end-page check. */
+  internalLinkCount: number;
 }
 
 /**
@@ -636,6 +660,74 @@ async function captureOne(
       )
         eeatSignals++;
 
+      // Inline CSS: sum of every <style> element's text length.
+      let inlineCssBytes = 0;
+      for (const st of Array.from(document.querySelectorAll('style'))) inlineCssBytes += (st.textContent ?? '').length;
+
+      // Form controls lacking an accessible label. A control is labelled when it
+      // has aria-label/-labelledby/title, is wrapped in a <label>, or a
+      // <label for> points at its id. Skip hidden/button-like and unlabellable types.
+      const SKIP_INPUT = ['hidden', 'submit', 'button', 'reset', 'image', 'checkbox', 'radio'];
+      let inputsWithoutLabel = 0;
+      const controls = Array.from(document.querySelectorAll('input, textarea, select'));
+      for (const el of controls) {
+        if (el.tagName === 'INPUT' && SKIP_INPUT.includes((el.getAttribute('type') ?? 'text').toLowerCase())) continue;
+        const id = el.getAttribute('id');
+        const labelled =
+          !!el.getAttribute('aria-label') ||
+          !!el.getAttribute('aria-labelledby') ||
+          !!el.getAttribute('title') ||
+          !!el.closest('label') ||
+          (!!id && !!document.querySelector(`label[for="${CSS.escape(id)}"]`));
+        if (!labelled) inputsWithoutLabel++;
+      }
+
+      // Duplicate hreflang declarations in the head.
+      const hreflangs = Array.from(document.querySelectorAll('link[rel="alternate" i][hreflang]')).map((l) =>
+        (l.getAttribute('hreflang') ?? '').trim().toLowerCase(),
+      );
+      const seenHreflang = new Set<string>();
+      let duplicateHreflang = 0;
+      for (const h of hreflangs) {
+        if (!h) continue;
+        if (seenHreflang.has(h)) duplicateHreflang++;
+        else seenHreflang.add(h);
+      }
+
+      // Structured data: JSON-LD blocks + whether any declares a VideoObject.
+      const ldBlocks = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+      const jsonLdBlocks = ldBlocks.length;
+      const hasVideoObjectSchema = ldBlocks.some((s) => /"@type"\s*:\s*"VideoObject"/.test(s.textContent ?? ''));
+
+      // Social meta: Open Graph or Twitter Card.
+      const hasSocialTags = !!document.querySelector(
+        'meta[property^="og:" i], meta[name^="twitter:" i], meta[name^="og:" i]',
+      );
+
+      // Images + lazy-loading adoption.
+      const imageCount = document.images.length;
+      let lazyImageCount = 0;
+      for (const img of Array.from(document.images))
+        if ((img.getAttribute('loading') ?? '') === 'lazy') lazyImageCount++;
+
+      // Videos + caption tracks.
+      const videoEls = Array.from(document.querySelectorAll('video'));
+      const videoCount = videoEls.length;
+      let videosWithoutCaptions = 0;
+      for (const v of videoEls) {
+        if (!v.querySelector('track[kind="captions"], track[kind="subtitles"]')) videosWithoutCaptions++;
+      }
+
+      // Same-origin (internal) anchors — for the dead-end-page check.
+      let internalLinkCount = 0;
+      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+        try {
+          if (new URL(a.getAttribute('href') ?? '', location.href).origin === origin) internalLinkCount++;
+        } catch {
+          /* malformed href — ignore */
+        }
+      }
+
       return {
         title: (document.title ?? '').trim(),
         description: descEl ? (descEl.getAttribute('content') ?? '').trim() : null,
@@ -658,6 +750,17 @@ async function captureOne(
         resourceHintCount,
         privacyLinkCount,
         eeatSignals,
+        inlineCssBytes,
+        inputsWithoutLabel,
+        duplicateHreflang,
+        jsonLdBlocks,
+        hasVideoObjectSchema,
+        hasSocialTags,
+        imageCount,
+        lazyImageCount,
+        videoCount,
+        videosWithoutCaptions,
+        internalLinkCount,
       };
     });
 
@@ -741,6 +844,17 @@ async function captureOne(
       eeatSignals: dom.eeatSignals,
       headers,
       htmlLang: dom.htmlLang,
+      inlineCssBytes: dom.inlineCssBytes,
+      inputsWithoutLabel: dom.inputsWithoutLabel,
+      duplicateHreflang: dom.duplicateHreflang,
+      jsonLdBlocks: dom.jsonLdBlocks,
+      hasSocialTags: dom.hasSocialTags,
+      imageCount: dom.imageCount,
+      lazyImageCount: dom.lazyImageCount,
+      videoCount: dom.videoCount,
+      hasVideoObjectSchema: dom.hasVideoObjectSchema,
+      videosWithoutCaptions: dom.videosWithoutCaptions,
+      internalLinkCount: dom.internalLinkCount,
     };
   } catch {
     return null;
@@ -1344,6 +1458,178 @@ const CHECKERS: LiveChecker[] = [
     check: () => unverifiable('robots.txt AI-crawler rules handled by the special verifier', 'site-level'),
   },
   {
+    // URL length — the cited URL string is deterministic, so this confirms AND
+    // refutes against the flagged page.
+    kind: 'url-length',
+    match: (t) => /url is too long|some urls are too long|url.*longer than recommended/.test(t),
+    check: (s, f) => {
+      // Measure the page actually sampled (`s.url` = the requested sample URL =
+      // the analyzer's basis) so multi-sample aggregation evaluates EACH example,
+      // not the first cited URL N times. Fall back to the cited URL only when no
+      // live signal carries one.
+      const u = s.url ?? s.finalUrl ?? f.exampleUrl ?? '';
+      const len = u.length;
+      return len > THRESHOLDS.URL_LENGTH_MAX
+        ? confirmed(`URL is ${len} chars (> ${THRESHOLDS.URL_LENGTH_MAX})`)
+        : refuted(`URL is ${len} chars (≤ ${THRESHOLDS.URL_LENGTH_MAX})`);
+    },
+  },
+  {
+    // URL depth — path-segment count of the sampled page. Deterministic → confirm/refute.
+    kind: 'url-depth',
+    match: (t) => /url is too deep|urls? are too deep/.test(t),
+    check: (s, f) => {
+      // Per-sample URL (see url-length) — evaluate each example, not the first one N times.
+      const u = s.url ?? s.finalUrl ?? f.exampleUrl ?? '';
+      let depth: number;
+      try {
+        depth = new URL(u).pathname.split('/').filter(Boolean).length;
+      } catch {
+        return unverifiable('cited URL is unparseable', 'inconclusive');
+      }
+      return depth > THRESHOLDS.URL_DEPTH_MAX
+        ? confirmed(`URL is ${depth} levels deep (> ${THRESHOLDS.URL_DEPTH_MAX})`)
+        : refuted(`URL is ${depth} levels deep (≤ ${THRESHOLDS.URL_DEPTH_MAX})`);
+    },
+  },
+  {
+    // Form controls without an accessible label / placeholder-as-label. Confirm-only:
+    // forms can hydrate after load, so absence at load isn't proof.
+    kind: 'form-labels',
+    match: (t) => /inputs?.*missing label|missing label|placeholder used instead of label|labels? are missing/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.inputsWithoutLabel > 0,
+        `${s.inputsWithoutLabel} form control(s) with no associated label`,
+        'no unlabelled form controls at load — forms may hydrate; not dropping',
+      ),
+  },
+  {
+    // Inline CSS bytes vs the analyzer's warning threshold. Confirm-only: more
+    // <style> can be injected during hydration, so under-threshold isn't a refute.
+    kind: 'inline-css',
+    match: (t) => /inline css/.test(t),
+    check: (s) => overOrUnsure(s.inlineCssBytes, THRESHOLDS.INLINE_CSS_SIZE_WARNING, 'inline CSS', ' bytes'),
+  },
+  {
+    // Duplicate hreflang declarations in the head — server-rendered + stable.
+    kind: 'hreflang-duplicate',
+    match: (t) => /alternates?.*duplicat|duplicated in head|hreflang.*duplicat/.test(t),
+    check: (s) =>
+      s.duplicateHreflang > 0
+        ? confirmed(`${s.duplicateHreflang} duplicate hreflang declaration(s) in head`)
+        : refuted('no duplicate hreflang declarations in the head now'),
+  },
+  {
+    // More than one <h1>. h1Count is server-rendered + stable → confirm/refute.
+    kind: 'multiple-h1',
+    match: (t) => /more than one h1|multiple h1|multiple <h1>/.test(t),
+    check: (s) => overLimit(s.h1Count, 1, 'h1 count'),
+  },
+  {
+    // Open Graph / Twitter Card social meta. Server-rendered → confirm/refute.
+    // Matcher is deliberately narrow: a per-tag finding ("missing og:image") must
+    // NOT route here — `hasSocialTags` is an OR over all social meta, so a page
+    // with any og/twitter tag would falsely refute a specific-tag finding.
+    kind: 'social-tags',
+    match: (t) => /missing social media|social media tags/.test(t),
+    check: (s) =>
+      s.hasSocialTags
+        ? refuted('page has Open Graph / Twitter Card social tags now')
+        : confirmed('no Open Graph or Twitter Card social tags on the page'),
+  },
+  {
+    // Low structured-data coverage — a site-wide claim. Run against the homepage
+    // (siteWidePage), confirm-only: the homepage having JSON-LD can't refute a
+    // site-wide "low coverage" claim.
+    kind: 'structured-data-coverage',
+    match: (t) => /low structured data|structured data coverage/.test(t),
+    siteWidePage: true,
+    check: (s) =>
+      presentOrUnsure(
+        s.jsonLdBlocks === 0,
+        'no JSON-LD structured data on the homepage',
+        `homepage has ${s.jsonLdBlocks} JSON-LD block(s) — can't refute a site-wide coverage claim from one page`,
+        'site-level',
+      ),
+  },
+  {
+    // Video without VideoObject schema — per cited page. videoCount + JSON-LD are
+    // observable at load; confirm when a video lacks schema, refute when present,
+    // unverified when no video mounted (may be lazy / behind a facade).
+    // Matches the "missing VideoObject" findings (per-page + site-wide "lack")
+    // but NOT "Invalid VideoObject schema" — there the schema EXISTS, so refuting
+    // on its presence would be a false drop.
+    kind: 'video-schema',
+    match: (t) =>
+      (/videoobject|video content without/.test(t) || /video.*without.*schema/.test(t)) && !/invalid/.test(t),
+    check: (s) => {
+      if (s.videoCount === 0)
+        return unverifiable('no <video> mounted at load — may be lazy / behind a click-to-play facade');
+      return s.hasVideoObjectSchema
+        ? refuted('page declares VideoObject structured data now')
+        : confirmed(`${s.videoCount} video(s) and no VideoObject schema`);
+    },
+  },
+  {
+    // Videos missing caption/subtitle tracks. Confirm-only (videos can mount late).
+    kind: 'video-captions',
+    match: (t) => /without captions|captions or transcript/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.videosWithoutCaptions > 0,
+        `${s.videosWithoutCaptions} video(s) without a caption/subtitle track`,
+        'no uncaptioned <video> at load — videos may mount late; not dropping',
+      ),
+  },
+  {
+    // Many images but none lazy-loaded. Confirm-only: images can mount after load,
+    // and lazy attrs are only meaningful once the real image set is present.
+    kind: 'lazy-loading',
+    match: (t) => /none use lazy loading|many images but none/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.imageCount >= 5 && s.lazyImageCount === 0,
+        `${s.imageCount} images and none use loading="lazy"`,
+        'lazy-loading adoption not confirmable at load (images may mount late); not dropping',
+      ),
+  },
+  {
+    // Dead-end page (no outgoing internal links). Confirm-only on EXACTLY zero
+    // internal anchors — a strong, rare signal. We never refute on presence of
+    // links: a naive same-origin count is broader than the analyzer's crawl-graph
+    // notion (global nav counts here), so >0 stays unverified, never a false drop.
+    kind: 'dead-end',
+    match: (t) => /dead-end page|no outgoing internal/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.internalLinkCount === 0,
+        'page has no outgoing internal links',
+        `${s.internalLinkCount} internal link(s) present — broader than the crawl-graph notion; not dropping`,
+      ),
+  },
+  {
+    // Crawl-budget waste — a site-wide aggregate a single page can't adjudicate.
+    kind: 'crawl-budget',
+    match: (t) => /crawl budget waste|significant crawl budget|crawl budget is being wasted/.test(t),
+    noFetch: true,
+    check: () => unverifiable('site-wide crawl-budget aggregate — not derivable from a single live page', 'site-level'),
+  },
+  {
+    // Error-rate-by-bucket — a site-wide aggregate over the crawl, not a page property.
+    kind: 'error-rate',
+    match: (t) => /high error rate/.test(t),
+    noFetch: true,
+    check: () => unverifiable('site-wide error-rate aggregate — not a single-page property', 'site-level'),
+  },
+  {
+    // No Sitemap declared in robots.txt — fetched once for the site (SPECIAL_KINDS).
+    kind: 'robots-sitemap',
+    match: (t) => /no sitemap declared in robots|sitemap.*not.*declared.*robots/.test(t),
+    noFetch: true,
+    check: () => unverifiable('handled by the robots.txt special verifier'),
+  },
+  {
     kind: 'vitals',
     match: (t) => /\bcls\b|\btbt\b|\binp\b|layout shift|blocking time/.test(t),
     // CLS/TBT measured live via PerformanceObserver under the crawl's
@@ -1358,7 +1644,7 @@ const CHECKERS: LiveChecker[] = [
   },
   {
     kind: 'coverage',
-    match: (t) => /unused (css|code)/.test(t),
+    match: (t) => /unused (css|code|javascript|js)\b/.test(t),
     // Unused-bytes ratio from Playwright CSS/JS coverage. Confirm-only: deferred
     // / interaction-loaded code can only raise real usage, never the reverse.
     check: (s, f) => {
@@ -1412,6 +1698,7 @@ const SPECIAL_KINDS = new Set([
   'broken-outbound',
   'cannibalisation',
   'robots-ai',
+  'robots-sitemap',
 ]);
 
 /** Known AI/LLM crawler user-agent tokens, for the robots.txt AI-crawler checks. */
@@ -1480,6 +1767,39 @@ async function verifyRobotsAi(f: ReportFinding, timeoutMs: number, originHint: s
   if (!origin) return unverifiable('no site origin to fetch robots.txt', 'no-example');
   const body = await fetchText(`${origin}/robots.txt`, timeoutMs);
   return robotsAiVerdict(f.title, body);
+}
+
+/** Pure verdict for the "No Sitemap declared in robots.txt" finding: confirmed
+ *  when robots.txt has no `Sitemap:` directive, refuted when one is present.
+ *  Comments are stripped first. A null body (unfetchable) → unverified. */
+export function robotsSitemapVerdict(body: string | null): CheckResult {
+  if (body == null) return unverifiable('could not fetch robots.txt', 'unreachable');
+  const hasSitemap = body
+    .split(/\r?\n/)
+    .map((l) => l.replace(/#.*$/, '').trim())
+    .some((l) => /^sitemap:\s*\S+/i.test(l));
+  return hasSitemap
+    ? refuted('robots.txt now declares a Sitemap: directive')
+    : confirmed('robots.txt declares no Sitemap: directive');
+}
+
+/** Fetch robots.txt for the finding's origin and apply {@link robotsSitemapVerdict}. */
+async function verifyRobotsSitemap(
+  f: ReportFinding,
+  timeoutMs: number,
+  originHint: string | null,
+): Promise<CheckResult> {
+  let origin = originHint;
+  if (f.exampleUrl) {
+    try {
+      origin = new URL(f.exampleUrl).origin;
+    } catch {
+      /* keep originHint */
+    }
+  }
+  if (!origin) return unverifiable('no site origin to fetch robots.txt', 'no-example');
+  const body = await fetchText(`${origin}/robots.txt`, timeoutMs);
+  return robotsSitemapVerdict(body);
 }
 
 /** Page cap for the homepage reachability BFS (orphan/unreachable checks). */
@@ -2271,6 +2591,7 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
         else if (checker.kind === 'broken-outbound-page') r = await verifyBrokenOutboundPage(f, browser, timeoutMs);
         else if (checker.kind === 'broken-outbound') r = await verifyBrokenOutbound(f, browser, timeoutMs);
         else if (checker.kind === 'robots-ai') r = await verifyRobotsAi(f, timeoutMs, siteOriginForGuard);
+        else if (checker.kind === 'robots-sitemap') r = await verifyRobotsSitemap(f, timeoutMs, siteOriginForGuard);
         else if (checker.kind === 'site-graph') {
           if (!site) r = unverifiable('site context unavailable');
           else if (/missing from sitemap|not (listed )?in sitemap/i.test(f.title)) r = verifySitemapMembership(f, site);
@@ -2284,7 +2605,10 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
         // robots-ai checks the single site-wide robots.txt — fully representative,
         // so a refute is sound; exempt it from the first-example plural guard.
         const selfGated =
-          checker.kind === 'duplicate' || checker.kind === 'broken-pagination' || checker.kind === 'robots-ai';
+          checker.kind === 'duplicate' ||
+          checker.kind === 'broken-pagination' ||
+          checker.kind === 'robots-ai' ||
+          checker.kind === 'robots-sitemap';
         const guarded = selfGated ? r : guardPluralRefute(r, f);
         verdictByPlan.set(f, { ...guarded, kind: checker.kind });
       }

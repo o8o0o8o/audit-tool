@@ -1597,7 +1597,10 @@ void describe('FrameworkConfigValidator — Next.js app-dir resolution & comment
     const msgs = [...r.issues, ...r.warnings].map((i) => i.message ?? '');
     assert.ok(!msgs.some((m) => /Missing robots/.test(m)), 'robots.ts exists under app/ — no false missing');
     assert.ok(!msgs.some((m) => /Missing sitemap/.test(m)), 'sitemap.ts exists under app/ — no false missing');
-    assert.ok(msgs.some((m) => /metadata/i.test(m)), 'metadata check must run on the real app dir');
+    assert.ok(
+      msgs.some((m) => /metadata/i.test(m)),
+      'metadata check must run on the real app dir',
+    );
   });
 
   void it('does not read a config key that appears only inside a /* */ comment', () => {
@@ -1612,8 +1615,14 @@ void describe('FrameworkConfigValidator — Next.js app-dir resolution & comment
     });
     fs.rmSync(root, { recursive: true, force: true });
     const msgs = [...r.issues, ...r.warnings].map((i) => i.message ?? '');
-    assert.ok(msgs.some((m) => /trailingSlash/.test(m)), 'commented-out trailingSlash must not count as configured');
-    assert.ok(msgs.some((m) => /images/.test(m)), 'commented-out images must not count as configured');
+    assert.ok(
+      msgs.some((m) => /trailingSlash/.test(m)),
+      'commented-out trailingSlash must not count as configured',
+    );
+    assert.ok(
+      msgs.some((m) => /images/.test(m)),
+      'commented-out images must not count as configured',
+    );
   });
 });
 
@@ -3410,6 +3419,17 @@ void describe('live-verifier: checker refute contract', () => {
     eeatSignals: 2,
     headers: {},
     htmlLang: 'en',
+    inlineCssBytes: 0,
+    inputsWithoutLabel: 0,
+    duplicateHreflang: 0,
+    jsonLdBlocks: 1,
+    hasSocialTags: true,
+    imageCount: 0,
+    lazyImageCount: 0,
+    videoCount: 0,
+    hasVideoObjectSchema: false,
+    videosWithoutCaptions: 0,
+    internalLinkCount: 5,
   };
 
   void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
@@ -3473,20 +3493,249 @@ void describe('live-verifier: checker refute contract', () => {
     );
   });
 
-  void it('length checkers do NOT own other "too long" findings (URL/headline/manifest) — locks matcher scope vs future wording drift', () => {
+  void it('title/description length checkers do NOT own headline/manifest "too long" findings — locks matcher scope', () => {
     // These real corpus messages contain "too long" but neither "title" nor
-    // "description", so they must fall through, never be refuted against the
-    // page's title/description length.
-    for (const t of [
-      'Article headline too long for rich results',
-      'Some URLs are too long',
-      'Manifest name too long',
-      'URL is too long (120 chars, max recommended: 100)',
-    ]) {
+    // "description" (nor "url"), so they must fall through, never be refuted
+    // against the page's title/description length.
+    for (const t of ['Article headline too long for rich results', 'Manifest name too long']) {
       const r = checkFindingSignals(t, { ...base, title: 'short', description: 'x'.repeat(400) }, 1);
       assert.notStrictEqual(r.status, 'refuted', `"${t}" must not be refuted by a length checker`);
       assert.match(r.reason, /no live checker/i, `"${t}" should not route to title/description-length`);
     }
+  });
+
+  void it('url-length owns URL "too long" findings — judged on the URL, NOT the page title/description', () => {
+    const longUrl = `https://x.example/${'a'.repeat(150)}`;
+    for (const t of ['Some URLs are too long', 'URL is too long (120 chars, max recommended: 100)']) {
+      // A short title + long description must not influence the verdict: the URL
+      // is what's measured. With a 150+ char sampled URL the checker confirms.
+      const r = checkFindingSignals(
+        t,
+        { ...base, url: longUrl, finalUrl: longUrl, title: 'short', description: 'x'.repeat(400) },
+        1,
+      );
+      assert.strictEqual(r.status, 'confirmed', `"${t}" should be owned by url-length and confirm on a long URL`);
+      assert.match(r.reason, /url is \d+ chars/i, `"${t}" must be judged on URL length, not title/description`);
+    }
+    // A short URL refutes — proving the verdict tracks the URL, not the long description.
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some URLs are too long',
+        { ...base, url: 'https://x.example/a', finalUrl: 'https://x.example/a', description: 'x'.repeat(400) },
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('url-length / url-depth measure the SAMPLED page (s.url), not the first cited example', () => {
+    // Guardrail for the multi-sample aggregation fix: the checker must read the
+    // sampled page's own URL (s.url), so each sampled example is evaluated on its
+    // own merits rather than re-measuring f.exampleUrl N times.
+    assert.strictEqual(
+      checkFindingSignals('Some URLs are too long', { ...base, url: `https://x.example/${'a'.repeat(150)}` }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'URL is too deep (6 levels, max recommended: 3)',
+        { ...base, url: 'https://x.example/a/b/c/d/e/f' },
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'URL is too deep (6 levels, max recommended: 3)',
+        { ...base, url: 'https://x.example/a/b' },
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('social-tags matcher does NOT own per-tag social findings (would falsely refute when other social meta exists)', () => {
+    // hasSocialTags is an OR over all og/twitter meta, so routing a specific-tag
+    // finding here would refute it whenever ANY social tag is present.
+    for (const t of [
+      'Default social image used on most pages',
+      'Social images use relative URLs',
+      'Social images below recommended dimensions',
+      'Many pages missing Twitter Card tags',
+      'Low Open Graph tag coverage',
+    ]) {
+      const r = checkFindingSignals(t, { ...base, hasSocialTags: true }, 1);
+      assert.notStrictEqual(r.status, 'refuted', `"${t}" must not be refuted by social-tags`);
+      assert.match(r.reason, /no live checker/i, `"${t}" should not route to social-tags`);
+    }
+    // The site-wide "missing social media tags" finding IS owned and confirms/refutes.
+    assert.strictEqual(
+      checkFindingSignals('Pages missing social media tags', { ...base, hasSocialTags: false }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Pages missing social media tags', { ...base, hasSocialTags: true }, 1).status,
+      'refuted',
+    );
+  });
+
+  void it('form-labels is confirm-only (present → confirmed, none at load → unverified, never refuted)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Form inputs missing labels', { ...base, inputsWithoutLabel: 3 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Form inputs missing labels', { ...base, inputsWithoutLabel: 0 }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Placeholder used instead of label', { ...base, inputsWithoutLabel: 0 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('inline-css is confirm-only over the warning threshold', () => {
+    assert.strictEqual(
+      checkFindingSignals('Large inline CSS', { ...base, inlineCssBytes: 80_000 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Large inline CSS', { ...base, inlineCssBytes: 1_000 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('hreflang-duplicate confirms a duplicate and refutes none', () => {
+    assert.strictEqual(
+      checkFindingSignals('Some alternates are duplicated in head links', { ...base, duplicateHreflang: 2 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some alternates are duplicated in head links', { ...base, duplicateHreflang: 0 }, 1).status,
+      'refuted',
+    );
+  });
+
+  void it('multiple-h1 confirms >1 and refutes ≤1', () => {
+    assert.strictEqual(
+      checkFindingSignals('Some pages have more than one h1 tag', { ...base, h1Count: 3 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have more than one h1 tag', { ...base, h1Count: 1 }, 1).status,
+      'refuted',
+    );
+  });
+
+  void it('social-tags confirms when absent and refutes when present', () => {
+    assert.strictEqual(
+      checkFindingSignals('Pages missing social media tags', { ...base, hasSocialTags: false }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Pages missing social media tags', { ...base, hasSocialTags: true }, 1).status,
+      'refuted',
+    );
+  });
+
+  void it('video-schema confirms a video w/o schema, refutes when schema present, unverified when no video mounted', () => {
+    assert.strictEqual(
+      checkFindingSignals(
+        'Video content without VideoObject schema',
+        { ...base, videoCount: 1, hasVideoObjectSchema: false },
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Video content without VideoObject schema',
+        { ...base, videoCount: 1, hasVideoObjectSchema: true },
+        1,
+      ).status,
+      'refuted',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Video content without VideoObject schema', { ...base, videoCount: 0 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('video-schema does NOT own "Invalid VideoObject schema" (schema present → would falsely refute)', () => {
+    const r = checkFindingSignals(
+      'Invalid VideoObject schema',
+      { ...base, videoCount: 1, hasVideoObjectSchema: true },
+      1,
+    );
+    assert.notStrictEqual(r.status, 'refuted');
+    assert.match(r.reason, /no live checker/i);
+  });
+
+  void it('video-captions is confirm-only', () => {
+    assert.strictEqual(
+      checkFindingSignals('Videos without captions or transcripts', { ...base, videosWithoutCaptions: 2 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Videos without captions or transcripts', { ...base, videosWithoutCaptions: 0 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('lazy-loading confirms many images with zero lazy, stays unverified otherwise (never refutes)', () => {
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some pages have many images but none use lazy loading',
+        { ...base, imageCount: 10, lazyImageCount: 0 },
+        1,
+      ).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some pages have many images but none use lazy loading',
+        { ...base, imageCount: 10, lazyImageCount: 4 },
+        1,
+      ).status,
+      'unverified',
+    );
+  });
+
+  void it('dead-end confirms exactly-zero internal links, never refutes on present links', () => {
+    assert.strictEqual(
+      checkFindingSignals('Dead-end page (no outgoing internal links)', { ...base, internalLinkCount: 0 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Dead-end page (no outgoing internal links)', { ...base, internalLinkCount: 8 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('structured-data-coverage (site-wide) confirms no JSON-LD on the homepage, unverified otherwise', () => {
+    assert.strictEqual(
+      checkFindingSignals('Low structured data coverage', { ...base, jsonLdBlocks: 0 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Low structured data coverage', { ...base, jsonLdBlocks: 3 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('crawl-budget / high-error-rate aggregates are OWNED (site-level unverified), not a "no live checker" gap', () => {
+    for (const t of ['Significant crawl budget waste detected', 'High error rate in API/Technical']) {
+      const r = checkFindingSignals(t, base, 1);
+      assert.strictEqual(r.status, 'unverified');
+      assert.doesNotMatch(r.reason, /no live checker/i, `"${t}" should be owned`);
+    }
+  });
+
+  void it('coverage matcher catches "unused JavaScript" wording (not just "unused code/css")', () => {
+    assert.strictEqual(
+      checkFindingSignals('High percentage of unused JavaScript', { ...base, unusedJsRatio: 0.8 }, 1).status,
+      'confirmed',
+    );
   });
 
   void it('missing-main confirms when no <main> landmark and refutes when present', () => {
@@ -3595,6 +3844,26 @@ void describe('live-verifier: checker refute contract', () => {
       'Brotli compression not detected',
       'No explicit AI crawler rules in robots.txt',
       'AI crawlers blocked in robots.txt',
+      // Tier-1 gap closers — every one must now resolve to a real checker.
+      'URL is too long (120 chars, max recommended: 100)',
+      'Some URLs are too long',
+      'URL is too deep (6 levels, max recommended: 3)',
+      'Form inputs missing labels',
+      'Form inputs across the site are missing labels',
+      'Placeholder used instead of label',
+      'Large inline CSS',
+      'Some alternates are duplicated in head links',
+      'Some pages have more than one h1 tag',
+      'Pages missing social media tags',
+      'Low structured data coverage',
+      'Video content without VideoObject schema',
+      'Videos without captions or transcripts',
+      'Some pages have many images but none use lazy loading',
+      'Dead-end page (no outgoing internal links)',
+      'Significant crawl budget waste detected',
+      'High error rate in API/Technical',
+      'No Sitemap declared in robots.txt',
+      'High percentage of unused JavaScript',
     ];
     for (const t of titles) {
       assert.doesNotMatch(
@@ -4027,6 +4296,17 @@ void describe('live-verifier: broken-outbound match split', () => {
     eeatSignals: 2,
     headers: {},
     htmlLang: 'en',
+    inlineCssBytes: 0,
+    inputsWithoutLabel: 0,
+    duplicateHreflang: 0,
+    jsonLdBlocks: 1,
+    hasSocialTags: true,
+    imageCount: 0,
+    lazyImageCount: 0,
+    videoCount: 0,
+    hasVideoObjectSchema: false,
+    videosWithoutCaptions: 0,
+    internalLinkCount: 5,
   });
 
   void it('per-page "Page has N broken outbound link(s)" does NOT refute on a 200 container page', () => {
@@ -4112,7 +4392,7 @@ void describe('live-verifier: path-case is significant in site-graph drop decisi
   });
 });
 
-import { duplicateVerdict, robotsAiVerdict } from '../lib/phase3/live-verifier';
+import { duplicateVerdict, robotsAiVerdict, robotsSitemapVerdict } from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: Slice 2 header checkers', () => {
   const base: LiveSignals = {
@@ -4157,6 +4437,17 @@ void describe('live-verifier: Slice 2 header checkers', () => {
     eeatSignals: 2,
     headers: {},
     htmlLang: 'en',
+    inlineCssBytes: 0,
+    inputsWithoutLabel: 0,
+    duplicateHreflang: 0,
+    jsonLdBlocks: 1,
+    hasSocialTags: true,
+    imageCount: 0,
+    lazyImageCount: 0,
+    videoCount: 0,
+    hasVideoObjectSchema: false,
+    videosWithoutCaptions: 0,
+    internalLinkCount: 5,
   };
   const withHeaders = (h: Record<string, string>): LiveSignals => ({ ...base, headers: h });
 
@@ -4328,6 +4619,30 @@ void describe('live-verifier: robotsAiVerdict', () => {
   });
 });
 
+void describe('live-verifier: robotsSitemapVerdict', () => {
+  void it('confirms when robots.txt declares no Sitemap directive', () => {
+    assert.strictEqual(robotsSitemapVerdict('User-agent: *\nDisallow: /admin').status, 'confirmed');
+  });
+
+  void it('refutes when a Sitemap: directive is present (comments stripped)', () => {
+    assert.strictEqual(
+      robotsSitemapVerdict('# a comment\nUser-agent: *\nSitemap: https://x.example/sitemap.xml').status,
+      'refuted',
+    );
+    // A commented-out Sitemap line does not count.
+    assert.strictEqual(
+      robotsSitemapVerdict('# Sitemap: https://x.example/sitemap.xml\nUser-agent: *').status,
+      'confirmed',
+    );
+  });
+
+  void it('unfetchable robots.txt → unverified (unreachable)', () => {
+    const r = robotsSitemapVerdict(null);
+    assert.strictEqual(r.status, 'unverified');
+    assert.strictEqual(r.code, 'unreachable');
+  });
+});
+
 void describe('live-verifier: duplicateVerdict count-coverage', () => {
   void it('matching values → confirmed regardless of count', () => {
     assert.strictEqual(duplicateVerdict('title', 'Same', 'Same', 2).status, 'confirmed');
@@ -4443,6 +4758,17 @@ void describe('live-verifier: liveSignalsSnapshot (Slice 3 LLM evidence)', () =>
     eeatSignals: 1,
     headers: { 'content-encoding': 'br', 'x-frame-options': 'DENY', 'set-cookie': 'big', 'x-custom': 'noise' },
     htmlLang: 'en',
+    inlineCssBytes: 0,
+    inputsWithoutLabel: 0,
+    duplicateHreflang: 0,
+    jsonLdBlocks: 1,
+    hasSocialTags: true,
+    imageCount: 0,
+    lazyImageCount: 0,
+    videoCount: 0,
+    hasVideoObjectSchema: false,
+    videosWithoutCaptions: 0,
+    internalLinkCount: 5,
   };
 
   void it('summarises signals, rounds ratios, nulls unmeasured coverage/contrast, and keeps only relevant headers', () => {

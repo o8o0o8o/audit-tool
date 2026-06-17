@@ -3430,6 +3430,12 @@ void describe('live-verifier: checker refute contract', () => {
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
     internalLinkCount: 5,
+    lcpMs: 0,
+    fcpMs: 0,
+    fontRequests: 0,
+    fontBytes: 0,
+    consoleErrors: 0,
+    hasAuthorByline: true,
   };
 
   void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
@@ -3738,6 +3744,96 @@ void describe('live-verifier: checker refute contract', () => {
     );
   });
 
+  // ---- Tier-2 gap-closers (ported from the offline verifier; all confirm-only) ----
+
+  void it('vitals owns LCP / FCP confirm-only (over → confirmed, unmeasured → unverified, never refuted)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Some pages have LCP more than 2500ms', { ...base, lcpMs: 4200 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have LCP more than 2500ms', { ...base, lcpMs: 1500 }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have LCP more than 2500ms', { ...base, lcpMs: 0 }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have FCP more than 1800ms', { ...base, fcpMs: 2400 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have FCP more than 1800ms', { ...base, fcpMs: 900 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('vitals owns TTI but returns unverified (lab metric, no PerformanceObserver) — not a no-checker gap', () => {
+    const r = checkFindingSignals('Some pages have TTI more than 3800ms', base, 1);
+    assert.strictEqual(r.status, 'unverified');
+    assert.doesNotMatch(r.reason, /no live checker/i);
+  });
+
+  void it('fonts confirm-only: payload by bytes, count by file number', () => {
+    assert.strictEqual(
+      checkFindingSignals('Large web font payload', { ...base, fontBytes: 400_000 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Large web font payload', { ...base, fontBytes: 50_000 }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Too many font files loaded', { ...base, fontRequests: 7 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Too many font files loaded', { ...base, fontRequests: 2 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('console-errors confirm-only: errors at load → confirmed, none → unverified (never refuted)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Critical JavaScript errors detected', { ...base, consoleErrors: 3 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Critical JavaScript errors detected', { ...base, consoleErrors: 0 }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('JavaScript console errors detected', { ...base, consoleErrors: 1 }, 1).status,
+      'confirmed',
+    );
+  });
+
+  void it('author-attribution confirm-only: no byline → confirmed, byline present → unverified (heuristic, never refuted)', () => {
+    assert.strictEqual(
+      checkFindingSignals('YMYL page without author attribution', { ...base, hasAuthorByline: false }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('YMYL page without author attribution', { ...base, hasAuthorByline: true }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Most content pages lack author attribution', { ...base, hasAuthorByline: false }, 1).status,
+      'confirmed',
+    );
+  });
+
+  void it('console-errors does NOT own "unused JavaScript" (stays with coverage)', () => {
+    // Had console-errors wrongly matched, consoleErrors:0 would yield unverified;
+    // coverage instead confirms on the high unused ratio.
+    assert.strictEqual(
+      checkFindingSignals('High percentage of unused JavaScript', { ...base, unusedJsRatio: 0.85, consoleErrors: 0 }, 1)
+        .status,
+      'confirmed',
+    );
+  });
+
   void it('missing-main confirms when no <main> landmark and refutes when present', () => {
     assert.strictEqual(
       checkFindingSignals('Missing `<main>` element', { ...base, mainCount: 0 }, 1).status,
@@ -3864,6 +3960,18 @@ void describe('live-verifier: checker refute contract', () => {
       'High error rate in API/Technical',
       'No Sitemap declared in robots.txt',
       'High percentage of unused JavaScript',
+      // Tier-2 gap closers (ported from the offline verifier).
+      'Some pages have LCP more than 2500ms',
+      'Some pages have FCP more than 1800ms',
+      'Some pages have TTI more than 3800ms',
+      'Large web font payload',
+      'Excessive web font payload',
+      'Too many font files loaded',
+      'Critical JavaScript errors detected',
+      'JavaScript console errors detected',
+      'YMYL page without author attribution',
+      'Most content pages lack author attribution',
+      'Most pages lack author attribution',
     ];
     for (const t of titles) {
       assert.doesNotMatch(
@@ -4307,6 +4415,12 @@ void describe('live-verifier: broken-outbound match split', () => {
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
     internalLinkCount: 5,
+    lcpMs: 0,
+    fcpMs: 0,
+    fontRequests: 0,
+    fontBytes: 0,
+    consoleErrors: 0,
+    hasAuthorByline: true,
   });
 
   void it('per-page "Page has N broken outbound link(s)" does NOT refute on a 200 container page', () => {
@@ -4448,6 +4562,12 @@ void describe('live-verifier: Slice 2 header checkers', () => {
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
     internalLinkCount: 5,
+    lcpMs: 0,
+    fcpMs: 0,
+    fontRequests: 0,
+    fontBytes: 0,
+    consoleErrors: 0,
+    hasAuthorByline: true,
   };
   const withHeaders = (h: Record<string, string>): LiveSignals => ({ ...base, headers: h });
 
@@ -4769,6 +4889,12 @@ void describe('live-verifier: liveSignalsSnapshot (Slice 3 LLM evidence)', () =>
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
     internalLinkCount: 5,
+    lcpMs: 0,
+    fcpMs: 0,
+    fontRequests: 0,
+    fontBytes: 0,
+    consoleErrors: 0,
+    hasAuthorByline: true,
   };
 
   void it('summarises signals, rounds ratios, nulls unmeasured coverage/contrast, and keeps only relevant headers', () => {

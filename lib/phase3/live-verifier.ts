@@ -345,6 +345,18 @@ export interface LiveSignals {
   videosWithoutCaptions: number;
   /** Same-origin (internal) anchors with an href — for the dead-end-page check. */
   internalLinkCount: number;
+  /** Largest Contentful Paint (ms) from a PerformanceObserver; 0 when unmeasured. Volatile → confirm-only. */
+  lcpMs: number;
+  /** First Contentful Paint (ms) from the paint timeline; 0 when unmeasured. Volatile → confirm-only. */
+  fcpMs: number;
+  /** Number of web-font files downloaded (resourceType 'font'). Load-dependent → confirm-only. */
+  fontRequests: number;
+  /** Total bytes of downloaded web fonts. Load-dependent → confirm-only. */
+  fontBytes: number;
+  /** Console errors + uncaught page exceptions observed during load. Confirm-only. */
+  consoleErrors: number;
+  /** True when an author byline / author markup is present (E-E-A-T author signal). */
+  hasAuthorByline: boolean;
 }
 
 /**
@@ -387,8 +399,18 @@ async function captureOne(
   // unreliable content-length header.
   const requests: { host: string; type: string; bytes: number }[] = [];
   const sizings: Promise<void>[] = [];
+  // Console errors + uncaught page exceptions observed during load (the
+  // "Critical JavaScript errors" finding). Confirm-only — errors can be
+  // interaction-triggered, so absence at load isn't proof.
+  let consoleErrors = 0;
   try {
     const page = await context.newPage();
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors++;
+    });
+    page.on('pageerror', () => {
+      consoleErrors++;
+    });
     page.on('requestfinished', (req) => {
       sizings.push(
         (async () => {
@@ -409,9 +431,10 @@ async function captureOne(
     // CLS + long-task (TBT proxy) observers must be installed before any script
     // runs on the page.
     await page.addInitScript(() => {
-      const w = window as unknown as { __cls: number; __tbt: number };
+      const w = window as unknown as { __cls: number; __tbt: number; __lcp: number };
       w.__cls = 0;
       w.__tbt = 0;
+      w.__lcp = 0;
       try {
         new PerformanceObserver((list) => {
           for (const e of list.getEntries()) {
@@ -425,6 +448,11 @@ async function captureOne(
             if (over > 0) w.__tbt += over;
           }
         }).observe({ type: 'longtask', buffered: true });
+        // Largest Contentful Paint — keep the latest reported value.
+        new PerformanceObserver((list) => {
+          const entries = list.getEntries();
+          if (entries.length) w.__lcp = entries[entries.length - 1].startTime;
+        }).observe({ type: 'largest-contentful-paint', buffered: true });
       } catch {
         /* observers unsupported — leaves 0, routes to unverified, never refute */
       }
@@ -499,13 +527,20 @@ async function captureOne(
       /* leave 0 → unverified */
     }
 
-    // CLS / TBT readout.
+    // CLS / TBT / LCP / FCP readout. LCP comes from the init-script observer;
+    // FCP from the buffered paint timeline. 0 means "not measured" → unverified.
     const vitals = await page
       .evaluate(() => {
-        const w = window as unknown as { __cls?: number; __tbt?: number };
-        return { cls: w.__cls ?? 0, tbt: Math.round(w.__tbt ?? 0) };
+        const w = window as unknown as { __cls?: number; __tbt?: number; __lcp?: number };
+        const fcpEntry = performance.getEntriesByName('first-contentful-paint')[0];
+        return {
+          cls: w.__cls ?? 0,
+          tbt: Math.round(w.__tbt ?? 0),
+          lcp: Math.round(w.__lcp ?? 0),
+          fcp: fcpEntry ? Math.round(fcpEntry.startTime) : 0,
+        };
       })
-      .catch(() => ({ cls: 0, tbt: 0 }));
+      .catch(() => ({ cls: 0, tbt: 0, lcp: 0, fcp: 0 }));
 
     // Coverage readout → unused ratios.
     let unusedCssRatio = -1;
@@ -640,8 +675,10 @@ async function captureOne(
 
       // E-E-A-T proxy signals on the page (0–4).
       let eeatSignals = 0;
-      if (document.querySelector('[rel="author"], [itemprop="author"], [class*="author" i], [class*="byline" i]'))
-        eeatSignals++;
+      const hasAuthorByline = !!document.querySelector(
+        '[rel="author"], [itemprop="author"], [class*="author" i], [class*="byline" i]',
+      );
+      if (hasAuthorByline) eeatSignals++;
       const anchors = Array.from(document.querySelectorAll('a[href]'));
       if (
         anchors.some((a) => /about/.test(((a.getAttribute('href') ?? '') + ' ' + (a.textContent ?? '')).toLowerCase()))
@@ -750,6 +787,7 @@ async function captureOne(
         resourceHintCount,
         privacyLinkCount,
         eeatSignals,
+        hasAuthorByline,
         inlineCssBytes,
         inputsWithoutLabel,
         duplicateHreflang,
@@ -799,6 +837,7 @@ async function captureOne(
     const thirdParty = requests.filter((r) => r.host && registrable(r.host) !== pageReg);
     const totalBytes = requests.reduce((n, r) => n + r.bytes, 0);
     const imageBytes = requests.filter((r) => r.type === 'image').map((r) => r.bytes);
+    const fontReqs = requests.filter((r) => r.type === 'font');
 
     return {
       url,
@@ -855,6 +894,12 @@ async function captureOne(
       hasVideoObjectSchema: dom.hasVideoObjectSchema,
       videosWithoutCaptions: dom.videosWithoutCaptions,
       internalLinkCount: dom.internalLinkCount,
+      lcpMs: vitals.lcp,
+      fcpMs: vitals.fcp,
+      fontRequests: fontReqs.length,
+      fontBytes: fontReqs.reduce((n, r) => n + r.bytes, 0),
+      consoleErrors,
+      hasAuthorByline: dom.hasAuthorByline,
     };
   } catch {
     return null;
@@ -986,6 +1031,10 @@ function normUrl(u: string): string {
     return u.replace(/#.*$/, '').replace(/\/$/, '');
   }
 }
+
+/** Web-font file-count bar for the "too many font files" check (mirrors the
+ *  offline verifier's TOO_MANY_FONTS_BAR). */
+const TOO_MANY_FONTS_BAR = 4;
 
 // Ordered: more specific kinds first (the first match wins).
 const CHECKERS: LiveChecker[] = [
@@ -1631,16 +1680,64 @@ const CHECKERS: LiveChecker[] = [
   },
   {
     kind: 'vitals',
-    match: (t) => /\bcls\b|\btbt\b|\binp\b|layout shift|blocking time/.test(t),
-    // CLS/TBT measured live via PerformanceObserver under the crawl's
-    // network/CPU/device profile. Confirm-only (they vary load to load). INP
-    // needs real interaction → unverified.
+    match: (t) =>
+      /\bcls\b|\btbt\b|\binp\b|\blcp\b|\bfcp\b|\btti\b|layout shift|blocking time|largest contentful paint|first contentful paint|time to interactive/.test(
+        t,
+      ),
+    // CLS/TBT/LCP/FCP measured live via PerformanceObserver under the crawl's
+    // network/CPU/device profile. Confirm-only (they vary load to load). INP and
+    // TTI are lab/interaction metrics with no PerformanceObserver → owned, but
+    // unverified (a deliberate non-decision, not a "no live checker" gap).
     check: (s, f) => {
       const t = f.title.toLowerCase();
       if (/\bcls\b|layout shift/.test(t)) return overOrUnsure(Number(s.clsValue.toFixed(3)), THRESHOLDS.CLS, 'CLS');
       if (/\btbt\b|blocking time/.test(t)) return overOrUnsure(s.tbtMs, THRESHOLDS.TBT, 'TBT', 'ms');
+      if (/\blcp\b|largest contentful paint/.test(t))
+        return s.lcpMs > 0
+          ? overOrUnsure(s.lcpMs, THRESHOLDS.LCP, 'LCP', 'ms')
+          : unverifiable('LCP not measured at load', 'under-observable');
+      if (/\bfcp\b|first contentful paint/.test(t))
+        return s.fcpMs > 0
+          ? overOrUnsure(s.fcpMs, THRESHOLDS.FCP, 'FCP', 'ms')
+          : unverifiable('FCP not measured at load', 'under-observable');
+      if (/\btti\b|time to interactive/.test(t))
+        return unverifiable('TTI is a lab metric — not measurable from an automated load', 'volatile');
       return unverifiable('INP needs real user interaction — not measurable from an automated load', 'volatile');
     },
+  },
+  {
+    // Web-font payload / count. Load-dependent (fonts can be deferred / lazily
+    // requested), so confirm-only via overOrUnsure — never refuted.
+    kind: 'fonts',
+    match: (t) => /web font payload|font files loaded|too many font|many.*font files/.test(t),
+    check: (s, f) =>
+      /payload|excessive|large/.test(f.title.toLowerCase())
+        ? overOrUnsure(s.fontBytes, THRESHOLDS.FONT_SIZE_WARNING, 'web-font payload', ' bytes')
+        : overOrUnsure(s.fontRequests, TOO_MANY_FONTS_BAR, 'web-font files'),
+  },
+  {
+    // Console errors / uncaught exceptions captured during load. Confirm-only:
+    // errors can be interaction-triggered, so none-at-load isn't a refute.
+    kind: 'console-errors',
+    match: (t) => /javascript (console )?errors?|console errors?|js errors?/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.consoleErrors > 0,
+        `${s.consoleErrors} console error(s) / page exception(s) at load`,
+        'no console errors at load — errors may be interaction-triggered; not dropping',
+      ),
+  },
+  {
+    // Author attribution (E-E-A-T). Confirm-only on ABSENCE: byline detection is
+    // heuristic, so a positive match could be a false positive — never refute.
+    kind: 'author-attribution',
+    match: (t) => /author attribution|lacks? author|without author|missing author|no author/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        !s.hasAuthorByline,
+        'no author byline / author markup detected on the page',
+        'an author byline / author markup is present — heuristic match, not dropping',
+      ),
   },
   {
     kind: 'coverage',

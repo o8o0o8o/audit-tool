@@ -69,7 +69,7 @@ class FontLoadingAnalyzer {
     };
 
     // 1. Analyze font requests from network
-    const fontRequests = this.#analyzeFontRequests(requests);
+    const fontRequests = this.analyzeFontRequests(requests);
     fontData.fonts = fontRequests.fonts;
     fontData.totalFontSize = fontRequests.totalSize;
     fontData.webFontCount = fontRequests.fonts.length;
@@ -176,10 +176,11 @@ class FontLoadingAnalyzer {
   }
 
   /**
-   * Analyze font requests from network data
-   * @private
+   * Analyze font requests from network data. Counts only fonts that actually
+   * loaded — a failed request (4xx/5xx) is excluded from the byte total, file
+   * count, and format list. Exposed for unit testing.
    */
-  static #analyzeFontRequests(requests: NetworkRequest[]) {
+  static analyzeFontRequests(requests: NetworkRequest[]) {
     const fonts: FontFileInfo[] = [];
     let totalSize = 0;
 
@@ -189,6 +190,13 @@ class FontLoadingAnalyzer {
       const isFont = fontExtensions.some((ext) => reqUrl.toLowerCase().includes(ext)) || req.resourceType === 'font';
 
       if (isFont) {
+        // A font request that failed (e.g. 404) did not load, so it is not part
+        // of the page's font payload and must not inflate the byte total, the
+        // font-file count, or the legacy-format ratio. Otherwise a page with a
+        // broken @font-face gets BOTH a "fonts return 404" finding AND a "large
+        // web font payload" finding that counts those same missing files.
+        if (typeof req.status === 'number' && req.status >= 400) continue;
+
         const size = req.size ?? 0;
         totalSize += size;
 

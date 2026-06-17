@@ -7,6 +7,7 @@ import { ContentSimilarityAnalyzer } from '../lib/analyzers/site-wide/content-si
 import { KeywordCannibalisationAnalyzer } from '../lib/analyzers/site-wide/keyword-cannibalisation-analyzer';
 import { InternalPageRankAnalyzer } from '../lib/analyzers/site-wide/internal-pagerank-analyzer';
 import { CodeCoverageAnalyzer } from '../lib/analyzers/performance/code-coverage-analyzer';
+import { FontLoadingAnalyzer } from '../lib/analyzers/performance/font-loading-analyzer';
 import { CTADetectorAnalyzer } from '../lib/analyzers/content/cta-detector-analyzer';
 import { OutboundLinkChecker } from '../lib/analyzers/content/outbound-link-checker';
 import { BrokenPaginationAnalyzer } from '../lib/analyzers/site-wide/broken-pagination-analyzer';
@@ -688,6 +689,34 @@ void describe('RepresentativeSampler', () => {
 // populateIncomingLinksCount — incoming-links key normalization
 // ============================================================
 import { populateIncomingLinksCount, checkAlternateDuplicates } from '../lib/crawler/page-data-builder';
+
+void describe('FontLoadingAnalyzer.analyzeFontRequests', () => {
+  void it('excludes failed (4xx/5xx) font requests from payload, count, and formats', () => {
+    // Regression: a 404 @font-face used to count toward the font payload, so a
+    // page with broken fonts got both a "fonts return 404" finding and a "large
+    // web font payload" finding counting those same missing files.
+    const requests = {
+      'https://e.com/Inter-Regular.woff2': { resourceType: 'font', status: 200, size: 120_000 },
+      'https://e.com/InterDisplay-Bold.woff2': { resourceType: 'font', status: 404, size: 600 },
+      'https://e.com/Legacy.woff': { resourceType: 'font', status: 500, size: 90_000 },
+    };
+    const { fonts, totalSize } = FontLoadingAnalyzer.analyzeFontRequests(
+      requests as unknown as Parameters<typeof FontLoadingAnalyzer.analyzeFontRequests>[0],
+    );
+    assert.strictEqual(fonts.length, 1, 'only the 200 font counts');
+    assert.strictEqual(totalSize, 120_000, 'payload excludes the 404/500 fonts');
+    assert.strictEqual(fonts[0].format, 'woff2');
+  });
+
+  void it('counts fonts with no status (cached / not recorded) as loaded', () => {
+    const requests = { 'https://e.com/a.woff2': { resourceType: 'font', size: 50_000 } };
+    const { fonts, totalSize } = FontLoadingAnalyzer.analyzeFontRequests(
+      requests as unknown as Parameters<typeof FontLoadingAnalyzer.analyzeFontRequests>[0],
+    );
+    assert.strictEqual(fonts.length, 1);
+    assert.strictEqual(totalSize, 50_000);
+  });
+});
 
 void describe('checkAlternateDuplicates', () => {
   const collect = (alternates: { href: string }[]) => {

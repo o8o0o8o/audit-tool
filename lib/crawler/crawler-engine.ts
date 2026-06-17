@@ -331,14 +331,16 @@ class CrawlerEngine {
       let size: number | null = null;
 
       try {
-        // Per-request size for the `requests` map (consumed by the compression /
-        // font / critical-path analyzers): prefer the declared content-length so
-        // we never buffer the body just to measure it. Only fall back to reading
-        // the body when the header is absent AND the resource is one we'd parse
-        // anyway (document/script/stylesheet) — buffering a large media/asset
-        // stream, or a gzip bomb with no content-length, would OOM the crawler.
-        // NOTE: this value feeds the per-request map only; totalResponseSize is
-        // summed separately from real transfer bytes (see `sizings` above).
+        // Provisional per-request size for the `requests` map (consumed by the
+        // compression / font / critical-path / third-party analyzers): use the
+        // declared content-length so we never buffer the body just to measure it.
+        // Only fall back to reading the body when the header is absent AND the
+        // resource is one we'd parse anyway (document/script/stylesheet) —
+        // buffering a large media/asset stream, or a gzip bomb with no
+        // content-length, would OOM the crawler. NOTE: this is a PROVISIONAL
+        // value — `requestFinishedHandler` overwrites it with the real
+        // transferred bytes (`request.sizes().responseBodySize`) once the request
+        // finishes, so streamed/ranged media isn't counted at its full length.
         const declared = Number(response.headers()['content-length']);
         if (Number.isFinite(declared) && declared >= 0) {
           size = declared;
@@ -370,7 +372,20 @@ class CrawlerEngine {
         (async () => {
           try {
             const s = await request.sizes();
-            if (s.responseBodySize > 0) totalResponseSize += s.responseBodySize;
+            if (s.responseBodySize > 0) {
+              totalResponseSize += s.responseBodySize;
+              // Overwrite the per-request `size` (set from content-length by the
+              // response handler) with the real transferred bytes. A range/
+              // streamed media response advertises the FULL asset length in
+              // content-length while transferring only a slice, so the declared
+              // value inflated per-request size into tens/hundreds of MB and
+              // skewed every consumer that sums it (third-party payload, network
+              // breakdown, total transfer). `request.sizes()` accounts the bytes
+              // actually received without buffering the body. Leave cached/
+              // redirected requests (responseBodySize 0) on their declared size.
+              const entry = requests[request.url()];
+              if (entry) entry.size = s.responseBodySize;
+            }
           } catch {
             // Request had no recordable size (cached, aborted, redirect) - ignore.
           }

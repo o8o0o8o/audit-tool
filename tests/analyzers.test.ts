@@ -5259,7 +5259,7 @@ void describe('pagination probe: isSuspectedInfinitePagination', () => {
 // ============================================================
 // Phase 2: issue-aware visual evidence (overlays / CLS pair / SERP)
 // ============================================================
-import { evidenceKindFor } from '../lib/phase2/phase2-runner';
+import { evidenceKindFor, looksLikeProseExample } from '../lib/phase2/phase2-runner';
 
 void describe('phase2: issue-aware visual evidence', () => {
   const OVERLAYS = {
@@ -5339,6 +5339,18 @@ void describe('phase2: issue-aware visual evidence', () => {
     a.manifest.evidence = { 'https_example.com_about': { url: 'https://example.com/about', files: ev.files } };
     return a;
   }
+
+  void it('looksLikeProseExample distinguishes guidance prose from code samples', () => {
+    // Prose guidance — must NOT be fenced as code.
+    assert.ok(looksLikeProseExample('Replace dead links with archived versions or remove them entirely.'));
+    assert.ok(looksLikeProseExample('Change light gray text (#999) on white to darker gray (#595959) for 7:1 ratio.'));
+    assert.ok(looksLikeProseExample('Use try/catch for error-prone code. Test with JavaScript disabled for graceful degradation.'));
+    // Real code — must stay fenced.
+    assert.ok(!looksLikeProseExample('<link rel="canonical" href="https://example.com/page">'));
+    assert.ok(!looksLikeProseExample('gtag("consent", "default", { ad_storage: "denied" });'));
+    assert.ok(!looksLikeProseExample('User-agent: *\nAllow: /'));
+    assert.ok(!looksLikeProseExample('sudo certbot --nginx -d example.com'));
+  });
 
   void it('maps finding messages to their evidence kind', () => {
     assert.deepStrictEqual(evidenceKindFor('Some images are missing alt text'), {

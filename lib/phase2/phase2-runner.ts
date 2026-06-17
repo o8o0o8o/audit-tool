@@ -1054,15 +1054,23 @@ function buildFindingBlock(
   }
 
   if (recommendation?.example && recommendation.example.trim()) {
-    // Next.js overrides supply JSX/TSX examples; tag the fence accordingly.
-    const exampleLang = isNextjs && nextjsOverrideFor(message)?.example ? 'tsx' : 'html';
+    const example = recommendation.example.trim();
     lines.push('**Example**');
     lines.push('');
-    lines.push(`\`\`\`${exampleLang}`);
-    for (const line of recommendation.example.trim().split('\n')) {
-      lines.push(line);
+    if (looksLikeProseExample(example)) {
+      // A natural-language guidance sentence, not a code sample — render as
+      // text. Fencing it as ```html produced absurd "code" blocks like "Replace
+      // dead links with archived versions or remove them entirely."
+      lines.push(example);
+    } else {
+      // Next.js overrides supply JSX/TSX examples; tag the fence accordingly.
+      const exampleLang = isNextjs && nextjsOverrideFor(message)?.example ? 'tsx' : 'html';
+      lines.push(`\`\`\`${exampleLang}`);
+      for (const line of example.split('\n')) {
+        lines.push(line);
+      }
+      lines.push('```');
     }
-    lines.push('```');
     lines.push('');
   }
 
@@ -1621,6 +1629,19 @@ type EvidenceKind =
  * verifier) for the same kinds. Order matters: "Image links without alt text"
  * must resolve to missing-alt, not empty-anchor.
  */
+/**
+ * True when a fix-recommendation `example` is a natural-language guidance
+ * sentence rather than a code sample, so the report renders it as text instead
+ * of a misleading ```html fence. Conservative — anything with markup or code
+ * structure (`<tags>`, braces, semicolons, assignments, newlines) is treated as
+ * code. Validated against the full fix catalog: flags exactly the prose entries
+ * and no real code example.
+ */
+export function looksLikeProseExample(example: string): boolean {
+  const t = example.trim();
+  return /^[A-Z].*\.$/.test(t) && !/[<\n{};=]/.test(t) && t.split(/\s+/).length >= 4;
+}
+
 export function evidenceKindFor(message: string): EvidenceKind | null {
   const t = message.toLowerCase();
   if (/\balt (text|attribute)\b/.test(t) && /(without|missing|no\b|empty)/.test(t)) return { type: 'overlay', kind: 'missing-alt' };

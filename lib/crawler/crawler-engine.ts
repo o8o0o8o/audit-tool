@@ -634,8 +634,8 @@ class CrawlerEngine {
       });
 
       const alternatesErrors: Issue[] = [];
-      const uniqueTitles = new Set<string>();
-      const uniqueDescriptions = new Set<string>();
+      const uniqueTitles = new Map<string, string>();
+      const uniqueDescriptions = new Map<string, string>();
       const failedPages: string[] = [];
       const discoveredLinksSource = new Map<string, string>();
       const paginationSeriesCounts = new Map<string, number>();

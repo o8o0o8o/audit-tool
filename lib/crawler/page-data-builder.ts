@@ -39,12 +39,22 @@ import type { CLSEntry } from './vitals-collector';
 import { collectVisualOverlays } from './visual-overlay-collector';
 
 /**
+ * Render a URL for display inside a finding's prose WITHOUT its scheme, so it
+ * reads as a human-facing page reference and is NOT matched by the verifiers'
+ * `https?://…` cited-URL extractor (`extractUrls`/`exampleUrls`). Used to name
+ * the page a duplicate title/description collides with.
+ */
+function displayUrlNoScheme(url: string): string {
+  return url.replace(/^https?:\/\//, '');
+}
+
+/**
  * Process title validation
  */
 export function processTitle(
   title: string | null | undefined,
   url: string,
-  uniqueTitles: Set<string>,
+  uniqueTitles: Map<string, string>,
   reportIssue: ReportIssueFn,
 ): { title: string | null; titleLength: number } {
   const escapedUrl = escapeHtml(url);
@@ -79,17 +89,23 @@ export function processTitle(
     );
   }
 
-  // Normalize title for duplicate comparison (handles whitespace variations)
+  // Normalize title for duplicate comparison (handles whitespace variations).
+  // Name the FIRST page that carried this title so the finding says what it
+  // collides with, not just "this page". The first-seen URL is rendered without
+  // its scheme so it is NOT picked up as a second cited example URL by the
+  // verifier's URL extractor (which would flip the duplicate check to a brittle
+  // two-page comparison); "this page" stays the sole cited example.
   const normalizedTitle = normalizeTextForComparison(title);
-  if (uniqueTitles.has(normalizedTitle)) {
+  const firstTitleUrl = uniqueTitles.get(normalizedTitle);
+  if (firstTitleUrl !== undefined) {
     reportIssue(
       `Some pages have identical titles`,
-      `Title "${escapeHtml(title)}" is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
+      `Title "${escapeHtml(title)}" is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a> — identical to the title on ${escapeHtml(displayUrlNoScheme(firstTitleUrl))}`,
       SEVERITY.HIGH,
     );
+  } else {
+    uniqueTitles.set(normalizedTitle, url);
   }
-
-  uniqueTitles.add(normalizedTitle);
   return { title: processedTitle, titleLength };
 }
 
@@ -126,7 +142,7 @@ export function processMetaTags(
   metaTags: MetaTag[],
   pageData: PageInfo,
   url: string,
-  uniqueDescriptions: Set<string>,
+  uniqueDescriptions: Map<string, string>,
   reportIssue: ReportIssueFn,
 ): void {
   const escapedUrl = escapeHtml(url);
@@ -172,18 +188,20 @@ export function processMetaTags(
         );
       }
 
-      // Normalize description for duplicate comparison (handles whitespace variations)
+      // Normalize description for duplicate comparison (handles whitespace
+      // variations). Name the first page that carried it — see processTitle for
+      // why the first-seen URL is rendered scheme-less (kept out of the verifier's
+      // cited-URL set so "this page" stays the sole example).
       const normalizedDesc = normalizeTextForComparison(content);
-      if (content && uniqueDescriptions.has(normalizedDesc)) {
+      const firstDescUrl = content ? uniqueDescriptions.get(normalizedDesc) : undefined;
+      if (content && firstDescUrl !== undefined) {
         reportIssue(
           `Some pages have identical descriptions`,
-          `Description "${escapeHtml(content.substring(0, 50))}..." is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a>`,
+          `Description "${escapeHtml(content.substring(0, 50))}..." is duplicated for this page <a href="${escapedUrl}">${escapedUrl}</a> — identical to the description on ${escapeHtml(displayUrlNoScheme(firstDescUrl))}`,
           SEVERITY.HIGH,
         );
-      }
-
-      if (content) {
-        uniqueDescriptions.add(normalizedDesc);
+      } else if (content) {
+        uniqueDescriptions.set(normalizedDesc, url);
       }
     }
 

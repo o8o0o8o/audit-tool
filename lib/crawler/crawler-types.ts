@@ -183,8 +183,10 @@ export interface CrawlSinglePageParams {
   pagesToCrawl: string[];
   addMissing: boolean;
   discoveredLinksSource: Map<string, string>;
-  uniqueTitles: Set<string>;
-  uniqueDescriptions: Set<string>;
+  /** Normalized title/description → the FIRST page that carried it, so a later
+   *  duplicate can name the page it collides with (not just "this page"). */
+  uniqueTitles: Map<string, string>;
+  uniqueDescriptions: Map<string, string>;
   paginationSeriesCounts: Map<string, number>;
   /** See CrawlPagesParams.crawlFrontierKeys. */
   crawlFrontierKeys: Set<string>;
@@ -202,8 +204,8 @@ export interface ProcessPageDataParams {
   pagesToCrawl: string[];
   addMissing: boolean;
   discoveredLinksSource: Map<string, string>;
-  uniqueTitles: Set<string>;
-  uniqueDescriptions: Set<string>;
+  uniqueTitles: Map<string, string>;
+  uniqueDescriptions: Map<string, string>;
   paginationSeriesCounts: Map<string, number>;
   /** See CrawlPagesParams.crawlFrontierKeys. */
   crawlFrontierKeys: Set<string>;

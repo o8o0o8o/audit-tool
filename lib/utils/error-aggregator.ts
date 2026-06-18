@@ -7,6 +7,37 @@ import type { SeverityLevel, AnalysisDetail } from '../types';
 import { SEVERITY, CRAWL_SETTINGS } from '../constants';
 import { compareExamplesWorstFirst } from '../utils';
 
+/**
+ * Findings whose SUBJECT is a page being defective / non-real — a broken
+ * pagination tail or a soft 404 (HTTP 200 serving "not found" content). A
+ * defective page must be KEPT in these (they are the findings telling you to
+ * fix or remove the page) and removed from every on-page-quality finding
+ * (canonical, alt, perf, a11y, content, …) where its presence is just
+ * count-inflating noise. Hard 4xx/5xx pages are intentionally absent: the
+ * crawler skips analysis for non-200 responses, so they never reach on-page
+ * findings, and they legitimately belong in HTTP-error / sitemap-reconciliation
+ * findings — so they are neither suppressed nor need a keep-rule here.
+ */
+export function isDefectivePageOwnerFinding(key: string): boolean {
+  return (
+    key.startsWith('Broken pagination') ||
+    key.startsWith('Additional pagination series') ||
+    /\bsoft 404\b/i.test(key)
+  );
+}
+
+/**
+ * True when an example string cites any URL in `urls`. Extracts every absolute
+ * URL the example embeds (link text and/or `href="…"`) and tests exact set
+ * membership, decoding `&amp;` so escaped query strings still match. Exact
+ * match (not substring) so `/page/7` does not also catch `/page/70`.
+ */
+function exampleCitesUrl(example: string, urls: Set<string>): boolean {
+  const matches = example.match(/https?:\/\/[^\s"'<>)\]]+/g);
+  if (!matches) return false;
+  return matches.some((u) => urls.has(u.replace(/&amp;/g, '&')));
+}
+
 export interface AnalysisState {
   overall: Set<string>;
   details: Record<string, AnalysisDetail>;
@@ -171,6 +202,54 @@ class ErrorAggregator {
       this.#analysis.summary.totalIssues++;
       this.#analysis.summary[`${severity}Count`]++;
     }
+  }
+
+  /**
+   * Remove example entries citing any URL in `urls` from every finding whose
+   * key does NOT satisfy `keepKey`. Used after broken-pagination detection so a
+   * phantom infinite-pagination tail (pages we've already flagged for deletion)
+   * stops inflating the occurrence counts of unrelated findings — adding a
+   * canonical/alt/etc. to a page that should not exist is never the fix.
+   *
+   * Count is reduced by the number of removed examples, floored at the
+   * surviving example count: a non-truncated finding lands on an exact count, a
+   * truncated one is corrected by at least what we observed. A finding left with
+   * no examples and a zeroed count is dropped entirely (severity tally adjusted),
+   * so a finding that was ONLY these phantom pages disappears.
+   *
+   * @returns the number of example entries removed across all findings.
+   */
+  suppressExamplesByUrl(urls: Set<string>, keepKey: (key: string) => boolean = () => false): number {
+    if (urls.size === 0) return 0;
+    let removedTotal = 0;
+    for (const [key, detail] of Object.entries(this.#analysis.details)) {
+      if (keepKey(key)) continue;
+      if (!Array.isArray(detail.examples) || detail.examples.length === 0) continue;
+      const kept = detail.examples.filter((ex) => !exampleCitesUrl(ex, urls));
+      const removed = detail.examples.length - kept.length;
+      if (removed === 0) continue;
+      removedTotal += removed;
+      detail.examples = kept;
+      detail.count = Math.max((detail.count ?? kept.length) - removed, kept.length);
+      if (kept.length === 0 && detail.count === 0) this.#dropFinding(key, detail.severity);
+    }
+    return removedTotal;
+  }
+
+  /**
+   * Remove a finding entirely and keep the severity bookkeeping consistent.
+   */
+  #dropFinding(key: string, severity: SeverityLevel) {
+    delete this.#analysis.details[key];
+    this.#analysis.overall.delete(key);
+    const arr = this.#analysis.bySeverity[severity];
+    if (!arr) return;
+    const idx = arr.indexOf(`${key} [${severity}]`);
+    if (idx === -1) return;
+    arr.splice(idx, 1);
+    this.#analysis.summary.totalIssues = Math.max(0, this.#analysis.summary.totalIssues - 1);
+    const countKey = `${severity}Count`;
+    this.#analysis.summary[countKey] = Math.max(0, (this.#analysis.summary[countKey] ?? 0) - 1);
   }
 
   /**

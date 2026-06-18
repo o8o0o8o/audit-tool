@@ -66,10 +66,30 @@ class BrokenPaginationAnalyzer {
    *   cap (from `pageData.truncatedPaginationSeries`). A truncated series with
    *   a broken final page is high-confidence broken.
    */
+  /**
+   * Reduce a pagination series key to the underlying paginated ROUTE by
+   * dropping query params that are not the pagination param itself.
+   * `/insights/page/{N}` and `/insights/page/{N}?postType=case-study` both
+   * reduce to `/insights/page/{N}` — the same non-terminating "next", just a
+   * filtered view. A query-based series (`/list?page={N}&sort=asc`) keeps only
+   * the `page={N}` part. Used to consolidate same-route variants into one
+   * finding instead of one-per-filter.
+   */
+  static #defectKey(seriesKey: string): string {
+    const qIdx = seriesKey.indexOf('?');
+    if (qIdx === -1) return seriesKey;
+    const path = seriesKey.slice(0, qIdx);
+    const paginationParams = seriesKey
+      .slice(qIdx + 1)
+      .split('&')
+      .filter((p) => p.includes('{N}'));
+    return paginationParams.length ? `${path}?${paginationParams.join('&')}` : path;
+  }
+
   static analyzeSiteWide(
     pages: Record<string, PageInfo>,
     opts: { truncatedSeries?: Record<string, number> } = {},
-  ): { issues: Issue[]; warnings: Issue[] } {
+  ): { issues: Issue[]; warnings: Issue[]; brokenUrls: string[] } {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const truncatedSeries = opts.truncatedSeries ?? {};
@@ -134,40 +154,83 @@ class BrokenPaginationAnalyzer {
       if (flag) broken.push({ key, tail, truncated: wasTruncated });
     }
 
-    if (broken.length === 0) return { issues, warnings };
+    // Every broken tail URL across all series — phantom pages the orchestrator
+    // suppresses from OTHER findings (the fix is to terminate pagination, not
+    // to add canonicals/alt/etc. to pages that should not exist).
+    const brokenUrls = broken.flatMap(({ tail }) => tail.map((p) => p.url));
 
-    // 3. Emit one HIGH issue per broken series (cap the listing).
-    broken.sort((a, b) => b.tail.length - a.tail.length);
+    if (broken.length === 0) return { issues, warnings, brokenUrls };
+
+    // 3. Consolidate series that are the SAME paginated route differing only by
+    // a non-pagination query param (e.g. `/insights/page/{N}` and
+    // `/insights/page/{N}?postType=case-study`) — one termination bug, one
+    // finding. Keep each variant's tail separate so we can sample across them.
+    const groups = new Map<string, { key: string; variants: SeriesPage[][]; truncated: boolean }>();
+    for (const { key, tail, truncated } of broken) {
+      const dk = BrokenPaginationAnalyzer.#defectKey(key);
+      const g = groups.get(dk);
+      if (g) {
+        g.variants.push(tail);
+        g.truncated = g.truncated || truncated;
+      } else {
+        groups.set(dk, { key: dk, variants: [tail], truncated });
+      }
+    }
+
+    // Deterministic order: worst (longest combined tail) first, key as tie-break.
+    const grouped = [...groups.values()].sort(
+      (a, b) => b.variants.flat().length - a.variants.flat().length || a.key.localeCompare(b.key),
+    );
+
+    // 4. Emit one HIGH issue per consolidated route (cap the listing).
     const SHOWN = 10;
-    for (const { key, tail, truncated } of broken.slice(0, SHOWN)) {
-      const first = tail[0];
-      const last = tail[tail.length - 1];
-      const range = first.pageNum === last.pageNum ? `page ${first.pageNum}` : `pages ${first.pageNum}–${last.pageNum}`;
+    for (const { key, variants, truncated } of grouped.slice(0, SHOWN)) {
+      const allTail = variants.flat();
+      const nums = allTail.map((p) => p.pageNum).sort((a, b) => a - b);
+      const lo = nums[0];
+      const hi = nums[nums.length - 1];
+      const range = lo === hi ? `page ${lo}` : `pages ${lo}–${hi}`;
       const truncatedNote = truncated
         ? ' The crawler stopped following this series at its discovery cap, so the real broken tail is likely longer.'
         : '';
-      const sampleUrls = tail.slice(0, 5).map((p) => p.url);
+      const variantNote =
+        variants.length > 1
+          ? ` The same route is paginated under ${variants.length} query variants (e.g. filtered views), all sharing this non-terminating "next".`
+          : '';
+      // Round-robin across variants so the sample shows each filtered view.
+      const sampleUrls: string[] = [];
+      for (let i = 0; sampleUrls.length < 5; i++) {
+        let added = false;
+        for (const v of variants) {
+          if (v[i]) {
+            sampleUrls.push(v[i].url);
+            added = true;
+            if (sampleUrls.length >= 5) break;
+          }
+        }
+        if (!added) break;
+      }
       issues.push({
         message: `Broken pagination wastes crawl budget — ${key}`,
         detail:
-          `The <code>${escapeHtml(key)}</code> pagination series advances into ${tail.length} empty, ` +
+          `The <code>${escapeHtml(key)}</code> pagination series advances into ${allTail.length} empty, ` +
           `duplicate, or not-found page(s) (${range}). The "next" link keeps returning HTTP 200 with no real ` +
           `content, so crawlers (Googlebot) follow it indefinitely and waste crawl budget on pages that will ` +
-          `never be indexed.${truncatedNote} Remove the "next" link on the last real page (or return a 404 for ` +
+          `never be indexed.${variantNote}${truncatedNote} Remove the "next" link on the last real page (or return a 404 for ` +
           `out-of-range pages) so pagination terminates. Affected: ${formatSampleList(sampleUrls)}`,
         severity: SEVERITY.HIGH,
       });
     }
 
-    if (broken.length > SHOWN) {
+    if (grouped.length > SHOWN) {
       issues.push({
         message: 'Additional pagination series show broken/infinite "next" links',
-        detail: `${broken.length - SHOWN} further paginated series advance past their real last page. Audit pagination termination site-wide.`,
+        detail: `${grouped.length - SHOWN} further paginated routes advance past their real last page. Audit pagination termination site-wide.`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
-    return { issues, warnings };
+    return { issues, warnings, brokenUrls };
   }
 }
 

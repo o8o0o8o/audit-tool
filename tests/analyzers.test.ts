@@ -1049,7 +1049,7 @@ void describe('findingGroupKey (cross-list identity)', () => {
 // ============================================================
 import { buildReportMarkdown } from '../lib/phase2/phase2-runner';
 import type { AuditArtifacts, IssueDetail as P2IssueDetail } from '../lib/phase2/types';
-import { ErrorAggregator } from '../lib/utils/error-aggregator';
+import { ErrorAggregator, isDefectivePageOwnerFinding } from '../lib/utils/error-aggregator';
 import { exampleMetric, compareExamplesWorstFirst } from '../lib/utils';
 
 function mkArtifacts(detailKeys: string[], examples: Record<string, string[]> = {}): AuditArtifacts {
@@ -1212,6 +1212,87 @@ void describe('ErrorAggregator example retention determinism', () => {
     assert.strictEqual(counts.length, 100);
     assert.strictEqual(counts[0], 51, 'lowest retained count should be 51 (worst 100 kept)');
     assert.strictEqual(counts[99], 150, 'worst page (150 requests) must be retained');
+  });
+});
+
+void describe('ErrorAggregator.suppressExamplesByUrl', () => {
+  void it('drops examples citing a suppressed URL and adjusts count, keeping the excepted finding', () => {
+    const agg = new ErrorAggregator();
+    // A normal finding citing a mix of real + broken-pagination pages.
+    agg.addError('Canonicals are not set', 'missing on https://e.com/real', 'high');
+    agg.addError('Canonicals are not set', 'missing on https://e.com/insights/page/7', 'high');
+    agg.addError('Canonicals are not set', 'missing on https://e.com/insights/page/8', 'high');
+    // The broken-pagination finding itself cites those same pages — must be kept.
+    agg.addError('Broken pagination wastes crawl budget — x', 'tail https://e.com/insights/page/7', 'high');
+
+    const removed = agg.suppressExamplesByUrl(
+      new Set(['https://e.com/insights/page/7', 'https://e.com/insights/page/8']),
+      (key) => key.startsWith('Broken pagination'),
+    );
+
+    assert.strictEqual(removed, 2, 'two phantom-page examples removed');
+    const data = agg.getData();
+    const canon = data.details['Canonicals are not set'];
+    assert.strictEqual(canon.count, 1, 'count corrected to the surviving (non-truncated) example');
+    assert.deepStrictEqual(canon.examples, ['missing on https://e.com/real']);
+    // Excepted finding untouched.
+    assert.ok(data.details['Broken pagination wastes crawl budget — x']);
+  });
+
+  void it('does NOT match a prefix URL (/page/7 must not catch /page/70)', () => {
+    const agg = new ErrorAggregator();
+    agg.addError('Some issue', 'x https://e.com/insights/page/70', 'medium');
+    const removed = agg.suppressExamplesByUrl(new Set(['https://e.com/insights/page/7']));
+    assert.strictEqual(removed, 0, '/page/7 is not a substring match for /page/70');
+    assert.strictEqual(agg.getData().details['Some issue'].count, 1);
+  });
+
+  void it('drops a finding entirely when only suppressed pages remain', () => {
+    const agg = new ErrorAggregator();
+    agg.addError('Large HTML document', 'big https://e.com/insights/page/9', 'low');
+    agg.suppressExamplesByUrl(new Set(['https://e.com/insights/page/9']));
+    const data = agg.getData();
+    assert.strictEqual(data.details['Large HTML document'], undefined, 'fully-phantom finding removed');
+    assert.ok(!data.bySeverity.low.some((k) => k.startsWith('Large HTML document')), 'severity tally cleaned up');
+  });
+
+  void it('matches URLs whose escaped (&amp;) query string appears in the example', () => {
+    const agg = new ErrorAggregator();
+    agg.addError('Some issue', 'x <a href="https://e.com/l?page={N}&amp;sort=asc">link</a>', 'medium');
+    const removed = agg.suppressExamplesByUrl(new Set(['https://e.com/l?page={N}&sort=asc']));
+    assert.strictEqual(removed, 1, 'escaped & in the example matches the decoded URL');
+  });
+
+  void it('keeps defective pages in their owning findings but strips them elsewhere (soft 404 + pagination)', () => {
+    const agg = new ErrorAggregator();
+    const soft = 'https://e.com/ghost';
+    agg.addError('Soft 404 detected - page returns 200 but shows error content', `x ${soft}`, 'high');
+    agg.addError('Broken pagination wastes crawl budget — x', `tail https://e.com/insights/page/9`, 'high');
+    agg.addError('Canonicals are not set', `missing on ${soft}`, 'high');
+    agg.addError('Canonicals are not set', `missing on https://e.com/insights/page/9`, 'high');
+    agg.addError('Canonicals are not set', `missing on https://e.com/real`, 'high');
+
+    agg.suppressExamplesByUrl(new Set([soft, 'https://e.com/insights/page/9']), isDefectivePageOwnerFinding);
+    const d = agg.getData().details;
+    assert.deepStrictEqual(d['Canonicals are not set'].examples, ['missing on https://e.com/real']);
+    assert.ok(d['Soft 404 detected - page returns 200 but shows error content'], 'soft-404 finding keeps its page');
+    assert.ok(d['Broken pagination wastes crawl budget — x'], 'pagination finding keeps its page');
+  });
+});
+
+void describe('isDefectivePageOwnerFinding', () => {
+  void it('recognises defect-owner findings and rejects on-page-quality ones', () => {
+    for (const k of [
+      'Broken pagination wastes crawl budget — https://e.com/p/{N}',
+      'Additional pagination series show broken/infinite "next" links',
+      'Soft 404 detected - page returns 200 but shows error content',
+      'Potential soft 404 page needs review',
+    ]) {
+      assert.ok(isDefectivePageOwnerFinding(k), `${k} should be a defect owner`);
+    }
+    for (const k of ['Canonicals are not set', 'Some pages have too many requests', 'Empty anchor text']) {
+      assert.ok(!isDefectivePageOwnerFinding(k), `${k} must NOT be a defect owner`);
+    }
   });
 });
 
@@ -2738,6 +2819,30 @@ void describe('BrokenPaginationAnalyzer', () => {
     };
     const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
     assert.strictEqual(result.issues.length, 0);
+  });
+
+  void it('consolidates same-route query variants into one finding and returns all broken URLs', () => {
+    const mk = (wc: number, hash: string) =>
+      page({ contentQuality: { wordCount: wc } as PageInfo['contentQuality'], contentHash: hash });
+    const pages = {
+      // unfiltered series: pages 2–3 are the broken tail
+      'https://ex.com/insights/page/1': mk(900, 'a'),
+      'https://ex.com/insights/page/2': mk(10, 'empty'),
+      'https://ex.com/insights/page/3': mk(10, 'empty'),
+      // SAME route, just a ?postType filter — same termination bug
+      'https://ex.com/insights/page/1?postType=case-study': mk(900, 'b'),
+      'https://ex.com/insights/page/2?postType=case-study': mk(9, 'empty2'),
+      'https://ex.com/insights/page/3?postType=case-study': mk(9, 'empty2'),
+    };
+    const result = BrokenPaginationAnalyzer.analyzeSiteWide(pages as unknown as Record<string, PageInfo>);
+    const crawlBudget = result.issues.filter((i) => /crawl budget/i.test(i.message ?? ''));
+    assert.strictEqual(crawlBudget.length, 1, 'two query variants of one route must collapse to a single finding');
+    assert.ok(/insights\/page\/\{N\}/.test(crawlBudget[0].message ?? ''));
+    assert.ok(!/postType/.test(crawlBudget[0].message ?? ''), 'consolidated message uses the query-stripped route');
+    assert.ok(/2 query variants/.test(crawlBudget[0].detail ?? ''), 'detail notes the variant count');
+    // Both variants' tail URLs are returned so the orchestrator can suppress them elsewhere.
+    assert.ok(result.brokenUrls.includes('https://ex.com/insights/page/2'));
+    assert.ok(result.brokenUrls.includes('https://ex.com/insights/page/2?postType=case-study'));
   });
 });
 

@@ -13,7 +13,7 @@ import { validateUrl, formatElapsedTime, removeTrailingSlash } from './utils';
 import { sanitizeDomainName } from '../validators';
 import { FileManager } from './storage/file-manager';
 import { ScoreCalculator } from './scoring/score-calculator';
-import { ErrorAggregator } from './utils/error-aggregator';
+import { ErrorAggregator, isDefectivePageOwnerFinding } from './utils/error-aggregator';
 import { ProgressManager } from './orchestrators/progress-manager';
 import { AuditOrchestrator } from './orchestrators/audit-orchestrator';
 import { CrawlerEngine } from './crawler/crawler-engine';
@@ -596,13 +596,30 @@ class SEOData {
 
     // Run all site-wide validations
     // Bridge internal pageData to the orchestrator's expected shape
-    await AuditOrchestrator.runSiteWideValidation(
+    const { defectivePageUrls } = await AuditOrchestrator.runSiteWideValidation(
       this.#results.pageData as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[0],
       this.origin ?? '',
       this.#results.isMultiLang,
       this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[3],
       this.#results.sitemaps?.urls ?? {},
     );
+
+    // Defective/non-real pages (broken-pagination tails + soft 404s) are phantom
+    // pages whose fix is to remove/repair the page — not to add canonicals/alt/
+    // etc. Drop them from every OTHER finding so they stop inflating occurrence
+    // counts (and scores). The findings that identify them as defective (broken
+    // pagination, soft 404) keep them.
+    if (defectivePageUrls.length > 0) {
+      const removed = this.#errorAggregator.suppressExamplesByUrl(
+        new Set(defectivePageUrls),
+        isDefectivePageOwnerFinding,
+      );
+      if (removed > 0) {
+        console.log(
+          `Suppressed ${removed} finding reference(s) to ${defectivePageUrls.length} defective page(s) (broken pagination / soft 404).`,
+        );
+      }
+    }
 
     // Stop timing
     this.#stopTiming();

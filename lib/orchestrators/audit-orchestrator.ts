@@ -503,6 +503,10 @@ class AuditOrchestrator {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
     const analysisConfig = config.analysis ?? {};
+    // Captured from the broken-pagination validator below; combined with
+    // soft-404 pages into the defective-page set the caller suppresses from
+    // every other finding's affected list.
+    let brokenPaginationUrls: string[] = [];
     const validators = [
       {
         name: 'Duplicate Content',
@@ -578,10 +582,13 @@ class AuditOrchestrator {
       },
       {
         name: 'Broken Pagination (Site-Wide)',
-        run: () =>
-          BrokenPaginationAnalyzer.analyzeSiteWide(pageData.pages, {
+        run: () => {
+          const result = BrokenPaginationAnalyzer.analyzeSiteWide(pageData.pages, {
             truncatedSeries: pageData.truncatedPaginationSeries,
-          }),
+          });
+          brokenPaginationUrls = result.brokenUrls;
+          return result;
+        },
       },
       {
         name: 'Media SEO (Site-Wide)',
@@ -704,6 +711,18 @@ class AuditOrchestrator {
 
     // Run async/data-storing validators that need special result handling
     await AuditOrchestrator.#runDataStoringValidators(pageData, origin, saveError);
+
+    // Defective/non-real pages whose fix is to remove or repair the page, not to
+    // address per-page findings on it: broken-pagination tails + soft 404s (HTTP
+    // 200 serving error content — these DO get fully analyzed, so they pollute
+    // every finding). Hard 4xx/5xx pages are excluded on purpose: the crawler
+    // never analyzes non-200 responses, so they produce no on-page findings.
+    const soft404Urls = Object.entries(pageData.pages)
+      .filter(([, p]) => p.soft404?.isSoft404)
+      .map(([url]) => url);
+    const defectivePageUrls = [...new Set([...brokenPaginationUrls, ...soft404Urls])];
+
+    return { defectivePageUrls };
   }
 
   /**

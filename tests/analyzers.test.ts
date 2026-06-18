@@ -1064,7 +1064,7 @@ function mkArtifacts(detailKeys: string[], examples: Record<string, string[]> = 
       format: 'multi',
       domain: 'example.com',
       created: '2026-01-01T00:00:00.000Z',
-      progress: { processedPages: [], totalWithoutError: 0, totalWithError: 0, byError: {}, attempts: {} },
+      progress: { processedPages: [], totalWithoutError: 5, totalWithError: 0, byError: {}, attempts: {} },
       files: { metadata: '', analysis: '', incomingLinks: '', pageBatches: [] },
       evidence: null,
     },
@@ -1142,6 +1142,30 @@ void describe('buildReportMarkdown determinism', () => {
     assert.ok(!/\+~\d+\s*pts/.test(noScore), 'no-score report must not contain per-finding point chips');
     // Findings themselves are untouched.
     assert.ok(noScore.includes('Missing meta description'), 'findings must still be present without scores');
+  });
+
+  void it('warns when the crawl produced no analyzable pages (degenerate-crawl guard)', () => {
+    // The plentific GIGO case: 0 pages analyzed, all attempts errored. Every
+    // per-page finding below is an artifact, so the report must say so loudly.
+    const healthy = buildReportMarkdown(
+      mkArtifacts(['Missing meta description'], { 'Missing meta description': ['https://e.com/a'] }),
+    );
+    assert.ok(
+      !healthy.includes('no analyzable pages'),
+      'a healthy crawl (>0 analyzed) must NOT carry the degenerate-crawl banner',
+    );
+
+    const degenerate = mkArtifacts(['Page has very thin content'], {
+      'Page has very thin content': ['https://e.com/dead'],
+    });
+    degenerate.manifest.progress.totalWithoutError = 0;
+    degenerate.manifest.progress.totalWithError = 10;
+    const md = buildReportMarkdown(degenerate);
+    assert.ok(md.includes('no analyzable pages'), 'degenerate crawl must carry the warning banner');
+    assert.ok(md.includes('All 10 attempted page(s)'), 'banner should state how many pages errored');
+    assert.ok(md.includes('not a reliable audit'), 'banner must flag the findings/scores as unreliable');
+    // The banner sits above the findings so it is seen first.
+    assert.ok(md.indexOf('no analyzable pages') < md.indexOf('Page has very thin content'), 'banner must precede findings');
   });
 
   void it('produces identical affected-pages samples regardless of example order', () => {

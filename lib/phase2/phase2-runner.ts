@@ -614,6 +614,25 @@ function buildCover(artifacts: AuditArtifacts): string {
   return lines.join('\n');
 }
 
+/**
+ * When the crawl produced no analyzable pages (every fetch errored or failed to
+ * load), the per-page and site-wide findings below are artifacts of the error
+ * responses — a "0 words / thin content" finding on a 404 is an artifact of the
+ * error, not a content problem — and categories with no measured signal default
+ * to a perfect score. Surface a prominent banner so a degenerate run is never
+ * mistaken for a valid audit. Returns '' for a healthy crawl (>0 analyzed).
+ */
+function buildDegenerateCrawlBanner(artifacts: AuditArtifacts): string {
+  const ok = artifacts.manifest.progress.totalWithoutError ?? 0;
+  const err = artifacts.manifest.progress.totalWithError ?? 0;
+  if (ok > 0) return '';
+  const errLine = err > 0 ? ` All ${err} attempted page(s) returned errors (e.g. 4xx/5xx) or failed to load.` : '';
+  return [
+    `> **⚠️ Crawl produced no analyzable pages.**${errLine} The findings and category scores below are derived from an empty / error-only dataset and are **not a reliable audit**: per-page findings (e.g. "thin content", "missing canonical") are artifacts of the error responses, and categories with no measured signal default to a perfect score. Investigate what makes these URLs unreachable — a sitemap pointing at dead URLs, an auth/geo wall, or bot blocking — and re-run.`,
+    '',
+  ].join('\n');
+}
+
 function buildPurpose(artifacts: AuditArtifacts, noScore = false): string {
   const lines: string[] = [
     '## Purpose of the Audit',
@@ -1251,6 +1270,10 @@ export function buildReportMarkdown(
   }
   const parts: string[] = [];
   parts.push(buildCover(artifacts));
+  // Degenerate-crawl guard: when nothing was successfully analyzed, the findings
+  // and scores below are artifacts. Warn before anything else so the report is
+  // never mistaken for a valid audit (empty string for a healthy crawl).
+  parts.push(buildDegenerateCrawlBanner(artifacts));
   // Verification banner (only on the `--verify` report) sits right under the
   // cover so the reader knows these findings were re-checked.
   if (verifyBanner) parts.push(verifyBanner);

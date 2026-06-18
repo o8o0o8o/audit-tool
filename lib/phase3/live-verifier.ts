@@ -1436,9 +1436,14 @@ const CHECKERS: LiveChecker[] = [
   // load cannot adjudicate these. Marked noFetch (the orchestrator skips the
   // fetch) and reported as `unverified` with the reason.
   {
+    // Exact-duplicate title/description AND same-page parameterized variants
+    // that share a title/description ("Parameterized URLs share a title"). Both
+    // are adjudicated by the `verifyDuplicate` special handler, which fetches the
+    // first 2 cited pages and compares the field — the comparison is identical.
     kind: 'duplicate',
     noFetch: true,
-    match: (t) => /duplicate (page )?(title|meta description)/.test(t),
+    match: (t) =>
+      /duplicate (page )?(title|meta description)/.test(t) || /parameterized urls share a (title|description)/.test(t),
     check: () =>
       unverifiable('duplication needs ≥2 pages compared — single-page live fetch cannot confirm', 'site-level'),
   },

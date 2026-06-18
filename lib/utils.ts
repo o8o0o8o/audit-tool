@@ -543,6 +543,19 @@ function normalizeUrlForComparison(urlString: string): string {
 }
 
 /**
+ * The path-identity of a URL for comparison: strips the query string AND the
+ * hash AND the trailing slash. Two URLs with the same base path differ only by
+ * their query parameters — i.e. they are the SAME page viewed through different
+ * filters/sorts/pagination params (faceted navigation), not two distinct pages.
+ * Used to tell a genuine cross-page duplicate ( /a and /b share a title ) apart
+ * from a same-page parameterized variant ( /a and /a?sort=x share a title ),
+ * which has a different SEO remedy (canonicalize/noindex, not "retitle").
+ */
+function basePathForComparison(urlString: string): string {
+  return normalizeUrlForComparison(urlString.split('?')[0]);
+}
+
+/**
  * Case-insensitive HTTP header lookup.
  * Playwright normalizes headers to lowercase, but external sources may not.
  */
@@ -1196,6 +1209,7 @@ export {
   statPercentile,
   getLetterGrade,
   normalizeUrlForComparison,
+  basePathForComparison,
   getHeader,
   parseJsonLdSchemas,
   estimateScoreAfterFixes,

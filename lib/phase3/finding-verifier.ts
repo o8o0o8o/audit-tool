@@ -665,6 +665,20 @@ const VERIFIERS: Verifier[] = [
     verify: (ctx) => verifyShared('duplicate-description', 'description', descOf, ctx),
   },
   {
+    // "Parameterized URLs share a title" — same-page faceted variants that
+    // share a title. The claim is still "these cited pages share one title",
+    // so the identical-value comparison applies unchanged.
+    kind: 'duplicate-title-param',
+    match: (m) => /parameterized/.test(m) && /\btitles?\b/.test(m) && !/description/.test(m),
+    verify: (ctx) => verifyShared('duplicate-title-param', 'title', titleOf, ctx),
+  },
+  {
+    // "Parameterized URLs share a description".
+    kind: 'duplicate-description-param',
+    match: (m) => /parameterized/.test(m) && /descriptions?\b/.test(m),
+    verify: (ctx) => verifyShared('duplicate-description-param', 'description', descOf, ctx),
+  },
+  {
     // Page genuinely lacks a canonical. EXCLUDES the "wrong canonical" family
     // (canonicalised elsewhere, non-self-referencing, mismatch, tracking
     // params) where a canonical IS present — refuting those would be a false drop.

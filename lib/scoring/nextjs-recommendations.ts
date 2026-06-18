@@ -130,6 +130,18 @@ export const NEXTJS_FIX_OVERRIDES: Record<string, Partial<FixRecommendation>> = 
       "// app/blog/[slug]/page.tsx\nexport async function generateMetadata({ params }) {\n  const post = await getPost(params.slug);\n  return { description: post.excerpt };\n}",
     resources: [NEXT_DOCS.metadata],
   },
+  'Parameterized URLs share a title': {
+    fix: "These are the same route viewed through searchParams (filters/sorts/pagination), so they share a title by design — do not give each a unique title. Point each parameterized variant's canonical at the clean base path via generateMetadata, so Google consolidates them to one indexable URL. Only emit a distinct title + self-canonical when a filtered view is genuinely meant to rank on its own.",
+    example:
+      "// app/insights/page/[page]/page.tsx\nexport async function generateMetadata({ params }) {\n  // ignore searchParams (?postType=…) in the canonical — point to the clean path\n  return { alternates: { canonical: `/insights/page/${params.page}` } };\n}",
+    resources: [NEXT_DOCS.metadata],
+  },
+  'Parameterized URLs share a description': {
+    fix: 'These are the same route with different query parameters, so the shared description is expected. Canonicalize each parameterized variant to the clean base path in generateMetadata (ignoring searchParams) so the duplicates consolidate, rather than writing a description per filter combination.',
+    example:
+      "// app/insights/page/[page]/page.tsx\nexport async function generateMetadata({ params }) {\n  return { alternates: { canonical: `/insights/page/${params.page}` } };\n}",
+    resources: [NEXT_DOCS.metadata],
+  },
 
   // ── Bundle / unused code ────────────────────────────────────────────────────
   'Large amount of unused code': {

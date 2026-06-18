@@ -1136,6 +1136,16 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'Write unique descriptions per page. Identical descriptions waste an SEO signal.',
     resources: [],
   },
+  'Parameterized URLs share a title': {
+    effort: '30 minutes',
+    fix: 'These URLs are the same page viewed through different query parameters (filters/sorts/pagination), so they correctly share a title — do not retitle them. Add a rel="canonical" on each parameterized variant pointing to the clean base URL (or noindex the filtered views, or configure parameter handling in Search Console) so the duplicates consolidate to one indexable page. Only give a filtered view its own title + self-canonical if it is genuinely meant to rank on its own.',
+    resources: [],
+  },
+  'Parameterized URLs share a description': {
+    effort: '30 minutes',
+    fix: 'These URLs are the same page with different query parameters, so the shared description is expected — do not rewrite per variant. Canonicalize each parameterized URL to the clean base URL (or noindex the filtered views) so the duplicates consolidate, rather than crafting a unique description for every filter combination.',
+    resources: [],
+  },
   'Some pages have incorrect h tags structure': {
     effort: '15 minutes',
     fix: 'Headings skip levels (e.g. H1→H3). Use sequential H1→H2→H3 nesting so screen readers and crawlers can parse structure.',

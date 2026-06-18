@@ -46,6 +46,8 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   'Some pages have identical descriptions': { tier: 'warning', category: 'seo' },
   'Duplicate page titles found': { tier: 'error', category: 'seo' },
   'Duplicate meta descriptions found': { tier: 'warning', category: 'seo' },
+  'Parameterized URLs share a title': { tier: 'error', category: 'seo' },
+  'Parameterized URLs share a description': { tier: 'warning', category: 'seo' },
   'Some pages have more than one h1 tag': { tier: 'warning', category: 'seo' },
   'Some pages have skipped heading levels': { tier: 'notice', category: 'seo' },
   'Some pages are missing alt attribute on images': { tier: 'warning', category: 'seo' },

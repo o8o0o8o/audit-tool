@@ -1,5 +1,5 @@
 import { SEVERITY } from '../../constants';
-import { formatUrlList, escapeHtml, truncateText, normalizeUrlForComparison } from '../../utils';
+import { formatUrlList, escapeHtml, truncateText, normalizeUrlForComparison, basePathForComparison } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 /**
@@ -63,43 +63,24 @@ class DuplicateChecker {
       }
     }
 
-    // Find and report duplicate titles
-    let duplicateTitleCount = 0;
-    const duplicateTitles = new Map();
+    // Find and report duplicate titles. Genuine cross-page duplicates and
+    // same-page parameterized variants get distinct findings (see emitDuplicateIssues).
+    const duplicateTitles = new Map<string, string[]>();
+    const duplicateTitleCount = DuplicateChecker.emitDuplicateIssues(titleMap, duplicateTitles, issues, {
+      noun: 'title',
+      crossPathMessage: 'Duplicate page titles found',
+      paramMessage: 'Parameterized URLs share a title',
+      format: (title) => escapeHtml(title),
+    });
 
-    for (const title in titleMap) {
-      const urls = titleMap[title];
-      if (urls.length > 1) {
-        duplicateTitleCount++;
-        duplicateTitles.set(title, urls);
-
-        const urlList = formatUrlList(urls);
-        issues.push({
-          message: `Duplicate page titles found`,
-          detail: `The title "${escapeHtml(title)}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
-
-    // Find and report duplicate descriptions
-    let duplicateDescriptionCount = 0;
-    const duplicateDescriptions = new Map();
-
-    for (const description in descriptionMap) {
-      const urls = descriptionMap[description];
-      if (urls.length > 1) {
-        duplicateDescriptionCount++;
-        duplicateDescriptions.set(description, urls);
-
-        const urlList = formatUrlList(urls);
-        issues.push({
-          message: `Duplicate meta descriptions found`,
-          detail: `The description "${escapeHtml(truncateText(description, 100))}" is used on ${urls.length} pages:<ul>${urlList}</ul>`,
-          severity: SEVERITY.MEDIUM,
-        });
-      }
-    }
+    // Find and report duplicate descriptions (same split as titles).
+    const duplicateDescriptions = new Map<string, string[]>();
+    const duplicateDescriptionCount = DuplicateChecker.emitDuplicateIssues(descriptionMap, duplicateDescriptions, issues, {
+      noun: 'description',
+      crossPathMessage: 'Duplicate meta descriptions found',
+      paramMessage: 'Parameterized URLs share a description',
+      format: (description) => escapeHtml(truncateText(description, 100)),
+    });
 
     if (duplicateTitleCount > 0) {
       console.log(`Found ${duplicateTitleCount} duplicate titles`);
@@ -116,6 +97,91 @@ class DuplicateChecker {
       duplicateDescriptions,
       issues,
     };
+  }
+
+  /**
+   * Partition the URLs that share one title/description value into:
+   *  - `paramGroups`: clusters of ≥2 URLs that collapse to a single base path
+   *    (the same page seen through different query strings — faceted/sort/
+   *    pagination params). Their SEO remedy is canonicalize-to-base or noindex,
+   *    NOT a unique title.
+   *  - `crossPathReps`: one representative URL per distinct base path. When ≥2
+   *    distinct base paths share the value, those are GENUINE cross-page
+   *    duplicates (two different pages with the same title).
+   *
+   * A single value can yield both (e.g. `/a`, `/a?x=1`, `/b` → param group
+   * [`/a`, `/a?x=1`] plus cross-path reps [`/a`, `/b`]).
+   */
+  private static partitionByBasePath(urls: string[]): {
+    paramGroups: string[][];
+    crossPathReps: string[];
+  } {
+    const byBase = new Map<string, string[]>();
+    for (const u of urls) {
+      const base = basePathForComparison(u);
+      const group = byBase.get(base);
+      if (group) group.push(u);
+      else byBase.set(base, [u]);
+    }
+    const paramGroups: string[][] = [];
+    const crossPathReps: string[] = [];
+    for (const group of byBase.values()) {
+      if (group.length > 1) paramGroups.push(group);
+      crossPathReps.push(group[0]);
+    }
+    return { paramGroups, crossPathReps };
+  }
+
+  /**
+   * Emit duplicate-value findings for one value map (titles or descriptions),
+   * splitting genuine cross-page duplicates from same-page parameterized
+   * variants so each carries accurate framing and the correct fix. Populates
+   * `duplicateMap` with every duplicated value (used downstream for counts).
+   * Returns the number of distinct duplicated values.
+   */
+  private static emitDuplicateIssues(
+    valueMap: Record<string, string[]>,
+    duplicateMap: Map<string, string[]>,
+    issues: Issue[],
+    opts: {
+      noun: 'title' | 'description';
+      crossPathMessage: string;
+      paramMessage: string;
+      format: (value: string) => string;
+    },
+  ): number {
+    let count = 0;
+    for (const value in valueMap) {
+      const urls = valueMap[value];
+      if (urls.length <= 1) continue;
+      count++;
+      duplicateMap.set(value, urls);
+
+      const display = opts.format(value);
+      const { paramGroups, crossPathReps } = DuplicateChecker.partitionByBasePath(urls);
+
+      // Genuine cross-page duplicate: ≥2 DISTINCT pages share the value.
+      if (crossPathReps.length > 1) {
+        issues.push({
+          message: opts.crossPathMessage,
+          detail: `The ${opts.noun} "${display}" is used on ${crossPathReps.length} pages:<ul>${formatUrlList(crossPathReps)}</ul>`,
+          severity: SEVERITY.MEDIUM,
+        });
+      }
+
+      // Same-page parameterized variants: identical base path, different query
+      // string — one page viewed through different filters. Canonicalize/noindex,
+      // do not retitle.
+      for (const group of paramGroups) {
+        const base = basePathForComparison(group[0]);
+        issues.push({
+          message: opts.paramMessage,
+          detail: `The ${opts.noun} "${display}" is shared by ${group.length} parameterized URLs of the same page (<code>${escapeHtml(base)}</code>) — these are one page viewed through different query strings, not separate pages:<ul>${formatUrlList(group)}</ul>`,
+          severity: SEVERITY.MEDIUM,
+        });
+      }
+    }
+    return count;
   }
 }
 

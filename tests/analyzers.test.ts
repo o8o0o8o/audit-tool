@@ -384,6 +384,55 @@ void describe('redirect-source exclusion (trailing-slash twin inflation)', () =>
     assert.strictEqual(out.duplicateDescriptions.size, 0, 'twin must not register a duplicate description');
   });
 
+  void it('DuplicateChecker reframes same-page parameterized variants (faceted nav), not "duplicate titles"', () => {
+    // /insights/page/2 and /insights/page/2?postType=case-study are ONE page
+    // viewed through a query-string filter — they share a title by design. The
+    // remedy is canonicalize/noindex, not a unique title, so the finding must be
+    // the parameterized variant, NOT the cross-page "Duplicate page titles found".
+    const out = DuplicateChecker.checkDuplicates({
+      'https://e.com/insights/page/2': { title: 'Insights | Page 2', description: 'Insights page 2 description here' },
+      'https://e.com/insights/page/2?postType=case-study': {
+        title: 'Insights | Page 2',
+        description: 'Insights page 2 description here',
+      },
+    } as unknown as Record<string, PageInfo>);
+    const msgs = out.issues.map((i) => i.message);
+    assert.ok(msgs.includes('Parameterized URLs share a title'), 'should emit the parameterized-title finding');
+    assert.ok(
+      msgs.includes('Parameterized URLs share a description'),
+      'should emit the parameterized-description finding',
+    );
+    assert.ok(
+      !msgs.includes('Duplicate page titles found'),
+      'must NOT emit the cross-page duplicate-title finding for same-path variants',
+    );
+    assert.ok(
+      !msgs.includes('Duplicate meta descriptions found'),
+      'must NOT emit the cross-page duplicate-description finding for same-path variants',
+    );
+  });
+
+  void it('DuplicateChecker still flags genuine cross-page duplicate titles (distinct paths)', () => {
+    const out = DuplicateChecker.checkDuplicates({
+      'https://e.com/a': { title: 'Shared Title' },
+      'https://e.com/b': { title: 'Shared Title' },
+    } as unknown as Record<string, PageInfo>);
+    const msgs = out.issues.map((i) => i.message);
+    assert.ok(msgs.includes('Duplicate page titles found'), 'distinct paths sharing a title remain a cross-page dup');
+    assert.ok(!msgs.includes('Parameterized URLs share a title'), 'distinct paths are not parameterized variants');
+  });
+
+  void it('DuplicateChecker emits BOTH findings for a mixed group (distinct paths + param variants)', () => {
+    const out = DuplicateChecker.checkDuplicates({
+      'https://e.com/a': { title: 'Shared Title' },
+      'https://e.com/a?sort=asc': { title: 'Shared Title' },
+      'https://e.com/b': { title: 'Shared Title' },
+    } as unknown as Record<string, PageInfo>);
+    const msgs = out.issues.map((i) => i.message);
+    assert.ok(msgs.includes('Duplicate page titles found'), '/a vs /b is a genuine cross-page duplicate');
+    assert.ok(msgs.includes('Parameterized URLs share a title'), '/a vs /a?sort=asc is a parameterized variant');
+  });
+
   void it('IndexabilityValidator does not flag a redirect source as missing from sitemap', () => {
     const out = IndexabilityValidator.validateIndexabilityCrawlability(
       {
@@ -3196,6 +3245,17 @@ void describe('finding-verifier', () => {
       'The title "Title One" is used on 2 pages: <a href="https://e.com/a">a</a> <a href="https://e.com/b">b</a>';
     const r = verifyFinding('Duplicate page titles found', detail([ex]), pages);
     assert.strictEqual(r.status, 'refuted');
+  });
+
+  void it('confirms a parameterized-URLs-share-a-title finding via the duplicate-title-param verifier', () => {
+    const pages = idx({
+      'https://e.com/insights/page/2': { title: 'Insights | Page 2' },
+      'https://e.com/insights/page/2?postType=case-study': { title: 'Insights | Page 2' },
+    });
+    const ex =
+      'The title "Insights | Page 2" is shared by 2 parameterized URLs of the same page: <a href="https://e.com/insights/page/2">a</a> <a href="https://e.com/insights/page/2?postType=case-study">b</a>';
+    const r = verifyFinding('Parameterized URLs share a title', detail([ex]), pages);
+    assert.strictEqual(r.status, 'confirmed');
   });
 
   void it('confirms missing-canonical when the page has an empty canonical', () => {
@@ -6126,6 +6186,8 @@ void describe('uniform fix recommendations', () => {
     'Description meta tag is missing',
     'Duplicate page titles found',
     'Duplicate meta descriptions found',
+    'Parameterized URLs share a title',
+    'Parameterized URLs share a description',
     'Low structured data coverage',
     'Indexable pages missing from sitemap',
     'Orphan page (no internal links point to it)',

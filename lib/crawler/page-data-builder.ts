@@ -427,6 +427,7 @@ export function collectLinks(
     incomingLinksTracking,
     collectedURLs,
     uniquePages,
+    crawlFrontierKeys,
     pagesToCrawl,
     addMissing,
     discoveredLinksSource,
@@ -506,13 +507,21 @@ export function collectLinks(
         }
       }
 
+      // Canonical dedup key (hash + trailing-slash stripped). A discovered link
+      // to `/foo` must not be crawled as a second page when `/foo/` (or the
+      // bare origin vs `/`) is already in the frontier — they are the same
+      // resource. We dedup on this key but keep crawling/storing the original
+      // `normalizedHref` form so the report reflects the site's own convention.
+      const frontierKey = normalizeUrlForComparison(normalizedHref);
+
       if (addMissing && !paginationCapped) {
-        if (!collectedURLs.has(normalizedHref)) {
+        if (!crawlFrontierKeys.has(frontierKey) && !collectedURLs.has(normalizedHref)) {
           // Check limit before adding new URLs
           if (pagesToCrawl.length < maxDiscoveredUrls) {
             pagesToCrawl.push(normalizedHref);
             collectedURLs.add(normalizedHref);
             uniquePages.add(normalizedHref);
+            crawlFrontierKeys.add(frontierKey);
 
             if (!sitemapUrls[normalizedHref]) {
               discoveredLinksSource.set(normalizedHref, url);
@@ -520,10 +529,11 @@ export function collectLinks(
           }
           // Silently skip URLs beyond the limit to prevent OOM
         }
-      } else if (!paginationCapped && !uniquePages.has(normalizedHref)) {
+      } else if (!paginationCapped && !crawlFrontierKeys.has(frontierKey)) {
         // Only track in collectedURLs if under limit
         if (collectedURLs.size < maxDiscoveredUrls) {
           collectedURLs.add(normalizedHref);
+          crawlFrontierKeys.add(frontierKey);
 
           if (!sitemapUrls[normalizedHref]) {
             discoveredLinksSource.set(normalizedHref, url);

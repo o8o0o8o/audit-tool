@@ -21,7 +21,9 @@ import { HistoryManager } from '../historyManager';
 import { getContentInsights } from '../lib/reports/sections/content-insights';
 import type { PageInfo } from '../lib/types';
 import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
-import { getPaginationSeriesKey } from '../lib/utils';
+import { getPaginationSeriesKey, normalizeUrlForComparison } from '../lib/utils';
+import { collectLinks } from '../lib/crawler/page-data-builder';
+import { parse as parseHtml } from 'node-html-parser';
 import { recordPaginationNotFound, worstPaginationStreak } from '../lib/crawler/resilience';
 import type { FailureTracker } from '../lib/crawler/crawler-types';
 
@@ -447,6 +449,72 @@ void describe('redirect-source exclusion (trailing-slash twin inflation)', () =>
       !out.issues.some((i) => /missing from sitemap/i.test(i.message ?? '')),
       'redirect source must not inflate the missing-from-sitemap count',
     );
+  });
+});
+
+// ============================================================
+// Crawl-frontier trailing-slash dedup (collectLinks)
+// ============================================================
+// A page whose sitemap loc is `https://site` (slash-less) and whose in-page
+// link is `/` (normalised to `https://site/`) — or `/foo` vs `/foo/` — is ONE
+// resource. The crawl frontier must dedup on the canonical key
+// (normalizeUrlForComparison) so the page is crawled once; otherwise every
+// per-page finding double-counts and the homepage is reported as cannibalising
+// itself. We exercise collectLinks directly with addMissing=false (pass 1,
+// where discovered-not-in-sitemap URLs are collected for the second pass).
+void describe('crawl-frontier trailing-slash dedup (collectLinks)', () => {
+  function runCollect(linkHrefs: string[], seedFrontierKeys: string[]) {
+    const html = `<html><body>${linkHrefs
+      .map((h) => `<a href="${h}">link</a>`)
+      .join('')}</body></html>`;
+    const collectedURLs = new Set<string>();
+    const uniquePages = new Set<string>();
+    const crawlFrontierKeys = new Set<string>(seedFrontierKeys);
+    collectLinks(
+      {
+        parsedPage: parseHtml(html) as never,
+        url: 'https://site.com/some-page',
+        results: { pageData: {} } as never,
+        incomingLinksTracking: new Map(),
+        collectedURLs,
+        uniquePages,
+        crawlFrontierKeys,
+        pagesToCrawl: [],
+        addMissing: false,
+        discoveredLinksSource: new Map(),
+        sitemapUrls: {},
+        paginationSeriesCounts: new Map(),
+      },
+      'https://site.com',
+      {},
+      () => {},
+    );
+    return collectedURLs;
+  }
+
+  void it('does not collect the root link `/` when the bare origin is already in the frontier', () => {
+    // Sitemap listed `https://site.com` (slash-less). Seed its canonical key.
+    const collected = runCollect(['/'], [normalizeUrlForComparison('https://site.com')]);
+    assert.strictEqual(collected.size, 0, 'root-slash twin of the bare origin must not be crawled again');
+  });
+
+  void it('does not collect `/foo` when `/foo/` is already in the frontier (and vice-versa)', () => {
+    const a = runCollect(['/foo'], [normalizeUrlForComparison('https://site.com/foo/')]);
+    assert.strictEqual(a.size, 0, '/foo must dedup against an already-known /foo/');
+    const b = runCollect(['/foo/'], [normalizeUrlForComparison('https://site.com/foo')]);
+    assert.strictEqual(b.size, 0, '/foo/ must dedup against an already-known /foo');
+  });
+
+  void it('still collects a genuinely new page absent from the frontier', () => {
+    const collected = runCollect(['/brand-new'], [normalizeUrlForComparison('https://site.com')]);
+    assert.deepStrictEqual([...collected], ['https://site.com/brand-new'], 'new pages are still discovered');
+  });
+
+  void it('collects two distinct trailing-slash variants only once between them', () => {
+    // Both `/dup` and `/dup/` appear on the page, neither pre-seeded. The first
+    // wins; the second collapses onto its canonical key.
+    const collected = runCollect(['/dup', '/dup/'], []);
+    assert.strictEqual(collected.size, 1, 'the two trailing-slash variants collapse to a single crawl');
   });
 });
 

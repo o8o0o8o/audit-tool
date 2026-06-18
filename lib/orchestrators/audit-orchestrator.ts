@@ -122,6 +122,7 @@ import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyze
 import { ContentGapAnalyzer } from '../analyzers/site-wide/content-gap-analyzer';
 import { LinkingOpportunityAnalyzer } from '../analyzers/site-wide/linking-opportunity-analyzer';
 import { DNSIPv6Analyzer } from '../analyzers/performance/dns-ipv6-analyzer';
+import { normalizeUrlForComparison } from '../utils';
 
 class AuditOrchestrator {
   /**
@@ -139,7 +140,25 @@ class AuditOrchestrator {
 
     const uniquePages = new Set(Object.keys(results.sitemaps.urls));
     const collectedURLs = new Set<string>();
-    const pagesToCrawl = Array.from(uniquePages);
+
+    // Build the crawl frontier from the sitemap, deduped on a canonical key
+    // (hash + trailing-slash stripped) so trailing-slash variants of the same
+    // page — and the bare origin vs its root-slash form — are crawled only
+    // ONCE. Without this, a sitemap loc `https://site` and an in-page link to
+    // `/` (normalised to `https://site/`) are treated as two pages, double-
+    // counting every per-page finding and manufacturing a self-cannibalisation
+    // finding for the homepage. The first-seen URL form is kept (so the report
+    // shows whatever convention the sitemap/site actually uses). The shared
+    // key set is threaded through both crawl passes; discovered links consult
+    // it in collectLinks().
+    const crawlFrontierKeys = new Set<string>();
+    const pagesToCrawl: string[] = [];
+    for (const url of uniquePages) {
+      const key = normalizeUrlForComparison(url);
+      if (crawlFrontierKeys.has(key)) continue;
+      crawlFrontierKeys.add(key);
+      pagesToCrawl.push(url);
+    }
 
     // Detect multilanguage site
     let isMultiLang = AuditOrchestrator.#detectMultilanguage(results);
@@ -151,6 +170,7 @@ class AuditOrchestrator {
       pagesToCrawl,
       collectedURLs,
       uniquePages,
+      crawlFrontierKeys,
       results,
       incomingLinksTracking,
       sitemapUrls: results.sitemaps.urls,
@@ -177,6 +197,7 @@ class AuditOrchestrator {
         pagesToCrawl: Array.from(collectedURLs),
         collectedURLs,
         uniquePages,
+        crawlFrontierKeys,
         addMissing: true,
         results,
         incomingLinksTracking,

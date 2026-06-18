@@ -137,6 +137,15 @@ export interface CrawlPagesParams {
   results: CrawlResults;
   incomingLinksTracking: Map<string, Set<string>>;
   sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
+  /**
+   * Canonical-key dedup set (hash + trailing-slash stripped, via
+   * normalizeUrlForComparison) shared across both crawl passes. Prevents the
+   * same page being crawled twice when its sitemap loc and its discovered
+   * in-page link differ only by a trailing slash (e.g. `/foo` vs `/foo/`, or
+   * the bare origin `https://site` vs `https://site/`). Seeded from the sitemap
+   * URLs by the orchestrator; grown as discovered URLs are added.
+   */
+  crawlFrontierKeys: Set<string>;
 }
 
 export interface CrawlResults {
@@ -177,6 +186,8 @@ export interface CrawlSinglePageParams {
   uniqueTitles: Set<string>;
   uniqueDescriptions: Set<string>;
   paginationSeriesCounts: Map<string, number>;
+  /** See CrawlPagesParams.crawlFrontierKeys. */
+  crawlFrontierKeys: Set<string>;
 }
 
 export interface ProcessPageDataParams {
@@ -194,6 +205,8 @@ export interface ProcessPageDataParams {
   uniqueTitles: Set<string>;
   uniqueDescriptions: Set<string>;
   paginationSeriesCounts: Map<string, number>;
+  /** See CrawlPagesParams.crawlFrontierKeys. */
+  crawlFrontierKeys: Set<string>;
 }
 
 export interface CollectLinksParams {
@@ -208,6 +221,8 @@ export interface CollectLinksParams {
   discoveredLinksSource: Map<string, string>;
   sitemapUrls: Record<string, SitemapUrl>;
   paginationSeriesCounts: Map<string, number>;
+  /** See CrawlPagesParams.crawlFrontierKeys. */
+  crawlFrontierKeys: Set<string>;
 }
 
 export interface LinkEntry {

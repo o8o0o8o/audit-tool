@@ -1625,6 +1625,38 @@ void describe('SourcePatternAnalyzer', () => {
     assert.strictEqual(hit?.severity, 'high');
   });
 
+  void it('does NOT flag ssr: false in a client-only widget path (analytics)', () => {
+    // `ssr: false` is the correct pattern for client-only third-party widgets —
+    // the finding text exempts them, so flagging HIGH here is a false positive.
+    const root = fakeRepo(
+      'src/components/Analytics/index.tsx',
+      `import dynamic from 'next/dynamic';\nconst GA = dynamic(() => import('./ga'), { ssr: false });\nexport default function A() { return <GA />; }\n`,
+    );
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['src'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(!find(r.issues, 'ssr: false break SEO'), 'analytics widget ssr:false must not be flagged');
+  });
+
+  void it('still flags ssr: false in a content path even when a widget also uses it', () => {
+    // Mixed repo: a legitimate widget AND a content page both disable SSR. The
+    // content page must still fire; the widget must not inflate the count.
+    const root = fakeRepo(
+      'src/app/page.tsx',
+      `import dynamic from 'next/dynamic';\nconst Body = dynamic(() => import('./Body'), { ssr: false });\nexport default function P() { return <Body />; }\n`,
+    );
+    fs.writeFileSync(
+      path.join(root, 'src/app/tracking.tsx'),
+      `import dynamic from 'next/dynamic';\nconst T = dynamic(() => import('./t'), { ssr: false });\nexport default function T2() { return <T />; }\n`,
+    );
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Next.js', srcDirs: ['src'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    const hit = find(r.issues, 'ssr: false break SEO');
+    assert.ok(hit, 'content-path ssr:false must still fire');
+    assert.ok(hit?.detail?.includes('page.tsx'), 'content example must be cited');
+    assert.ok(!hit?.detail?.includes('tracking.tsx'), 'widget example must be excluded from the finding');
+    assert.ok(hit?.detail?.includes('1 dynamic import'), 'count must exclude the widget');
+  });
+
   void it('flags force-dynamic export', () => {
     const root = fakeRepo(
       'app/icon.tsx',
@@ -2133,11 +2165,29 @@ void describe('SourceMapper — alt detection & key merge', () => {
 
   void it('merges locations when one analysis key matches two mapper substrings', () => {
     const root = fakeTree({ 'app/page.tsx': 'export default ()=> <img src="y" />' });
-    const m = SourceMapper.map({ 'titles that are too short and images without alt text': 1 }, root, { ...NEXT_FI });
+    const m = SourceMapper.map({ 'Title is missing and images without alt text': 1 }, root, { ...NEXT_FI });
     fs.rmSync(root, { recursive: true, force: true });
     const contexts = new Set((Object.values(m)[0] ?? []).map((l) => l.context));
     assert.ok(contexts.has('page without metadata export'), 'title mapper locations must survive');
     assert.ok(contexts.has('image without alt attribute'), 'alt mapper locations must survive');
+  });
+
+  void it('does NOT source-map title/description LENGTH findings (not statically determinable)', () => {
+    // "too short"/"too long" are content-length facts, not structural ones — the
+    // value is composed at runtime/CMS. Mapping them cited "page without metadata
+    // export" and attached the IDENTICAL files to the mutually-exclusive
+    // too-short and too-long findings. Length findings must produce no mapping.
+    const root = fakeTree({ 'app/page.tsx': 'export const metadata = { title: "x" };\nexport default ()=> null' });
+    for (const key of [
+      'Some pages have titles that are too short',
+      'Some pages have titles that are too long',
+      'Some pages have descriptions that are too short',
+      'Some pages have descriptions that are too long',
+    ]) {
+      const m = SourceMapper.map({ [key]: 1 }, root, { ...NEXT_FI });
+      assert.deepStrictEqual(m, {}, `length finding "${key}" must not be source-mapped`);
+    }
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
 

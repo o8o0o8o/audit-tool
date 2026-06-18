@@ -107,12 +107,16 @@ class SourceMapper {
    * Keys are substrings matched against analysis.details keys
    */
   static #ISSUE_MAPPERS = {
+    // Only structural, source-visible facts are mapped. A title/description that
+    // is "too short"/"too long" is a CONTENT-LENGTH fact, not a structural one:
+    // the value is typically composed at runtime (generateMetadata, a CMS field,
+    // a title template) and is not knowable from a static scan. The old length
+    // entries fell through to #mapMissingTitle, which cited "page without
+    // metadata export" — wrong for a title that exists, and identical for the
+    // mutually-exclusive "too short" and "too long" findings. So length findings
+    // are deliberately NOT mapped; only genuinely-missing tags are.
     'Title is missing': SourceMapper.#mapMissingTitle,
-    'titles that are too short': SourceMapper.#mapMissingTitle,
-    'titles that are too long': SourceMapper.#mapMissingTitle,
     'Description meta tag is missing': SourceMapper.#mapMissingDescription,
-    'descriptions that are too short': SourceMapper.#mapMissingDescription,
-    'descriptions that are too long': SourceMapper.#mapMissingDescription,
     'Canonicals are not set': SourceMapper.#mapMissingCanonical,
     'more than one h1 tag': SourceMapper.#mapH1Issues,
     // Substrings must be CONTAINED in the analyzer's emitted message. The schema

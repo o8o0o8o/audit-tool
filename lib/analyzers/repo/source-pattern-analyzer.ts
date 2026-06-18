@@ -44,6 +44,7 @@ const PATTERNS: Array<{
   detail: (findings: PatternFinding[]) => string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   scopeToFiles?: RegExp; // only fire when matched file path matches
+  excludePaths?: RegExp; // drop findings whose file path matches (e.g. legitimate cases)
 }> = [
   {
     id: 'no-store-cache',
@@ -63,6 +64,12 @@ const PATTERNS: Array<{
     detail: (f) =>
       `${f.length} dynamic import(s) explicitly disable SSR. Search engines and the initial paint see no content — only use \`ssr: false\` for client-only widgets, never for main page content.`,
     severity: 'high',
+    // `ssr: false` is the CORRECT pattern for client-only third-party widgets
+    // (analytics, tag managers, chat, consent banners) — the detail text itself
+    // exempts them. Flagging these as HIGH is a false positive, so drop findings
+    // whose path names such a widget. Main-content paths (page/layout/blocks/…)
+    // still fire.
+    excludePaths: /(?:^|[\\/])(?:analytics|tracking|gtm|gtag|google-?tag|tag-?manager|pixel|chat|intercom|drift|crisp|hotjar|fullstory|segment|consent|cookie|widgets?|third-?party)(?:[\\/.-]|$)/i,
   },
   {
     id: 'force-dynamic-export',
@@ -157,7 +164,9 @@ class SourcePatternAnalyzer {
 
     // Emit one issue per pattern that found anything
     for (const pattern of PATTERNS) {
-      const f = findings[pattern.id];
+      const f = pattern.excludePaths
+        ? findings[pattern.id].filter((x) => !pattern.excludePaths!.test(x.file))
+        : findings[pattern.id];
       if (f.length === 0) continue;
 
       const examples = f

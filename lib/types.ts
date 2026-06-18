@@ -1662,6 +1662,10 @@ export interface ParsedArgs {
   noScore: boolean;
   evidence: boolean;
   evidenceCap: number;
+  /** Phase 4 — opt-in competitive content research + content plan. */
+  contentResearch: boolean;
+  /** Comma-separated competitor URLs or a path to a file (one URL per line). Optional — LLM discovers when omitted. */
+  competitors: string | null;
   warnings: string[];
 }
 

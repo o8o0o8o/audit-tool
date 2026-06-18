@@ -6,13 +6,13 @@
 
 _seo_audit_completions() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
-  local opts="--origin= --sitemap= --compare= --compare-sitemap= --proceed --perf --save-html --screenshots --concurrency= --repo= --config= --init-config --open --verbose --heap-size= --ci= --json --exclude= --limit= --dry-run --preset= --webhook= --slack= --sites= --watch= --brand-logo= --brand-name= --generate-ci --validate-config --verify --llm --phase2 --no-phase2 --no-score --evidence --no-evidence --evidence-cap= --version --help"
+  local opts="--origin= --sitemap= --compare= --compare-sitemap= --proceed --perf --save-html --screenshots --concurrency= --repo= --config= --init-config --open --verbose --heap-size= --ci= --json --exclude= --limit= --dry-run --preset= --webhook= --slack= --sites= --watch= --brand-logo= --brand-name= --generate-ci --validate-config --verify --llm --phase2 --no-phase2 --no-score --evidence --no-evidence --evidence-cap= --content-research --competitors= --version --help"
 
   COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
 
   # If completing a file path argument, fall back to file completion
   case "$cur" in
-    --sitemap=*|--compare-sitemap=*|--config=*|--repo=*|--sites=*)
+    --sitemap=*|--compare-sitemap=*|--config=*|--repo=*|--sites=*|--competitors=*)
       local prefix="${cur%%=*}="
       local path="${cur#*=}"
       COMPREPLY=( $(compgen -f -- "$path" | sed "s|^|$prefix|") )

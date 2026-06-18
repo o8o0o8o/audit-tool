@@ -587,6 +587,36 @@ async function audit() {
       }
     }
 
+    // Phase 4 — competitive content research (--content-research). Opt-in and
+    // fully isolated: reads Phase 1 artifacts off disk, crawls a bounded sample
+    // of competitor content, and emits a SEPARATE content-research-report.* set
+    // plus content-research-state.json. A failure here can never lose the audit
+    // or the curated/verified reports. Independent of phase2Succeeded — it does
+    // not depend on the Phase 2 report.
+    if (args.contentResearch === true) {
+      try {
+        const { runContentResearchPhase, parseCompetitorsArg } = await import('./lib/phase4/phase4-runner');
+        const competitors =
+          parseCompetitorsArg(args.competitors).length > 0
+            ? parseCompetitorsArg(args.competitors)
+            : (config.competitors ?? []);
+        await runContentResearchPhase(seo.fileManager.resultsDir, {
+          verbose: args.verbose === true,
+          competitors,
+          // The LLM steps (discovery + plan synthesis) follow the same keyless
+          // transport as the other passes; enabled with --llm, else they no-op
+          // when no transport is reachable.
+          llm: args.llmNarrative === true,
+        });
+      } catch (e: unknown) {
+        console.log('⚠️  Content research phase failed:', (e as Error).message);
+        console.log(
+          `   Re-run with: npx tsx -e "import {runContentResearchPhase} from './lib/phase4/phase4-runner'; runContentResearchPhase('${seo.fileManager.resultsDir}',{verbose:true}).then(p=>console.log(p))"`,
+        );
+        if (args.verbose === true) console.error((e as Error).stack);
+      }
+    }
+
     // LLM usage/cost rollup — captured by the shared tracker across every
     // Phase 2/3 LLM call. Attach to the results for the summary box and persist
     // a standalone ledger. Best-effort: never let accounting break the audit.

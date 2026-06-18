@@ -22,7 +22,14 @@
  * a module singleton is the right scope. `resetLlmUsage()` exists for tests.
  */
 
-export type LlmCategory = 'narrative' | 'anomaly' | 'verify' | 'finding-verify' | 'vision-verify' | 'repo';
+export type LlmCategory =
+  | 'narrative'
+  | 'anomaly'
+  | 'verify'
+  | 'finding-verify'
+  | 'vision-verify'
+  | 'repo'
+  | 'content-research';
 export type LlmTransport = 'api' | 'cli';
 
 /** The Anthropic/CLI `usage` block shape (all fields optional/defensive). */
@@ -65,6 +72,7 @@ export const LLM_CATEGORY_ORDER: LlmCategory[] = [
   'finding-verify',
   'vision-verify',
   'repo',
+  'content-research',
 ];
 
 /** USD per MILLION tokens, by model family. API-path estimates only. */

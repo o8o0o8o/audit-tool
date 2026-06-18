@@ -418,6 +418,17 @@ export function isCrawlerError(issue: string): boolean {
 // Severity sort order for issue prioritization
 export const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
+// Phase 4 — competitive content research bounds. Keep competitor crawling cheap
+// and predictable: cap pages per competitor and the number of competitors.
+export const CONTENT_RESEARCH = {
+  MAX_COMPETITORS: 5, // Max competitor sites analyzed in one run
+  COMPETITOR_MAX_PAGES: 40, // Max pages fetched per competitor
+  COMPETITOR_FETCH_CONCURRENCY: 4, // Parallel competitor page fetches
+  COMPETITOR_PAGE_TIMEOUT_MS: 20_000, // Per-page navigation timeout
+  // Path fragments that signal editorial/content pages worth prioritising.
+  CONTENT_PATH_HINTS: ['/blog', '/article', '/articles', '/guide', '/guides', '/resources', '/learn', '/docs', '/tutorial', '/post', '/news', '/insights'],
+};
+
 // Stop words for text analysis (keyword extraction, anchor text analysis)
 // Core grammatical stop words plus common words that don't carry keyword value
 export const STOP_WORDS = new Set([

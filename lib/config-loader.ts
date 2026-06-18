@@ -27,6 +27,8 @@ interface ConfigRecord {
   };
   excludeUrls?: string[];
   includeUrls?: string[];
+  /** Phase 4 — competitor URLs for competitive content research (optional). */
+  competitors?: string[];
   analysis?: {
     similarityThreshold?: number;
     jsUnusedThreshold?: number;

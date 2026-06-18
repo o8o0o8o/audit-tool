@@ -6460,3 +6460,406 @@ void describe('extractCliUsage', () => {
     assert.deepStrictEqual(extractCliUsage(''), {});
   });
 });
+
+// ============================================================
+// Phase 4 — Competitive Content Research
+// ============================================================
+import { extractTopKeywords, normaliseOrigin } from '../lib/phase4/competitor-crawl';
+import { computeCompetitiveGaps } from '../lib/phase4/competitive-gap';
+import { filterValidCompetitors } from '../lib/phase4/competitor-discovery';
+import { extractJson } from '../lib/phase4/llm-client';
+import type { CompetitorProfile, KeywordInjection } from '../lib/phase4/types';
+
+// Build a minimal PageInfo carrying only the topic signal the gap analyzer reads.
+function cpPage(url: string, words: string[], wordCount = 600): PageInfo {
+  const freq: Record<string, number> = {};
+  for (const w of words) freq[w] = (freq[w] ?? 0) + 1;
+  const topKeywords = Object.entries(freq).map(([word, count]) => ({
+    word,
+    count,
+    density: Number(((count / wordCount) * 100).toFixed(2)),
+  }));
+  return { url, contentQuality: { wordCount, topKeywords } } as unknown as PageInfo;
+}
+
+function mkCompetitor(host: string, pages: Record<string, PageInfo>): CompetitorProfile {
+  return {
+    origin: `https://${host}`,
+    host,
+    pagesCrawled: Object.keys(pages).length,
+    pagesAttempted: Object.keys(pages).length,
+    pages,
+    discovered: false,
+  };
+}
+
+void describe('Phase 4 — extractTopKeywords', () => {
+  void it('filters stop words and short words, ranks by frequency', () => {
+    const kws = extractTopKeywords('the and a kubernetes kubernetes kubernetes deployment deployment cat');
+    const words = kws.map((k) => k.word);
+    assert.ok(!words.includes('the'), 'stop word "the" excluded');
+    assert.ok(!words.includes('cat'), 'short word (<4 chars) "cat" excluded');
+    assert.strictEqual(words[0], 'kubernetes', 'most frequent word ranked first');
+    assert.strictEqual(kws[0].count, 3);
+  });
+
+  void it('is deterministic and caps at 10 keywords', () => {
+    const text = Array.from({ length: 20 }, (_, i) => `term${i} term${i}`).join(' ');
+    const a = extractTopKeywords(text);
+    const b = extractTopKeywords(text);
+    assert.strictEqual(a.length, 10);
+    assert.deepStrictEqual(a, b);
+  });
+
+  void it('returns [] for empty text', () => {
+    assert.deepStrictEqual(extractTopKeywords(''), []);
+    assert.deepStrictEqual(extractTopKeywords('   '), []);
+  });
+});
+
+void describe('Phase 4 — normaliseOrigin', () => {
+  void it('adds https and strips path', () => {
+    assert.strictEqual(normaliseOrigin('example.com'), 'https://example.com');
+    assert.strictEqual(normaliseOrigin('https://example.com/blog/post'), 'https://example.com');
+    assert.strictEqual(normaliseOrigin('http://example.com'), 'http://example.com');
+  });
+  void it('returns null on junk', () => {
+    assert.strictEqual(normaliseOrigin(''), null);
+    assert.strictEqual(normaliseOrigin('not a url with spaces'), null);
+  });
+});
+
+void describe('Phase 4 — computeCompetitiveGaps', () => {
+  // Our site covers "pricing" but NOT "kubernetes"; both competitors cover
+  // "kubernetes" across multiple pages → it must surface as a missing gap.
+  const ourPages: Record<string, PageInfo> = {
+    'https://us.com/pricing': cpPage('https://us.com/pricing', ['pricing', 'pricing', 'pricing', 'plans']),
+  };
+  const compA = mkCompetitor('a.com', {
+    'https://a.com/k8s-1': cpPage('https://a.com/k8s-1', ['kubernetes', 'kubernetes', 'kubernetes', 'cluster'], 1800),
+    'https://a.com/k8s-2': cpPage('https://a.com/k8s-2', ['kubernetes', 'kubernetes', 'cluster', 'cluster']),
+  });
+  const compB = mkCompetitor('b.com', {
+    'https://b.com/k8s': cpPage('https://b.com/k8s', ['kubernetes', 'kubernetes', 'deployment']),
+  });
+
+  void it('surfaces a topic competitors cover that we do not', () => {
+    const gaps = computeCompetitiveGaps(ourPages, [compA, compB]);
+    const k8s = gaps.find((g) => g.keywords.includes('kubernetes'));
+    assert.ok(k8s, 'kubernetes gap detected');
+    assert.strictEqual(k8s!.ourPages, 0);
+    assert.strictEqual(k8s!.gapType, 'missing');
+    assert.ok(k8s!.coveringCompetitors >= 2, 'both competitors counted');
+    assert.ok(k8s!.competitorBestWordCount >= 1800, 'tracks deepest competitor word count');
+  });
+
+  void it('is deterministic (same input → identical ranked output)', () => {
+    const a = computeCompetitiveGaps(ourPages, [compA, compB]);
+    const b = computeCompetitiveGaps(ourPages, [compA, compB]);
+    assert.deepStrictEqual(a, b);
+  });
+
+  void it('returns [] when no competitor has crawled pages', () => {
+    const empty = mkCompetitor('x.com', {});
+    assert.deepStrictEqual(computeCompetitiveGaps(ourPages, [empty]), []);
+  });
+
+  void it('joins injected search volume onto matching gaps and re-ranks', () => {
+    const injection: KeywordInjection = { keywords: [{ term: 'kubernetes', volume: 90000, difficulty: 40 }] };
+    const gaps = computeCompetitiveGaps(ourPages, [compA, compB], injection);
+    const k8s = gaps.find((g) => g.keywords.includes('kubernetes'));
+    assert.ok(k8s, 'gap present');
+    assert.strictEqual(k8s!.searchVolume, 90000);
+    assert.strictEqual(k8s!.difficulty, 40);
+  });
+});
+
+void describe('Phase 4 — filterValidCompetitors (anti-hallucination guard)', () => {
+  void it('drops invalid, private, self, and duplicate hosts', () => {
+    const out = filterValidCompetitors(
+      [
+        'https://good.com',
+        'good.com', // duplicate host (normalised)
+        'http://127.0.0.1', // private host
+        'http://localhost:3000', // private host
+        'not a url', // unparseable
+        42, // non-string
+        'https://us.com', // our own host
+        'ftp://nope.com', // unsupported protocol
+      ],
+      'us.com',
+    );
+    assert.deepStrictEqual(out, ['https://good.com']);
+  });
+
+  void it('caps the list at MAX_COMPETITORS (5)', () => {
+    const many = Array.from({ length: 9 }, (_, i) => `https://c${i}.com`);
+    const out = filterValidCompetitors(many, 'us.com');
+    assert.strictEqual(out.length, 5);
+  });
+});
+
+void describe('Phase 4 — extractJson', () => {
+  void it('parses fenced and prose-wrapped JSON', () => {
+    assert.deepStrictEqual(extractJson('```json\n{"a":1}\n```'), { a: 1 });
+    assert.deepStrictEqual(extractJson('Here you go: {"competitors":["x"]} done'), { competitors: ['x'] });
+    assert.deepStrictEqual(extractJson('[1,2,3]'), [1, 2, 3]);
+  });
+  void it('returns null on unparseable input', () => {
+    assert.strictEqual(extractJson('not json at all'), null);
+    assert.strictEqual(extractJson(null), null);
+  });
+});
+
+// ============================================================
+// Phase 4 — topic-extract (cleaner topic signal)
+// ============================================================
+import { isContentTerm, extractPageTerms, buildTermIndex } from '../lib/phase4/topic-extract';
+
+void describe('Phase 4 — isContentTerm', () => {
+  void it('accepts real content words', () => {
+    for (const w of ['kubernetes', 'marketing', 'content', 'workflows']) {
+      assert.ok(isContentTerm(w), `${w} should be a content term`);
+    }
+  });
+  void it('rejects URL/GTM fragments, code tokens, no-vowel and over-long junk', () => {
+    assert.strictEqual(isContentTerm('srchttpswwwgoogletagmanagercomnshtmlidgtmn3wstxz'), false); // long + http/gtm
+    assert.strictEqual(isContentTerm('https'), false);
+    assert.strictEqual(isContentTerm('const'), false); // code token
+    assert.strictEqual(isContentTerm('await'), false); // code token
+    assert.strictEqual(isContentTerm('bcdfg'), false); // no vowel (y counts as one, so rhythm-like words pass)
+    assert.strictEqual(isContentTerm('the'), false); // stop word / too short
+    assert.strictEqual(isContentTerm('ai'), false); // too short
+  });
+  void it('does not reject ambiguous product words (resource contains "src")', () => {
+    assert.ok(isContentTerm('resource'));
+    assert.ok(isContentTerm('config')); // product word, kept
+  });
+});
+
+void describe('Phase 4 — extractPageTerms', () => {
+  void it('pulls bigrams from title + h1 and filters topKeyword noise', () => {
+    const page = {
+      url: 'https://x.com/p',
+      title: 'Content Modeling Guide',
+      headings: { h1: ['Structured content basics'] },
+      contentQuality: {
+        wordCount: 500,
+        topKeywords: [
+          { word: 'modeling', count: 5, density: 1 },
+          { word: 'srchttpsgtmabc', count: 9, density: 2 }, // GTM junk → dropped
+          { word: 'const', count: 8, density: 1 }, // code token → dropped
+        ],
+      },
+    } as unknown as PageInfo;
+    const terms = extractPageTerms(page);
+    assert.ok(terms.has('content modeling'), 'title bigram present');
+    assert.ok(terms.has('structured content'), 'h1 bigram present');
+    assert.ok(terms.has('modeling'), 'clean topKeyword kept');
+    assert.ok(!terms.has('const'), 'code token dropped');
+    assert.ok(![...terms].some((t) => t.includes('gtm') || t.includes('http')), 'no GTM/URL fragments');
+  });
+});
+
+void describe('Phase 4 — buildTermIndex', () => {
+  void it('maps terms to the set of page URLs', () => {
+    const pages: Record<string, PageInfo> = {
+      'https://x.com/a': { url: 'https://x.com/a', title: 'Kubernetes Guide', headings: { h1: [] }, contentQuality: { wordCount: 100, topKeywords: [] } } as unknown as PageInfo,
+      'https://x.com/b': { url: 'https://x.com/b', title: 'Kubernetes Networking', headings: { h1: [] }, contentQuality: { wordCount: 100, topKeywords: [] } } as unknown as PageInfo,
+    };
+    const idx = buildTermIndex(pages);
+    assert.strictEqual(idx.get('kubernetes')?.urls.size, 2, 'kubernetes appears on both pages');
+    assert.ok(idx.has('kubernetes guide'));
+  });
+});
+
+// ============================================================
+// Phase 4 — scoreGap (opportunity-score spread, #3)
+// ============================================================
+import { scoreGap } from '../lib/phase4/competitive-gap';
+
+void describe('Phase 4 — scoreGap discrimination', () => {
+  void it('ranks a high-signal gap well above a low-signal one', () => {
+    const strong = scoreGap({ gapType: 'missing', competitorPages: 50, coveringCompetitors: 5, competitorBestWordCount: 3600, keywords: ['documentation reference'] });
+    const weak = scoreGap({ gapType: 'depth', competitorPages: 2, coveringCompetitors: 1, competitorBestWordCount: 400, keywords: ['tip'] });
+    assert.ok(strong > weak + 25, `strong (${strong}) should clearly outrank weak (${weak})`);
+  });
+
+  void it('spreads scores across a varied gap set (not all equal)', () => {
+    const gaps = [
+      { gapType: 'missing' as const, competitorPages: 51, coveringCompetitors: 5, competitorBestWordCount: 2800, keywords: ['documentation'] },
+      { gapType: 'missing' as const, competitorPages: 30, coveringCompetitors: 1, competitorBestWordCount: 2789, keywords: ['builder'] },
+      { gapType: 'missing' as const, competitorPages: 12, coveringCompetitors: 2, competitorBestWordCount: 1700, keywords: ['collection'] },
+      { gapType: 'missing' as const, competitorPages: 4, coveringCompetitors: 1, competitorBestWordCount: 1100, keywords: ['workflows'] },
+    ];
+    const scores = gaps.map(scoreGap);
+    assert.strictEqual(new Set(scores).size, scores.length, `expected distinct scores, got ${JSON.stringify(scores)}`);
+  });
+
+  void it('lets injected search volume raise and difficulty lower the score, clamped 0–100', () => {
+    const base = scoreGap({ gapType: 'missing', competitorPages: 10, coveringCompetitors: 2, keywords: ['x'] });
+    const hot = scoreGap({ gapType: 'missing', competitorPages: 10, coveringCompetitors: 2, keywords: ['x'], searchVolume: 90000 });
+    const hard = scoreGap({ gapType: 'missing', competitorPages: 10, coveringCompetitors: 2, keywords: ['x'], searchVolume: 90000, difficulty: 90 });
+    assert.ok(hot > base, 'volume raises score');
+    assert.ok(hard < hot, 'difficulty lowers score');
+    for (const s of [base, hot, hard]) assert.ok(s >= 0 && s <= 100, `clamped: ${s}`);
+  });
+});
+
+// ============================================================
+// Phase 4 — bestTopicLabel (#4 phrase labels)
+// ============================================================
+import { bestTopicLabel, titleCase as p4TitleCase } from '../lib/phase4/topic-extract';
+import type { TermIndexEntry } from '../lib/phase4/topic-extract';
+
+function termIdx(entries: Record<string, number>): Map<string, TermIndexEntry> {
+  const m = new Map<string, TermIndexEntry>();
+  for (const [word, n] of Object.entries(entries)) {
+    m.set(word, { word, urls: new Set(Array.from({ length: n }, (_, i) => `u${i}`)), totalDensity: 0, avgDensity: 0 });
+  }
+  return m;
+}
+
+void describe('Phase 4 — bestTopicLabel', () => {
+  void it('prefers the most-supported on-topic phrase over the bare seed', () => {
+    const idx = termIdx({ content: 9, 'content modeling': 5, 'structured content': 2 });
+    const label = bestTopicLabel('content', ['content', 'content modeling', 'structured content'], idx);
+    assert.strictEqual(label, 'content modeling');
+  });
+  void it('falls back to the seed when the cluster has no phrase', () => {
+    const idx = termIdx({ pricing: 4 });
+    assert.strictEqual(bestTopicLabel('pricing', ['pricing', 'plans'], idx), 'pricing');
+  });
+  void it('is deterministic on ties (support → length → lexical)', () => {
+    // Equal support (3) and equal length (14) → lexical tiebreak decides.
+    const idx = termIdx({ access: 6, 'access control': 3, 'access manager': 3 });
+    const kws = ['access', 'access control', 'access manager'];
+    const a = bestTopicLabel('access', kws, idx);
+    const b = bestTopicLabel('access', [...kws].reverse(), idx);
+    assert.strictEqual(a, b, 'order-independent');
+    assert.strictEqual(a, 'access control', 'equal support+length → lexical first');
+  });
+  void it('titleCase renders phrases for display', () => {
+    assert.strictEqual(p4TitleCase('content modeling'), 'Content Modeling');
+    assert.strictEqual(p4TitleCase('access'), 'Access');
+  });
+});
+
+// ============================================================
+// Phase 4 — applyPlanTopics (#2 LLM topic relabel)
+// ============================================================
+import { applyPlanTopics } from '../lib/phase4/content-synthesis';
+import type { CompetitiveGap, ContentPlanItem } from '../lib/phase4/types';
+
+function mkGap(topic: string): CompetitiveGap {
+  return { topic, keywords: [topic], ourPages: 0, ourBestWordCount: 0, ourExamples: [], competitorPages: 3, coveringCompetitors: 1, competitorBestWordCount: 0, bestCompetitor: null, gapType: 'missing', opportunityScore: 50, examples: [] };
+}
+function mkItem(topic?: string): ContentPlanItem {
+  return { priority: 1, topic, title: 't', targetKeywords: [], rationale: 'r', format: 'f', suggestedWordCount: 1000, brief: 'b' };
+}
+
+void describe('Phase 4 — applyPlanTopics', () => {
+  void it('relabels gaps from the matching plan item topic (1:1, in order)', () => {
+    const gaps = [mkGap('documentation payload'), mkGap('visual development')];
+    applyPlanTopics(gaps, [mkItem('Documentation Reference'), mkItem('Visual Development')]);
+    assert.deepStrictEqual(gaps.map((g) => g.topic), ['Documentation Reference', 'Visual Development']);
+  });
+  void it('keeps the original label when the plan item has no usable topic', () => {
+    const gaps = [mkGap('content modeling'), mkGap('access control')];
+    applyPlanTopics(gaps, [mkItem('   '), mkItem(undefined)]);
+    assert.deepStrictEqual(gaps.map((g) => g.topic), ['content modeling', 'access control']);
+  });
+  void it('handles a shorter plan than gaps without error', () => {
+    const gaps = [mkGap('a topic'), mkGap('b topic')];
+    applyPlanTopics(gaps, [mkItem('A Topic')]);
+    assert.deepStrictEqual(gaps.map((g) => g.topic), ['A Topic', 'b topic']);
+  });
+});
+
+// ============================================================
+// Phase 4 — LLM topic taxonomy (Frontier 2)
+// ============================================================
+import { parseTaxonomy } from '../lib/phase4/topic-taxonomy';
+
+void describe('Phase 4 — parseTaxonomy', () => {
+  void it('parses valid topics, lowercases keywords, dedupes labels', () => {
+    const raw = '```json\n{"topics":[{"label":"Content Modeling","keywords":["Content Modeling","Schema","fields"]},{"label":"Content Modeling","keywords":["dup"]},{"label":"Access Control","keywords":["roles","permissions"]}]}\n```';
+    const t = parseTaxonomy(raw);
+    assert.ok(t);
+    assert.strictEqual(t!.length, 2, 'duplicate label dropped');
+    assert.deepStrictEqual(t![0], { label: 'Content Modeling', keywords: ['content modeling', 'schema', 'fields'] });
+  });
+  void it('drops entries with no label or no keywords; returns null when nothing usable', () => {
+    assert.strictEqual(parseTaxonomy('{"topics":[{"keywords":["x"]},{"label":"No Keywords","keywords":[]}]}'), null);
+    assert.strictEqual(parseTaxonomy('not json'), null);
+    assert.strictEqual(parseTaxonomy(null), null);
+  });
+});
+
+void describe('Phase 4 — computeCompetitiveGaps with LLM topics', () => {
+  // Our site covers "pricing"; competitors cover a "Content Modeling" topic.
+  const ourPages: Record<string, PageInfo> = {
+    'https://us.com/pricing': cpPage('https://us.com/pricing', ['pricing', 'pricing', 'plans']),
+  };
+  const compA = mkCompetitor('a.com', {
+    'https://a.com/modeling': cpPage('https://a.com/modeling', ['modeling', 'modeling', 'schema'], 1500),
+    'https://a.com/schema': cpPage('https://a.com/schema', ['schema', 'fields'], 900),
+  });
+  const compB = mkCompetitor('b.com', { 'https://b.com/structured': cpPage('https://b.com/structured', ['schema', 'structured']) });
+
+  void it('uses the supplied LLM topic label and maps pages by its keywords', () => {
+    const topics = [{ label: 'Content Modeling', keywords: ['modeling', 'schema', 'structured'] }];
+    const gaps = computeCompetitiveGaps(ourPages, [compA, compB], null, topics);
+    const g = gaps.find((x) => x.topic === 'Content Modeling');
+    assert.ok(g, 'topic uses the LLM label verbatim');
+    assert.strictEqual(g!.ourPages, 0, 'we do not cover it');
+    assert.strictEqual(g!.gapType, 'missing');
+    assert.ok(g!.competitorPages >= 2 && g!.coveringCompetitors === 2, 'mapped across both competitors');
+  });
+
+  void it('falls back to lexical clustering when no topics are supplied', () => {
+    const lexical = computeCompetitiveGaps(ourPages, [compA, compB]);
+    assert.ok(lexical.length > 0, 'still produces gaps without LLM topics');
+  });
+});
+
+// ============================================================
+// Phase 4 — create-vs-expand actionability
+// ============================================================
+import { buildContentPlan, resolvePlanActions } from '../lib/phase4/content-plan';
+
+void describe('Phase 4 — create vs expand', () => {
+  function gap(over: Partial<CompetitiveGap>): CompetitiveGap {
+    return { topic: 'content modeling', keywords: ['content modeling', 'schema'], ourPages: 0, ourBestWordCount: 0, ourExamples: [], competitorPages: 5, coveringCompetitors: 2, competitorBestWordCount: 2000, bestCompetitor: 'a.com', gapType: 'missing', opportunityScore: 80, examples: [], ...over };
+  }
+
+  void it('resolvePlanActions: create with no page, expand when we have one', () => {
+    const acts = resolvePlanActions([gap({ ourPages: 0 }), gap({ ourPages: 2, gapType: 'thin', ourBestExample: 'https://us.com/x' })]);
+    assert.strictEqual(acts[0].action, 'create');
+    assert.deepStrictEqual(acts[1], { action: 'expand', targetPage: 'https://us.com/x' });
+  });
+
+  void it('de-dups expand targets: a page is claimed by the highest-priority topic only', () => {
+    // Both gaps map to the same best page; only the first (higher priority) expands it.
+    const acts = resolvePlanActions([
+      gap({ topic: 'a', ourPages: 2, gapType: 'thin', ourBestExample: 'https://us.com/manifesto' }),
+      gap({ topic: 'b', ourPages: 1, gapType: 'thin', ourBestExample: 'https://us.com/manifesto' }),
+    ]);
+    assert.deepStrictEqual(acts[0], { action: 'expand', targetPage: 'https://us.com/manifesto' });
+    assert.strictEqual(acts[1].action, 'create', 'second topic on the same page becomes create');
+    assert.strictEqual(acts[1].targetPage, undefined);
+  });
+
+  void it('buildContentPlan surfaces the target page URL for expand items', () => {
+    const plan = buildContentPlan([
+      gap({ ourPages: 1, gapType: 'thin', ourExamples: ['https://us.com/cms'], ourBestExample: 'https://us.com/cms', ourBestWordCount: 420 }),
+      gap({ topic: 'access control', ourPages: 0 }),
+    ]);
+    assert.strictEqual(plan[0].action, 'expand');
+    assert.strictEqual(plan[0].targetPage, 'https://us.com/cms');
+    assert.ok(plan[0].brief.includes('https://us.com/cms'), 'brief names the page to expand');
+    assert.strictEqual(plan[1].action, 'create');
+    assert.strictEqual(plan[1].targetPage, undefined);
+    assert.ok(/create a new page/i.test(plan[1].brief));
+  });
+});

@@ -155,6 +155,9 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.noScore) childArgs.push('--no-score');
     if (args.evidence === false) childArgs.push('--no-evidence');
     if (args.evidenceCap && args.evidenceCap !== 10) childArgs.push(`--evidence-cap=${args.evidenceCap}`);
+    // Phase 4 — competitive content research runs inside the child too.
+    if (args.contentResearch) childArgs.push('--content-research');
+    if (args.competitors) childArgs.push(`--competitors=${args.competitors}`);
 
     const child = spawn('node', childArgs, {
       stdio: 'inherit',

@@ -5957,3 +5957,126 @@ void describe('phase2: slice-3 evidence', () => {
     assert.match(md, /not in sitemap ✗/);
   });
 });
+
+// ============================================================
+// Repo-specific fix coverage (Tier 1: framework-uniform recommendations)
+// ============================================================
+import { resolveFix } from '../lib/phase2/phase2-runner';
+import { NEXTJS_FIX_OVERRIDES } from '../lib/scoring/nextjs-recommendations';
+
+void describe('uniform fix recommendations', () => {
+  // The legacy one-size-fits-all line that Tier 1 replaced. No resolved fix
+  // should ever equal it again.
+  const LEGACY_FALLBACK =
+    'Review the affected pages listed above and apply the standard best practice for this issue. Prioritise the pages with the highest traffic or business value first.';
+
+  // Authoritative corpus: the deterministic finding messages produced on a real
+  // Next.js audit (siro.ai reference run). Excludes AI-discovered findings,
+  // which carry their own remediation.
+  const REAL_MESSAGES = [
+    'Some pages have too many requests',
+    'Some pages have links without any text',
+    'Empty anchor text',
+    'Some images are significantly larger than their display size',
+    'Pages serve images only as JPG/PNG instead of WebP/AVIF',
+    'Some pages have too many render-blocking resources',
+    'Too many third-party origins',
+    'Low semantic HTML usage',
+    'External scripts missing Subresource Integrity (SRI)',
+    'No author information found',
+    'Large amount of inline JavaScript',
+    'Low text-to-HTML ratio',
+    'Temporary redirect used instead of permanent',
+    'Missing Permissions-Policy header',
+    'Missing cross-origin isolation headers',
+    'Large amount of unused code',
+    'Some pages have LCP more than 2500ms',
+    'Some pages have TBT more than 200ms',
+    'Some pages have descriptions that are too short',
+    'Canonicals are not set for some pages',
+    'Pages have image files larger than recommended',
+    'Excessive third-party payload',
+    'Render-blocking third-party scripts',
+    'Heavy advertising scripts',
+    'LCP image not preloaded',
+    'Some pages have CLS more than 0.1',
+    'Some pages have titles that are too long',
+    'Missing preconnect for font services',
+    'Some pages have titles that are too short',
+    'Some pages have more than one h1 tag',
+    'Form inputs missing autocomplete attribute',
+    'Excessive DOM size',
+    'High percentage of unused CSS',
+    'Some pages have descriptions that are too long',
+    'Description meta tag is missing',
+    'Duplicate page titles found',
+    'Duplicate meta descriptions found',
+    'Low structured data coverage',
+    'Indexable pages missing from sitemap',
+    'Orphan page (no internal links point to it)',
+    'Page has very low internal link equity',
+    'Paginated page has incorrect canonical',
+    'LCP images not preloaded across site',
+    'Most pages lack resource hints',
+  ];
+
+  void it('never resolves to the legacy generic fallback line (generic or Next.js)', () => {
+    for (const msg of REAL_MESSAGES) {
+      for (const isNext of [false, true]) {
+        const { fix } = resolveFix(msg, isNext);
+        assert.ok(fix && fix.trim().length > 0, `empty fix for "${msg}" (next=${isNext})`);
+        assert.notStrictEqual(fix, LEGACY_FALLBACK, `"${msg}" (next=${isNext}) still uses the legacy fallback`);
+      }
+    }
+  });
+
+  void it('gives findings that previously rendered raw HTML on Next.js sites a catalogued, framework-aware fix', () => {
+    // These were the visibly-generic gaps in the siro report: a base catalog
+    // entry existed but no Next.js override, so a raw <img>/<script> example
+    // shipped to a Next.js site. They must now resolve from the catalog.
+    const MUST_BE_NEXT_SPECIFIC = [
+      'Some pages have CLS more than 0.1',
+      'Some pages have LCP more than 2500ms',
+      'Some pages have too many requests',
+      'Some pages have titles that are too long',
+      'Some pages have titles that are too short',
+      'Some pages have descriptions that are too short',
+      'Some pages have more than one h1 tag',
+      'Page has very low internal link equity',
+      'Orphan page (no internal links point to it)',
+      'Paginated page has incorrect canonical',
+      'Low structured data coverage',
+      'Excessive third-party payload',
+    ];
+    for (const msg of MUST_BE_NEXT_SPECIFIC) {
+      const { fix, fromCatalog } = resolveFix(msg, true);
+      assert.ok(fromCatalog, `"${msg}" should resolve from the catalog on Next.js, not the category default`);
+      // Framework-aware: names a Next.js API, or the React/Next units a
+      // component-level fix is expressed in (component, route, JSON-LD).
+      assert.match(
+        fix,
+        /next\/|metadata api|server component|generatemetadata|app router|\bcomponents?\b|\broutes?\b|json-ld/i,
+        `"${msg}" Next.js fix should be framework-aware`,
+      );
+    }
+  });
+
+  void it('Core Web Vitals fixes on Next.js use next/image, not a raw <img> example', () => {
+    for (const msg of ['Some pages have CLS more than 0.1', 'Some pages have LCP more than 2500ms']) {
+      const { example } = resolveFix(msg, true);
+      assert.ok(example, `expected an example for "${msg}"`);
+      assert.doesNotMatch(example!, /<img\b/i, `"${msg}" Next.js example must not use a raw <img>`);
+      assert.match(example!, /next\/image|<Image\b/, `"${msg}" Next.js example should use next/image`);
+    }
+  });
+
+  void it('no catalogued example contains a hardcoded foreign brand', () => {
+    const merged = { ...ScoreCalculator.getFixRecommendations() };
+    for (const [key, rec] of Object.entries(merged)) {
+      if (rec.example) assert.doesNotMatch(rec.example, /FocusReactive/i, `base catalog "${key}" leaks a brand name`);
+    }
+    for (const [key, rec] of Object.entries(NEXTJS_FIX_OVERRIDES)) {
+      if (rec.example) assert.doesNotMatch(rec.example, /FocusReactive/i, `Next.js override "${key}" leaks a brand name`);
+    }
+  });
+});

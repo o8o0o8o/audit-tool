@@ -192,6 +192,54 @@ function lookupRecommendation(message: string, isNextjs = false): FixRecommendat
   return { ...(base ?? {}), ...override } as FixRecommendation;
 }
 
+/**
+ * Category-level default fix, used only when no catalogued recommendation owns
+ * the finding. Replaces the old one-size-fits-all "apply the standard best
+ * practice" sentence: every category resolves to actionable guidance, and on a
+ * Next.js audit that guidance names the idiomatic Next.js mechanism (Metadata
+ * API, next/image, next/dynamic, next/script, …) so fixes read framework-aware
+ * even for kinds that lack a per-message override. This is the floor — explicit
+ * catalog + Next.js overrides still take precedence in `resolveFix`.
+ */
+const DEFAULT_FIX_GENERIC: Record<string, string> = {
+  seo: "Review the affected pages and set the relevant on-page SEO element (title, description, canonical, heading, or structured data) correctly and uniquely per page. Prioritise the highest-traffic or highest-value pages first.",
+  performance: 'Audit the affected pages and trim the offending resources: defer or remove non-critical scripts, optimise and correctly size images, and eliminate render-blocking assets. Prioritise the highest-traffic pages.',
+  accessibility: 'Fix the flagged elements to meet WCAG — add the missing label, alt text, accessible name, or sufficient colour contrast so assistive technology can interpret them.',
+  security: 'Set the missing security header or transport setting at the server / edge so every response is covered, then re-test.',
+  technical: 'Resolve the flagged technical issue (redirects, markup, or build configuration) at its source so the fix applies across the whole site.',
+};
+
+const DEFAULT_FIX_NEXTJS: Record<string, string> = {
+  seo: 'Set this per route with the Next.js Metadata API (`export const metadata` or `generateMetadata` for dynamic routes) so each page declares a unique, correct value; configure `metadataBase` once in the root layout.',
+  performance: 'Address this in the App Router: keep non-interactive UI as Server Components, lazy-load heavy client components with next/dynamic, serve images via next/image, and load third-party tags through next/script with strategy="lazyOnload".',
+  accessibility: 'Fix the flagged elements in their React component so the change applies everywhere the component renders (add the label / alt / aria attribute, or correct the contrast token).',
+  security: 'Set the missing header in next.config.js `headers()` (or middleware) so every route is covered, then re-test.',
+  technical: "Resolve this in the Next.js config or route source (redirects(), route-segment config, or the component) so the fix applies across the build.",
+};
+
+function defaultFix(message: string, isNextjs: boolean): string {
+  const { category } = classifyIssue(stripHtml(message));
+  const table = isNextjs ? DEFAULT_FIX_NEXTJS : DEFAULT_FIX_GENERIC;
+  return table[category] ?? DEFAULT_FIX_GENERIC.seo;
+}
+
+/**
+ * Resolve the Fix text + example for a finding. Returns the catalogued
+ * recommendation when one matches (with Next.js overrides merged in), otherwise
+ * a category-level default — never an empty or one-size-fits-all string.
+ * `fromCatalog` is false when the default kicked in, so callers (and tests) can
+ * tell the difference. Does NOT cover AI-discovered findings, which carry their
+ * own remediation in `detail.recommendation`.
+ */
+export function resolveFix(
+  message: string,
+  isNextjs = false,
+): { fix: string; example?: string; fromCatalog: boolean } {
+  const rec = lookupRecommendation(message, isNextjs);
+  if (rec?.fix) return { fix: rec.fix, example: rec.example, fromCatalog: true };
+  return { fix: defaultFix(message, isNextjs), example: rec?.example, fromCatalog: false };
+}
+
 /** Severity → base impact weight. */
 const SEV_WEIGHT: Record<string, number> = { critical: 100, high: 70, medium: 35, low: 12 };
 /** Catalog tier → multiplier. Notice-tier diagnostics are demoted so a
@@ -1052,9 +1100,9 @@ function buildFindingBlock(
   } else if (recommendation?.fix) {
     lines.push(sanitizeProse(recommendation.fix));
   } else {
-    lines.push(
-      `Review the affected pages listed above and apply the standard best practice for this issue. Prioritise the pages with the highest traffic or business value first.`,
-    );
+    // No catalogued recommendation — fall back to a category-level default
+    // (framework-aware on Next.js audits) rather than a generic boilerplate line.
+    lines.push(sanitizeProse(defaultFix(message, isNextjs)));
   }
   lines.push('');
 

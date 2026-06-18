@@ -23,6 +23,7 @@ const NEXT_DOCS = {
   sitemap: { text: 'Next.js sitemap.ts', url: 'https://nextjs.org/docs/app/api-reference/file-conventions/metadata/sitemap' },
   metadata: { text: 'Metadata API', url: 'https://nextjs.org/docs/app/api-reference/functions/generate-metadata' },
   dynamic: { text: 'next/dynamic (lazy loading)', url: 'https://nextjs.org/docs/app/guides/lazy-loading' },
+  link: { text: 'next/link', url: 'https://nextjs.org/docs/app/api-reference/components/link' },
 };
 
 export const NEXTJS_FIX_OVERRIDES: Record<string, Partial<FixRecommendation>> = {
@@ -174,6 +175,113 @@ export const NEXTJS_FIX_OVERRIDES: Record<string, Partial<FixRecommendation>> = 
     example:
       "// next.config.js — one hop, not a chain\nmodule.exports = {\n  async redirects() {\n    return [{ source: '/a', destination: '/final', permanent: true }];\n  },\n};",
     resources: [NEXT_DOCS.redirects],
+  },
+
+  // ── Core Web Vitals ─────────────────────────────────────────────────────────
+  'Some pages have CLS more than 0.1': {
+    fix: 'Eliminate layout shift in the App Router: give every <Image> explicit width/height (or `fill` with a sized parent), render content-driven banners/embeds server-side or reserve their height in the Suspense fallback, and load fonts with next/font (which reserves metrics) instead of a runtime @font-face.',
+    example:
+      "import Image from 'next/image';\n\n// Reserve space so the streamed-in banner can't push content down\n<Suspense fallback={<div style={{ height: 48 }} />}>\n  <AnnouncementBanner />\n</Suspense>\n\n<Image src=\"/hero.jpg\" alt=\"…\" width={1200} height={630} />",
+    resources: [NEXT_DOCS.image, { text: 'Optimize CLS', url: 'https://web.dev/articles/optimize-cls' }],
+  },
+  'Some pages have LCP more than 2500ms': {
+    fix: 'Render the largest above-the-fold image with next/image and the `priority` prop so Next.js preloads it and skips lazy-loading. Keep the LCP element server-rendered (do not gate it behind a client component) and move render-blocking third-party scripts into next/script.',
+    example: "import Image from 'next/image';\n\n<Image src=\"/hero.jpg\" alt=\"…\" width={1200} height={630} priority />",
+    resources: [NEXT_DOCS.image, { text: 'Optimize LCP', url: 'https://web.dev/articles/optimize-lcp' }],
+  },
+  'LCP images not preloaded across site': {
+    fix: 'Add the `priority` prop to the above-the-fold <Image> in each shared template so Next.js emits the preload automatically — no manual <link rel="preload"> needed.',
+    example: "import Image from 'next/image';\n\n<Image src={hero} alt=\"…\" fill priority />",
+    resources: [NEXT_DOCS.image],
+  },
+  'Some pages have too many requests': {
+    fix: 'Cut request count in the App Router: serve images via next/image (one optimised request instead of many variants), lazy-load below-the-fold client components with next/dynamic, and move third-party tags into next/script so they load after hydration.',
+    example: "import dynamic from 'next/dynamic';\nconst Below = dynamic(() => import('./BelowTheFold'));",
+    resources: [NEXT_DOCS.dynamic],
+  },
+  'Large amount of inline JavaScript': {
+    fix: 'Move inline scripts into next/script with an explicit strategy (afterInteractive / lazyOnload) and keep logic in Server/Client components instead of inline <script> blocks, so Next.js can defer and dedupe it.',
+    example: "import Script from 'next/script';\n\n<Script id=\"init\" strategy=\"afterInteractive\">{`/* … */`}</Script>",
+    resources: [NEXT_DOCS.script],
+  },
+
+  // ── Third-party weight ──────────────────────────────────────────────────────
+  'Excessive third-party payload': {
+    fix: 'Load third-party tags through next/script with strategy="lazyOnload" so they fetch after the page is interactive, lazy-load heavy embeds (video / chat / maps) with next/dynamic on interaction, and drop unused vendors.',
+    example: "import Script from 'next/script';\n\n<Script src=\"https://cdn.vendor.com/widget.js\" strategy=\"lazyOnload\" />",
+    resources: [NEXT_DOCS.script, { text: 'Optimizing 3rd-Party', url: 'https://web.dev/articles/optimizing-third-party-javascript' }],
+  },
+  'Too many third-party origins': {
+    fix: 'Reduce distinct third-party origins: consolidate analytics/marketing tags behind a single loader via next/script, self-host fonts with next/font, and lazy-load embeds with next/dynamic so their origins are only contacted on demand.',
+    example: "import Script from 'next/script';\n\n<Script src=\"https://www.googletagmanager.com/gtm.js?id=GTM-XXXX\" strategy=\"afterInteractive\" />",
+    resources: [NEXT_DOCS.script],
+  },
+  'Heavy advertising scripts': {
+    fix: 'Defer ad / marketing scripts with next/script strategy="lazyOnload" so they never block first paint, and gate consent-dependent tags behind the consent event rather than loading them eagerly.',
+    example: "import Script from 'next/script';\n\n<Script src=\"https://connect.facebook.net/en_US/fbevents.js\" strategy=\"lazyOnload\" />",
+    resources: [NEXT_DOCS.script],
+  },
+
+  // ── Titles & descriptions (length / presence) ───────────────────────────────
+  'Some pages have titles that are too long': {
+    fix: 'Set a concise title per route via the Metadata API (≤60 chars). Use a short title.template brand suffix in the root layout and per-route titles so the suffix is not counted twice into the length.',
+    example:
+      "// app/layout.tsx\nexport const metadata = { title: { template: '%s | Brand', default: 'Brand' } };\n// app/some-route/page.tsx\nexport const metadata = { title: 'Concise, keyword-first title' };",
+    resources: [NEXT_DOCS.metadata],
+  },
+  'Some pages have titles that are too short': {
+    fix: 'Give each route a descriptive ≥30-char title via the Metadata API (or generateMetadata for dynamic routes) instead of a bare label, so it describes the page and uses the available SERP width.',
+    example: "// app/podcast/page.tsx\nexport const metadata = { title: 'Field Sales Podcast — Interviews & Tactics' };",
+    resources: [NEXT_DOCS.metadata],
+  },
+  'Some pages have descriptions that are too short': {
+    fix: 'Set a 120–160 char description per route via the Metadata API. For dynamic routes derive it from the content in generateMetadata so each URL gets a full, unique description.',
+    example:
+      "// app/blog/[slug]/page.tsx\nexport async function generateMetadata({ params }) {\n  const post = await getPost(params.slug);\n  return { description: post.excerpt };\n}",
+    resources: [NEXT_DOCS.metadata],
+  },
+  'Some pages have descriptions that are too long': {
+    fix: 'Trim each route description to ~150–160 chars via the Metadata API so it is not truncated in search results; lead with the unique value of the page.',
+    example: "export const metadata = { description: 'One clear, ~150-char summary of this page.' };",
+    resources: [NEXT_DOCS.metadata],
+  },
+  'Description meta tag is missing': {
+    fix: 'Add a description per route via the Metadata API (generateMetadata for dynamic routes) so every indexable page ships a unique meta description.',
+    example: "export const metadata = { description: 'What this page is about, in ~150 chars.' };",
+    resources: [NEXT_DOCS.metadata],
+  },
+
+  // ── Canonical (pagination) ──────────────────────────────────────────────────
+  'Paginated page has incorrect canonical': {
+    fix: 'In the paginated route (e.g. app/insights/page/[page]/page.tsx) set a self-referential canonical in generateMetadata — each /page/N must canonicalize to itself, not to /page/1 — so paginated content stays indexable.',
+    example:
+      "// app/insights/page/[page]/page.tsx\nexport async function generateMetadata({ params }) {\n  return { alternates: { canonical: `/insights/page/${params.page}` } };\n}",
+    resources: [NEXT_DOCS.metadata],
+  },
+
+  // ── Internal linking ────────────────────────────────────────────────────────
+  'Orphan page (no internal links point to it)': {
+    fix: 'Add internal links to the orphan from related routes using next/link so it is reachable through navigation, not only via the sitemap — or remove the route if it is obsolete.',
+    example: "import Link from 'next/link';\n\n<Link href=\"/guides\">Guides</Link>",
+    resources: [NEXT_DOCS.link],
+  },
+  'Page has very low internal link equity': {
+    fix: 'Add contextual next/link references from authoritative, well-linked routes (hub pages, related posts) to the low-equity pages so internal PageRank flows to them.',
+    example: "import Link from 'next/link';\n\n<Link href=\"/insights/some-post\">Related: Some Post</Link>",
+    resources: [NEXT_DOCS.link],
+  },
+  'Some pages have more than one h1 tag': {
+    fix: 'Ensure each page renders exactly one <h1>. In shared blocks/components use <h2>–<h6>; reserve the single <h1> for the page-level heading owned by the route, not by reusable section components.',
+    example: "// In a reusable block component\n<h2>{title}</h2>  // not <h1> — the route owns the single <h1>",
+    resources: [{ text: 'Heading structure', url: 'https://www.w3.org/WAI/tutorials/page-structure/headings/' }],
+  },
+
+  // ── Structured data ─────────────────────────────────────────────────────────
+  'Low structured data coverage': {
+    fix: 'Emit JSON-LD from your route/layout components (a <script type="application/ld+json"> rendered by a Server Component) — e.g. Article for posts, Organization/WebSite in the root layout — so most pages ship schema.',
+    example:
+      "// In a Server Component\nexport function ArticleJsonLd({ post }) {\n  const data = { '@context': 'https://schema.org', '@type': 'Article', headline: post.title };\n  return <script type=\"application/ld+json\" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />;\n}",
+    resources: [{ text: 'Structured Data', url: 'https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data' }],
   },
 };
 

@@ -2068,13 +2068,25 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
   'Some pages have titles that are too long': {
     effort: '30 minutes',
     fix: 'Trim titles to ~60 characters (≈600px) so Google does not truncate them in the SERP. Front-load the primary keyword, drop redundant boilerplate, and keep the brand suffix short ("| Brand").',
-    example: '<title>Headless CMS Migration Services | FocusReactive</title>',
+    example: '<title>Primary Keyword — Concise Page Topic | Brand</title>',
+    resources: [{ text: 'Title link best practices', url: 'https://developers.google.com/search/docs/appearance/title-link' }],
+  },
+  'Some pages have titles that are too short': {
+    effort: '30 minutes',
+    fix: 'Expand bare titles to ≥30 characters so they describe the page and use the available result width. Add the primary keyword and a short brand suffix; keep one distinct title per page.',
+    example: '<title>SMS Terms of Service — Policies & Opt-Out | Brand</title>',
     resources: [{ text: 'Title link best practices', url: 'https://developers.google.com/search/docs/appearance/title-link' }],
   },
   'Some pages have descriptions that are too long': {
     effort: '30 minutes',
     fix: 'Shorten meta descriptions to ~150-160 characters so they are not cut off in search results. Lead with the page\'s unique value and a call to action; write one distinct description per page.',
-    example: '<meta name="description" content="Migrate to a headless CMS with zero downtime — our team handles content modelling, data migration and Next.js integration.">',
+    example: '<meta name="description" content="One clear, ~150-character summary of this page that leads with its unique value and ends with a call to action.">',
+    resources: [{ text: 'Meta descriptions', url: 'https://developers.google.com/search/docs/appearance/snippet' }],
+  },
+  'Some pages have descriptions that are too short': {
+    effort: '30 minutes',
+    fix: 'Expand thin meta descriptions to 120-160 characters so they fully describe the page and use the available SERP space. Lead with the page\'s unique value; write one distinct description per page.',
+    example: '<meta name="description" content="A full 120–160 character summary that describes this page\'s unique value and what the visitor will get.">',
     resources: [{ text: 'Meta descriptions', url: 'https://developers.google.com/search/docs/appearance/snippet' }],
   },
   'Multiple pages target the same keyword in their titles': {

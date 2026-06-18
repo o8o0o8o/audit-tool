@@ -1091,6 +1091,13 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'Audit thin pages and consolidate or expand them.',
     resources: [],
   },
+  'Spelling errors detected': {
+    effort: '30 minutes',
+    fix: 'Proofread the flagged copy and correct the misspellings in the source content (CMS entry or component text). Add a spell-check step to your editorial/PR workflow to catch them before publish.',
+    resources: [
+      { text: 'cspell', url: 'https://cspell.org/' },
+    ],
+  },
   'pages have near-duplicate content': {
     effort: '2-4 hours',
     fix: 'Pages with high text overlap. Either canonical to the master version, merge, or differentiate the content.',

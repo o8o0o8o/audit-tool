@@ -162,14 +162,14 @@ class CriticalPathAnalyzer {
       });
     }
 
-    // Large HTML document
-    if (criticalPathData.documentSize > THRESHOLDS.DOCUMENT_SIZE_WARNING) {
-      warnings.push({
-        message: 'Large HTML document',
-        detail: `HTML document is ${formatBytes(criticalPathData.documentSize)}. Large documents increase time to first byte and parsing time.`,
-        severity: SEVERITY.MEDIUM,
-      });
-    }
+    // NOTE: "Large HTML document" is intentionally NOT emitted here. The
+    // technical-seo analyzer owns that finding at a meaningful >1MB threshold
+    // (matching the report's benchmark text). Emitting it here too — at the much
+    // lower DOCUMENT_SIZE_WARNING (100KB) — collided under the identical title,
+    // merging two analyzers into one finding that flagged ~every page while the
+    // benchmark still read ">1MB". The 100KB document-size signal lives on in
+    // `criticalPathData` for the per-page table; it is no longer a standalone
+    // finding.
 
     // Generate recommendations
     criticalPathData.recommendations = this.#generateRecommendations(criticalPathData);

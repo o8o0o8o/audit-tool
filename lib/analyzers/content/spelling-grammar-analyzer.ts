@@ -50,7 +50,6 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   wierd: 'weird',
   freind: 'friend',
   foriegn: 'foreign',
-  seize: 'seize',
 
   // Silent letters and unusual spelling
   definately: 'definitely',
@@ -83,7 +82,6 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   analisis: 'analysis',
   compatability: 'compatibility',
   configuraton: 'configuration',
-  customise: 'customize', // Not a misspelling in UK English, but flagging for awareness
   functonality: 'functionality',
   managment: 'management',
   performace: 'performance',
@@ -102,7 +100,6 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   beautifull: 'beautiful',
   buisness: 'business',
   catagory: 'category',
-  changeable: 'changeable',
   collegue: 'colleague',
   colum: 'column',
   comittee: 'committee',
@@ -132,7 +129,6 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   lightening: 'lightning',
   manuever: 'maneuver',
   medeval: 'medieval',
-  memento: 'memento',
   minature: 'miniature',
   miscellanous: 'miscellaneous',
   mischevious: 'mischievous',
@@ -192,15 +188,23 @@ class SpellingGrammarAnalyzer {
       totalWords: number;
       misspellings: { word: string; correction: string; count: number }[];
       totalMisspellings: number;
+      language: string | null;
+      skipped?: 'non-english';
     } = {
       totalWords: 0,
       misspellings: [],
       totalMisspellings: 0,
+      language: null,
     };
 
     try {
-      // Extract visible text from the page
-      const pageText = await chromePage.evaluate(() => {
+      // Extract visible text + the document language. The dictionary below is
+      // English-only, so running it against non-English copy produces false
+      // positives (e.g. the common French/Spanish word "que" flagged as a
+      // misspelling of "queue"). Read the declared <html lang> and skip the
+      // check on pages that are explicitly not English; pages with no lang
+      // attribute are treated as best-effort English.
+      const { text: pageText, lang } = await chromePage.evaluate(() => {
         // Get visible text content, excluding scripts, styles, and hidden elements
         const excludeSelectors = 'script, style, noscript, code, pre, [aria-hidden="true"]';
         const bodyClone = document.body.cloneNode(true) as HTMLElement;
@@ -208,8 +212,20 @@ class SpellingGrammarAnalyzer {
         // Remove excluded elements
         bodyClone.querySelectorAll(excludeSelectors).forEach((el) => el.remove());
 
-        return bodyClone.textContent || '';
+        return {
+          text: bodyClone.textContent ?? '',
+          lang: (document.documentElement.getAttribute('lang') ?? '').trim().toLowerCase(),
+        };
       });
+
+      info.language = lang || null;
+
+      // Gate to English content: a declared non-English language disables the
+      // English misspelling dictionary entirely.
+      if (lang && !lang.startsWith('en')) {
+        info.skipped = 'non-english';
+        return { issues, warnings, info };
+      }
 
       // Tokenize into words
       const words = pageText
@@ -225,7 +241,9 @@ class SpellingGrammarAnalyzer {
 
       for (const word of words) {
         const correction = COMMON_MISSPELLINGS[word];
-        if (correction) {
+        // Guard against degenerate dictionary entries that map a word to itself
+        // (a real word would otherwise be flagged as its own misspelling).
+        if (correction && correction !== word) {
           if (!misspellingCounts[word]) {
             misspellingCounts[word] = { correction, count: 0 };
           }

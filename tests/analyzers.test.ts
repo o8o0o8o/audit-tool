@@ -6238,6 +6238,18 @@ void describe('uniform fix recommendations', () => {
     }
   });
 
+  void it('spelling findings resolve to a proofreading fix, not the Next.js redirects() default', () => {
+    // Regression: "Spelling errors detected (N instances)" had no catalog entry
+    // and classified as `technical`, so it inherited DEFAULT_FIX_NEXTJS.technical
+    // ("Resolve this in the Next.js config or route source (redirects()…)").
+    for (const isNext of [false, true]) {
+      const { fix, fromCatalog } = resolveFix('Spelling errors detected (54 instances)', isNext);
+      assert.ok(fromCatalog, 'spelling should resolve from the catalog, not the category default');
+      assert.match(fix, /proofread|spell[- ]?check|misspell/i, 'spelling fix should be about proofreading');
+      assert.doesNotMatch(fix, /redirects?\(\)|metadata api/i, 'spelling fix must not be the redirect/metadata default');
+    }
+  });
+
   void it('Core Web Vitals fixes on Next.js use next/image, not a raw <img> example', () => {
     for (const msg of ['Some pages have CLS more than 0.1', 'Some pages have LCP more than 2500ms']) {
       const { example } = resolveFix(msg, true);

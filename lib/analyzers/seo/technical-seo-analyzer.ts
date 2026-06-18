@@ -319,16 +319,39 @@ class TechnicalSEOAnalyzer {
     const contentIframes: string[] = [];
 
     for (const iframe of iframes) {
-      const src = iframe.getAttribute('src') ?? '';
+      const src = (iframe.getAttribute('src') ?? '').trim();
       const width = iframe.getAttribute('width');
       const height = iframe.getAttribute('height');
+      const style = (iframe.getAttribute('style') ?? '').toLowerCase();
 
+      // Skip iframes with no real src: JS-injected functional frames
+      // (consent managers, reCAPTCHA challenges, chat widgets, payment SDKs)
+      // mount an empty/about:blank iframe that holds no crawlable page content.
+      if (!src || /^about:blank$/i.test(src)) continue;
       // Skip small iframes (tracking pixels, widgets)
       if ((width && parseInt(width) < 100) || (height && parseInt(height) < 100)) continue;
-      // Skip known non-content iframes
-      if (/google.*maps|youtube|vimeo|recaptcha|facebook.*plugin|twitter/i.test(src)) continue;
+      if (width === '0' || height === '0') continue;
+      // Skip hidden iframes — not indexable content regardless of src.
+      if (
+        iframe.hasAttribute('hidden') ||
+        iframe.getAttribute('aria-hidden') === 'true' ||
+        /display\s*:\s*none|visibility\s*:\s*hidden/.test(style)
+      ) {
+        continue;
+      }
+      // Skip known non-content iframes: media embeds, maps, social plugins,
+      // consent/CMP, tag managers, analytics/ads, chat & support widgets,
+      // forms/marketing, and payment/captcha SDKs. None of these contain
+      // indexable page content the parent route should be ranking on.
+      if (
+        /google\.com\/maps|maps\.google|youtube|youtu\.be|vimeo|dailymotion|wistia|loom|spotify|soundcloud|recaptcha|hcaptcha|turnstile|challenges\.cloudflare|googletagmanager|gtm\.js|doubleclick|googleadservices|googlesyndication|google-analytics|facebook\.com\/plugins|connect\.facebook|platform\.twitter|twitter\.com\/widgets|instagram\.com|linkedin\.com|tiktok\.com|onetrust|cookielaw|cookiebot|usercentrics|trustarc|hubspot|hsforms|hs-sites|salesforce|force\.com|pardot|marketo|calendly|typeform|intercom|drift|tawk|crisp\.chat|zendesk|livechat|hotjar|disqus|paypal|stripe|braintree/i.test(
+          src,
+        )
+      ) {
+        continue;
+      }
 
-      contentIframes.push(src || '(no src)');
+      contentIframes.push(src);
     }
 
     if (contentIframes.length > 0) {

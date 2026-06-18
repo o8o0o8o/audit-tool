@@ -667,8 +667,14 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   // ran with --perf) so live perf signals (TTFB/CLS/TBT) are comparable.
   const throttle = loadCrawlThrottle(artifacts.runDir);
 
+  // Persisted full-crawl link/sitemap graph: lets the live pass adjudicate
+  // orphan / unreachable / click-depth / low-link-equity / sitemap-membership
+  // findings against the WHOLE crawl instead of a bounded 120-page live BFS
+  // (which left them `unverified` on large sites). Undefined → live BFS fallback.
+  const siteData = loadSiteData(artifacts.runDir, loadAllPages(artifacts.runDir)) ?? undefined;
+
   console.log("🔎 Live verification: re-fetching each finding's example(s) and re-asserting the claim…");
-  const { verdicts, signalsByUrl } = await verifyReportLive(reportMd, { verbose: state.verbose, throttle });
+  const { verdicts, signalsByUrl } = await verifyReportLive(reportMd, { verbose: state.verbose, throttle, siteData });
 
   // Map parsed report titles → in-memory finding messages. The renderer emits
   // `### ${sanitizeProse(message)}`, so a parsed title equals

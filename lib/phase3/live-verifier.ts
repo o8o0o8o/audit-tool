@@ -358,6 +358,26 @@ export interface LiveSignals {
   consoleErrors: number;
   /** True when an author byline / author markup is present (E-E-A-T author signal). */
   hasAuthorByline: boolean;
+  /** HTTP redirect hops the navigation followed to reach `finalUrl` (0 = direct).
+   *  Server-issued but can vary by geo/cookie/Accept-Language → confirm-only. */
+  redirectCount: number;
+  /** True when the document head declares `<link rel="preload" as="image">`
+   *  (an LCP-image preload). Server-rendered + stable. */
+  hasImagePreload: boolean;
+  /** Total `<a href>` anchors on the page (for the "too many on-page links"
+   *  check). Under-observable upward — links can hydrate → confirm-only. */
+  totalLinkCount: number;
+  /** Affiliate-looking outbound links missing BOTH rel="sponsored" and
+   *  rel="nofollow" (mirrors ExternalLinksAnalyzer.isAffiliateLink). Confirm-only:
+   *  links can hydrate, so absence at load isn't proof. */
+  affiliateLinksNoRel: number;
+  /** True when the page declares a `noindex` directive — `<meta name="robots">`
+   *  (or `googlebot`) with `noindex`. The X-Robots-Tag header form is checked
+   *  separately from `headers`. Server-rendered + stable → confirm AND refute. */
+  hasNoindexMeta: boolean;
+  /** Total bytes of all downloaded images (sum of image responseBodySize).
+   *  Load-dependent (lazy/below-fold images), so confirm-only via overOrUnsure. */
+  totalImageBytes: number;
 }
 
 /**
@@ -504,6 +524,19 @@ async function captureOne(
     const status = response.status();
     const finalUrl = response.url();
     const pageHost = new URL(finalUrl).hostname;
+
+    // Count the HTTP redirect hops that led to this response (3xx chain). Walk
+    // the request's redirect ancestry; 0 means a direct (non-redirected) load.
+    let redirectCount = 0;
+    try {
+      let prev = response.request().redirectedFrom();
+      while (prev) {
+        redirectCount++;
+        prev = prev.redirectedFrom();
+      }
+    } catch {
+      /* leave 0 → redirect-chain checker stays unverified, never a false drop */
+    }
 
     // Main-document response headers (lowercased keys), for the Slice 2 header
     // checkers. Stable + server-rendered, so they confirm AND refute.
@@ -656,6 +689,12 @@ async function captureOne(
       const canonicalEl = document.querySelector('link[rel="canonical"]');
       const descEl = document.querySelector('meta[name="description"]');
 
+      // noindex via a robots / googlebot meta directive (the X-Robots-Tag header
+      // form is checked from the response headers in the checker).
+      const hasNoindexMeta = Array.from(
+        document.querySelectorAll('meta[name="robots" i], meta[name="googlebot" i]'),
+      ).some((m) => /\bnoindex\b/i.test(m.getAttribute('content') ?? ''));
+
       // `<main>` landmark (the "Missing <main> element" finding). role="main"
       // counts as an equivalent landmark.
       const mainCount = document.querySelectorAll('main, [role="main"]').length;
@@ -665,6 +704,11 @@ async function captureOne(
       const resourceHintCount = document.querySelectorAll(
         'link[rel~="preconnect" i], link[rel~="preload" i], link[rel~="dns-prefetch" i], link[rel~="prefetch" i], link[rel~="modulepreload" i]',
       ).length;
+
+      // LCP-image preload: a `<link rel="preload" as="image">` (covers both
+      // href and imagesrcset responsive preloads). The "LCP images not preloaded"
+      // finding asks whether this exists.
+      const hasImagePreload = !!document.querySelector('link[rel~="preload" i][as="image" i]');
 
       // Privacy-policy links: href OR visible text mentions "privacy".
       let privacyLinkCount = 0;
@@ -756,14 +800,39 @@ async function captureOne(
         if (!v.querySelector('track[kind="captions"], track[kind="subtitles"]')) videosWithoutCaptions++;
       }
 
-      // Same-origin (internal) anchors — for the dead-end-page check.
-      let internalLinkCount = 0;
-      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+      // Same-origin (internal) anchors — for the dead-end-page check. Also count
+      // ALL anchors (totalLinkCount → "too many on-page links") and affiliate
+      // links missing rel=sponsored/nofollow (→ "Affiliate link without
+      // sponsored/nofollow"). isAffiliate mirrors ExternalLinksAnalyzer.
+      const isAffiliate = (href: string): boolean => {
+        if (/shareasale|cj\.com|rakuten|awin|impact\.com|clickbank|partnerize/i.test(href)) return true;
+        let parsed: URL;
         try {
-          if (new URL(a.getAttribute('href') ?? '', location.href).origin === origin) internalLinkCount++;
+          parsed = new URL(href, location.href);
+        } catch {
+          return false;
+        }
+        if (/(?:^|\.)amazon\./i.test(parsed.hostname) && parsed.searchParams.has('tag')) return true;
+        for (const [key, value] of parsed.searchParams) {
+          const k = key.toLowerCase();
+          if (k === 'affiliate' || k === 'aff' || k === 'affid' || k === 'aff_id') return true;
+          if (k === 'utm_source' && /affiliate/i.test(value)) return true;
+        }
+        return /\/(?:affiliate|aff|partner)\//i.test(parsed.pathname);
+      };
+      let internalLinkCount = 0;
+      let totalLinkCount = 0;
+      let affiliateLinksNoRel = 0;
+      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+        totalLinkCount++;
+        const href = a.getAttribute('href') ?? '';
+        try {
+          if (new URL(href, location.href).origin === origin) internalLinkCount++;
         } catch {
           /* malformed href — ignore */
         }
+        const rel = (a.getAttribute('rel') ?? '').toLowerCase();
+        if (isAffiliate(href) && !/\bsponsored\b/.test(rel) && !/\bnofollow\b/.test(rel)) affiliateLinksNoRel++;
       }
 
       return {
@@ -786,6 +855,7 @@ async function captureOne(
         oversizedImages,
         mainCount,
         resourceHintCount,
+        hasImagePreload,
         privacyLinkCount,
         eeatSignals,
         hasAuthorByline,
@@ -800,6 +870,9 @@ async function captureOne(
         videoCount,
         videosWithoutCaptions,
         internalLinkCount,
+        totalLinkCount,
+        affiliateLinksNoRel,
+        hasNoindexMeta,
       };
     });
 
@@ -870,6 +943,7 @@ async function captureOne(
         .filter((r) => r.type === 'script' && AD_HOST_RE.test(r.host))
         .reduce((n, r) => n + r.bytes, 0),
       largestImageBytes: imageBytes.length ? Math.max(...imageBytes) : 0,
+      totalImageBytes: imageBytes.reduce((n, b) => n + b, 0),
       oversizedImages: dom.oversizedImages,
       clsValue: vitals.cls,
       tbtMs: vitals.tbt,
@@ -901,6 +975,11 @@ async function captureOne(
       fontBytes: fontReqs.reduce((n, r) => n + r.bytes, 0),
       consoleErrors,
       hasAuthorByline: dom.hasAuthorByline,
+      redirectCount,
+      hasImagePreload: dom.hasImagePreload,
+      totalLinkCount: dom.totalLinkCount,
+      affiliateLinksNoRel: dom.affiliateLinksNoRel,
+      hasNoindexMeta: dom.hasNoindexMeta,
     };
   } catch {
     return null;
@@ -1055,6 +1134,44 @@ const CHECKERS: LiveChecker[] = [
     check: (s) => (s.canonical ? refuted(`canonical present: ${s.canonical}`) : confirmed('no canonical link on page')),
   },
   {
+    // "Some loc and canonical don't match" — the cited URL IS the sitemap loc;
+    // compare it against the page's live canonical. Server-rendered + stable, so
+    // confirm AND refute (multi-occurrence refutes are downgraded by the sampling
+    // aggregator). A page with NO canonical is the separate "missing canonical"
+    // finding (handled above + matched first), so here an absent canonical is
+    // inconclusive, never a refute. normUrl equalizes trailing-slash/fragment so
+    // a cosmetic-only difference isn't reported as a mismatch.
+    kind: 'canonical-mismatch',
+    match: (t) => /canonical/.test(t) && /(match|differ)/.test(t),
+    check: (s) => {
+      if (!s.canonical)
+        return unverifiable(
+          'no canonical on the page now — a missing canonical is a separate finding, not a loc/canonical mismatch',
+          'inconclusive',
+        );
+      const loc = s.url ?? s.finalUrl;
+      return normUrl(s.canonical) !== normUrl(loc)
+        ? confirmed(`canonical (${s.canonical}) does not match the page URL (${loc})`)
+        : refuted(`canonical matches the page URL (${s.canonical})`);
+    },
+  },
+  {
+    // "Multiple redirects detected" / "Pages sit behind a long redirect chain":
+    // the cited URL is the chain head; count the live redirect hops. Confirm-only
+    // — a 3xx chain can be geo / cookie / Accept-Language dependent (i18n sites),
+    // and the report's chain representation is fuzzy, so a short chain on this
+    // fetch is not enough to drop the finding. ≥2 hops confirms.
+    kind: 'redirect-chain',
+    match: (t) => /multiple redirects|redirect chain|long redirect/.test(t),
+    check: (s) =>
+      s.redirectCount >= 2
+        ? confirmed(`navigation followed ${s.redirectCount} redirect hops`)
+        : unverifiable(
+            `navigation followed ${s.redirectCount} redirect hop(s) on this fetch; redirect chains vary with geo/cookies/Accept-Language — not dropping`,
+            'volatile',
+          ),
+  },
+  {
     kind: 'render-blocking-third-party',
     match: (t) => /render-?blocking/.test(t) && /third-?party/.test(t),
     check: (s) =>
@@ -1152,6 +1269,15 @@ const CHECKERS: LiveChecker[] = [
     check: (s) => overOrUnsure(s.largestImageBytes, THRESHOLDS.IMAGE_SIZE_MAX, 'largest image', ' bytes'),
   },
   {
+    // "Some pages have excessive total image size" — sum of all image bytes vs
+    // TOTAL_IMAGE_SIZE_MAX. Load-dependent (lazy/below-fold images), so confirm-only
+    // via overOrUnsure. Placed after large-image-files (per-image) so the
+    // total-size wording is owned distinctly.
+    kind: 'total-image-size',
+    match: (t) => /total image size|excessive total image/.test(t),
+    check: (s) => overOrUnsure(s.totalImageBytes, THRESHOLDS.TOTAL_IMAGE_SIZE_MAX, 'total image size', ' bytes'),
+  },
+  {
     kind: 'legacy-image-format',
     match: (t) => /(jpg|png).*(webp|avif)|webp\/avif|images only as/.test(t),
     check: (s) =>
@@ -1159,6 +1285,21 @@ const CHECKERS: LiveChecker[] = [
         s.jpgPngImages > 0,
         `${s.jpgPngImages} JPG/PNG image(s) served (${s.modernImages} modern)`,
         'no JPG/PNG images at load — lazy images may be unmeasured; not dropping',
+      ),
+  },
+  {
+    // "Affiliate link without sponsored/nofollow" — the cited page is scanned for
+    // affiliate-looking outbound links (mirrors ExternalLinksAnalyzer) missing
+    // BOTH rel=sponsored and rel=nofollow. Confirm-only: links can hydrate, so
+    // absence at load isn't proof; never refuted. MUST precede `empty-anchor`,
+    // whose `/links? without/` matcher would otherwise claim "…link without…".
+    kind: 'affiliate-link',
+    match: (t) => /affiliate link/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.affiliateLinksNoRel > 0,
+        `${s.affiliateLinksNoRel} affiliate link(s) without rel=sponsored/nofollow`,
+        'no unmarked affiliate links at load — links may hydrate; not dropping',
       ),
   },
   {
@@ -1243,6 +1384,34 @@ const CHECKERS: LiveChecker[] = [
         THRESHOLDS.DESCRIPTION_MIN,
         THRESHOLDS.DESCRIPTION_MAX,
       ),
+  },
+  {
+    // "Description meta tag is missing" — the `<meta name="description">` is
+    // server-rendered, so this confirms AND refutes (plural-guarded). Placed AFTER
+    // description-length, whose "too short/long" matcher is disjoint from "missing".
+    kind: 'missing-description',
+    match: (t) => /description/.test(t) && /(missing|not set|without|absent|no meta description)/.test(t),
+    check: (s) =>
+      s.description
+        ? refuted(`meta description present (${s.description.length} chars)`)
+        : confirmed('no meta description on the page'),
+  },
+  {
+    // "Pages in sitemap are marked noindex" / "Page is noindexed": a noindex
+    // directive via `<meta name="robots">` OR the X-Robots-Tag header. Both are
+    // server-rendered + stable → confirm AND refute (plural-guarded). Distinct
+    // from `x-robots-noindex` (registered below): that one matches only the
+    // header-specific wording (`/x-robots-tag/ && /noindex/`), which this matcher
+    // does not catch, so the two don't shadow each other regardless of order;
+    // this owns the meta-robots / sitemap-noindex findings.
+    kind: 'noindex',
+    match: (t) => /marked noindex|in sitemap.*noindex|noindex directive|page is noindex|noindexed/.test(t),
+    check: (s) => {
+      const headerNoindex = /noindex/i.test(s.headers['x-robots-tag'] ?? '');
+      return s.hasNoindexMeta || headerNoindex
+        ? confirmed(`page declares noindex (${s.hasNoindexMeta ? 'meta robots' : 'X-Robots-Tag header'})`)
+        : refuted('no noindex directive (meta robots or X-Robots-Tag) on the page now');
+    },
   },
   {
     // "Missing <main> element" / "has no landmark". `<main>` (or role="main") is
@@ -1432,6 +1601,24 @@ const CHECKERS: LiveChecker[] = [
         'site-level',
       ),
   },
+  {
+    // "LCP images not preloaded across site" — a site-wide claim that cites no
+    // per-page URL, so it runs against the resolved homepage (siteWidePage).
+    // Must precede the `vitals` checker, whose /\blcp\b/ matcher would otherwise
+    // claim it. Confirm-only: a homepage that DOES preload its LCP image can't
+    // refute a "most pages don't" claim. The preload `<link>` is server-rendered
+    // and stable, so its absence on the homepage is a solid confirmation.
+    kind: 'lcp-preload',
+    siteWidePage: true,
+    match: (t) => /lcp/.test(t) && /preload/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        !s.hasImagePreload,
+        'homepage declares no <link rel="preload" as="image"> for the LCP image',
+        'homepage has an LCP-image preload; a site-wide "not preloaded across site" claim can\'t be refuted from one page — not dropping',
+        'site-level',
+      ),
+  },
   // Site-level / cross-page / instrumentation-only kinds: a single live page
   // load cannot adjudicate these. Marked noFetch (the orchestrator skips the
   // fetch) and reported as `unverified` with the reason.
@@ -1473,6 +1660,33 @@ const CHECKERS: LiveChecker[] = [
     check: () =>
       unverifiable(
         'cross-page topic / coverage aggregate (computed over the whole crawl) — not derivable from a single live page; use the offline or LLM verification pass',
+        'site-level',
+      ),
+  },
+  {
+    // "A notable share of pages have near-duplicate content" — a cross-page
+    // shingle-similarity aggregate (ContentSimilarityAnalyzer) over the whole
+    // crawl. Owned (not a "no live checker" gap) and routed to the offline/LLM pass.
+    kind: 'near-duplicate-content',
+    noFetch: true,
+    match: (t) => /near-duplicate content|near duplicate content|notable share.*near-duplicate/.test(t),
+    check: () =>
+      unverifiable(
+        'cross-page near-duplicate-content aggregate (shingle similarity over the whole crawl) — not derivable from a single live page',
+        'site-level',
+      ),
+  },
+  {
+    // "Low AI content structure score" — a per-page AEO composite (headings,
+    // lists, Q&A, semantic ratio, …) aggregated site-wide. A single live load
+    // can't reproduce the score; owned and routed to the offline/LLM pass rather
+    // than the "no live checker" gap.
+    kind: 'ai-content-structure',
+    noFetch: true,
+    match: (t) => /ai content structure|content structure score/.test(t),
+    check: () =>
+      unverifiable(
+        'AEO content-structure score is a composite per-page/site-wide aggregate — not settled by a single live load; use the offline or LLM pass',
         'site-level',
       ),
   },
@@ -1548,10 +1762,47 @@ const CHECKERS: LiveChecker[] = [
     },
   },
   {
+    // "Session ID detected in URL" — the cited URL is deterministic, so this
+    // confirms AND refutes against the flagged URL. Mirrors the analyzer's exact
+    // detection (UrlArchitectureAnalyzer): a session-keyword QUERY PARAM key, or a
+    // path-embedded `…sid=` assignment — NOT a bare substring, so ordinary words
+    // like "resident"/"residential" (which contain "sid") correctly refute,
+    // catching that stale false positive. Plural-guarded by the sampler.
+    kind: 'session-id',
+    match: (t) => /session\s?id/.test(t),
+    check: (s, f) => {
+      const u = s.url ?? s.finalUrl ?? f.exampleUrl ?? '';
+      let parsed: URL;
+      try {
+        parsed = new URL(u);
+      } catch {
+        return unverifiable('cited URL is unparseable', 'inconclusive');
+      }
+      const params = ['sessionid', 'session_id', 'sid', 'phpsessid', 'jsessionid', 'aspsessionid'];
+      const set = new Set(params);
+      const hasQueryParam = [...parsed.searchParams.keys()].some((k) => set.has(k.toLowerCase()));
+      const pathPattern = new RegExp(`(?:^|[/;,&?])(?:${params.join('|')})=`, 'i');
+      return hasQueryParam || pathPattern.test(parsed.pathname)
+        ? confirmed('URL carries a session-id parameter')
+        : refuted(`URL has no session-id parameter (${parsed.pathname}${parsed.search})`);
+    },
+  },
+  {
+    // "Too many on-page links" — total anchor count vs LINKS_PER_PAGE_WARNING.
+    // Confirm-only via overOrUnsure: the count can only GROW as JS-injected links
+    // hydrate, so under-threshold at load isn't enough to drop the finding.
+    kind: 'too-many-links',
+    match: (t) => /too many on-page links/.test(t),
+    check: (s) => overOrUnsure(s.totalLinkCount, THRESHOLDS.LINKS_PER_PAGE_WARNING, 'on-page links'),
+  },
+  {
     // Form controls without an accessible label / placeholder-as-label. Confirm-only:
     // forms can hydrate after load, so absence at load isn't proof.
     kind: 'form-labels',
-    match: (t) => /inputs?.*missing label|missing label|placeholder used instead of label|labels? are missing/.test(t),
+    match: (t) =>
+      /inputs?.*missing label|missing label|placeholder used instead of label|placeholder as [^.]*label|labels? are missing|(field|input|control)s?[^.]*lack[^.]*label/.test(
+        t,
+      ),
     check: (s) =>
       presentOrUnsure(
         s.inputsWithoutLabel > 0,
@@ -1685,6 +1936,16 @@ const CHECKERS: LiveChecker[] = [
     check: () => unverifiable('handled by the robots.txt special verifier'),
   },
   {
+    // "CSS/JS files may be blocked" — a robots.txt wildcard Disallow (/*.js$,
+    // /*.css) that stops crawlers fetching render-critical assets. Site-wide and
+    // stable: handled by the robots.txt special verifier (fetched once), which
+    // confirms AND refutes. Exempt from the plural guard (single representative file).
+    kind: 'css-js-blocked',
+    match: (t) => /css\/js.*blocked|blocks css\/js|css and js.*blocked/.test(t),
+    noFetch: true,
+    check: () => unverifiable('handled by the robots.txt CSS/JS-block special verifier'),
+  },
+  {
     kind: 'vitals',
     match: (t) =>
       /\bcls\b|\btbt\b|\binp\b|\blcp\b|\bfcp\b|\btti\b|layout shift|blocking time|largest contentful paint|first contentful paint|time to interactive/.test(
@@ -1802,6 +2063,7 @@ const SPECIAL_KINDS = new Set([
   'cannibalisation',
   'robots-ai',
   'robots-sitemap',
+  'css-js-blocked',
 ]);
 
 /** Known AI/LLM crawler user-agent tokens, for the robots.txt AI-crawler checks. */
@@ -1905,8 +2167,89 @@ async function verifyRobotsSitemap(
   return robotsSitemapVerdict(body);
 }
 
+/**
+ * Pure verdict for "CSS/JS files may be blocked": confirmed when robots.txt has a
+ * wildcard `Disallow: /*.js` / `/*.css` (± `$`) under `*` or a major search bot,
+ * with NO overriding `Allow:` exposing `.css`/`.js` — mirrors
+ * RobotsParser.#checkCriticalPathBlocking. Refuted when no such blocking rule
+ * survives. A null body (unfetchable) → unverified. Unit-tested.
+ */
+export function robotsCssJsBlockedVerdict(body: string | null): CheckResult {
+  if (body == null) return unverifiable('could not fetch robots.txt', 'unreachable');
+  const isWildcardJsCss = (p: string): boolean => p === '/*.css' || p === '/*.js' || p === '/*.css$' || p === '/*.js$';
+  const isMajor = (ua: string): boolean =>
+    ua === '*' || /googlebot|bingbot|slurp|duckduckbot|baiduspider|yandex/i.test(ua);
+  const lines = body
+    .split(/\r?\n/)
+    .map((l) => l.replace(/#.*$/, '').trim())
+    .filter(Boolean);
+  let blocked = false;
+  let groupDisallow: string[] = [];
+  let groupAllow: string[] = [];
+  let groupMajor = false;
+  let pendingAgents = true; // consecutive UA lines share the following directives
+  const flush = (): void => {
+    if (groupMajor) {
+      for (const d of groupDisallow) {
+        if (!isWildcardJsCss(d)) continue;
+        const override = groupAllow.some((a) => a.includes('.css') || a.includes('.js'));
+        if (!override) blocked = true;
+      }
+    }
+    groupDisallow = [];
+    groupAllow = [];
+    groupMajor = false;
+  };
+  for (const line of lines) {
+    const ua = line.match(/^user-agent:\s*(.+)$/i);
+    if (ua) {
+      if (!pendingAgents) flush(); // a UA line after directives starts a new group
+      if (isMajor(ua[1].trim())) groupMajor = true;
+      pendingAgents = true;
+      continue;
+    }
+    pendingAgents = false;
+    const dis = line.match(/^disallow:\s*(.*)$/i);
+    if (dis) {
+      groupDisallow.push(dis[1].trim());
+      continue;
+    }
+    const alw = line.match(/^allow:\s*(.*)$/i);
+    if (alw) groupAllow.push(alw[1].trim());
+  }
+  flush();
+  return blocked
+    ? confirmed('robots.txt still blocks CSS/JS via a wildcard Disallow (/*.js or /*.css) with no Allow override')
+    : refuted('robots.txt has no wildcard CSS/JS Disallow blocking rendering now');
+}
+
+/** Fetch robots.txt for the finding's origin and apply {@link robotsCssJsBlockedVerdict}. */
+async function verifyCssJsBlocked(
+  f: ReportFinding,
+  timeoutMs: number,
+  originHint: string | null,
+): Promise<CheckResult> {
+  let origin = originHint;
+  if (f.exampleUrl) {
+    try {
+      origin = new URL(f.exampleUrl).origin;
+    } catch {
+      /* keep originHint */
+    }
+  }
+  if (!origin) return unverifiable('no site origin to fetch robots.txt', 'no-example');
+  const body = await fetchText(`${origin}/robots.txt`, timeoutMs);
+  return robotsCssJsBlockedVerdict(body);
+}
+
 /** Page cap for the homepage reachability BFS (orphan/unreachable checks). */
 const REACHABILITY_MAX_PAGES = 120;
+/** Click-depth bar (mirrors finding-verifier.CLICK_DEPTH_BAR): more than this
+ *  many clicks from the homepage confirms a "buried page" finding. */
+const CLICK_DEPTH_BAR = 4;
+/** Inbound-link bar (mirrors finding-verifier.LOW_EQUITY_BAR): at-or-below this
+ *  many inbound internal links confirms a "low link equity" finding. */
+const LOW_EQUITY_BAR = 3;
 
 export interface LiveSite {
   /** Normalized URLs declared in the sitemap(s); empty if none fetched. */
@@ -1914,11 +2257,32 @@ export interface LiveSite {
   /** True when the sitemap fetch was truncated (budget / fan-out / URL cap) —
    *  the set is INCOMPLETE, so a missing URL can't be asserted absent. */
   sitemapCapped: boolean;
-  /** Normalized URLs reachable from the homepage via internal links (bounded BFS). */
+  /** Normalized URLs reachable from the homepage via internal links (bounded BFS,
+   *  or the FULL persisted crawl graph when {@link LiveVerifyOptions.siteData} is supplied). */
   reachable: Set<string>;
-  /** True when the BFS hit its page cap — reachability is then INCOMPLETE, so a
-   *  missing URL can't be asserted as an orphan (→ unverified, never refute). */
+  /** True when reachability is INCOMPLETE (the bounded BFS hit its page cap), so a
+   *  missing URL can't be asserted as an orphan (→ unverified, never refute).
+   *  Always false when built from the persisted full-crawl graph. */
   reachabilityCapped: boolean;
+  /** Inbound link graph (normalized dst → source urls), from the persisted crawl.
+   *  Present only when built from {@link LiveVerifyOptions.siteData}; enables the
+   *  orphan / low-link-equity checks that a bounded live BFS can't settle. */
+  incoming?: Map<string, string[]>;
+  /** Click depth from the homepage (normalized url → depth) over the full crawl
+   *  forward graph. Present only when built from persisted crawl data. */
+  depthFromHome?: Map<string, number>;
+}
+
+/** Persisted full-crawl link/sitemap graph (a structural subset of the offline
+ *  pass's `SiteData`, so that value is assignable here without importing it —
+ *  avoiding a finding-verifier ↔ live-verifier cycle). When supplied via
+ *  {@link LiveVerifyOptions.siteData}, the live pass derives its {@link LiveSite}
+ *  from this (uncapped) instead of the bounded 120-page live BFS + sitemap fetch. */
+export interface PersistedSiteGraph {
+  incoming: Map<string, string[]>;
+  depthFromHome: Map<string, number>;
+  sitemapUrls: Set<string>;
+  sitemapCapped: boolean;
 }
 
 /** GET text with a timeout; null on any failure / non-2xx. */
@@ -2258,14 +2622,67 @@ export function verifySitemapMembership(f: ReportFinding, site: LiveSite): Check
 
 /** Orphan / unreachable: confirm when the cited page isn't reachable from the homepage. */
 export function verifyReachability(f: ReportFinding, site: LiveSite): CheckResult {
-  if (!f.exampleUrl) return unverifiable('no example URL to test reachability');
+  if (!f.exampleUrl) return unverifiable('no example URL to test reachability', 'no-example');
   if (site.reachable.has(normUrl(f.exampleUrl)))
     return refuted('cited page IS reachable from the homepage via internal links');
   if (site.reachabilityCapped)
     return unverifiable(
       `cited page not seen within the ${REACHABILITY_MAX_PAGES}-page crawl cap — reachability inconclusive, not dropping`,
+      'site-level',
     );
   return confirmed('cited page is not reachable from the homepage via internal links');
+}
+
+/**
+ * Orphan page ("no internal links point to it"). Uses the persisted inbound graph
+ * when available (uncapped): inbound > 0 refutes (positive evidence it isn't an
+ * orphan); a crawled page with zero inbound (absent-or-empty in the graph)
+ * confirms. Without the graph it falls back to reachability (a page reachable
+ * from home necessarily has ≥1 inbound link). Plural-guarded by the caller.
+ */
+export function verifyOrphan(f: ReportFinding, site: LiveSite): CheckResult {
+  if (!f.exampleUrl) return unverifiable('no example URL to test for orphan status', 'no-example');
+  if (!site.incoming) return verifyReachability(f, site);
+  if (site.incoming.size === 0) return unverifiable('inbound link graph is empty', 'site-level');
+  const inc = site.incoming.get(normUrl(f.exampleUrl));
+  if (inc && inc.length > 0) return refuted(`${inc.length} internal link(s) point to this page`);
+  // The crawl's inbound graph lists every linked-to page, so a flagged (crawled)
+  // page with no entry / an empty list genuinely receives no inbound internal links.
+  return confirmed('no internal links point to this page (per the crawl link graph)');
+}
+
+/** Click depth: confirm when the cited page sits more than CLICK_DEPTH_BAR clicks
+ *  from the homepage over the persisted crawl graph. Confirm-only (a low/absent
+ *  depth could reflect an incomplete crawl, not a shallow page). */
+export function verifyClickDepth(f: ReportFinding, site: LiveSite): CheckResult {
+  if (!f.exampleUrl) return unverifiable('no example URL to measure click depth', 'no-example');
+  if (!site.depthFromHome || site.depthFromHome.size === 0)
+    return unverifiable('no crawl-graph depth data — click depth not derivable from a single live page', 'site-level');
+  const d = site.depthFromHome.get(normUrl(f.exampleUrl));
+  if (d === undefined)
+    return unverifiable('cited page not reached in the crawl-graph BFS — depth inconclusive', 'site-level');
+  return d > CLICK_DEPTH_BAR
+    ? confirmed(`page is ${d} clicks from the homepage (> ${CLICK_DEPTH_BAR})`)
+    : unverifiable(`page is only ${d} clicks from the homepage (≤ ${CLICK_DEPTH_BAR})`, 'site-level');
+}
+
+/** Low internal link equity: confirm when the cited page receives ≤ LOW_EQUITY_BAR
+ *  inbound internal links over the persisted crawl graph. Confirm-only — raw
+ *  inbound count is a broader proxy than the analyzer's PageRank-style score, so
+ *  a higher count doesn't refute. */
+export function verifyLinkEquity(f: ReportFinding, site: LiveSite): CheckResult {
+  if (!f.exampleUrl) return unverifiable('no example URL to measure link equity', 'no-example');
+  if (!site.incoming || site.incoming.size === 0)
+    return unverifiable('no inbound link graph — link equity not derivable from a single live page', 'site-level');
+  const inc = site.incoming.get(normUrl(f.exampleUrl));
+  if (inc === undefined)
+    return unverifiable('cited page not in the crawl link graph — equity inconclusive', 'site-level');
+  return inc.length <= LOW_EQUITY_BAR
+    ? confirmed(`only ${inc.length} internal link(s) point to this page (≤ ${LOW_EQUITY_BAR})`)
+    : unverifiable(
+        `${inc.length} internal links point to this page (> ${LOW_EQUITY_BAR}); raw count is a broad proxy — not dropping`,
+        'site-level',
+      );
 }
 
 /**
@@ -2364,6 +2781,12 @@ export interface LiveVerifyOptions {
   verbose?: boolean;
   /** Same network/CPU profile the crawl used (CLS/TBT need it to reproduce). */
   throttle?: Throttle;
+  /** Persisted full-crawl link/sitemap graph (from `loadSiteData`). When present,
+   *  site-level findings (orphan / unreachable / click-depth / low-link-equity /
+   *  sitemap membership) are adjudicated against the WHOLE crawl rather than a
+   *  bounded 120-page live BFS — removing the cap that left them `unverified`.
+   *  Omit for a pure-live standalone run (the bounded BFS is then used). */
+  siteData?: PersistedSiteGraph;
 }
 
 /**
@@ -2675,9 +3098,25 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
         cache.set(homeUrl, homepageSignals);
       }
 
-      // 2. Site context (sitemap + reachability) for site-level findings.
-      let site: LiveSite | null = null;
-      if (needsSiteCtx) {
+      // 2. Site context for site-level findings. PREFER the persisted full-crawl
+      // graph (uncapped — removes the 120-page BFS cap that left orphan /
+      // unreachable / sitemap-membership findings `unverified` on large sites);
+      // fall back to a bounded live BFS + sitemap fetch when none was supplied.
+      let site: LiveSite | null = opts.siteData
+        ? {
+            sitemapUrls: opts.siteData.sitemapUrls,
+            sitemapCapped: opts.siteData.sitemapCapped,
+            reachable: new Set(opts.siteData.depthFromHome.keys()),
+            reachabilityCapped: false,
+            incoming: opts.siteData.incoming,
+            depthFromHome: opts.siteData.depthFromHome,
+          }
+        : null;
+      if (site && opts.verbose)
+        console.log(
+          `  … using persisted crawl graph for site-level checks (${site.reachable.size} reachable, ${site.incoming?.size ?? 0} inbound entries, ${site.sitemapUrls.size} sitemap URLs)`,
+        );
+      if (!site && needsSiteCtx) {
         // Derive the origin from a site-graph finding's OWN example (always
         // on-site) — NOT the first finding of any kind, whose example could be
         // an external URL (e.g. a broken-outbound link) → wrong-origin sitemap.
@@ -2712,11 +3151,16 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
         else if (checker.kind === 'broken-outbound') r = await verifyBrokenOutbound(f, browser, timeoutMs);
         else if (checker.kind === 'robots-ai') r = await verifyRobotsAi(f, timeoutMs, siteOriginForGuard);
         else if (checker.kind === 'robots-sitemap') r = await verifyRobotsSitemap(f, timeoutMs, siteOriginForGuard);
+        else if (checker.kind === 'css-js-blocked') r = await verifyCssJsBlocked(f, timeoutMs, siteOriginForGuard);
         else if (checker.kind === 'site-graph') {
-          if (!site) r = unverifiable('site context unavailable');
-          else if (/missing from sitemap|not (listed )?in sitemap/i.test(f.title)) r = verifySitemapMembership(f, site);
-          else if (/orphan|unreachable/i.test(f.title)) r = verifyReachability(f, site);
-          else r = unverifiable('link-equity / click-depth not derivable from a bounded live crawl');
+          const t = f.title.toLowerCase();
+          if (!site) r = unverifiable('site context unavailable', 'site-level');
+          else if (/missing from sitemap|not (listed )?in sitemap/.test(t)) r = verifySitemapMembership(f, site);
+          else if (/orphan/.test(t)) r = verifyOrphan(f, site);
+          else if (/unreachable/.test(t)) r = verifyReachability(f, site);
+          else if (/click depth|clicks? from/.test(t)) r = verifyClickDepth(f, site);
+          else if (/link equity|(low|few)[^.]*internal link/.test(t)) r = verifyLinkEquity(f, site);
+          else r = unverifiable('link-graph metric not derivable from available data', 'site-level');
         } else r = unverifiable('unhandled special kind');
         // `duplicate` and `broken-pagination` do their own count-coverage gating
         // (refute only when the cited examples cover the whole finding), so they
@@ -2728,7 +3172,8 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
           checker.kind === 'duplicate' ||
           checker.kind === 'broken-pagination' ||
           checker.kind === 'robots-ai' ||
-          checker.kind === 'robots-sitemap';
+          checker.kind === 'robots-sitemap' ||
+          checker.kind === 'css-js-blocked';
         const guarded = selfGated ? r : guardPluralRefute(r, f);
         verdictByPlan.set(f, { ...guarded, kind: checker.kind });
       }
@@ -2810,6 +3255,7 @@ export function liveSignalsSnapshot(s: LiveSignals): Record<string, unknown> {
   return {
     status: s.status,
     finalUrl: s.finalUrl,
+    redirectCount: s.redirectCount,
     title: s.title,
     titleLength: s.title.length,
     description: s.description,

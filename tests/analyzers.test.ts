@@ -4258,6 +4258,12 @@ void describe('live-verifier: checker refute contract', () => {
     fontBytes: 0,
     consoleErrors: 0,
     hasAuthorByline: true,
+    redirectCount: 0,
+    hasImagePreload: true,
+    totalLinkCount: 10,
+    affiliateLinksNoRel: 0,
+    hasNoindexMeta: false,
+    totalImageBytes: 0,
   };
 
   void it('autocomplete is confirm-only: 0 inputs at load → unverified, NOT refuted (forms can mount on interaction)', () => {
@@ -4283,6 +4289,164 @@ void describe('live-verifier: checker refute contract', () => {
   void it('single-occurrence stable-signal refute still refutes (the sampled page IS the finding)', () => {
     const r = checkFindingSignals('Canonical URL is not set', base, 1);
     assert.strictEqual(r.status, 'refuted');
+  });
+
+  // ---- tranche-1 gap closers: redirect-chain, canonical-mismatch, lcp-preload ----
+
+  void it('canonical-mismatch confirms when the live canonical differs from the page URL', () => {
+    const r = checkFindingSignals(
+      "Some loc and canonical don't match",
+      { ...base, url: 'https://x.example/a', finalUrl: 'https://x.example/a', canonical: 'https://x.example/b' },
+      1,
+    );
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('canonical-mismatch refutes when canonical matches the page URL (single occurrence)', () => {
+    const r = checkFindingSignals(
+      "Some loc and canonical don't match",
+      { ...base, url: 'https://x.example/a', finalUrl: 'https://x.example/a', canonical: 'https://x.example/a/' },
+      1,
+    );
+    assert.strictEqual(r.status, 'refuted'); // trailing-slash-only difference is normalized away
+  });
+
+  void it('canonical-mismatch is plural-guarded: a clean first page on a multi-occurrence finding does not drop it', () => {
+    const r = checkFindingSignals(
+      "Some loc and canonical don't match",
+      { ...base, url: 'https://x.example/a', finalUrl: 'https://x.example/a', canonical: 'https://x.example/a' },
+      5,
+    );
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('canonical-mismatch with no canonical is inconclusive (that is the missing-canonical finding), never a refute', () => {
+    const r = checkFindingSignals("Some loc and canonical don't match", { ...base, canonical: null }, 1);
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('redirect-chain confirms when ≥2 redirect hops were followed', () => {
+    const r = checkFindingSignals('Multiple redirects detected', { ...base, redirectCount: 3 }, 1);
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('redirect-chain is confirm-only: a short chain on this fetch stays unverified, never refuted', () => {
+    // count=1 so the plural guard is NOT what produces unverified — the checker itself must.
+    const r = checkFindingSignals('Pages sit behind a long redirect chain', { ...base, redirectCount: 0 }, 1);
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('lcp-preload confirms when the (homepage) page has no LCP-image preload', () => {
+    const r = checkFindingSignals('LCP images not preloaded across site', { ...base, hasImagePreload: false }, 1);
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('lcp-preload is confirm-only: a homepage WITH an image preload cannot refute the site-wide claim', () => {
+    const r = checkFindingSignals('LCP images not preloaded across site', { ...base, hasImagePreload: true }, 1);
+    assert.strictEqual(r.status, 'unverified');
+  });
+
+  void it('session-id confirms when the cited URL carries a real session-id query param', () => {
+    const r = checkFindingSignals(
+      'Session ID detected in URL',
+      { ...base, url: 'https://x.example/p?sid=ABC123', finalUrl: 'https://x.example/p?sid=ABC123' },
+      1,
+    );
+    assert.strictEqual(r.status, 'confirmed');
+  });
+
+  void it('session-id refutes the "resident/residential" substring false positive (no real session param)', () => {
+    const r = checkFindingSignals(
+      'Session ID detected in URL',
+      { ...base, url: 'https://x.example/contractors/sector/residential/', finalUrl: 'https://x.example/x' },
+      1,
+    );
+    assert.strictEqual(r.status, 'refuted');
+  });
+
+  void it('too-many-links confirms over the threshold and is confirm-only under it (links can hydrate)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Too many on-page links', { ...base, totalLinkCount: 400 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Too many on-page links', { ...base, totalLinkCount: 10 }, 1).status,
+      'unverified',
+    );
+  });
+
+  void it('affiliate-link confirms when unmarked affiliate links are present, confirm-only when absent', () => {
+    assert.strictEqual(
+      checkFindingSignals('Affiliate link without sponsored/nofollow', { ...base, affiliateLinksNoRel: 3 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Affiliate link without sponsored/nofollow', { ...base, affiliateLinksNoRel: 0 }, 1).status,
+      'unverified',
+    );
+  });
+
+  // ---- tranche-2: matcher widening + new stable checkers ----
+
+  void it('form-labels matcher now owns the "placeholder as their only label" and "fields lack <label>" wordings', () => {
+    for (const t of [
+      'Contact form inputs use placeholder as their only label',
+      'Form fields lack `<label>` and grouping semantics',
+    ]) {
+      assert.doesNotMatch(checkFindingSignals(t, base, 1).reason, /no live checker/i, `"${t}" should be owned`);
+      // present signal → confirmed (routes to form-labels, not some refuting checker)
+      assert.strictEqual(checkFindingSignals(t, { ...base, inputsWithoutLabel: 2 }, 1).status, 'confirmed', t);
+    }
+  });
+
+  void it('missing-description confirms when no meta description, refutes when present (single occurrence)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Description meta tag is missing', { ...base, description: null }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Description meta tag is missing', { ...base, description: 'present' }, 1).status,
+      'refuted',
+    );
+  });
+
+  void it('missing-description does NOT steal the description-length "too long/short" findings', () => {
+    // A "too long" finding must route to description-length and CONFIRM on a 400-char
+    // description — proving it didn't fall through to missing-description (which would
+    // refute on a present description).
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some pages have descriptions that are too long',
+        { ...base, description: 'x'.repeat(400) },
+        1,
+      ).status,
+      'confirmed',
+    );
+  });
+
+  void it('noindex confirms on a meta-robots noindex and on an X-Robots-Tag header, refutes when neither', () => {
+    assert.strictEqual(
+      checkFindingSignals('Pages in sitemap are marked noindex', { ...base, hasNoindexMeta: true }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Pages in sitemap are marked noindex', { ...base, headers: { 'x-robots-tag': 'noindex' } }, 1)
+        .status,
+      'confirmed',
+    );
+    assert.strictEqual(checkFindingSignals('Pages in sitemap are marked noindex', base, 1).status, 'refuted');
+  });
+
+  void it('total-image-size confirms over the threshold, confirm-only under it (lazy images)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Some pages have excessive total image size', { ...base, totalImageBytes: 50_000_000 }, 1)
+        .status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have excessive total image size', { ...base, totalImageBytes: 1000 }, 1).status,
+      'unverified',
+    );
   });
 
   // ---- registry-gap closers: every category-A finding kind is now OWNED ----
@@ -4794,6 +4958,23 @@ void describe('live-verifier: checker refute contract', () => {
       'YMYL page without author attribution',
       'Most content pages lack author attribution',
       'Most pages lack author attribution',
+      // Tranche-1 gap closers.
+      "Some loc and canonical don't match",
+      'Multiple redirects detected',
+      'Pages sit behind a long redirect chain',
+      'LCP images not preloaded across site',
+      'Session ID detected in URL',
+      'Too many on-page links',
+      'Affiliate link without sponsored/nofollow',
+      'CSS/JS files may be blocked',
+      // Tranche-2 gap closers.
+      'Contact form inputs use placeholder as their only label',
+      'Form fields lack `<label>` and grouping semantics',
+      'Description meta tag is missing',
+      'Pages in sitemap are marked noindex',
+      'Some pages have excessive total image size',
+      'A notable share of pages have near-duplicate content',
+      'Low AI content structure score',
     ];
     for (const t of titles) {
       assert.doesNotMatch(
@@ -4978,6 +5159,9 @@ void describe('buildReportMarkdown screenshot embedding', () => {
 import {
   verifySitemapMembership,
   verifyReachability,
+  verifyOrphan,
+  verifyClickDepth,
+  verifyLinkEquity,
   type LiveSite,
   type ReportFinding,
 } from '../lib/phase3/live-verifier';
@@ -5028,6 +5212,75 @@ void describe('live-verifier: site-level verifiers', () => {
     assert.strictEqual(
       verifySitemapMembership(f('Indexable pages missing from sitemap', 'https://e.com/x'), empty).status,
       'unverified',
+    );
+  });
+
+  // ---- tranche-4: persisted full-crawl graph (uncapped orphan/depth/equity) ----
+
+  // A site built from the persisted crawl graph: NOT capped, carries the inbound
+  // graph + click-depth map. /a has inbound + depth 1; /buried is deep; /lonely
+  // has zero inbound and is unreachable.
+  const graphSite: LiveSite = {
+    sitemapUrls: new Set(['https://e.com/a']),
+    sitemapCapped: false,
+    reachable: new Set(['https://e.com/a', 'https://e.com/buried']),
+    reachabilityCapped: false,
+    incoming: new Map([
+      ['https://e.com/a', ['https://e.com/', 'https://e.com/x']],
+      ['https://e.com/buried', ['https://e.com/a']],
+    ]),
+    depthFromHome: new Map([
+      ['https://e.com/', 0],
+      ['https://e.com/a', 1],
+      ['https://e.com/buried', 6],
+    ]),
+  };
+
+  void it('orphan: zero-inbound (absent from the inbound graph) → confirmed; has-inbound → refuted', () => {
+    assert.strictEqual(verifyOrphan(f('Orphan page', 'https://e.com/lonely'), graphSite).status, 'confirmed');
+    assert.strictEqual(verifyOrphan(f('Orphan page', 'https://e.com/a'), graphSite).status, 'refuted');
+  });
+
+  void it('orphan without an inbound graph falls back to reachability', () => {
+    // graphSite minus the incoming map → reachability fallback (uncapped here).
+    const noGraph: LiveSite = { ...graphSite, incoming: undefined };
+    assert.strictEqual(verifyOrphan(f('Orphan page', 'https://e.com/lonely'), noGraph).status, 'confirmed');
+    assert.strictEqual(verifyOrphan(f('Orphan page', 'https://e.com/a'), noGraph).status, 'refuted');
+  });
+
+  void it('click-depth: deeper than the bar → confirmed; shallow → unverified (confirm-only)', () => {
+    assert.strictEqual(
+      verifyClickDepth(f('Page is 6 clicks from homepage', 'https://e.com/buried'), graphSite).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      verifyClickDepth(f('Page is 1 click from homepage', 'https://e.com/a'), graphSite).status,
+      'unverified',
+    );
+  });
+
+  void it('low-link-equity: ≤ bar inbound → confirmed; above bar → unverified (confirm-only proxy)', () => {
+    // /buried has 1 inbound (≤3) → confirmed; give /a 4 inbound → above bar → unverified.
+    assert.strictEqual(
+      verifyLinkEquity(f('Page has very low internal link equity', 'https://e.com/buried'), graphSite).status,
+      'confirmed',
+    );
+    const wellLinked: LiveSite = {
+      ...graphSite,
+      incoming: new Map([
+        ['https://e.com/a', ['https://e.com/', 'https://e.com/x', 'https://e.com/y', 'https://e.com/z']],
+      ]),
+    };
+    assert.strictEqual(
+      verifyLinkEquity(f('Page has very low internal link equity', 'https://e.com/a'), wellLinked).status,
+      'unverified',
+    );
+  });
+
+  void it('persisted reachability is uncapped: an unreached page confirms (no 120-page-cap unverified)', () => {
+    assert.strictEqual(
+      verifyReachability(f('Page unreachable from homepage', 'https://e.com/lonely'), graphSite).status,
+      'confirmed',
     );
   });
 });
@@ -5256,6 +5509,12 @@ void describe('live-verifier: broken-outbound match split', () => {
     fontBytes: 0,
     consoleErrors: 0,
     hasAuthorByline: true,
+    redirectCount: 0,
+    hasImagePreload: true,
+    totalLinkCount: 10,
+    affiliateLinksNoRel: 0,
+    hasNoindexMeta: false,
+    totalImageBytes: 0,
   });
 
   void it('per-page "Page has N broken outbound link(s)" does NOT refute on a 200 container page', () => {
@@ -5341,7 +5600,12 @@ void describe('live-verifier: path-case is significant in site-graph drop decisi
   });
 });
 
-import { duplicateVerdict, robotsAiVerdict, robotsSitemapVerdict } from '../lib/phase3/live-verifier';
+import {
+  duplicateVerdict,
+  robotsAiVerdict,
+  robotsSitemapVerdict,
+  robotsCssJsBlockedVerdict,
+} from '../lib/phase3/live-verifier';
 
 void describe('live-verifier: Slice 2 header checkers', () => {
   const base: LiveSignals = {
@@ -5403,6 +5667,12 @@ void describe('live-verifier: Slice 2 header checkers', () => {
     fontBytes: 0,
     consoleErrors: 0,
     hasAuthorByline: true,
+    redirectCount: 0,
+    hasImagePreload: true,
+    totalLinkCount: 10,
+    affiliateLinksNoRel: 0,
+    hasNoindexMeta: false,
+    totalImageBytes: 0,
   };
   const withHeaders = (h: Record<string, string>): LiveSignals => ({ ...base, headers: h });
 
@@ -5598,6 +5868,34 @@ void describe('live-verifier: robotsSitemapVerdict', () => {
   });
 });
 
+void describe('live-verifier: robotsCssJsBlockedVerdict', () => {
+  void it('confirms a wildcard JS/CSS Disallow under "*" with no Allow override', () => {
+    assert.strictEqual(robotsCssJsBlockedVerdict('User-agent: *\nDisallow: /*.js$').status, 'confirmed');
+    assert.strictEqual(robotsCssJsBlockedVerdict('User-agent: Googlebot\nDisallow: /*.css').status, 'confirmed');
+  });
+
+  void it('refutes when an Allow override re-exposes CSS/JS', () => {
+    assert.strictEqual(
+      robotsCssJsBlockedVerdict('User-agent: *\nDisallow: /*.js$\nAllow: /assets/app.js').status,
+      'refuted',
+    );
+  });
+
+  void it('refutes when no wildcard CSS/JS block exists (ordinary disallows are fine)', () => {
+    assert.strictEqual(robotsCssJsBlockedVerdict('User-agent: *\nDisallow: /admin\nDisallow: /cart').status, 'refuted');
+  });
+
+  void it('a JS/CSS block scoped to a NON-major bot does not confirm', () => {
+    assert.strictEqual(robotsCssJsBlockedVerdict('User-agent: AhrefsBot\nDisallow: /*.js$').status, 'refuted');
+  });
+
+  void it('unfetchable robots.txt → unverified (unreachable)', () => {
+    const r = robotsCssJsBlockedVerdict(null);
+    assert.strictEqual(r.status, 'unverified');
+    assert.strictEqual(r.code, 'unreachable');
+  });
+});
+
 void describe('live-verifier: duplicateVerdict count-coverage', () => {
   void it('matching values → confirmed regardless of count', () => {
     assert.strictEqual(duplicateVerdict('title', 'Same', 'Same', 2).status, 'confirmed');
@@ -5730,6 +6028,12 @@ void describe('live-verifier: liveSignalsSnapshot (Slice 3 LLM evidence)', () =>
     fontBytes: 0,
     consoleErrors: 0,
     hasAuthorByline: true,
+    redirectCount: 0,
+    hasImagePreload: true,
+    totalLinkCount: 10,
+    affiliateLinksNoRel: 0,
+    hasNoindexMeta: false,
+    totalImageBytes: 0,
   };
 
   void it('summarises signals, rounds ratios, nulls unmeasured coverage/contrast, and keeps only relevant headers', () => {
@@ -6664,8 +6968,18 @@ void describe('Phase 4 — extractPageTerms', () => {
 void describe('Phase 4 — buildTermIndex', () => {
   void it('maps terms to the set of page URLs', () => {
     const pages: Record<string, PageInfo> = {
-      'https://x.com/a': { url: 'https://x.com/a', title: 'Kubernetes Guide', headings: { h1: [] }, contentQuality: { wordCount: 100, topKeywords: [] } } as unknown as PageInfo,
-      'https://x.com/b': { url: 'https://x.com/b', title: 'Kubernetes Networking', headings: { h1: [] }, contentQuality: { wordCount: 100, topKeywords: [] } } as unknown as PageInfo,
+      'https://x.com/a': {
+        url: 'https://x.com/a',
+        title: 'Kubernetes Guide',
+        headings: { h1: [] },
+        contentQuality: { wordCount: 100, topKeywords: [] },
+      } as unknown as PageInfo,
+      'https://x.com/b': {
+        url: 'https://x.com/b',
+        title: 'Kubernetes Networking',
+        headings: { h1: [] },
+        contentQuality: { wordCount: 100, topKeywords: [] },
+      } as unknown as PageInfo,
     };
     const idx = buildTermIndex(pages);
     assert.strictEqual(idx.get('kubernetes')?.urls.size, 2, 'kubernetes appears on both pages');
@@ -6680,17 +6994,53 @@ import { scoreGap } from '../lib/phase4/competitive-gap';
 
 void describe('Phase 4 — scoreGap discrimination', () => {
   void it('ranks a high-signal gap well above a low-signal one', () => {
-    const strong = scoreGap({ gapType: 'missing', competitorPages: 50, coveringCompetitors: 5, competitorBestWordCount: 3600, keywords: ['documentation reference'] });
-    const weak = scoreGap({ gapType: 'depth', competitorPages: 2, coveringCompetitors: 1, competitorBestWordCount: 400, keywords: ['tip'] });
+    const strong = scoreGap({
+      gapType: 'missing',
+      competitorPages: 50,
+      coveringCompetitors: 5,
+      competitorBestWordCount: 3600,
+      keywords: ['documentation reference'],
+    });
+    const weak = scoreGap({
+      gapType: 'depth',
+      competitorPages: 2,
+      coveringCompetitors: 1,
+      competitorBestWordCount: 400,
+      keywords: ['tip'],
+    });
     assert.ok(strong > weak + 25, `strong (${strong}) should clearly outrank weak (${weak})`);
   });
 
   void it('spreads scores across a varied gap set (not all equal)', () => {
     const gaps = [
-      { gapType: 'missing' as const, competitorPages: 51, coveringCompetitors: 5, competitorBestWordCount: 2800, keywords: ['documentation'] },
-      { gapType: 'missing' as const, competitorPages: 30, coveringCompetitors: 1, competitorBestWordCount: 2789, keywords: ['builder'] },
-      { gapType: 'missing' as const, competitorPages: 12, coveringCompetitors: 2, competitorBestWordCount: 1700, keywords: ['collection'] },
-      { gapType: 'missing' as const, competitorPages: 4, coveringCompetitors: 1, competitorBestWordCount: 1100, keywords: ['workflows'] },
+      {
+        gapType: 'missing' as const,
+        competitorPages: 51,
+        coveringCompetitors: 5,
+        competitorBestWordCount: 2800,
+        keywords: ['documentation'],
+      },
+      {
+        gapType: 'missing' as const,
+        competitorPages: 30,
+        coveringCompetitors: 1,
+        competitorBestWordCount: 2789,
+        keywords: ['builder'],
+      },
+      {
+        gapType: 'missing' as const,
+        competitorPages: 12,
+        coveringCompetitors: 2,
+        competitorBestWordCount: 1700,
+        keywords: ['collection'],
+      },
+      {
+        gapType: 'missing' as const,
+        competitorPages: 4,
+        coveringCompetitors: 1,
+        competitorBestWordCount: 1100,
+        keywords: ['workflows'],
+      },
     ];
     const scores = gaps.map(scoreGap);
     assert.strictEqual(new Set(scores).size, scores.length, `expected distinct scores, got ${JSON.stringify(scores)}`);
@@ -6698,8 +7048,21 @@ void describe('Phase 4 — scoreGap discrimination', () => {
 
   void it('lets injected search volume raise and difficulty lower the score, clamped 0–100', () => {
     const base = scoreGap({ gapType: 'missing', competitorPages: 10, coveringCompetitors: 2, keywords: ['x'] });
-    const hot = scoreGap({ gapType: 'missing', competitorPages: 10, coveringCompetitors: 2, keywords: ['x'], searchVolume: 90000 });
-    const hard = scoreGap({ gapType: 'missing', competitorPages: 10, coveringCompetitors: 2, keywords: ['x'], searchVolume: 90000, difficulty: 90 });
+    const hot = scoreGap({
+      gapType: 'missing',
+      competitorPages: 10,
+      coveringCompetitors: 2,
+      keywords: ['x'],
+      searchVolume: 90000,
+    });
+    const hard = scoreGap({
+      gapType: 'missing',
+      competitorPages: 10,
+      coveringCompetitors: 2,
+      keywords: ['x'],
+      searchVolume: 90000,
+      difficulty: 90,
+    });
     assert.ok(hot > base, 'volume raises score');
     assert.ok(hard < hot, 'difficulty lowers score');
     for (const s of [base, hot, hard]) assert.ok(s >= 0 && s <= 100, `clamped: ${s}`);
@@ -6752,27 +7115,58 @@ import { applyPlanTopics } from '../lib/phase4/content-synthesis';
 import type { CompetitiveGap, ContentPlanItem } from '../lib/phase4/types';
 
 function mkGap(topic: string): CompetitiveGap {
-  return { topic, keywords: [topic], ourPages: 0, ourBestWordCount: 0, ourExamples: [], competitorPages: 3, coveringCompetitors: 1, competitorBestWordCount: 0, bestCompetitor: null, gapType: 'missing', opportunityScore: 50, examples: [] };
+  return {
+    topic,
+    keywords: [topic],
+    ourPages: 0,
+    ourBestWordCount: 0,
+    ourExamples: [],
+    competitorPages: 3,
+    coveringCompetitors: 1,
+    competitorBestWordCount: 0,
+    bestCompetitor: null,
+    gapType: 'missing',
+    opportunityScore: 50,
+    examples: [],
+  };
 }
 function mkItem(topic?: string): ContentPlanItem {
-  return { priority: 1, topic, title: 't', targetKeywords: [], rationale: 'r', format: 'f', suggestedWordCount: 1000, brief: 'b' };
+  return {
+    priority: 1,
+    topic,
+    title: 't',
+    targetKeywords: [],
+    rationale: 'r',
+    format: 'f',
+    suggestedWordCount: 1000,
+    brief: 'b',
+  };
 }
 
 void describe('Phase 4 — applyPlanTopics', () => {
   void it('relabels gaps from the matching plan item topic (1:1, in order)', () => {
     const gaps = [mkGap('documentation payload'), mkGap('visual development')];
     applyPlanTopics(gaps, [mkItem('Documentation Reference'), mkItem('Visual Development')]);
-    assert.deepStrictEqual(gaps.map((g) => g.topic), ['Documentation Reference', 'Visual Development']);
+    assert.deepStrictEqual(
+      gaps.map((g) => g.topic),
+      ['Documentation Reference', 'Visual Development'],
+    );
   });
   void it('keeps the original label when the plan item has no usable topic', () => {
     const gaps = [mkGap('content modeling'), mkGap('access control')];
     applyPlanTopics(gaps, [mkItem('   '), mkItem(undefined)]);
-    assert.deepStrictEqual(gaps.map((g) => g.topic), ['content modeling', 'access control']);
+    assert.deepStrictEqual(
+      gaps.map((g) => g.topic),
+      ['content modeling', 'access control'],
+    );
   });
   void it('handles a shorter plan than gaps without error', () => {
     const gaps = [mkGap('a topic'), mkGap('b topic')];
     applyPlanTopics(gaps, [mkItem('A Topic')]);
-    assert.deepStrictEqual(gaps.map((g) => g.topic), ['A Topic', 'b topic']);
+    assert.deepStrictEqual(
+      gaps.map((g) => g.topic),
+      ['A Topic', 'b topic'],
+    );
   });
 });
 
@@ -6783,7 +7177,8 @@ import { parseTaxonomy } from '../lib/phase4/topic-taxonomy';
 
 void describe('Phase 4 — parseTaxonomy', () => {
   void it('parses valid topics, lowercases keywords, dedupes labels', () => {
-    const raw = '```json\n{"topics":[{"label":"Content Modeling","keywords":["Content Modeling","Schema","fields"]},{"label":"Content Modeling","keywords":["dup"]},{"label":"Access Control","keywords":["roles","permissions"]}]}\n```';
+    const raw =
+      '```json\n{"topics":[{"label":"Content Modeling","keywords":["Content Modeling","Schema","fields"]},{"label":"Content Modeling","keywords":["dup"]},{"label":"Access Control","keywords":["roles","permissions"]}]}\n```';
     const t = parseTaxonomy(raw);
     assert.ok(t);
     assert.strictEqual(t!.length, 2, 'duplicate label dropped');
@@ -6805,7 +7200,9 @@ void describe('Phase 4 — computeCompetitiveGaps with LLM topics', () => {
     'https://a.com/modeling': cpPage('https://a.com/modeling', ['modeling', 'modeling', 'schema'], 1500),
     'https://a.com/schema': cpPage('https://a.com/schema', ['schema', 'fields'], 900),
   });
-  const compB = mkCompetitor('b.com', { 'https://b.com/structured': cpPage('https://b.com/structured', ['schema', 'structured']) });
+  const compB = mkCompetitor('b.com', {
+    'https://b.com/structured': cpPage('https://b.com/structured', ['schema', 'structured']),
+  });
 
   void it('uses the supplied LLM topic label and maps pages by its keywords', () => {
     const topics = [{ label: 'Content Modeling', keywords: ['modeling', 'schema', 'structured'] }];
@@ -6830,11 +7227,28 @@ import { buildContentPlan, resolvePlanActions } from '../lib/phase4/content-plan
 
 void describe('Phase 4 — create vs expand', () => {
   function gap(over: Partial<CompetitiveGap>): CompetitiveGap {
-    return { topic: 'content modeling', keywords: ['content modeling', 'schema'], ourPages: 0, ourBestWordCount: 0, ourExamples: [], competitorPages: 5, coveringCompetitors: 2, competitorBestWordCount: 2000, bestCompetitor: 'a.com', gapType: 'missing', opportunityScore: 80, examples: [], ...over };
+    return {
+      topic: 'content modeling',
+      keywords: ['content modeling', 'schema'],
+      ourPages: 0,
+      ourBestWordCount: 0,
+      ourExamples: [],
+      competitorPages: 5,
+      coveringCompetitors: 2,
+      competitorBestWordCount: 2000,
+      bestCompetitor: 'a.com',
+      gapType: 'missing',
+      opportunityScore: 80,
+      examples: [],
+      ...over,
+    };
   }
 
   void it('resolvePlanActions: create with no page, expand when we have one', () => {
-    const acts = resolvePlanActions([gap({ ourPages: 0 }), gap({ ourPages: 2, gapType: 'thin', ourBestExample: 'https://us.com/x' })]);
+    const acts = resolvePlanActions([
+      gap({ ourPages: 0 }),
+      gap({ ourPages: 2, gapType: 'thin', ourBestExample: 'https://us.com/x' }),
+    ]);
     assert.strictEqual(acts[0].action, 'create');
     assert.deepStrictEqual(acts[1], { action: 'expand', targetPage: 'https://us.com/x' });
   });
@@ -6852,7 +7266,13 @@ void describe('Phase 4 — create vs expand', () => {
 
   void it('buildContentPlan surfaces the target page URL for expand items', () => {
     const plan = buildContentPlan([
-      gap({ ourPages: 1, gapType: 'thin', ourExamples: ['https://us.com/cms'], ourBestExample: 'https://us.com/cms', ourBestWordCount: 420 }),
+      gap({
+        ourPages: 1,
+        gapType: 'thin',
+        ourExamples: ['https://us.com/cms'],
+        ourBestExample: 'https://us.com/cms',
+        ourBestWordCount: 420,
+      }),
       gap({ topic: 'access control', ourPages: 0 }),
     ]);
     assert.strictEqual(plan[0].action, 'expand');

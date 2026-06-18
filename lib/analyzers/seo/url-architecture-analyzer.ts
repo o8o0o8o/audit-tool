@@ -47,18 +47,22 @@ class UrlArchitectureAnalyzer {
         });
       }
 
-      // Check for session IDs in URL
+      // Check for session IDs in URL.
+      // Match real session tokens, not arbitrary substrings: an exact query-param
+      // key, or a path-embedded session keyword that actually assigns a value
+      // (e.g. the matrix param `;jsessionid=...`). The previous substring check on
+      // the pathname mistook ordinary words like "re-sid-ent" for a session ID.
       const sessionParams = ['sessionid', 'session_id', 'sid', 'phpsessid', 'jsessionid', 'aspsessionid'];
-      for (const param of sessionParams) {
-        if (parsedUrl.searchParams.has(param) || parsedUrl.pathname.toLowerCase().includes(param)) {
-          issues.push({
-            type: 'session_id_in_url',
-            message: 'Session ID detected in URL',
-            detail: `Session IDs in URLs create duplicate content issues and should be avoided`,
-            severity: SEVERITY.HIGH,
-          });
-          break;
-        }
+      const sessionParamSet = new Set(sessionParams);
+      const hasSessionQueryParam = [...parsedUrl.searchParams.keys()].some((k) => sessionParamSet.has(k.toLowerCase()));
+      const pathSessionPattern = new RegExp(`(?:^|[/;,&?])(?:${sessionParams.join('|')})=`, 'i');
+      if (hasSessionQueryParam || pathSessionPattern.test(parsedUrl.pathname)) {
+        issues.push({
+          type: 'session_id_in_url',
+          message: 'Session ID detected in URL',
+          detail: `Session IDs in URLs create duplicate content issues and should be avoided`,
+          severity: SEVERITY.HIGH,
+        });
       }
 
       // Check for multiple consecutive slashes

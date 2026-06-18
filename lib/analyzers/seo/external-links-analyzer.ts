@@ -200,14 +200,38 @@ class ExternalLinksAnalyzer {
    * Check if link is an affiliate link
    */
   static isAffiliateLink(href: string) {
-    const affiliatePatterns = [
-      /[?&](ref|affiliate|aff|partner|tag|utm_source=affiliate)/i,
-      /\/(ref|aff|affiliate|partner)\//i,
-      /amazon\..*[?&]tag=/i,
-      /shareasale|cj\.com|rakuten|awin|impact\.com/i,
-    ];
+    // Named affiliate networks — high confidence regardless of params.
+    if (/shareasale|cj\.com|rakuten|awin|impact\.com|clickbank|partnerize/i.test(href)) {
+      return true;
+    }
 
-    return affiliatePatterns.some((pattern) => pattern.test(href));
+    let parsed: URL;
+    try {
+      parsed = new URL(href);
+    } catch {
+      return false;
+    }
+
+    // Amazon associate tag — the only context where `tag=` reliably means affiliate.
+    if (/(?:^|\.)amazon\./i.test(parsed.hostname) && parsed.searchParams.has('tag')) {
+      return true;
+    }
+
+    // Explicit affiliate query params, matched by EXACT key (not substring). A
+    // generic `?ref=`/`?tag=` referrer or category param is not an affiliate code —
+    // e.g. a vendor "powered by" link like ...?ref=xxx&utm_source=powered-by.
+    for (const [key, value] of parsed.searchParams) {
+      const k = key.toLowerCase();
+      if (k === 'affiliate' || k === 'aff' || k === 'affid' || k === 'aff_id') {
+        return true;
+      }
+      if (k === 'utm_source' && /affiliate/i.test(value)) {
+        return true;
+      }
+    }
+
+    // Path-based affiliate segments, e.g. /affiliate/, /aff/, /partner/.
+    return /\/(?:affiliate|aff|partner)\//i.test(parsed.pathname);
   }
 
   /**

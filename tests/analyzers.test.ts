@@ -941,7 +941,10 @@ void describe('categorize (Phase 2 routing)', () => {
   void it('ignores an embedded example URL when routing a section', () => {
     // The `https://` of a cited URL must not pull a finding into the technical
     // section via `/HTTPS|TLS|SSL/`.
-    assert.strictEqual(categorize('Broken pagination wastes crawl budget — https://www.siro.ai/insights/page/{N}'), 'seo');
+    assert.strictEqual(
+      categorize('Broken pagination wastes crawl budget — https://www.siro.ai/insights/page/{N}'),
+      'seo',
+    );
     assert.strictEqual(categorize('Duplicate page titles found — https://example.com/a'), 'seo');
   });
 });
@@ -1172,7 +1175,10 @@ void describe('buildReportMarkdown determinism', () => {
     assert.ok(md.includes('All 10 attempted page(s)'), 'banner should state how many pages errored');
     assert.ok(md.includes('not a reliable audit'), 'banner must flag the findings/scores as unreliable');
     // The banner sits above the findings so it is seen first.
-    assert.ok(md.indexOf('no analyzable pages') < md.indexOf('Page has very thin content'), 'banner must precede findings');
+    assert.ok(
+      md.indexOf('no analyzable pages') < md.indexOf('Page has very thin content'),
+      'banner must precede findings',
+    );
   });
 
   void it('produces identical affected-pages samples regardless of example order', () => {
@@ -1362,6 +1368,8 @@ import { benchmarkFor } from '../lib/phase2/benchmarks';
 // URL architecture — long-URL finding names the offending URLs
 // ============================================================
 import { UrlArchitectureAnalyzer } from '../lib/analyzers/seo/url-architecture-analyzer';
+import { ExternalLinksAnalyzer } from '../lib/analyzers/seo/external-links-analyzer';
+import { ResourceHintsAnalyzer } from '../lib/analyzers/performance/resource-hints-analyzer';
 
 void describe('UrlArchitectureAnalyzer long URLs', () => {
   void it('lists the actual long URLs in the finding detail, not just a count', () => {
@@ -1383,6 +1391,63 @@ void describe('UrlArchitectureAnalyzer long URLs', () => {
     const pages = { 'https://ex.com/': {} as PageInfo, 'https://ex.com/about': {} as PageInfo };
     const { warnings } = UrlArchitectureAnalyzer.analyzeSiteWide(pages, 'https://ex.com');
     assert.ok(!warnings.some((w) => w.message === 'Some URLs are too long'));
+  });
+});
+
+void describe('ResourceHintsAnalyzer.isPreloaded', () => {
+  void it('matches a preload by exact href and by query-string variant', () => {
+    const preloads = [{ href: 'https://ex.com/hero.jpg' }];
+    assert.ok(ResourceHintsAnalyzer.isPreloaded('https://ex.com/hero.jpg', preloads));
+    assert.ok(ResourceHintsAnalyzer.isPreloaded('https://ex.com/hero.jpg?v=2', preloads));
+  });
+
+  void it('does not treat an empty/missing preload href as matching every resource', () => {
+    assert.ok(!ResourceHintsAnalyzer.isPreloaded('https://ex.com/hero.jpg', [{ href: '' }]));
+    assert.ok(!ResourceHintsAnalyzer.isPreloaded('https://ex.com/hero.jpg', [{}]));
+  });
+});
+
+void describe('UrlArchitectureAnalyzer session-ID detection', () => {
+  const origin = 'https://ex.com';
+  const flagged = (url: string) =>
+    UrlArchitectureAnalyzer.analyze(url, {} as PageInfo, origin).issues.some((i) => i.type === 'session_id_in_url');
+
+  void it('flags a genuine session-id query parameter', () => {
+    assert.ok(flagged('https://ex.com/cart?sid=ABC123'), 'sid= query param');
+    assert.ok(flagged('https://ex.com/cart?PHPSESSID=deadbeef'), 'PHPSESSID query param');
+  });
+
+  void it('flags a path-embedded session token that assigns a value', () => {
+    assert.ok(flagged('https://ex.com/page;jsessionid=ABC123'), 'matrix jsessionid');
+  });
+
+  void it('does not flag ordinary words containing "sid" (regression: "resident")', () => {
+    assert.ok(!flagged('https://ex.com/resident-engagement/'));
+    assert.ok(!flagged('https://ex.com/de-de/resident-self-service/'));
+    assert.ok(!flagged('https://ex.com/considerations/outside-zone/'));
+  });
+});
+
+void describe('ExternalLinksAnalyzer.isAffiliateLink', () => {
+  void it('flags real affiliate signals', () => {
+    assert.ok(ExternalLinksAnalyzer.isAffiliateLink('https://partner.com/go?aff=123'), 'aff= param');
+    assert.ok(ExternalLinksAnalyzer.isAffiliateLink('https://www.amazon.com/dp/X?tag=mysite-20'), 'amazon tag');
+    assert.ok(ExternalLinksAnalyzer.isAffiliateLink('https://shareasale.com/r.cfm?b=1'), 'named network');
+    assert.ok(ExternalLinksAnalyzer.isAffiliateLink('https://site.com/affiliate/go'), 'path segment');
+    assert.ok(ExternalLinksAnalyzer.isAffiliateLink('https://site.com/x?utm_source=affiliate'), 'utm_source=affiliate');
+  });
+
+  void it('does not flag a vendor "powered by" link with a generic ref param (regression: CookieYes)', () => {
+    assert.ok(
+      !ExternalLinksAnalyzer.isAffiliateLink(
+        'https://www.cookieyes.com/product/cookie-consent/?ref=cypbcyb&utm_source=cookie-banner&utm_medium=powered-by-cookieyes',
+      ),
+    );
+  });
+
+  void it('does not flag generic ref/tag params (referrer, category filters)', () => {
+    assert.ok(!ExternalLinksAnalyzer.isAffiliateLink('https://news.com/article?ref=homepage'));
+    assert.ok(!ExternalLinksAnalyzer.isAffiliateLink('https://blog.com/posts?tag=seo'));
   });
 });
 
@@ -2613,7 +2678,11 @@ void describe('consolidateAnomalies', () => {
     // pages, each with a different title — neither exact-kind nor title labels
     // match, so only the Jaccard kind-token bridge (≥0.6) collapses them.
     const out = consolidateAnomalies([
-      mk({ kind: 'form-empty-action', title: 'Submission form has empty action and uses GET', url: 'https://example.com/1' }),
+      mk({
+        kind: 'form-empty-action',
+        title: 'Submission form has empty action and uses GET',
+        url: 'https://example.com/1',
+      }),
       mk({ kind: 'form-empty-action-get', title: 'Lead form submits to itself via GET', url: 'https://example.com/2' }),
       mk({ kind: 'contact-form-get-action', title: 'Footer form posts to empty action', url: 'https://example.com/3' }),
     ]);
@@ -5691,7 +5760,11 @@ void describe('phase2: issue-aware visual evidence', () => {
     // Prose guidance — must NOT be fenced as code.
     assert.ok(looksLikeProseExample('Replace dead links with archived versions or remove them entirely.'));
     assert.ok(looksLikeProseExample('Change light gray text (#999) on white to darker gray (#595959) for 7:1 ratio.'));
-    assert.ok(looksLikeProseExample('Use try/catch for error-prone code. Test with JavaScript disabled for graceful degradation.'));
+    assert.ok(
+      looksLikeProseExample(
+        'Use try/catch for error-prone code. Test with JavaScript disabled for graceful degradation.',
+      ),
+    );
     // Real code — must stay fenced.
     assert.ok(!looksLikeProseExample('<link rel="canonical" href="https://example.com/page">'));
     assert.ok(!looksLikeProseExample('gtag("consent", "default", { ad_storage: "denied" });'));
@@ -6118,7 +6191,8 @@ void describe('uniform fix recommendations', () => {
       if (rec.example) assert.doesNotMatch(rec.example, /FocusReactive/i, `base catalog "${key}" leaks a brand name`);
     }
     for (const [key, rec] of Object.entries(NEXTJS_FIX_OVERRIDES)) {
-      if (rec.example) assert.doesNotMatch(rec.example, /FocusReactive/i, `Next.js override "${key}" leaks a brand name`);
+      if (rec.example)
+        assert.doesNotMatch(rec.example, /FocusReactive/i, `Next.js override "${key}" leaks a brand name`);
     }
   });
 });

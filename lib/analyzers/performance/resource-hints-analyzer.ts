@@ -173,6 +173,8 @@ class ResourceHintsAnalyzer {
   static isPreloaded(url: string, preloads: ResourceHint[]) {
     return preloads.some((p) => {
       const href = p.href ?? '';
+      // An empty href must never count as a match — anyString.includes('') is true.
+      if (!href || !url) return false;
       return href === url || url.includes(href) || href.includes(url);
     });
   }
@@ -283,6 +285,8 @@ class ResourceHintsAnalyzer {
       if (lcpUrl) {
         const isPreloaded = hints.preload?.some((p) => {
           const href = (p.href as string) ?? '';
+          // An empty href must never count as a match — lcpUrl.includes('') is true.
+          if (!href) return false;
           return href === lcpUrl || lcpUrl.includes(href);
         });
         if (isPreloaded) {

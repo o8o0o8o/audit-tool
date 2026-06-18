@@ -387,7 +387,7 @@ export function verdictBreakdownLine(verdicts: LiveVerdict[]): string {
   const parts = [...byCode.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([c, n]) => `${n} ${REASON_LABELS[c] ?? c}`);
-  return `> **Why findings are unverified** (${unverifiedCount} of the ${verdicts.length} CRITICAL/HIGH/MEDIUM findings live-checked): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
+  return `> **Why findings are unverified** (${unverifiedCount} of the ${verdicts.length} live-checked CRITICAL/HIGH/MEDIUM findings remain unverified): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
 }
 
 /** First real http(s) URL across a finding's example strings (skips templated

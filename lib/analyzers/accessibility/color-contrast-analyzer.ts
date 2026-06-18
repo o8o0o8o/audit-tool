@@ -22,7 +22,7 @@ interface ContrastResult {
 }
 
 class ColorContrastAnalyzer {
-  static async analyze(chromePage: ChromePage, _url: string) {
+  static async analyze(chromePage: ChromePage, url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -144,23 +144,31 @@ class ColorContrastAnalyzer {
     // Keep only top 20 failures
     info.failures = info.failures.sort((a, b) => a.ratio - b.ratio).slice(0, 20);
 
+    // The element count stays in the DETAIL, not the message, so every page's
+    // failure aggregates under ONE finding instead of fragmenting into "(5
+    // elements)", "(24 elements)", … per page (each a distinct key → a distinct
+    // report row, inflating the issue count). Severity is FIXED for the same
+    // reason the message is stable: the aggregator keys by message and keeps the
+    // first-seen severity, so a per-page-varying severity (`>5 ? HIGH : MEDIUM`)
+    // would make the finding's severity depend on non-deterministic crawl order.
+    // See docs/report-rules.md and dom-complexity-analyzer for the same pattern.
+    const pageRef = `<a href="${url}">${url}</a>`;
     if (info.aaFailures > 0) {
       const worst = info.worstContrast;
       const worstDetail = worst
-        ? ` Worst: "${worst.text}" with ratio ${worst.ratio}:1 (${worst.foreground} on ${worst.background})`
+        ? ` Worst: "${worst.text}" with ratio ${worst.ratio}:1 (${worst.foreground} on ${worst.background}).`
         : '';
-
       issues.push({
-        message: `Color contrast fails WCAG AA (${info.aaFailures} elements)`,
-        detail: `${info.aaFailures} of ${info.totalChecked} checked text elements have insufficient contrast ratio.${worstDetail}. Required: 4.5:1 for normal text, 3:1 for large text.`,
-        severity: info.aaFailures > 5 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
+        message: `Color contrast fails WCAG AA`,
+        detail: `${pageRef} has ${info.aaFailures} of ${info.totalChecked} checked text elements below the WCAG AA contrast ratio (4.5:1 for normal text, 3:1 for large text).${worstDetail}`,
+        severity: SEVERITY.MEDIUM,
       });
     }
 
     if (info.aaFailures === 0 && info.aaaFailures > 0) {
       warnings.push({
-        message: `Color contrast passes AA but fails AAA (${info.aaaFailures} elements)`,
-        detail: `${info.aaaFailures} elements pass WCAG AA but fail AAA (7:1 for normal text, 4.5:1 for large text). Consider improving for enhanced accessibility.`,
+        message: `Color contrast passes AA but fails AAA`,
+        detail: `${pageRef} has ${info.aaaFailures} element(s) that pass WCAG AA but fail AAA (7:1 for normal text, 4.5:1 for large text). Consider improving for enhanced accessibility.`,
         severity: SEVERITY.LOW,
       });
     }

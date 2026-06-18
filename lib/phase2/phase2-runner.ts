@@ -571,6 +571,29 @@ export function consolidateAnomalies(anomalies: Anomaly[]): Anomaly[] {
       else union(first, i);
     }
   });
+  // Fuzzy bridge over `kind` slugs: the LLM sometimes emits DIFFERENT slugs for
+  // ONE defect across pages ("form-empty-action", "form-empty-action-get",
+  // "contact-form-get-action" — all the same empty-action GET form). Exact-label
+  // union-find above leaves these as separate findings. Union any two
+  // kind-bearing anomalies whose kind-token sets overlap strongly (Jaccard ≥
+  // 0.6) so the variants collapse. 0.6 catches those genuine variants while
+  // staying ABOVE the ~0.5 overlap of distinct-but-related classes (e.g.
+  // "link-broken-outbound" vs "link-broken-internal"), so it never over-merges.
+  const kindTokens = anomalies.map((a) =>
+    a.kind ? new Set(slug(a.kind).split('-').filter(Boolean)) : null,
+  );
+  for (let i = 0; i < anomalies.length; i++) {
+    const ti = kindTokens[i];
+    if (!ti || ti.size === 0) continue;
+    for (let j = i + 1; j < anomalies.length; j++) {
+      const tj = kindTokens[j];
+      if (!tj || tj.size === 0) continue;
+      let inter = 0;
+      for (const t of ti) if (tj.has(t)) inter++;
+      const union2 = ti.size + tj.size - inter;
+      if (union2 > 0 && inter / union2 >= 0.6) union(i, j);
+    }
+  }
   const groups = new Map<number, Anomaly[]>();
   const order: number[] = [];
   anomalies.forEach((a, i) => {
@@ -2518,7 +2541,16 @@ function buildEvidenceBlock(
  * Templated series keys (`…/page/{N}`) are dropped — they aren't real pages.
  */
 function extractAllUrls(s: string): string[] {
-  return [...new Set((s.match(/https?:\/\/[^\s<>"']+/g) ?? []).filter((u) => !isTemplateUrl(u)))];
+  // Strip trailing sentence/list punctuation the greedy `[^\s<>"']+` class would
+  // otherwise glue onto a URL — when URLs are joined into prose ("Affected: a, b, c")
+  // every URL but the last keeps a trailing comma, producing a broken link.
+  return [
+    ...new Set(
+      (s.match(/https?:\/\/[^\s<>"']+/g) ?? [])
+        .map((u) => u.replace(/[.,;:!?]+$/, ''))
+        .filter((u) => !isTemplateUrl(u)),
+    ),
+  ];
 }
 
 /**
@@ -2573,7 +2605,13 @@ function clusterLabel(s: string): string {
   // duplicate-description details wrap their page list in `<ul><li>`; without
   // cutting there too, the stray `<ul>`/`<li>` tags fall inside the label and
   // sanitizeProse renders them as literal inline code (`\`<ul>\`\`<li>\``).
-  const idx = s.search(/<a\b|<ul\b|<ol\b|<li\b|<br\s*\/?>|https?:\/\//i);
+  // Mask `<code>…</code>` spans before locating the cut: a finding can MENTION a
+  // URL inside code (the broken-pagination series key is itself a full URL,
+  // `<code>https://site/page/{N}</code>`), and a bare `https?://` there would
+  // otherwise be mistaken for the start of the page list — yielding the label
+  // "The `<code>`". Masking preserves length so the slice index stays valid.
+  const masked = s.replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, (m) => ' '.repeat(m.length));
+  const idx = masked.search(/<a\b|<ul\b|<ol\b|<li\b|<br\s*\/?>|https?:\/\//i);
   // sanitizeProse (not stripHtml) so literal element mentions in the label
   // ("Pages missing <main>") render as inline code instead of vanishing.
   return sanitizeProse(idx >= 0 ? s.slice(0, idx) : s)

@@ -155,8 +155,13 @@ const RULES: Array<{ category: ScoredCategory; patterns: RegExp[] }> = [
 ];
 
 export function scoredCategoryOf(message: string): ScoredCategory {
+  // Strip embedded URLs first: a finding message often ends with a cited example
+  // URL ("… — https://site/page"), and the `https://` scheme would otherwise
+  // match the Security rule's `/\bHTTPS\b/` (or `/\bSSL\b/` etc.), misrouting an
+  // SEO/crawl finding onto the Security score.
+  const text = message.replace(/https?:\/\/\S+/gi, ' ');
   for (const rule of RULES) {
-    if (rule.patterns.some((p) => p.test(message))) return rule.category;
+    if (rule.patterns.some((p) => p.test(text))) return rule.category;
   }
   return 'technical';
 }

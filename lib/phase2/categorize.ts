@@ -125,11 +125,15 @@ const RULES: Array<{ section: Section; patterns: RegExp[] }> = [
 ];
 
 export function categorize(message: string): Section {
+  // Strip embedded URLs first so a cited example URL ("… — https://site/page")
+  // can't trip keyword rules via its scheme/host (e.g. `/HTTPS|TLS|SSL/` matching
+  // the `https://` of the link rather than the finding's actual subject).
+  const text = message.replace(/https?:\/\/\S+/gi, ' ');
   for (const rule of PRECEDENCE) {
-    if (rule.patterns.some((re) => re.test(message))) return rule.section;
+    if (rule.patterns.some((re) => re.test(text))) return rule.section;
   }
   for (const rule of RULES) {
-    if (rule.patterns.some((re) => re.test(message))) return rule.section;
+    if (rule.patterns.some((re) => re.test(text))) return rule.section;
   }
   return 'technical'; // default catch-all
 }

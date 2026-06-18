@@ -20,7 +20,7 @@
  */
 
 import { CRAWL_SETTINGS, SEVERITY } from '../../constants';
-import { escapeHtml, getPaginationSeriesKey, getPaginationPageNumber, formatSampleList } from '../../utils';
+import { getPaginationSeriesKey, getPaginationPageNumber } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
 interface SeriesPage {
@@ -210,14 +210,21 @@ class BrokenPaginationAnalyzer {
         }
         if (!added) break;
       }
+      // Sample URLs render as proper anchor links after a <br>, NOT joined into
+      // the prose. A bare "Affected: a, b, c" list let the curated report's URL
+      // extractor glue the ", " separators onto each href (→ ".../page/7,") and
+      // made the cluster-label helper cut the label at the first bare URL. The
+      // series key lives in the message (the report header) — repeating it here
+      // as `<code>…</code>` was redundant and, since the key is itself a full URL
+      // (`…/page/{N}`), tripped both the URL extractor and the label cutter.
+      const sampleLinks = sampleUrls.map((u) => `<a href="${u}">${u}</a>`).join('<br>');
       issues.push({
         message: `Broken pagination wastes crawl budget — ${key}`,
         detail:
-          `The <code>${escapeHtml(key)}</code> pagination series advances into ${allTail.length} empty, ` +
-          `duplicate, or not-found page(s) (${range}). The "next" link keeps returning HTTP 200 with no real ` +
-          `content, so crawlers (Googlebot) follow it indefinitely and waste crawl budget on pages that will ` +
-          `never be indexed.${variantNote}${truncatedNote} Remove the "next" link on the last real page (or return a 404 for ` +
-          `out-of-range pages) so pagination terminates. Affected: ${formatSampleList(sampleUrls)}`,
+          `This pagination series advances into ${allTail.length} empty, duplicate, or not-found ` +
+          `page(s) (${range}) that return HTTP 200 with no real content, so crawlers (Googlebot) follow the ` +
+          `"next" link indefinitely and waste crawl budget on pages that will never be indexed.${variantNote}${truncatedNote}` +
+          `<br>Affected pages:<br>${sampleLinks}`,
         severity: SEVERITY.HIGH,
       });
     }

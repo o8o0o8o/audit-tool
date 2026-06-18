@@ -937,6 +937,13 @@ void describe('categorize (Phase 2 routing)', () => {
   void it('falls back to technical for unknown', () => {
     assert.strictEqual(categorize('Some completely unknown finding xyz'), 'technical');
   });
+
+  void it('ignores an embedded example URL when routing a section', () => {
+    // The `https://` of a cited URL must not pull a finding into the technical
+    // section via `/HTTPS|TLS|SSL/`.
+    assert.strictEqual(categorize('Broken pagination wastes crawl budget — https://www.siro.ai/insights/page/{N}'), 'seo');
+    assert.strictEqual(categorize('Duplicate page titles found — https://example.com/a'), 'seo');
+  });
 });
 
 // ============================================================
@@ -2601,6 +2608,29 @@ void describe('consolidateAnomalies', () => {
     assert.strictEqual(out[0].occurrences?.length, 2);
   });
 
+  void it('bridges different kind slugs for one defect via kind-token overlap', () => {
+    // The LLM emitted three slugs for the SAME empty-action GET form across
+    // pages, each with a different title — neither exact-kind nor title labels
+    // match, so only the Jaccard kind-token bridge (≥0.6) collapses them.
+    const out = consolidateAnomalies([
+      mk({ kind: 'form-empty-action', title: 'Submission form has empty action and uses GET', url: 'https://example.com/1' }),
+      mk({ kind: 'form-empty-action-get', title: 'Lead form submits to itself via GET', url: 'https://example.com/2' }),
+      mk({ kind: 'contact-form-get-action', title: 'Footer form posts to empty action', url: 'https://example.com/3' }),
+    ]);
+    assert.strictEqual(out.length, 1);
+    assert.strictEqual(out[0].occurrences?.length, 3);
+  });
+
+  void it('does not over-merge related-but-distinct kinds below the overlap threshold', () => {
+    // {link,broken,outbound} vs {link,broken,internal}: Jaccard 0.5 < 0.6 —
+    // different defects, must stay separate.
+    const out = consolidateAnomalies([
+      mk({ kind: 'link-broken-outbound', title: 'Outbound links 404', url: 'https://example.com/1' }),
+      mk({ kind: 'link-broken-internal', title: 'Internal links 404', url: 'https://example.com/2' }),
+    ]);
+    assert.strictEqual(out.length, 2);
+  });
+
   void it('merges the same kind across sections into the dominant section', () => {
     const out = consolidateAnomalies([
       mk({ kind: 'form-get', section: 'ux', severity: 'high', url: 'https://example.com/1' }),
@@ -2941,6 +2971,18 @@ void describe('score-impact', () => {
     assert.strictEqual(scoredCategoryOf('Form inputs missing labels'), 'accessibility');
     // JS errors must read as Technical, never Performance.
     assert.strictEqual(scoredCategoryOf('Critical JavaScript errors detected'), 'technical');
+  });
+
+  void it('ignores an embedded example URL when categorizing (https:// must not match Security)', () => {
+    // A finding message often ends with a cited URL. The `https://` scheme would
+    // otherwise match the Security rule's `/\bHTTPS\b/` and misroute the score.
+    assert.strictEqual(
+      scoredCategoryOf('Broken pagination wastes crawl budget — https://www.siro.ai/insights/page/{N}'),
+      'seo',
+    );
+    assert.strictEqual(scoredCategoryOf('Some pages have titles that are too long — https://example.com/about'), 'seo');
+    // A genuine security finding that happens to cite a URL still routes to security.
+    assert.strictEqual(scoredCategoryOf('Missing Permissions-Policy header — https://example.com/'), 'security');
   });
 
   void it('projects a higher score and attributes per-finding points within the gap', () => {

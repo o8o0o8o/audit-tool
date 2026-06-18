@@ -45,6 +45,8 @@ function generateHTML(
   // Determine output path
   const htmlOutputPath = outputPath ?? `${safeDomainName}.html`;
 
+  console.log('\n📝 Generating HTML report…');
+
   // Load all data using the data processor with error recovery
   let reportData;
   let loadError = null;

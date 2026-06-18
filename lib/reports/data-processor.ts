@@ -37,7 +37,7 @@ class ReportDataProcessor {
    * @private
    */
   static #loadMultiFileData(manifestPath: string, runDir: string) {
-    console.log(`Loading audit data from multi-file format...`);
+    console.log(`  - Loading audit data (multi-file format)…`);
 
     // Load manifest
     const manifest = FileManager.readJsonFile(manifestPath);
@@ -124,7 +124,7 @@ class ReportDataProcessor {
       console.warn('');
     }
 
-    console.log(`✓ Loaded ${Object.keys(pages).length} pages from ${loadedBatchCount}/${batches.length} batches\n`);
+    console.log(`  - Loaded ${Object.keys(pages).length} pages from ${loadedBatchCount}/${batches.length} batches`);
 
     // Load repo analysis if available
     let repoAnalysis = null;
@@ -194,7 +194,7 @@ class ReportDataProcessor {
    * @private
    */
   static #loadLegacyData(file: string, domainName: string, fileDir: string) {
-    console.log(`Loading audit data from legacy format...`);
+    console.log(`  - Loading audit data (legacy format)…`);
     const jsonData = FileManager.readJsonFile(file);
 
     // Load and merge archived pages if they exist

@@ -87,7 +87,7 @@ class RepoOrchestrator {
       return result;
     }
 
-    console.log(`Detected framework: ${frameworkInfo.framework} ${frameworkInfo.version ?? ''}`);
+    console.log(`  - Framework: ${frameworkInfo.framework} ${frameworkInfo.version ?? ''}`);
 
     // 2. Validate framework config
     try {
@@ -126,7 +126,7 @@ class RepoOrchestrator {
     try {
       routes = RouteExtractor.extract(repoPath, frameworkInfo);
       if (routes.length > 0) {
-        console.log(`Extracted ${routes.length} route(s) from source code`);
+        console.log(`  - Extracted ${routes.length} route(s) from source code`);
       }
     } catch (err: unknown) {
       console.error('Repo analysis: route extraction failed:', (err as Error).message);
@@ -157,7 +157,7 @@ class RepoOrchestrator {
         );
         const mappedCount = Object.keys(result.sourceMapping).length;
         if (mappedCount > 0) {
-          console.log(`Mapped ${mappedCount} issue type(s) to source locations`);
+          console.log(`  - Mapped ${mappedCount} issue type(s) to source locations`);
         }
       } catch (err: unknown) {
         console.error('Repo analysis: source mapping failed:', (err as Error).message);

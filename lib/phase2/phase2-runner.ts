@@ -38,6 +38,7 @@ import { detectAnomalies, type Anomaly } from './llm-anomaly';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
 import { isClaudeCliAvailable } from './claude-cli';
+import { PhaseProgress, timedStep } from '../utils/phase-progress';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -1311,9 +1312,10 @@ async function prepareNarratives(
   const cacheDir = path.join(artifacts.runDir, 'cache', 'llm-narrative');
 
   const out: Partial<Record<Section, string | null>> = {};
-  const calls = SECTION_ORDER.map(async (section) => {
+  const sectionsWithItems = SECTION_ORDER.filter((section) => buckets[section].length > 0);
+  const progress = new PhaseProgress('Section narratives (LLM)', sectionsWithItems.length);
+  const calls = sectionsWithItems.map(async (section) => {
     const items = buckets[section];
-    if (items.length === 0) return;
     const findings = items.slice(0, 30).map(([message, detail]) => ({
       message: stripHtml(message),
       severity: detail.severity ?? 'medium',
@@ -1326,8 +1328,10 @@ async function prepareNarratives(
       cacheDir,
       verbose: options.verbose,
     });
+    progress.tick();
   });
   await Promise.all(calls);
+  progress.done(`Section narratives: ${sectionsWithItems.length}`);
   return out;
 }
 
@@ -2623,12 +2627,18 @@ function writePhase2State(
  * Phase 3 verify runner re-renders from). Returns the PDF path.
  */
 export async function runPhase2(runDir: string, options: Phase2Options = {}): Promise<string> {
+  console.log('\n📝 Phase 2 — building curated report…');
   const artifacts = loadArtifacts(runDir);
   // Verification first — it decides which findings survive, so the narrative
-  // and the rendered report both work from the suppressed set.
-  const suppressed = await prepareSuppression(artifacts, options);
+  // and the rendered report both work from the suppressed set. Only the LLM
+  // path is slow enough to announce (the deterministic path is sub-second).
+  const suppressed = options.llmVerify
+    ? await timedStep('Verifying findings (LLM)', () => prepareSuppression(artifacts, options))
+    : await prepareSuppression(artifacts, options);
   // Optional LLM anomaly pass — returns [] when disabled, no API key, or no
-  // evidence. Never blocks report generation. Runs in parallel with narratives.
+  // evidence. Never blocks report generation. Runs in parallel with narratives;
+  // each emits its own per-item progress counter (prepareNarratives /
+  // detectAnomalies).
   const [narratives, rawAnomalies] = await Promise.all([
     prepareNarratives(artifacts, options, suppressed),
     options.llmFindings
@@ -2657,12 +2667,14 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   }
 
   const pdfPath = path.join(runDir, 'audit-report.pdf');
-  await renderMarkdownToPdf(markdown, pdfPath, {
-    title: `${artifacts.manifest.domain} — audit report`,
-    // Base at the run dir (where the .md/.html/.pdf live) so the `evidence/<dir>/…`
-    // image paths resolve both in the rendered PDF and in the directly-opened report.
-    imageBaseDir: runDir,
-  });
+  await timedStep('Rendering PDF', () =>
+    renderMarkdownToPdf(markdown, pdfPath, {
+      title: `${artifacts.manifest.domain} — audit report`,
+      // Base at the run dir (where the .md/.html/.pdf live) so the `evidence/<dir>/…`
+      // image paths resolve both in the rendered PDF and in the directly-opened report.
+      imageBaseDir: runDir,
+    }),
+  );
 
   return pdfPath;
 }

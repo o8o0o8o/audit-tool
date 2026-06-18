@@ -440,7 +440,7 @@ async function audit() {
       if (!repoValidation.valid) {
         console.error(`\n⚠️  Repo analysis skipped: ${repoValidation.error}`);
       } else {
-        console.log(`\n📂 Running source code analysis on: ${repoValidation.resolvedPath}`);
+        console.log(`\n📂 Source code analysis — ${repoValidation.resolvedPath}`);
         try {
           const repoPath = repoValidation.resolvedPath ?? args.repo;
           const repoAnalysis = RepoOrchestrator.analyze(repoPath, seo.data);
@@ -451,7 +451,7 @@ async function audit() {
           // degradation so a failure can never lose the deterministic result.
           if (args.llmRepo) {
             try {
-              console.log('🤖 Running LLM repo analysis (find more / confirm / fix)…');
+              console.log('  - LLM pass (find more / confirm / fix)…');
               const ctx = buildRepoContext(repoAnalysis, seo.data);
               const llmFindings = await analyzeRepoWithLlm(repoPath, ctx, {
                 cacheDir: path.join(seo.fileManager.resultsDir, 'llm-cache'),
@@ -459,12 +459,12 @@ async function audit() {
               });
               if (llmFindings.length > 0) {
                 repoAnalysis.llmFindings = llmFindings;
-                console.log(`🤖 LLM repo analysis: ${llmFindings.length} AI finding(s)`);
+                console.log(`  - LLM pass: ${llmFindings.length} AI finding(s)`);
               } else {
-                console.log('🤖 LLM repo analysis: no additional findings (or no transport).');
+                console.log('  - LLM pass: no additional findings (or no transport).');
               }
             } catch (e: unknown) {
-              console.error('⚠️  LLM repo analysis failed (deterministic result kept):', (e as Error).message);
+              console.error('  ⚠️  LLM pass failed (deterministic result kept):', (e as Error).message);
             }
           }
 
@@ -495,7 +495,7 @@ async function audit() {
             (repoAnalysis.issues?.length ?? 0) +
             (repoAnalysis.warnings?.length ?? 0) +
             (repoAnalysis.llmFindings?.length ?? 0);
-          console.log(`✅ Repo analysis complete: ${issueCount} finding(s)`);
+          console.log(`  ✓ Source analysis complete: ${issueCount} finding(s)`);
         } catch (error: unknown) {
           console.error('⚠️  Repo analysis failed:', (error as Error).message);
         }

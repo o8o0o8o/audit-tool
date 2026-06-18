@@ -34,6 +34,7 @@ import type { PageInfo } from '../types';
 import type { Section } from './categorize';
 import type { AuditArtifacts } from './types';
 import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
+import { PhaseProgress } from '../utils/phase-progress';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const LLM_API_TIMEOUT_MS = 120_000;
@@ -338,14 +339,24 @@ export async function detectAnomalies(artifacts: AuditArtifacts, options: Anomal
   };
 
   // API: parallel (cheap HTTPS). CLI: sequential — spawning many headless
-  // `claude` processes at once is heavy and the sample is small.
+  // `claude` processes at once is heavy and the sample is small. Either way,
+  // count completed pages so the (LLM-bound, multi-second) pass isn't silent.
+  const progress =
+    entries.length > 0 ? new PhaseProgress(`Scanning pages for anomalies${useCli ? ' (CLI)' : ''}`, entries.length) : null;
+  const trackPage = async (entry: [string, { url?: string | null; files: string[] }]): Promise<Anomaly[]> => {
+    const r = await analyzePage(entry);
+    progress?.tick();
+    return r;
+  };
+
   let results: Anomaly[][];
   if (useCli) {
     results = [];
-    for (const entry of entries) results.push(await analyzePage(entry));
+    for (const entry of entries) results.push(await trackPage(entry));
   } else {
-    results = await Promise.all(entries.map(analyzePage));
+    results = await Promise.all(entries.map(trackPage));
   }
+  progress?.done(`Scanned ${entries.length} page(s) for anomalies`);
 
   return results.flat();
 }

@@ -27,6 +27,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { callClaudeCli, isClaudeCliAvailable, extractCliResult } from '../phase2/claude-cli';
+import { PhaseProgress } from '../utils/phase-progress';
 
 // Re-export the shared CLI helpers so existing importers (phase2-runner, tests)
 // keep working unchanged after the transport was hoisted to ./claude-cli.
@@ -227,7 +228,16 @@ export async function llmVerifyFindings(items: LlmVerifyItem[], options: LlmVeri
   const batches: LlmVerifyItem[][] = [];
   for (let i = 0; i < items.length; i += BATCH_SIZE) batches.push(items.slice(i, i + BATCH_SIZE));
 
-  const results = await Promise.all(batches.map((batch) => verifyBatch(batch, apiKey, options)));
+  const progress = new PhaseProgress('LLM verify batches', batches.length);
+  const results = await Promise.all(
+    batches.map((batch) =>
+      verifyBatch(batch, apiKey, options).then((r) => {
+        progress.tick();
+        return r;
+      }),
+    ),
+  );
+  progress.done(`LLM verified ${items.length} finding(s) in ${batches.length} batch(es)`);
   return results.flat();
 }
 
@@ -327,7 +337,16 @@ export async function llmVerifyFindingsVision(
 ): Promise<LlmVerdict[]> {
   const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
   if (!apiKey || items.length === 0) return [];
-  const results = await Promise.all(items.map((it) => verifyOneVision(it, apiKey, options)));
+  const progress = new PhaseProgress('LLM vision checks', items.length);
+  const results = await Promise.all(
+    items.map((it) =>
+      verifyOneVision(it, apiKey, options).then((r) => {
+        progress.tick();
+        return r;
+      }),
+    ),
+  );
+  progress.done(`Vision-checked ${items.length} finding(s)`);
   return results.filter((r): r is LlmVerdict => r !== null);
 }
 
@@ -388,8 +407,14 @@ export async function claudeCliVerifyFindings(
   for (let i = 0; i < items.length; i += BATCH_SIZE) batches.push(items.slice(i, i + BATCH_SIZE));
 
   // Sequential: spawning many CLI processes at once is heavy and offers little
-  // gain over the API path's parallelism. Batches are few in practice.
+  // gain over the API path's parallelism. Batches are few in practice — but each
+  // CLI spawn is slow (up to 180s), so show batch progress + ETA.
+  const progress = new PhaseProgress('LLM verify batches (CLI)', batches.length);
   const out: LlmVerdict[] = [];
-  for (const batch of batches) out.push(...(await cliVerifyBatch(batch, options)));
+  for (const batch of batches) {
+    out.push(...(await cliVerifyBatch(batch, options)));
+    progress.tick();
+  }
+  progress.done(`LLM verified ${items.length} finding(s) in ${batches.length} batch(es)`);
   return out;
 }

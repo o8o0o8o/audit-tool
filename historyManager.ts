@@ -199,8 +199,7 @@ class HistoryManager {
     history.audits.push(snapshot);
     this.saveHistory(history);
 
-    console.log(`\n📊 Audit snapshot saved to history`);
-    console.log(`   Total audits: ${history.audits.length}`);
+    console.log(`\n📊 Saved audit snapshot to history (${history.audits.length} audit(s) total)`);
 
     return snapshot;
   }

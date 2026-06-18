@@ -34,6 +34,7 @@ import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT, CRAWL_SETTINGS } from '../con
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
 import { withTimeout } from '../crawler/resilience';
 import { isFetchAllowed } from '../../validators';
+import { PhaseProgress } from '../utils/phase-progress';
 
 // SSRF guard for the standalone --verify re-fetch: the report's example URLs are
 // re-fetched live, so a private/internal host parsed out of an old report must
@@ -1944,11 +1945,14 @@ async function fetchSitemapUrls(origin: string, timeoutMs: number): Promise<{ ur
   const seen = new Set<string>();
   let budget = 25;
   let droppedChild = false; // a child sitemap we couldn't enqueue (index fan-out cap)
+  // Unknown total (an index fans out into children as we read it), so count-only.
+  const progress = new PhaseProgress('Reading sitemaps', 0);
   while (queue.length && budget-- > 0) {
     const sm = queue.shift() as string;
     if (seen.has(sm)) continue;
     seen.add(sm);
     const xml = await fetchText(sm, timeoutMs);
+    progress.tick();
     if (!xml) continue;
     const isIndex = /<sitemapindex/i.test(xml);
     for (const m of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)) {
@@ -1958,10 +1962,14 @@ async function fetchSitemapUrls(origin: string, timeoutMs: number): Promise<{ ur
         else droppedChild = true;
       } else {
         urls.add(normUrl(loc));
-        if (urls.size >= 50000) return { urls, capped: true };
+        if (urls.size >= 50000) {
+          progress.done(`Read ${seen.size} sitemap(s), ${urls.size} URL(s)`);
+          return { urls, capped: true };
+        }
       }
     }
   }
+  progress.done(`Read ${seen.size} sitemap(s), ${urls.size} URL(s)`);
   // Incomplete if the fetch budget ran out with sitemaps still queued, or the
   // index fan-out cap dropped a child we never read.
   return { urls, capped: queue.length > 0 || droppedChild };
@@ -1988,11 +1996,15 @@ async function buildReachable(
   // from `reachable` can't be asserted as an orphan — coverage is incomplete
   // even if the queue happens to drain to empty.
   let suppressed = false;
+  // Unknown total (the frontier grows as we crawl, soft-capped at MAX_PAGES), so
+  // a count-only line — extrapolating an ETA toward a moving target would lie.
+  const progress = new PhaseProgress('Mapping site graph (BFS)', 0);
   try {
     const page = await context.newPage();
     while (queue.length && visited < MAX_PAGES) {
       const url = queue.shift() as string;
       visited++;
+      progress.tick();
       if (!liveFetchAllowed(url)) continue;
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
@@ -2022,6 +2034,7 @@ async function buildReachable(
   } finally {
     await context.close().catch(() => undefined);
   }
+  progress.done(`Mapped site graph: ${visited} crawled, ${reachable.size} reachable`);
   // Capped if the loop stopped with work left OR we ever suppressed an enqueue.
   return { set: reachable, capped: queue.length > 0 || suppressed };
 }
@@ -2635,13 +2648,18 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
   if (urlsToFetch.size > 0 || hasSpecial || needsSiteCtx || (needsHomepage && siteOrigin)) {
     const browser = await chromium.launch();
     try {
-      // 1. Per-page signal captures.
+      // 1. Per-page signal captures. Sequential page loads — the dominant cost
+      // of the live pass — so show an in-place counter + ETA (verbose keeps the
+      // per-URL lines).
+      const fetchProgress = urlsToFetch.size > 0 ? new PhaseProgress('Re-fetching pages', urlsToFetch.size) : null;
       let n = 0;
       for (const url of urlsToFetch) {
         n++;
         if (opts.verbose) console.log(`  … live-fetching (${n}/${urlsToFetch.size}) ${url}`);
         cache.set(url, await captureOne(browser, url, timeoutMs, opts.throttle));
+        fetchProgress?.tick();
       }
+      fetchProgress?.done(`Re-fetched ${urlsToFetch.size} page(s)`);
 
       // 1b. Homepage capture backing the siteWidePage checkers (resource hints,
       // E-E-A-T) — those findings cite no per-page URL.

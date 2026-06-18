@@ -1863,12 +1863,50 @@ function find<T extends { message?: string }>(arr: T[], fragment: string): T | u
 }
 
 void describe('SourcePatternAnalyzer', () => {
-  void it('returns nothing for non-Next.js frameworks', () => {
-    const root = fakeRepo('app/page.tsx', `export default function P() { return null; }`);
-    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Nuxt', srcDirs: ['app'] });
+  void it('returns nothing for an unrecognised framework (null)', () => {
+    const root = fakeRepo('app/utils.ts', `import _ from 'lodash';\n`);
+    const r = SourcePatternAnalyzer.analyze(root, { framework: null, srcDirs: ['app'] });
     fs.rmSync(root, { recursive: true, force: true });
     assert.strictEqual(r.issues.length, 0);
     assert.strictEqual(r.warnings.length, 0);
+  });
+
+  void it('does NOT run Next-only patterns on a non-Next framework', () => {
+    // `cache: "no-store"` is a Next-data-cache concern; it must not fire on Nuxt.
+    const root = fakeRepo('app/fetcher.ts', `export const load = () => fetch('/x', { cache: "no-store" });\n`);
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Nuxt', srcDirs: ['app'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(!find([...r.issues, ...r.warnings], 'Next.js data cache'), 'Next-only pattern must not fire on Nuxt');
+  });
+
+  void it('runs framework-agnostic import checks on a non-Next framework (lodash on Nuxt)', () => {
+    const root = fakeRepo('app/utils.ts', `import _ from 'lodash';\nexport const d = _.debounce(() => {}, 100);\n`);
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Nuxt', srcDirs: ['app'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(find(r.warnings, 'lodash imported as a whole library'), 'universal lodash check must run on Nuxt');
+  });
+
+  void it('flags a full moment.js import (framework-agnostic)', () => {
+    const root = fakeRepo('src/date.ts', `import moment from 'moment';\nexport const now = () => moment();\n`);
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'Astro', srcDirs: ['src'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(find(r.warnings, 'moment.js imported'), 'universal moment check must run on Astro');
+  });
+
+  void it('flags SvelteKit `export const ssr = false` in a +page route', () => {
+    const root = fakeRepo('src/routes/+page.ts', `export const ssr = false;\nexport const load = () => ({});\n`);
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'SvelteKit', srcDirs: ['src'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    const hit = find(r.issues, 'Route disables SSR');
+    assert.ok(hit, 'SvelteKit ssr=false on a route must fire');
+    assert.strictEqual(hit?.severity, 'high');
+  });
+
+  void it('does NOT flag `ssr = false` outside a +page/+layout route file', () => {
+    const root = fakeRepo('src/lib/config.ts', `export const ssr = false;\n`);
+    const r = SourcePatternAnalyzer.analyze(root, { framework: 'SvelteKit', srcDirs: ['src'] });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(!find([...r.issues, ...r.warnings], 'Route disables SSR'), 'non-route ssr=false must not fire');
   });
 
   void it('flags cache: "no-store"', () => {
@@ -2034,7 +2072,7 @@ void describe('repo framework name parity', () => {
 import { RouteExtractor } from '../lib/analyzers/repo/route-extractor';
 import { RouteSitemapComparator } from '../lib/analyzers/repo/route-sitemap-comparator';
 import { FrameworkConfigValidator } from '../lib/analyzers/repo/framework-config-validator';
-import { SourceMapper } from '../lib/analyzers/repo/source-mapper';
+import { SourceMapper, applyMatcher } from '../lib/analyzers/repo/source-mapper';
 import { renderRepoDetailHtml } from '../lib/reports/sections/source-code-analysis';
 
 /** Build a multi-file fake repo under a temp dir; returns the root. */
@@ -2456,6 +2494,158 @@ void describe('SourceMapper — alt detection & key merge', () => {
       assert.deepStrictEqual(m, {}, `length finding "${key}" must not be source-mapped`);
     }
     fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+/**
+ * Binds each mapping rule to the ACTUAL analyzer source that emits its finding
+ * message: `needle` is a stable literal substring that must appear in `file`.
+ * This is what makes drift detection AUTOMATIC — a silent rename in the analyzer
+ * removes the needle from the file and fails CI, where the static-examples guard
+ * alone would not (its example strings live in the test, not the analyzer). Every
+ * rule kind MUST have an entry here (asserted below), so a new rule can't ship
+ * without being pinned to a real emission site.
+ */
+const REAL_SOURCE_PROBES: Record<string, Array<{ file: string; needle: string }>> = {
+  'missing-title': [{ file: 'lib/crawler/page-data-builder.ts', needle: 'Title is missing' }],
+  'missing-description': [{ file: 'lib/crawler/page-data-builder.ts', needle: 'Description meta tag is missing' }],
+  'missing-canonical': [{ file: 'lib/crawler/page-data-builder.ts', needle: 'Canonicals are not set for some pages' }],
+  'multiple-h1': [{ file: 'lib/analyzers/seo/heading-analyzer.ts', needle: 'Some pages have more than one h1 tag' }],
+  'structured-data': [
+    { file: 'lib/analyzers/site-wide/structured-data-validator.ts', needle: 'Low structured data coverage' },
+  ],
+  'open-graph': [{ file: 'lib/analyzers/site-wide/social-media-validator.ts', needle: 'Low Open Graph tag coverage' }],
+  'missing-alt': [{ file: 'lib/analyzers/seo/anchor-text-analyzer.ts', needle: 'Image links without alt text' }],
+  'deprecated-html': [
+    { file: 'lib/analyzers/seo/deprecated-html-analyzer.ts', needle: 'Deprecated HTML elements found (' },
+  ],
+  'meta-refresh': [
+    { file: 'lib/analyzers/seo/technical-seo-analyzer.ts', needle: 'Page uses meta refresh redirect' },
+    { file: 'lib/analyzers/seo/technical-seo-analyzer.ts', needle: 'Page uses delayed meta refresh' },
+  ],
+};
+
+// The test suite is run from the repo root (package.json `test` script), so the
+// analyzer files resolve relative to cwd. A wrong cwd surfaces as a loud ENOENT,
+// never a silent pass.
+const REPO_ROOT_FOR_PROBES = process.cwd();
+
+void describe('SourceMapper — drift guard (matchers vs real emitted messages)', () => {
+  // The mapping registry is coupled to the FREE-TEXT finding messages analyzers
+  // emit (analysis.details keys). When a message is renamed, a matcher silently
+  // stops firing and the feature degrades with no error — which is exactly how
+  // the alt-text mapper went dead (the real finding is "Image links without alt
+  // text", but the old keys were "images without alt" / "alt text is missing",
+  // which match nothing). Two layers guard this: (1) the static `examples` each
+  // rule documents, and (2) REAL_SOURCE_PROBES below, which reads the emitting
+  // analyzer source so a silent rename there fails CI automatically.
+
+  void it('every rule lists ≥1 example and its matcher matches each one', () => {
+    for (const rule of SourceMapper.rules) {
+      assert.ok(rule.examples.length > 0, `rule "${rule.kind}" must document ≥1 real emitted example`);
+      for (const ex of rule.examples) {
+        assert.ok(
+          applyMatcher(rule.match, ex),
+          `rule "${rule.kind}" matcher no longer matches its documented emitted message: "${ex}" — ` +
+            `the analyzer message was likely renamed; update both the analyzer and the rule's examples`,
+        );
+      }
+    }
+  });
+
+  void it('no rule is dead (would have caught the alt-text regression)', () => {
+    for (const rule of SourceMapper.rules) {
+      assert.ok(
+        rule.examples.some((ex) => applyMatcher(rule.match, ex)),
+        `rule "${rule.kind}" matches none of its real emitted messages — it is dead`,
+      );
+    }
+  });
+
+  void it('maps the REAL alt finding "Image links without alt text" end-to-end', () => {
+    // The regression test proper: drive map() with the ACTUAL emitted string
+    // (not a synthetic "...images without alt..." variant) and assert a location
+    // is produced. This is what the unit tests above this block missed.
+    const root = fakeTree({ 'app/page.tsx': 'export default ()=> <img src="y" />' });
+    const m = SourceMapper.map({ 'Image links without alt text': 1 }, root, { ...NEXT_FI });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(JSON.stringify(m).includes('page.tsx'), 'the real emitted alt finding must resolve to a source location');
+  });
+
+  void it('does not match content-LENGTH findings (no accidental over-broad matcher)', () => {
+    const lengthFindings = [
+      'Some pages have titles that are too short',
+      'Some pages have descriptions that are too long',
+    ];
+    for (const rule of SourceMapper.rules) {
+      for (const lf of lengthFindings) {
+        assert.ok(!applyMatcher(rule.match, lf), `rule "${rule.kind}" must not match length finding "${lf}"`);
+      }
+    }
+  });
+
+  void it('every rule kind is pinned to a real emission site (no rule ships unprobed)', () => {
+    for (const rule of SourceMapper.rules) {
+      assert.ok(
+        REAL_SOURCE_PROBES[rule.kind]?.length,
+        `rule "${rule.kind}" has no REAL_SOURCE_PROBES entry — pin it to the analyzer file:needle that emits its message`,
+      );
+    }
+  });
+
+  void it('each probe needle still exists in its analyzer source (AUTOMATIC rename detection)', () => {
+    for (const [kind, probes] of Object.entries(REAL_SOURCE_PROBES)) {
+      for (const { file, needle } of probes) {
+        const abs = path.join(REPO_ROOT_FOR_PROBES, file);
+        const content = fs.readFileSync(abs, 'utf8');
+        assert.ok(
+          content.includes(needle),
+          `"${needle}" no longer appears in ${file} — the analyzer message for rule "${kind}" was renamed; ` +
+            `update the analyzer AND this probe (and the rule's matcher/examples in source-mapper.ts)`,
+        );
+      }
+    }
+  });
+
+  void it('every probe needle is matched by its own rule (real source ⇄ matcher are in sync)', () => {
+    const byKind = new Map(SourceMapper.rules.map((r) => [r.kind, r]));
+    for (const [kind, probes] of Object.entries(REAL_SOURCE_PROBES)) {
+      const rule = byKind.get(kind);
+      assert.ok(rule, `probe references unknown rule kind "${kind}"`);
+      for (const { needle } of probes) {
+        assert.ok(
+          applyMatcher(rule!.match, needle),
+          `rule "${kind}" matcher does not match its real emitted needle "${needle}"`,
+        );
+      }
+    }
+  });
+});
+
+void describe('SourceMapper — deprecated HTML & meta refresh (B2 reach)', () => {
+  void it('maps deprecated HTML elements to source (real emitted "… (N instances)" string)', () => {
+    const root = fakeTree({ 'src/Old.tsx': 'export default ()=> <center><font size="3">hi</font></center>' });
+    const m = SourceMapper.map({ 'Deprecated HTML elements found (2 instances)': 1 }, root, { ...NEXT_FI });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.ok(JSON.stringify(m).includes('Old.tsx'), 'a lowercase <font>/<center> must resolve to a source location');
+  });
+
+  void it('does NOT flag a capitalised <Font> component as the deprecated <font> element', () => {
+    const root = fakeTree({ 'src/C.tsx': 'import { Font } from "x";\nexport default ()=> <Font>hi</Font>' });
+    const m = SourceMapper.map({ 'Deprecated HTML elements found (1 instances)': 1 }, root, { ...NEXT_FI });
+    fs.rmSync(root, { recursive: true, force: true });
+    assert.deepStrictEqual(m, {}, 'a custom <Font> component is not the deprecated <font> DOM element');
+  });
+
+  void it('maps a meta refresh redirect — both JSX (httpEquiv) and raw HTML (http-equiv)', () => {
+    const jsx = fakeTree({ 'src/R.tsx': 'export default ()=> <meta httpEquiv="refresh" content="0;url=/x" />' });
+    const html = fakeTree({ 'src/p.html': '<head><meta http-equiv="refresh" content="5"></head>' });
+    const mJsx = SourceMapper.map({ 'Page uses meta refresh redirect': 1 }, jsx, { ...NEXT_FI });
+    const mHtml = SourceMapper.map({ 'Page uses delayed meta refresh': 1 }, html, { ...NEXT_FI });
+    fs.rmSync(jsx, { recursive: true, force: true });
+    fs.rmSync(html, { recursive: true, force: true });
+    assert.ok(JSON.stringify(mJsx).includes('R.tsx'), 'JSX httpEquiv="refresh" must map');
+    assert.ok(JSON.stringify(mHtml).includes('p.html'), 'raw http-equiv="refresh" must map');
   });
 });
 

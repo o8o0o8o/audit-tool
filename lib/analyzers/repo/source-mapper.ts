@@ -58,6 +58,37 @@ interface LineSearchCriteria {
   context: string;
 }
 
+/**
+ * How a rule recognises the analysis-detail key (the emitted finding message)
+ * it owns. A plain `RegExp` covers the common case; a predicate is used when the
+ * decision needs more than one signal (e.g. the alt rule needs both an
+ * "alt text/attribute" token AND a "without/missing" token, mirroring the verify
+ * phase's `missing-alt` checker).
+ */
+type Matcher = RegExp | ((key: string) => boolean);
+
+/** Evaluate a {@link Matcher} against an analysis-detail key. */
+function applyMatcher(matcher: Matcher, key: string): boolean {
+  return typeof matcher === 'function' ? matcher(key) : matcher.test(key);
+}
+
+interface MapperRule {
+  /** Stable identifier for the finding family (used in tests / logs). */
+  kind: string;
+  /** Recognises the emitted finding message. */
+  match: Matcher;
+  /**
+   * Representative REAL strings emitted by analyzers for this family. These are
+   * the drift oracle: the guard test asserts `match` still matches each one, so
+   * a renamed finding message that silently breaks mapping fails CI instead of
+   * degrading in production. When an analyzer renames a finding, update BOTH the
+   * analyzer and this list. Each example is annotated with its emitting site.
+   */
+  examples: string[];
+  /** Resolves source locations for the family. */
+  mapper: (repoPath: string, framework: string, srcDirs: string[]) => SourceLocation[];
+}
+
 class SourceMapper {
   /**
    * Map audit issues to source file locations
@@ -77,21 +108,19 @@ class SourceMapper {
     const mapping: Record<string, SourceLocation[]> = {};
     const { framework, srcDirs } = frameworkInfo;
 
-    // Build a set of issue keys present in the analysis
-    const issueKeys = new Set(Object.keys(analysisDetails));
+    const issueKeys = Object.keys(analysisDetails);
 
-    // Map each known issue type to source locations
-    for (const [issueKey, mapper] of Object.entries(this.#ISSUE_MAPPERS)) {
-      // Match issue keys that start with the pattern (some keys are dynamic like "Some pages have...")
-      const matchedKey = this.#findMatchingKey(issueKeys, issueKey);
+    // Map each known issue family to source locations. Rules are evaluated in
+    // order; multiple rules can match the SAME analysis key (e.g. "Title is
+    // missing and images without alt text"), and each rule's locations are
+    // merged under that key rather than overwriting.
+    for (const rule of SourceMapper.#RULES) {
+      const matchedKey = issueKeys.find((k) => applyMatcher(rule.match, k));
       if (!matchedKey) continue;
 
       try {
-        const locations = mapper.call(this, repoPath, framework ?? '', srcDirs);
+        const locations = rule.mapper.call(this, repoPath, framework ?? '', srcDirs);
         if (locations.length > 0) {
-          // Merge rather than overwrite: a single analysis key can contain two
-          // distinct mapper substrings (e.g. "titles too short and images
-          // without alt"), and each mapper's locations must be kept.
           mapping[matchedKey] = (mapping[matchedKey] ?? []).concat(locations);
         }
       } catch {
@@ -103,39 +132,91 @@ class SourceMapper {
   }
 
   /**
-   * Issue pattern -> mapper function
-   * Keys are substrings matched against analysis.details keys
+   * Ordered registry of finding-family → source-locator. Mirrors the verify
+   * phase's `CHECKERS` discipline (lib/phase3/live-verifier.ts): an explicit
+   * matcher + a documented set of real example messages, guarded by a drift
+   * test so a renamed finding can't silently kill the mapping.
+   *
+   * Only structural, source-visible facts are mapped. A title/description that
+   * is "too short"/"too long" is a CONTENT-LENGTH fact, not a structural one:
+   * the value is typically composed at runtime (generateMetadata, a CMS field,
+   * a title template) and is not knowable from a static scan — so length
+   * findings are deliberately absent here.
    */
-  static #ISSUE_MAPPERS = {
-    // Only structural, source-visible facts are mapped. A title/description that
-    // is "too short"/"too long" is a CONTENT-LENGTH fact, not a structural one:
-    // the value is typically composed at runtime (generateMetadata, a CMS field,
-    // a title template) and is not knowable from a static scan. The old length
-    // entries fell through to #mapMissingTitle, which cited "page without
-    // metadata export" — wrong for a title that exists, and identical for the
-    // mutually-exclusive "too short" and "too long" findings. So length findings
-    // are deliberately NOT mapped; only genuinely-missing tags are.
-    'Title is missing': SourceMapper.#mapMissingTitle,
-    'Description meta tag is missing': SourceMapper.#mapMissingDescription,
-    'Canonicals are not set': SourceMapper.#mapMissingCanonical,
-    'more than one h1 tag': SourceMapper.#mapH1Issues,
-    // Substrings must be CONTAINED in the analyzer's emitted message. The schema
-    // and Open Graph analyzers emit "Low structured data coverage" / "Low Open
-    // Graph tag coverage" (not "Missing …"), so match on the shared phrase.
-    'structured data': SourceMapper.#mapMissingStructuredData,
-    'Open Graph': SourceMapper.#mapMissingOpenGraph,
-    'images without alt': SourceMapper.#mapMissingAltText,
-    'alt text is missing': SourceMapper.#mapMissingAltText,
-  };
+  static #RULES: MapperRule[] = [
+    {
+      kind: 'missing-title',
+      match: /Title is missing/i,
+      examples: ['Title is missing'], // lib/crawler/page-data-builder.ts:55
+      mapper: SourceMapper.#mapMissingTitle,
+    },
+    {
+      kind: 'missing-description',
+      match: /Description meta tag is missing/i,
+      examples: ['Description meta tag is missing'], // lib/crawler/page-data-builder.ts:110
+      mapper: SourceMapper.#mapMissingDescription,
+    },
+    {
+      kind: 'missing-canonical',
+      match: /Canonicals are not set/i,
+      examples: ['Canonicals are not set for some pages'], // lib/crawler/page-data-builder.ts:355
+      mapper: SourceMapper.#mapMissingCanonical,
+    },
+    {
+      kind: 'multiple-h1',
+      match: /more than one h1 tag/i,
+      examples: ['Some pages have more than one h1 tag'], // lib/analyzers/seo/heading-analyzer.ts:29
+      mapper: SourceMapper.#mapH1Issues,
+    },
+    {
+      kind: 'structured-data',
+      // The schema validator emits "Low structured data coverage" (not
+      // "Missing …"), so match on the shared phrase.
+      match: /structured data/i,
+      examples: ['Low structured data coverage'], // lib/analyzers/site-wide/structured-data-validator.ts:186
+      mapper: SourceMapper.#mapMissingStructuredData,
+    },
+    {
+      kind: 'open-graph',
+      match: /Open Graph/i,
+      examples: ['Low Open Graph tag coverage'], // lib/analyzers/site-wide/social-media-validator.ts:102
+      mapper: SourceMapper.#mapMissingOpenGraph,
+    },
+    {
+      kind: 'missing-alt',
+      // The real emitted finding is "Image links without alt text" — it does NOT
+      // contain the substring "images without alt", which is why the old
+      // substring keys ('images without alt' / 'alt text is missing') matched
+      // nothing in production. Mirror the verify phase's `missing-alt` checker:
+      // an "alt text/attribute" token plus a "without/missing/no/empty" token.
+      match: (k) => /\balt (text|attribute)\b/i.test(k) && /(without|missing|no\b|empty)/i.test(k),
+      examples: ['Image links without alt text'], // lib/analyzers/seo/anchor-text-analyzer.ts:117
+      mapper: SourceMapper.#mapMissingAltText,
+    },
+    {
+      kind: 'deprecated-html',
+      // The emitted message embeds a per-page instance count, so match the stem.
+      match: /Deprecated HTML elements found/i,
+      examples: ['Deprecated HTML elements found (3 instances)'], // lib/analyzers/seo/deprecated-html-analyzer.ts:115
+      mapper: SourceMapper.#mapDeprecatedHtml,
+    },
+    {
+      kind: 'meta-refresh',
+      match: /meta refresh/i,
+      examples: [
+        'Page uses meta refresh redirect', // lib/analyzers/seo/technical-seo-analyzer.ts:48
+        'Page uses delayed meta refresh', // lib/analyzers/seo/technical-seo-analyzer.ts:54
+      ],
+      mapper: SourceMapper.#mapMetaRefresh,
+    },
+  ];
 
   /**
-   * Find the first key in the set that contains the given substring
+   * Expose rule metadata (kind, matcher, example messages) for the drift-guard
+   * test, without leaking the mapper implementations.
    */
-  static #findMatchingKey(keySet: Set<string>, substring: string) {
-    for (const key of keySet) {
-      if (key.includes(substring)) return key;
-    }
-    return null;
+  static get rules(): ReadonlyArray<{ kind: string; match: Matcher; examples: string[] }> {
+    return SourceMapper.#RULES.map(({ kind, match, examples }) => ({ kind, match, examples }));
   }
 
   // --- Issue mapper methods ---
@@ -424,6 +505,32 @@ class SourceMapper {
     return locations;
   }
 
+  static #mapDeprecatedHtml(repoPath: string, _framework: string, srcDirs: string[]) {
+    // Deprecated/obsolete HTML elements are raw markup, framework-independent —
+    // scan all component/template files. The set mirrors
+    // DeprecatedHTMLAnalyzer.DEPRECATED_ELEMENTS, MINUS <menu> (valid in HTML5)
+    // and <dir> (ambiguous with the `dir` attribute) to avoid false positives.
+    // Case-SENSITIVE on purpose: a lowercase `<font>` is the deprecated DOM
+    // element, while a capitalised `<Font>` is a custom component and must NOT
+    // be flagged (JSX lower-case = DOM, upper-case = component).
+    return this.#findInFilesWithLineSearch(repoPath, srcDirs, /\.(tsx|jsx|js|ts|astro|vue|html|htm)$/, {
+      linePattern: /<(center|font|marquee|blink|big|strike|tt|acronym|applet|basefont|bgsound|nobr|isindex)[\s/>]/,
+      suggestion: 'Replace deprecated HTML elements with modern CSS or semantic equivalents',
+      context: 'deprecated HTML element',
+    });
+  }
+
+  static #mapMetaRefresh(repoPath: string, _framework: string, srcDirs: string[]) {
+    // A `<meta http-equiv="refresh">` redirect is raw markup, framework-
+    // independent. `http-?equiv` + the /i flag matches both raw HTML
+    // (`http-equiv="refresh"`) and JSX (`httpEquiv="refresh"`).
+    return this.#findInFilesWithLineSearch(repoPath, srcDirs, /\.(tsx|jsx|js|ts|astro|vue|html|htm)$/, {
+      linePattern: /http-?equiv\s*=\s*["']?refresh/i,
+      suggestion: 'Remove the meta refresh and use a server-side 301/302 redirect instead',
+      context: 'meta refresh redirect',
+    });
+  }
+
   // --- Helpers ---
 
   /**
@@ -444,14 +551,21 @@ class SourceMapper {
     const results: SourceLocation[] = [];
     const seen = new Set();
     const maxResults = 20;
+    let capped = false;
 
     for (const dir of dirs) {
-      if (results.length >= maxResults) break;
+      if (results.length >= maxResults) {
+        capped = true;
+        break;
+      }
       const absDir = path.join(repoPath, dir);
       if (!fs.existsSync(absDir)) continue;
 
       this.#walkDir(absDir, (filePath) => {
-        if (results.length >= maxResults) return;
+        if (results.length >= maxResults) {
+          capped = true;
+          return;
+        }
         const basename = path.basename(filePath);
         if (!filePattern.test(basename)) return;
 
@@ -503,6 +617,11 @@ class SourceMapper {
       });
     }
 
+    if (capped) {
+      console.log(
+        `  - Source mapping: reached the ${maxResults}-location cap for "${criteria.context}"; additional matches were not listed`,
+      );
+    }
     return results;
   }
 
@@ -518,14 +637,21 @@ class SourceMapper {
     const results: SourceLocation[] = [];
     const seen = new Set();
     const maxResults = 20;
+    let capped = false;
 
     for (const dir of dirs) {
-      if (results.length >= maxResults) break;
+      if (results.length >= maxResults) {
+        capped = true;
+        break;
+      }
       const absDir = path.join(repoPath, dir);
       if (!fs.existsSync(absDir)) continue;
 
       this.#walkDir(absDir, (filePath) => {
-        if (results.length >= maxResults) return;
+        if (results.length >= maxResults) {
+          capped = true;
+          return;
+        }
         const basename = path.basename(filePath);
         if (!filePattern.test(basename)) return;
 
@@ -557,6 +683,11 @@ class SourceMapper {
       });
     }
 
+    if (capped) {
+      console.log(
+        `  - Source mapping: reached the ${maxResults}-location cap for "${criteria.context}"; additional matches were not listed`,
+      );
+    }
     return results;
   }
 
@@ -608,4 +739,5 @@ class SourceMapper {
   }
 }
 
-export { SourceMapper };
+export { SourceMapper, applyMatcher };
+export type { Matcher };

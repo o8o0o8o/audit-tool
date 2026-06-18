@@ -1,18 +1,27 @@
 /**
  * Source-pattern anti-pattern scanner.
  *
- * Walks the framework's source directories and grep-scans for the Next.js /
- * React anti-patterns the human audit PDFs frequently call out:
+ * Walks the framework's source directories and grep-scans for anti-patterns the
+ * human audit PDFs frequently call out. Each pattern declares which framework(s)
+ * it applies to (see `PATTERNS[].frameworks`):
  *
- *   • `cache: "no-store"` in fetch options — disables Next.js data cache.
+ *   Next.js:
+ *   • `cache: "no-store"` in fetch options — disables the Next.js data cache.
  *   • Dynamic imports of main content with `ssr: false` — forces CSR for SEO-
  *     critical content (matches the realthread audit's "react-wrap-balancer" call-out).
  *   • `export const dynamic = 'force-dynamic'` on routes that look static —
  *     matches the unive.nl call-out about `force-dynamic` on static assets.
- *   • Full-lib lodash imports (`import _ from 'lodash'`) — pulls the entire
- *     bundle into the build (matches the Mighty Shed call-out).
  *   • CSS inlined in `_app.tsx` via `dangerouslySetInnerHTML` — matches the
  *     unive.nl call-out about critical CSS placement.
+ *
+ *   SvelteKit:
+ *   • `export const ssr = false` in a +page/+layout route — turns the route into
+ *     a client-only SPA, invisible to crawlers and the first paint.
+ *
+ *   Framework-agnostic (any recognised framework):
+ *   • Full-lib lodash imports (`import _ from 'lodash'`) — pulls the entire
+ *     bundle into the build (matches the Mighty Shed call-out).
+ *   • Full moment.js imports — a heavy, maintenance-mode date library.
  *
  * Pure regex / fs walk — no AST parsing. Bounded scan: skips node_modules,
  * .next, .git, and caps total files visited.
@@ -33,12 +42,34 @@ interface PatternFinding {
   snippet: string;
 }
 
-const SKIP_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', '.cache', '.turbo', '.vercel', 'coverage']);
-const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.next',
+  '.git',
+  'dist',
+  'build',
+  '.cache',
+  '.turbo',
+  '.vercel',
+  'coverage',
+]);
+// `.vue`/`.svelte`/`.astro` are included so the framework-agnostic import checks
+// (lodash/moment) and the SvelteKit route check reach single-file component and
+// route source, not just plain TS/JS modules.
+const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.vue', '.svelte', '.astro']);
 const MAX_FILES = 5000;
+
+/**
+ * Which framework(s) a pattern applies to. `'all'` runs for every recognised
+ * framework (the import-hygiene checks are framework-agnostic); otherwise the
+ * pattern only fires when the detected framework name (as emitted by
+ * RepoFrameworkDetector — e.g. 'Next.js', 'SvelteKit') is in the list.
+ */
+type PatternScope = 'all' | string[];
 
 const PATTERNS: Array<{
   id: string;
+  frameworks: PatternScope;
   regex: RegExp;
   message: string;
   detail: (findings: PatternFinding[]) => string;
@@ -48,6 +79,7 @@ const PATTERNS: Array<{
 }> = [
   {
     id: 'no-store-cache',
+    frameworks: ['Next.js'],
     regex: /cache\s*:\s*['"]no-store['"]/g,
     message: 'fetch() calls disable the Next.js data cache',
     detail: (f) =>
@@ -59,6 +91,7 @@ const PATTERNS: Array<{
     // (e.g. `() => import('...')`) and reach the options object. Bounded so we
     // don't accidentally span unrelated calls.
     id: 'ssr-false-dynamic',
+    frameworks: ['Next.js'],
     regex: /dynamic\s*\([\s\S]{0,200}?\bssr\s*:\s*false\b/g,
     message: 'Dynamic imports with ssr: false break SEO',
     detail: (f) =>
@@ -69,10 +102,12 @@ const PATTERNS: Array<{
     // exempts them. Flagging these as HIGH is a false positive, so drop findings
     // whose path names such a widget. Main-content paths (page/layout/blocks/…)
     // still fire.
-    excludePaths: /(?:^|[\\/])(?:analytics|tracking|gtm|gtag|google-?tag|tag-?manager|pixel|chat|intercom|drift|crisp|hotjar|fullstory|segment|consent|cookie|widgets?|third-?party)(?:[\\/.-]|$)/i,
+    excludePaths:
+      /(?:^|[\\/])(?:analytics|tracking|gtm|gtag|google-?tag|tag-?manager|pixel|chat|intercom|drift|crisp|hotjar|fullstory|segment|consent|cookie|widgets?|third-?party)(?:[\\/.-]|$)/i,
   },
   {
     id: 'force-dynamic-export',
+    frameworks: ['Next.js'],
     regex: /export\s+const\s+dynamic\s*=\s*['"]force-dynamic['"]/g,
     message: "Routes export `dynamic = 'force-dynamic'`",
     detail: (f) =>
@@ -80,7 +115,23 @@ const PATTERNS: Array<{
     severity: 'medium',
   },
   {
+    // SvelteKit: `export const ssr = false` in a +page/+layout module turns the
+    // route into a client-only SPA — search engines and first paint see no
+    // content. The explicit SvelteKit API makes this near-zero false-positive.
+    id: 'sveltekit-ssr-false',
+    frameworks: ['SvelteKit'],
+    regex: /export\s+const\s+ssr\s*=\s*false\b/g,
+    message: 'Route disables SSR (`export const ssr = false`)',
+    detail: (f) =>
+      `${f.length} SvelteKit route(s) set \`export const ssr = false\`, forcing client-only rendering. Crawlers and the initial paint receive an empty shell. Remove it unless the route is genuinely app-only (e.g. behind auth).`,
+    severity: 'high',
+    scopeToFiles: /\+(page|layout)/,
+  },
+  {
+    // Framework-agnostic: importing the whole lodash library pulls the entire
+    // bundle regardless of framework.
     id: 'full-lodash-import',
+    frameworks: 'all',
     regex: /import\s+(?:_|\*\s+as\s+_)\s+from\s+['"]lodash['"]/g,
     message: 'lodash imported as a whole library',
     detail: (f) =>
@@ -88,7 +139,19 @@ const PATTERNS: Array<{
     severity: 'medium',
   },
   {
+    // Framework-agnostic: moment.js is large (~70KB min) and in maintenance mode;
+    // the project itself recommends modern alternatives.
+    id: 'full-moment-import',
+    frameworks: 'all',
+    regex: /import\s+\w+\s+from\s+['"]moment['"]/g,
+    message: 'moment.js imported (heavy, in maintenance mode)',
+    detail: (f) =>
+      `${f.length} file(s) import moment.js, a large library (~70KB minified) no longer recommended by its own maintainers. Replace with \`date-fns\`, \`dayjs\`, or the native \`Intl\` API to cut bundle size.`,
+    severity: 'low',
+  },
+  {
     id: 'css-inline-app',
+    frameworks: ['Next.js'],
     regex: /dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:\s*fs\.readFileSync\([^}]*\.css/g,
     message: 'CSS inlined via dangerouslySetInnerHTML in _app',
     detail: (f) =>
@@ -103,16 +166,24 @@ class SourcePatternAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    // Only Next.js for now — the patterns above are Next-specific. Other
-    // frameworks can be added when we have human-report data showing their
-    // common anti-patterns. NOTE: the framework name must match what
-    // RepoFrameworkDetector emits ('Next.js'), not a lowercased slug.
-    if (framework.framework !== 'Next.js') {
+    // No recognised framework → nothing to scan. NOTE: framework names must match
+    // what RepoFrameworkDetector emits ('Next.js', 'SvelteKit', …), not a
+    // lowercased slug — the analyzer once gated on 'nextjs' and silently never ran.
+    const fwName = framework.framework;
+    if (!fwName) {
+      return { issues, warnings };
+    }
+
+    // Patterns that apply to THIS framework: framework-agnostic ('all') plus any
+    // explicitly listing it. Others (e.g. Next-only checks on a SvelteKit repo)
+    // are skipped entirely so their regexes never fire on the wrong stack.
+    const activePatterns = PATTERNS.filter((p) => p.frameworks === 'all' || p.frameworks.includes(fwName));
+    if (activePatterns.length === 0) {
       return { issues, warnings };
     }
 
     const findings: Record<string, PatternFinding[]> = {};
-    for (const p of PATTERNS) findings[p.id] = [];
+    for (const p of activePatterns) findings[p.id] = [];
 
     let filesVisited = 0;
     const visit = (dir: string): void => {
@@ -138,7 +209,7 @@ class SourcePatternAnalyzer {
           } catch {
             continue;
           }
-          for (const pattern of PATTERNS) {
+          for (const pattern of activePatterns) {
             if (pattern.scopeToFiles && !pattern.scopeToFiles.test(full)) continue;
             for (const match of content.matchAll(pattern.regex)) {
               const line = content.slice(0, match.index ?? 0).split('\n').length;
@@ -163,7 +234,7 @@ class SourcePatternAnalyzer {
     }
 
     // Emit one issue per pattern that found anything
-    for (const pattern of PATTERNS) {
+    for (const pattern of activePatterns) {
       const f = pattern.excludePaths
         ? findings[pattern.id].filter((x) => !pattern.excludePaths!.test(x.file))
         : findings[pattern.id];

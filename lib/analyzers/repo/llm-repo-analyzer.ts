@@ -128,8 +128,13 @@ export function gatherSourceFiles(
 
   const seen = new Set<string>();
   const files: Array<{ path: string; content: string }> = [];
+  let capped = false;
+  let truncated = 0;
   for (const rel of candidates) {
-    if (files.length >= maxFiles) break;
+    if (files.length >= maxFiles) {
+      capped = true;
+      break;
+    }
     if (!rel || seen.has(rel)) continue;
     seen.add(rel);
     const abs = safeResolve(repoPath, rel);
@@ -144,8 +149,18 @@ export function gatherSourceFiles(
     }
     if (content.length > MAX_FILE_BYTES) {
       content = content.slice(0, MAX_FILE_BYTES) + '\n/* …truncated… */';
+      truncated++;
     }
     files.push({ path: rel, content });
+  }
+  // Honour the project's "no silent caps" rule: surface what the bounded LLM
+  // context dropped or shortened rather than capping invisibly.
+  if (capped || truncated) {
+    console.log(
+      `  - LLM repo context: ${files.length} file(s)` +
+        (capped ? ` (reached the ${maxFiles}-file cap; further candidates skipped)` : '') +
+        (truncated ? `, ${truncated} truncated to ${MAX_FILE_BYTES}B` : ''),
+    );
   }
   return files;
 }

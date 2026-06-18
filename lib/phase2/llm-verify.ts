@@ -31,6 +31,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
+import { recordApiUsage, recordCacheHit, type ApiUsage } from '../utils/llm-usage-tracker';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const LLM_API_TIMEOUT_MS = 120_000;
@@ -125,9 +126,14 @@ export function parseVerifyResult(raw: string, validIndices: number[]): VerifyDr
     if (typeof idx !== 'number' || !Number.isInteger(idx) || !valid.has(idx) || seen.has(idx)) continue;
     const rawKind = (d as { kind?: unknown })?.kind;
     const kind: VerifyDropKind = rawKind === 'false-positive' ? 'false-positive' : 'duplicate';
-    const reason = typeof (d as { reason?: unknown })?.reason === 'string' ? ((d as { reason: string }).reason).trim() : '';
+    const reason =
+      typeof (d as { reason?: unknown })?.reason === 'string' ? (d as { reason: string }).reason.trim() : '';
     seen.add(idx);
-    out.push({ index: idx, kind, reason: reason || (kind === 'duplicate' ? 'duplicate of another finding' : 'likely false positive') });
+    out.push({
+      index: idx,
+      kind,
+      reason: reason || (kind === 'duplicate' ? 'duplicate of another finding' : 'likely false positive'),
+    });
   }
   return out;
 }
@@ -159,7 +165,12 @@ async function callApi(userPrompt: string, apiKey: string, model: string, verbos
       }
       return null;
     }
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      model?: string;
+      usage?: ApiUsage;
+    };
+    recordApiUsage('verify', json.model ?? model, json.usage);
     return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
     if (verbose) {
@@ -187,7 +198,7 @@ export async function verifyFindings(req: VerifyRequest): Promise<VerifyDrop[]> 
   if (!req.findings || req.findings.length === 0) return [];
 
   // The CLI uses the user's default model (no override); the API uses ours.
-  const model = useCli ? req.model : req.model ?? DEFAULT_MODEL;
+  const model = useCli ? req.model : (req.model ?? DEFAULT_MODEL);
   const userPrompt = buildUserPrompt(req);
   const validIndices = req.findings.map((f) => f.index);
   const rawKey = cacheKey(model ?? 'default', SYSTEM_PROMPT, userPrompt);
@@ -199,6 +210,7 @@ export async function verifyFindings(req: VerifyRequest): Promise<VerifyDrop[]> 
       fs.mkdirSync(req.cacheDir, { recursive: true });
       cacheFile = path.join(req.cacheDir, `${key}.json`);
       if (fs.existsSync(cacheFile)) {
+        recordCacheHit('verify');
         return parseVerifyResult(fs.readFileSync(cacheFile, 'utf8'), validIndices);
       }
     } catch {
@@ -207,7 +219,7 @@ export async function verifyFindings(req: VerifyRequest): Promise<VerifyDrop[]> 
   }
 
   const text = useCli
-    ? await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, model, req.verbose ?? false)
+    ? await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, model, req.verbose ?? false, undefined, 'verify')
     : await callApi(userPrompt, apiKey as string, model as string, req.verbose ?? false);
   if (!text) return [];
 

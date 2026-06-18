@@ -25,6 +25,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
+import { recordApiUsage, recordCacheHit, type ApiUsage } from '../utils/llm-usage-tracker';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const LLM_API_TIMEOUT_MS = 120_000;
@@ -67,7 +68,10 @@ function buildUserPrompt(req: NarrativeRequest): string {
   const sev = (s: string) => s.toUpperCase().padEnd(8);
   const list = req.findings
     .slice(0, 30)
-    .map((f) => `${sev(f.severity)} ${f.count.toString().padStart(4)}× — ${f.message}${f.exampleUrl ? `  (e.g. ${f.exampleUrl})` : ''}`)
+    .map(
+      (f) =>
+        `${sev(f.severity)} ${f.count.toString().padStart(4)}× — ${f.message}${f.exampleUrl ? `  (e.g. ${f.exampleUrl})` : ''}`,
+    )
     .join('\n');
   return `Section: ${req.sectionTitle}\n\nFindings (severity, occurrence count, message):\n${list}\n\nWrite the Analysis paragraph.`;
 }
@@ -103,7 +107,12 @@ async function callApi(userPrompt: string, apiKey: string, model: string, verbos
       }
       return null;
     }
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      model?: string;
+      usage?: ApiUsage;
+    };
+    recordApiUsage('narrative', json.model ?? model, json.usage);
     return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM narrative failed: ${(error as Error).message}`);
@@ -127,7 +136,7 @@ export async function generateSectionAnalysis(req: NarrativeRequest): Promise<st
   if (!apiKey && !useCli) return null;
 
   // The CLI uses the user's default model (no override); the API uses ours.
-  const model = useCli ? req.model : req.model ?? DEFAULT_MODEL;
+  const model = useCli ? req.model : (req.model ?? DEFAULT_MODEL);
   const userPrompt = buildUserPrompt(req);
   const rawKey = cacheKey(model ?? 'default', SYSTEM_PROMPT, userPrompt);
   const key = useCli ? `cli-${rawKey}` : rawKey;
@@ -139,6 +148,7 @@ export async function generateSectionAnalysis(req: NarrativeRequest): Promise<st
       fs.mkdirSync(req.cacheDir, { recursive: true });
       cacheFile = path.join(req.cacheDir, `${key}.txt`);
       if (fs.existsSync(cacheFile)) {
+        recordCacheHit('narrative');
         return fs.readFileSync(cacheFile, 'utf8');
       }
     } catch {
@@ -147,7 +157,9 @@ export async function generateSectionAnalysis(req: NarrativeRequest): Promise<st
   }
 
   const text = useCli
-    ? extractParagraph(await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, model, req.verbose ?? false))
+    ? extractParagraph(
+        await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, model, req.verbose ?? false, undefined, 'narrative'),
+      )
     : await callApi(userPrompt, apiKey as string, model as string, req.verbose ?? false);
   if (!text) return null;
 

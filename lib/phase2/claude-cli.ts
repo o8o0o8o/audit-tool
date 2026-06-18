@@ -14,6 +14,7 @@
  */
 
 import { spawn, spawnSync } from 'child_process';
+import { recordCliUsage, type ApiUsage, type LlmCategory } from '../utils/llm-usage-tracker';
 
 /** The CLI binary to spawn; overridable for tests / non-standard installs. */
 const CLAUDE_CLI_BIN = process.env.SEO_AUDIT_CLAUDE_CLI_BIN || 'claude';
@@ -63,14 +64,39 @@ export function extractCliResult(stdout: string): string {
 }
 
 /**
+ * Pull token usage + the REAL dollar cost out of the `--output-format json`
+ * envelope (`{ result, total_cost_usd, usage: {...} }`). Pure and defensive —
+ * returns an empty object on anything unparseable, so usage accounting never
+ * throws or blocks the call. Exported for unit testing.
+ */
+export function extractCliUsage(stdout: string): { usage?: ApiUsage; costUsd?: number } {
+  const s = (stdout ?? '').trim();
+  const brace = s.indexOf('{');
+  if (brace === -1) return {};
+  try {
+    const env = JSON.parse(s.slice(brace)) as { total_cost_usd?: unknown; usage?: unknown };
+    const out: { usage?: ApiUsage; costUsd?: number } = {};
+    if (typeof env.total_cost_usd === 'number') out.costUsd = env.total_cost_usd;
+    if (env.usage && typeof env.usage === 'object') out.usage = env.usage as ApiUsage;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Spawn one CLI call, feeding the prompt on stdin. Resolves the result text, or
  * null on spawn failure / non-zero exit / timeout. Never rejects.
+ *
+ * When `category` is supplied, the envelope's token usage + real `total_cost_usd`
+ * are recorded against that category in the shared usage tracker on success.
  */
 export function callClaudeCli(
   prompt: string,
   model: string | undefined,
   verbose: boolean,
   timeoutMs: number = DEFAULT_CLI_TIMEOUT_MS,
+  category?: LlmCategory,
 ): Promise<string | null> {
   return new Promise((resolve) => {
     const argv = ['-p', '--output-format', 'json'];
@@ -111,6 +137,10 @@ export function callClaudeCli(
       if (code !== 0) {
         if (verbose) console.warn(`claude CLI exited ${code}`);
         return done(null);
+      }
+      if (category) {
+        const { usage, costUsd } = extractCliUsage(out);
+        recordCliUsage(category, usage, costUsd);
       }
       done(extractCliResult(out));
     });

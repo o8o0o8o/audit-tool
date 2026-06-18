@@ -587,6 +587,20 @@ async function audit() {
       }
     }
 
+    // LLM usage/cost rollup — captured by the shared tracker across every
+    // Phase 2/3 LLM call. Attach to the results for the summary box and persist
+    // a standalone ledger. Best-effort: never let accounting break the audit.
+    try {
+      const { getLlmUsageSnapshot } = await import('./lib/utils/llm-usage-tracker');
+      const llmUsage = getLlmUsageSnapshot();
+      if (llmUsage.totalCalls > 0 || llmUsage.cachedCalls > 0) {
+        (seo.data as AuditResultsExtended).llmUsage = llmUsage;
+        fs.writeFileSync(path.join(seo.fileManager.resultsDir, 'llm-usage.json'), JSON.stringify(llmUsage, null, 2));
+      }
+    } catch (e: unknown) {
+      console.debug('LLM usage rollup skipped:', (e as Error).message);
+    }
+
     // Extract summary once to avoid repeated deep property access
     const summary = seo.data.analysis?.summary ?? ({} as Record<string, unknown>);
     const score = (summary.overallScore as number) ?? 0;

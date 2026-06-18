@@ -27,6 +27,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { callClaudeCli, isClaudeCliAvailable, extractCliResult } from '../phase2/claude-cli';
+import { recordApiUsage, recordCacheHit, type ApiUsage } from '../utils/llm-usage-tracker';
 import { PhaseProgress } from '../utils/phase-progress';
 
 // Re-export the shared CLI helpers so existing importers (phase2-runner, tests)
@@ -176,7 +177,12 @@ async function callModel(userPrompt: string, apiKey: string, model: string, verb
       }
       return null;
     }
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      model?: string;
+      usage?: ApiUsage;
+    };
+    recordApiUsage('finding-verify', json.model ?? model, json.usage);
     return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM finding-verify failed: ${(error as Error).message}`);
@@ -198,7 +204,10 @@ async function verifyBatch(items: LlmVerifyItem[], apiKey: string, options: LlmV
     try {
       fs.mkdirSync(options.cacheDir, { recursive: true });
       cacheFile = path.join(options.cacheDir, `${key}.json`);
-      if (fs.existsSync(cacheFile)) return parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), validIndices);
+      if (fs.existsSync(cacheFile)) {
+        recordCacheHit('finding-verify');
+        return parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), validIndices);
+      }
     } catch {
       cacheFile = null;
     }
@@ -276,7 +285,12 @@ async function callModelVision(
       if (verbose) console.warn(`LLM vision-verify HTTP ${res.status}`);
       return null;
     }
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      model?: string;
+      usage?: ApiUsage;
+    };
+    recordApiUsage('vision-verify', json.model ?? model, json.usage);
     return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM vision-verify failed: ${(error as Error).message}`);
@@ -305,6 +319,7 @@ async function verifyOneVision(
       fs.mkdirSync(options.cacheDir, { recursive: true });
       cacheFile = path.join(options.cacheDir, `${key}.json`);
       if (fs.existsSync(cacheFile)) {
+        recordCacheHit('vision-verify');
         const v = parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), [0])[0];
         return v ? { index: item.index, verdict: v.verdict, reason: v.reason } : null;
       }
@@ -373,13 +388,16 @@ async function cliVerifyBatch(items: LlmVerifyItem[], options: LlmVerifyOptions)
     try {
       fs.mkdirSync(options.cacheDir, { recursive: true });
       cacheFile = path.join(options.cacheDir, `${key}.json`);
-      if (fs.existsSync(cacheFile)) return parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), validIndices);
+      if (fs.existsSync(cacheFile)) {
+        recordCacheHit('finding-verify');
+        return parseLlmVerdicts(fs.readFileSync(cacheFile, 'utf8'), validIndices);
+      }
     } catch {
       cacheFile = null;
     }
   }
 
-  const text = await callClaudeCli(prompt, model, options.verbose ?? false);
+  const text = await callClaudeCli(prompt, model, options.verbose ?? false, undefined, 'finding-verify');
   if (!text) return [];
   if (cacheFile) {
     try {

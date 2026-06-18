@@ -464,9 +464,7 @@ void describe('redirect-source exclusion (trailing-slash twin inflation)', () =>
 // where discovered-not-in-sitemap URLs are collected for the second pass).
 void describe('crawl-frontier trailing-slash dedup (collectLinks)', () => {
   function runCollect(linkHrefs: string[], seedFrontierKeys: string[]) {
-    const html = `<html><body>${linkHrefs
-      .map((h) => `<a href="${h}">link</a>`)
-      .join('')}</body></html>`;
+    const html = `<html><body>${linkHrefs.map((h) => `<a href="${h}">link</a>`).join('')}</body></html>`;
     const collectedURLs = new Set<string>();
     const uniquePages = new Set<string>();
     const crawlFrontierKeys = new Set<string>(seedFrontierKeys);
@@ -6314,7 +6312,11 @@ void describe('uniform fix recommendations', () => {
       const { fix, fromCatalog } = resolveFix('Spelling errors detected (54 instances)', isNext);
       assert.ok(fromCatalog, 'spelling should resolve from the catalog, not the category default');
       assert.match(fix, /proofread|spell[- ]?check|misspell/i, 'spelling fix should be about proofreading');
-      assert.doesNotMatch(fix, /redirects?\(\)|metadata api/i, 'spelling fix must not be the redirect/metadata default');
+      assert.doesNotMatch(
+        fix,
+        /redirects?\(\)|metadata api/i,
+        'spelling fix must not be the redirect/metadata default',
+      );
     }
   });
 
@@ -6336,5 +6338,125 @@ void describe('uniform fix recommendations', () => {
       if (rec.example)
         assert.doesNotMatch(rec.example, /FocusReactive/i, `Next.js override "${key}" leaks a brand name`);
     }
+  });
+});
+
+// ============================================================
+// LLM usage tracker (token/cost accounting)
+// ============================================================
+import {
+  recordApiUsage,
+  recordCliUsage,
+  recordCacheHit,
+  getLlmUsageSnapshot,
+  resetLlmUsage,
+  estimateApiCostUsd,
+} from '../lib/utils/llm-usage-tracker';
+import { extractCliUsage } from '../lib/phase2/claude-cli';
+
+void describe('LLM usage tracker', () => {
+  void it('prices API tokens per model family', () => {
+    // Sonnet: $3/M in, $15/M out → 1M in + 1M out = $18
+    assert.ok(
+      Math.abs(estimateApiCostUsd('claude-sonnet-4-6', { input_tokens: 1_000_000, output_tokens: 1_000_000 }) - 18) <
+        1e-6,
+    );
+    // Opus: $15/M in, $75/M out → $90
+    assert.ok(
+      Math.abs(estimateApiCostUsd('claude-opus-4-8', { input_tokens: 1_000_000, output_tokens: 1_000_000 }) - 90) <
+        1e-6,
+    );
+    // Haiku: $1/M in, $5/M out → $6
+    assert.ok(
+      Math.abs(estimateApiCostUsd('claude-haiku-4-5', { input_tokens: 1_000_000, output_tokens: 1_000_000 }) - 6) <
+        1e-6,
+    );
+    // Unknown model → sonnet-class default ($18)
+    assert.ok(
+      Math.abs(estimateApiCostUsd('some-future-model', { input_tokens: 1_000_000, output_tokens: 1_000_000 }) - 18) <
+        1e-6,
+    );
+    // No usage → 0
+    assert.strictEqual(estimateApiCostUsd('claude-sonnet-4-6', undefined), 0);
+  });
+
+  void it('aggregates API usage into total + per-category with estimated=true', () => {
+    resetLlmUsage();
+    recordApiUsage('narrative', 'claude-sonnet-4-6', { input_tokens: 1000, output_tokens: 200 });
+    recordApiUsage('narrative', 'claude-sonnet-4-6', { input_tokens: 500, output_tokens: 100 });
+    recordApiUsage('verify', 'claude-sonnet-4-6', { input_tokens: 2000, output_tokens: 50 });
+    const snap = getLlmUsageSnapshot();
+    assert.strictEqual(snap.totalCalls, 3);
+    assert.strictEqual(snap.cachedCalls, 0);
+    assert.strictEqual(snap.inputTokens, 3500);
+    assert.strictEqual(snap.outputTokens, 350);
+    assert.strictEqual(snap.estimated, true);
+    assert.strictEqual(snap.byCategory.narrative.calls, 2);
+    assert.strictEqual(snap.byCategory.verify.calls, 1);
+    assert.ok(snap.costUsd > 0);
+    // Total cost == sum of category costs
+    const sum = Object.values(snap.byCategory).reduce((s, c) => s + c.costUsd, 0);
+    assert.ok(Math.abs(snap.costUsd - sum) < 1e-9);
+  });
+
+  void it('records CLI usage with the real total_cost_usd and estimated=false', () => {
+    resetLlmUsage();
+    recordCliUsage('repo', { input_tokens: 1234, output_tokens: 56 }, 0.0123);
+    const snap = getLlmUsageSnapshot();
+    assert.strictEqual(snap.totalCalls, 1);
+    assert.strictEqual(snap.estimated, false);
+    assert.ok(Math.abs(snap.costUsd - 0.0123) < 1e-9);
+    assert.deepStrictEqual(snap.byCategory.repo.transports, ['cli']);
+  });
+
+  void it('counts cache hits separately from billed calls (free)', () => {
+    resetLlmUsage();
+    recordCacheHit('anomaly');
+    recordCacheHit('anomaly');
+    recordApiUsage('anomaly', 'claude-sonnet-4-6', { input_tokens: 100, output_tokens: 10 });
+    const snap = getLlmUsageSnapshot();
+    assert.strictEqual(snap.totalCalls, 1);
+    assert.strictEqual(snap.cachedCalls, 2);
+    assert.strictEqual(snap.byCategory.anomaly.calls, 1);
+    assert.strictEqual(snap.byCategory.anomaly.cached, 2);
+  });
+
+  void it('reset clears all accumulated usage', () => {
+    resetLlmUsage();
+    recordApiUsage('narrative', 'claude-sonnet-4-6', { input_tokens: 1, output_tokens: 1 });
+    resetLlmUsage();
+    const snap = getLlmUsageSnapshot();
+    assert.strictEqual(snap.totalCalls, 0);
+    assert.deepStrictEqual(snap.byCategory, {});
+  });
+
+  void it('cache-only category appears with zero billed cost', () => {
+    resetLlmUsage();
+    recordCacheHit('finding-verify');
+    const snap = getLlmUsageSnapshot();
+    assert.strictEqual(snap.totalCalls, 0);
+    assert.strictEqual(snap.cachedCalls, 1);
+    assert.strictEqual(snap.byCategory['finding-verify'].costUsd, 0);
+  });
+});
+
+void describe('extractCliUsage', () => {
+  void it('parses usage + total_cost_usd from the JSON envelope', () => {
+    const env = JSON.stringify({
+      result: 'ok',
+      total_cost_usd: 0.0456,
+      usage: { input_tokens: 321, output_tokens: 12, cache_read_input_tokens: 100 },
+    });
+    const u = extractCliUsage(env);
+    assert.strictEqual(u.costUsd, 0.0456);
+    assert.strictEqual(u.usage?.input_tokens, 321);
+    assert.strictEqual(u.usage?.output_tokens, 12);
+    assert.strictEqual(u.usage?.cache_read_input_tokens, 100);
+  });
+
+  void it('returns empty object on non-JSON / bare text', () => {
+    assert.deepStrictEqual(extractCliUsage('just some text, no brace'), {});
+    assert.deepStrictEqual(extractCliUsage('{ broken json'), {});
+    assert.deepStrictEqual(extractCliUsage(''), {});
   });
 });

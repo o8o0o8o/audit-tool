@@ -34,6 +34,7 @@ import type { PageInfo } from '../types';
 import type { Section } from './categorize';
 import type { AuditArtifacts } from './types';
 import { callClaudeCli, isClaudeCliAvailable } from './claude-cli';
+import { recordApiUsage, recordCacheHit, type ApiUsage } from '../utils/llm-usage-tracker';
 import { PhaseProgress } from '../utils/phase-progress';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
@@ -118,7 +119,13 @@ function buildSignals(page: PageInfo | undefined, requests: RequestsFile | null)
   return {
     title: page?.title,
     buttons: (page?.buttons ?? []).slice(0, 40).map((b) => ({ text: b.text, type: b.type })),
-    forms: (page?.forms ?? []).slice(0, 10).map((f) => ({ action: f.action, method: f.method, inputs: Array.isArray(f.inputs) ? f.inputs.length : undefined })),
+    forms: (page?.forms ?? [])
+      .slice(0, 10)
+      .map((f) => ({
+        action: f.action,
+        method: f.method,
+        inputs: Array.isArray(f.inputs) ? f.inputs.length : undefined,
+      })),
     brokenLinks: Array.isArray(link.brokenLinks) ? link.brokenLinks.slice(0, 20) : undefined,
     emptyAnchorLinks: link.emptyAnchorLinks?.slice(0, 15),
     genericAnchorLinks: link.genericAnchorLinks?.slice(0, 15),
@@ -225,7 +232,10 @@ async function callModel(
 ): Promise<string | null> {
   const content: unknown[] = [];
   if (screenshot) {
-    content.push({ type: 'image', source: { type: 'base64', media_type: screenshot.mediaType, data: screenshot.data } });
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: screenshot.mediaType, data: screenshot.data },
+    });
   }
   content.push({ type: 'text', text: userPrompt });
 
@@ -254,7 +264,12 @@ async function callModel(
       }
       return null;
     }
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      model?: string;
+      usage?: ApiUsage;
+    };
+    recordApiUsage('anomaly', json.model ?? model, json.usage);
     return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM anomaly failed: ${(error as Error).message}`);
@@ -277,7 +292,7 @@ export async function detectAnomalies(artifacts: AuditArtifacts, options: Anomal
 
   // The CLI uses the user's default model; the API uses ours. The cache-hash
   // model string is kept stable in either case.
-  const model = useCli ? options.model ?? 'cli-default' : options.model ?? DEFAULT_MODEL;
+  const model = useCli ? (options.model ?? 'cli-default') : (options.model ?? DEFAULT_MODEL);
   let entries = Object.entries(evidence).filter(([, info]) => info.url);
   if (typeof options.maxPages === 'number' && options.maxPages > 0) {
     entries = entries.slice(0, options.maxPages);
@@ -294,14 +309,18 @@ export async function detectAnomalies(artifacts: AuditArtifacts, options: Anomal
     }
   }
 
-  const analyzePage = async ([safeName, info]: [string, { url?: string | null; files: string[] }]): Promise<Anomaly[]> => {
+  const analyzePage = async ([safeName, info]: [string, { url?: string | null; files: string[] }]): Promise<
+    Anomaly[]
+  > => {
     const url = info.url as string;
     const evidenceDir = path.join(artifacts.runDir, 'evidence', safeName);
     const requests = readMaybeGz<RequestsFile>(path.join(evidenceDir, 'requests.json'));
     const signals = buildSignals(pages[url], requests);
     // The headless CLI transport is text-only, so vision is dropped on that path.
     const screenshot = useCli ? null : pickScreenshot(evidenceDir, info.files);
-    const reviewLine = screenshot ? 'Review the screenshot and signals.' : 'Review the signals (no screenshot available).';
+    const reviewLine = screenshot
+      ? 'Review the screenshot and signals.'
+      : 'Review the signals (no screenshot available).';
     const userPrompt = `Page URL: ${url}\n\nStructured signals (JSON):\n${JSON.stringify(signals, null, 1)}\n\n${reviewLine} Return the JSON array of problems.`;
 
     // Cache by everything that affects the answer, incl. the image bytes and the
@@ -322,10 +341,17 @@ export async function detectAnomalies(artifacts: AuditArtifacts, options: Anomal
 
     let text: string | null;
     if (cacheFile && fs.existsSync(cacheFile)) {
+      recordCacheHit('anomaly');
       text = fs.readFileSync(cacheFile, 'utf8');
     } else {
       text = useCli
-        ? await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, options.model, options.verbose ?? false)
+        ? await callClaudeCli(
+            `${SYSTEM_PROMPT}\n\n${userPrompt}`,
+            options.model,
+            options.verbose ?? false,
+            undefined,
+            'anomaly',
+          )
         : await callModel(userPrompt, screenshot, apiKey as string, model, options.verbose ?? false);
       if (text && cacheFile) {
         try {
@@ -342,7 +368,9 @@ export async function detectAnomalies(artifacts: AuditArtifacts, options: Anomal
   // `claude` processes at once is heavy and the sample is small. Either way,
   // count completed pages so the (LLM-bound, multi-second) pass isn't silent.
   const progress =
-    entries.length > 0 ? new PhaseProgress(`Scanning pages for anomalies${useCli ? ' (CLI)' : ''}`, entries.length) : null;
+    entries.length > 0
+      ? new PhaseProgress(`Scanning pages for anomalies${useCli ? ' (CLI)' : ''}`, entries.length)
+      : null;
   const trackPage = async (entry: [string, { url?: string | null; files: string[] }]): Promise<Anomaly[]> => {
     const r = await analyzePage(entry);
     progress?.tick();

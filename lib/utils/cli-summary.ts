@@ -6,6 +6,17 @@
 import type { AnalysisDetail, PageInfo, AuditSummary } from '../types';
 import { getLetterGrade, estimateScoreAfterFixes, truncateText } from '../utils';
 import { SCORING } from '../constants';
+import { LLM_CATEGORY_ORDER, type LlmUsageSnapshot } from './llm-usage-tracker';
+
+/** Human labels for the LLM cost categories shown in the summary. */
+const LLM_CATEGORY_LABELS: Record<string, string> = {
+  narrative: 'narrative',
+  anomaly: 'anomaly',
+  verify: 'verify',
+  'finding-verify': 'verify (live)',
+  'vision-verify': 'vision',
+  repo: 'repo',
+};
 
 interface AuditResultsExtended {
   analysis: {
@@ -28,7 +39,22 @@ interface AuditResultsExtended {
     elapsedTimeFormatted?: string;
     phases?: Array<{ name: string; duration: string }>;
   };
+  llmUsage?: LlmUsageSnapshot;
   previousScore?: number | null;
+}
+
+/** Compact token count: 1234 → "1.2k", 980 → "980". */
+function fmtTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
+/** USD with precision that scales to tiny audit costs: $0.0042 / $0.041 / $1.23. */
+function fmtUsd(n: number): string {
+  if (n <= 0) return '$0.00';
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  if (n < 1) return `$${n.toFixed(3)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 // ANSI color codes
@@ -283,6 +309,31 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
     }
   }
 
+  // LLM usage / cost (only when the optional LLM passes actually ran)
+  const llm = results.llmUsage;
+  if (llm && (llm.totalCalls > 0 || llm.cachedCalls > 0)) {
+    emptyLine();
+    divider();
+    const approx = llm.estimated ? '~' : '';
+    const cost = `${approx}${fmtUsd(llm.costUsd)}`;
+    const callWord = llm.totalCalls === 1 ? 'call' : 'calls';
+    line(
+      `${C.BOLD}LLM Usage:${C.RESET} ${llm.totalCalls} ${callWord} · ` +
+        `${fmtTokens(llm.inputTokens)} in / ${fmtTokens(llm.outputTokens)} out · ${C.CYAN}${cost}${C.RESET}`,
+    );
+    if (llm.cachedCalls > 0) {
+      line(`  ${C.DIM}${llm.cachedCalls} cached (free)${C.RESET}`);
+    }
+    for (const key of LLM_CATEGORY_ORDER) {
+      const cat = llm.byCategory[key];
+      if (!cat || (cat.calls === 0 && cat.cached === 0)) continue;
+      const label = (LLM_CATEGORY_LABELS[key] ?? key).padEnd(14);
+      const catCost = cat.calls > 0 ? ` · ${cat.estimated ? '~' : ''}${fmtUsd(cat.costUsd)}` : '';
+      const cachedNote = cat.cached > 0 ? ` ${C.DIM}(+${cat.cached} cached)${C.RESET}` : '';
+      line(`  ${C.DIM}${label}${C.RESET} ${cat.calls}${catCost}${cachedNote}`);
+    }
+  }
+
   // Score prediction based on category headroom
   if (criticalCount > 0 || highCount > 0) {
     const predicted = estimateScoreAfterFixes(overallScore, categoryScores, SCORING.CATEGORY_WEIGHTS);
@@ -393,6 +444,7 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
       low: summary.lowCount ?? 0,
     },
     duration: results.timing?.elapsedTimeFormatted ?? null,
+    llmUsage: results.llmUsage ?? undefined,
     report: htmlPath,
     insights: (() => {
       const pArr = Object.values(pageData.pages ?? {}) as PageInfo[];

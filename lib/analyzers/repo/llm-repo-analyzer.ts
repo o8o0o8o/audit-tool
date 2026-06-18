@@ -24,6 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { callClaudeCli, isClaudeCliAvailable } from '../../phase2/claude-cli';
+import { recordApiUsage, recordCacheHit, type ApiUsage } from '../../utils/llm-usage-tracker';
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -250,7 +251,12 @@ async function callModel(userPrompt: string, apiKey: string, model: string, verb
       }
       return null;
     }
-    const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      model?: string;
+      usage?: ApiUsage;
+    };
+    recordApiUsage('repo', json.model ?? model, json.usage);
     return json.content?.find((c) => c.type === 'text')?.text?.trim() ?? null;
   } catch (error: unknown) {
     if (verbose) console.warn(`LLM repo failed: ${(error as Error).message}`);
@@ -276,7 +282,7 @@ export async function analyzeRepoWithLlm(
   const files = gatherSourceFiles(repoPath, ctx, options.maxFiles ?? MAX_FILES);
   if (files.length === 0) return [];
 
-  const model = useCli ? options.model ?? 'cli-default' : options.model ?? DEFAULT_MODEL;
+  const model = useCli ? (options.model ?? 'cli-default') : (options.model ?? DEFAULT_MODEL);
   const userPrompt = buildUserPrompt(ctx, files);
   const allowed = new Set(files.map((f) => f.path));
 
@@ -302,10 +308,17 @@ export async function analyzeRepoWithLlm(
 
   let text: string | null;
   if (cacheFile && fs.existsSync(cacheFile)) {
+    recordCacheHit('repo');
     text = fs.readFileSync(cacheFile, 'utf8');
   } else {
     text = useCli
-      ? await callClaudeCli(`${SYSTEM_PROMPT}\n\n${userPrompt}`, options.model, options.verbose ?? false)
+      ? await callClaudeCli(
+          `${SYSTEM_PROMPT}\n\n${userPrompt}`,
+          options.model,
+          options.verbose ?? false,
+          undefined,
+          'repo',
+        )
       : await callModel(userPrompt, apiKey as string, model, options.verbose ?? false);
     if (text && cacheFile) {
       try {

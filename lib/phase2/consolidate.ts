@@ -148,6 +148,14 @@ const DEDUP_GROUPS: DedupGroup[] = [
     primary: /^potential soft 404 detected/i,
     members: [/^potential soft 404 page needs review/i],
   },
+  // Confirmed soft 404 — same story: the per-page detection ("Soft 404 detected
+  // - page returns 200 but shows error content") and the site-wide restatement
+  // ("Soft 404 page") are the same pages. Keep the per-page finding; fold the
+  // restatement.
+  {
+    primary: /^soft 404 detected/i,
+    members: [/^soft 404 page$/i],
+  },
   // Author attribution — the EEAT analyzer ("Most content pages lack author
   // attribution") and the AEO analyzer ("Most pages lack author attribution")
   // report the same site-wide gap.

@@ -60,6 +60,22 @@ class Soft404Analyzer {
     /erreur\s*404/i,
   ];
 
+  // Empty-listing / zero-results states. A listing, search, category, tag or
+  // pagination page that rendered with NO items still returns HTTP 200, but its
+  // body is the "no results" placeholder ("No posts found", "Try adjusting your
+  // filters", "Check back later", "0 results") instead of a "page not found"
+  // error — so the #notFoundPatterns above never match it. These phrasings are
+  // the tell, and (gated on thin content below) make such a page a soft 404: the
+  // crawler should get a real 404 for an out-of-range/empty listing, not 200.
+  static #emptyListingPatterns = [
+    /\btry\s+adjusting\s+(your\s+)?(search|filters?)\b/i,
+    /\bno\s+(results?|items?|posts?|articles?|products?|matches|entries|listings?|insights?|content)\s+(found|available|match|yet)\b/i,
+    /\bno\s+(results?|matches)\b/i,
+    /\bnothing\s+(found|here|to\s+show|matches)\b/i,
+    /\b0\s+results\b/i,
+    /\bcheck\s+back\s+(later|soon)\b/i,
+  ];
+
   // Elements that commonly contain 404 messages
   static #errorSelectors = [
     '.error-404',
@@ -98,6 +114,7 @@ class Soft404Analyzer {
 
     const signals: string[] = [];
     let confidence = 0;
+    const wordCount = pageData.contentQuality?.wordCount ?? 0;
 
     // 1. Check page title for 404 patterns
     const title = pageData.title ?? '';
@@ -128,6 +145,22 @@ class Soft404Analyzer {
       signals.push(`Multiple (${contentMatches}) "not found" patterns detected`);
     }
 
+    // 2b. Empty-listing / zero-results state on a thin page. Gated on thinness
+    // so a long article that merely mentions "no results" in prose is not
+    // misread — a genuine listing (even a sparse one, e.g. a guides index with a
+    // single entry) carries item text, not this placeholder. The match alone is
+    // a strong soft-404 signal; combined with the thin-content booster below it
+    // clears the 50% threshold on its own.
+    if (wordCount < 50) {
+      for (const pattern of this.#emptyListingPatterns) {
+        if (pattern.test(bodyText)) {
+          signals.push(`Empty listing / "no results" placeholder on a thin ${wordCount}-word page`);
+          confidence += 45;
+          break;
+        }
+      }
+    }
+
     // 3. Check for error-specific CSS classes/IDs
     const hasErrorElements = await this.#checkErrorElements(chromePage);
     if (hasErrorElements) {
@@ -136,7 +169,6 @@ class Soft404Analyzer {
     }
 
     // 4. Check for very thin content (common in soft 404s)
-    const wordCount = pageData.contentQuality?.wordCount ?? 0;
     if (wordCount < 50 && signals.length > 0) {
       signals.push(`Very thin content (${wordCount} words) combined with error signals`);
       confidence += 15;

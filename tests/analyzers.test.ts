@@ -11,6 +11,7 @@ import { FontLoadingAnalyzer } from '../lib/analyzers/performance/font-loading-a
 import { CTADetectorAnalyzer } from '../lib/analyzers/content/cta-detector-analyzer';
 import { OutboundLinkChecker } from '../lib/analyzers/content/outbound-link-checker';
 import { BrokenPaginationAnalyzer } from '../lib/analyzers/site-wide/broken-pagination-analyzer';
+import { Soft404Analyzer } from '../lib/analyzers/seo/soft-404-analyzer';
 import { PaginationAnalyzer } from '../lib/analyzers/seo/pagination-analyzer';
 import { ScoreCalculator } from '../lib/scoring/score-calculator';
 import { scoredCategoryOf, buildScoreImpact, sectionScoreSuffix } from '../lib/phase2/score-impact';
@@ -3247,6 +3248,51 @@ void describe('BrokenPaginationAnalyzer', () => {
     // Both variants' tail URLs are returned so the orchestrator can suppress them elsewhere.
     assert.ok(result.brokenUrls.includes('https://ex.com/insights/page/2'));
     assert.ok(result.brokenUrls.includes('https://ex.com/insights/page/2?postType=case-study'));
+  });
+});
+
+// ============================================================
+// Soft404Analyzer — empty-listing / "no results" detection
+// ============================================================
+void describe('Soft404Analyzer empty-listing detection', () => {
+  // Mock a Playwright page: #getBodyText calls evaluate(fn) with no 2nd arg;
+  // #checkErrorElements calls evaluate(fn, selectors) WITH a 2nd arg → false.
+  const mockChromePage = (bodyText: string) =>
+    ({ evaluate: async (_fn: unknown, arg?: unknown) => (arg !== undefined ? false : bodyText) }) as never;
+  const mockParsed = (h1: string) =>
+    ({ querySelector: (sel: string) => (sel === 'h1' && h1 ? { textContent: h1 } : null) }) as never;
+  const pageData = (wordCount: number, title = 'Siro Sales Insights | Page 7 | Siro') =>
+    ({ status: 200, title, contentQuality: { wordCount }, metaMap: {} }) as never;
+
+  void it('flags a thin empty-results listing page as a soft 404', async () => {
+    const r = await Soft404Analyzer.analyze(
+      mockChromePage('No insights found Try adjusting your filters or check back later for new insights.'),
+      mockParsed('Insights'),
+      'https://e.com/insights/page/7',
+      pageData(19),
+    );
+    assert.strictEqual(r.soft404Data.isSoft404, true, 'empty listing + thin ⇒ soft 404');
+    assert.ok(r.soft404Data.confidence >= 50, `confidence ${r.soft404Data.confidence} should clear 50`);
+  });
+
+  void it('does NOT flag a sparse-but-real listing (a guides index with one entry)', async () => {
+    const r = await Soft404Analyzer.analyze(
+      mockChromePage('Siro Guide The No-Nonsense Guide to Recording Field Sales and Service Conversations'),
+      mockParsed('Guides'),
+      'https://e.com/guides',
+      pageData(17, 'Sales Guides | Siro'),
+    );
+    assert.strictEqual(r.soft404Data.isSoft404, false, 'real item text, no empty-state placeholder');
+  });
+
+  void it('does NOT flag a long article that merely mentions "no results" in prose', async () => {
+    const r = await Soft404Analyzer.analyze(
+      mockChromePage('When you search and get no results found, it can be frustrating. Here is a long guide ...'),
+      mockParsed('How to handle empty searches'),
+      'https://e.com/blog/empty-searches',
+      pageData(800, 'How to handle empty searches'),
+    );
+    assert.strictEqual(r.soft404Data.isSoft404, false, 'thinness gate prevents a real article from being flagged');
   });
 });
 

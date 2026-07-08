@@ -4336,9 +4336,11 @@ void describe('live-verifier: parseReportFindings', () => {
     assert.ok(!findings.some((f) => f.title === 'Top Priority Issues'), 'summary heading excluded');
   });
 
-  void it('keeps CRITICAL/HIGH/MEDIUM and drops LOW', () => {
+  void it('keeps all severities including LOW', () => {
     assert.ok(findings.some((f) => f.title === 'Canonicals are not set for some pages'));
-    assert.ok(!findings.some((f) => f.title === 'Minor cosmetic thing'), 'LOW dropped');
+    const low = findings.find((f) => f.title === 'Minor cosmetic thing');
+    assert.ok(low, 'LOW finding kept');
+    assert.strictEqual(low?.severity, 'LOW');
   });
 
   void it('extracts the first real example URL', () => {
@@ -4487,6 +4489,20 @@ void describe('live-verifier: checker refute contract', () => {
     videoCount: 0,
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
+    videosWithoutPoster: 0,
+    videosWithoutTitle: 0,
+    autoplayVideosNoControls: 0,
+    hasManifestLink: false,
+    hasThemeColor: false,
+    hasAppleTouchIcon: false,
+    hasNoscript: false,
+    h2Count: 0,
+    inlineJsBytes: 0,
+    httpInternalLinks: 0,
+    redirectStatuses: [],
+    hasHeadingSkip: false,
+    textHtmlRatio: 0.5,
+    hasFreshnessSignal: false,
     internalLinkCount: 5,
     lcpMs: 0,
     fcpMs: 0,
@@ -4671,6 +4687,178 @@ void describe('live-verifier: checker refute contract', () => {
       'confirmed',
     );
     assert.strictEqual(checkFindingSignals('Pages in sitemap are marked noindex', base, 1).status, 'refuted');
+  });
+
+  // ---- tier-a: matcher widening for kinds surfaced once LOW is live-checked ----
+
+  void it('duplicate matcher owns the "identical titles/descriptions" wording (not just "duplicate")', () => {
+    for (const t of [
+      'Some pages have identical titles',
+      'Some pages have identical descriptions',
+      'Pages have identical meta descriptions',
+    ]) {
+      assert.doesNotMatch(checkFindingSignals(t, base, 2).reason, /no live checker/i, `"${t}" should be owned`);
+    }
+  });
+
+  void it('near-duplicate-content matcher owns the "very similar content" wording', () => {
+    for (const t of ['Pages have very similar content', 'A notable share of pages have highly similar content']) {
+      assert.doesNotMatch(checkFindingSignals(t, base, 2).reason, /no live checker/i, `"${t}" should be owned`);
+    }
+  });
+
+  void it('url-case checker confirms uppercase in the URL path and refutes an all-lowercase URL', () => {
+    const t = 'URL contains uppercase letters';
+    assert.doesNotMatch(checkFindingSignals(t, base, 1).reason, /no live checker/i, 'url-case should be owned');
+    assert.strictEqual(
+      checkFindingSignals(t, { ...base, url: 'https://x.example/Foo/Bar' }, 1).status,
+      'confirmed',
+      'uppercase path → confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals(t, { ...base, url: 'https://x.example/foo/bar' }, 1).status,
+      'refuted',
+      'lowercase path → refuted',
+    );
+  });
+
+  // ---- tier-b: new signal-backed checkers ----
+
+  void it('h2-count confirms > threshold and refutes at/under it', () => {
+    const t = 'Some pages have more than 10 h2 tags';
+    assert.strictEqual(checkFindingSignals(t, { ...base, h2Count: 14 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals(t, { ...base, h2Count: 4 }, 1).status, 'refuted');
+  });
+
+  void it('inline-js confirms over the byte threshold (confirm-only under it)', () => {
+    const t = 'Large amount of inline JavaScript';
+    assert.doesNotMatch(checkFindingSignals(t, base, 1).reason, /no live checker/i);
+    assert.strictEqual(checkFindingSignals(t, { ...base, inlineJsBytes: 80_000 }, 1).status, 'confirmed');
+    assert.strictEqual(checkFindingSignals(t, { ...base, inlineJsBytes: 1_000 }, 1).status, 'unverified');
+  });
+
+  void it('PWA / head presence checkers confirm on absence and refute on presence', () => {
+    const cases: [string, keyof LiveSignals][] = [
+      ['No web app manifest', 'hasManifestLink'],
+      ['No theme-color meta tag', 'hasThemeColor'],
+      ['No Apple touch icon', 'hasAppleTouchIcon'],
+      ['No noscript fallback content', 'hasNoscript'],
+    ];
+    for (const [t, field] of cases) {
+      assert.strictEqual(checkFindingSignals(t, base, 1).status, 'confirmed', `${t} → confirmed when absent`);
+      assert.strictEqual(
+        checkFindingSignals(t, { ...base, [field]: true }, 1).status,
+        'refuted',
+        `${t} → refuted when present`,
+      );
+    }
+  });
+
+  void it('video poster/title/autoplay + http-internal-links confirm when present (confirm-only)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Videos without poster image', { ...base, videosWithoutPoster: 2 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Videos without accessible title', { ...base, videosWithoutTitle: 1 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Autoplay video without pause controls', { ...base, autoplayVideosNoControls: 1 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Internal links use HTTP instead of HTTPS', { ...base, httpInternalLinks: 3 }, 1).status,
+      'confirmed',
+    );
+    // confirm-only: none-at-load stays unverified, never refuted
+    assert.strictEqual(
+      checkFindingSignals('Videos without poster image', { ...base, videosWithoutPoster: 0 }, 1).status,
+      'unverified',
+    );
+  });
+
+  // ---- tier-c: deferred-floor kinds now owned (confirm / refute / site-level relabel) ----
+
+  void it('redirect checkers confirm on a live redirect (confirm-only, never refute)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Requested URLs redirect before serving the page', { ...base, redirectCount: 1 }, 1).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Requested URLs redirect before serving the page', { ...base, redirectCount: 0 }, 1).status,
+      'unverified',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Temporary redirect used instead of permanent', { ...base, redirectStatuses: [302] }, 1)
+        .status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Temporary redirect used instead of permanent', { ...base, redirectStatuses: [301] }, 1)
+        .status,
+      'unverified',
+    );
+  });
+
+  void it('skipped-heading + freshness confirm/refute on the rendered document', () => {
+    assert.strictEqual(
+      checkFindingSignals('Some pages have incorrect h tags structure: preceding tag h2 is missing', {
+        ...base,
+        hasHeadingSkip: true,
+      }).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Some pages have incorrect h tags structure: preceding tag h2 is missing', {
+        ...base,
+        hasHeadingSkip: false,
+      }).status,
+      'refuted',
+    );
+    // freshness is CONFIRM-ONLY: the live DOM signal (incl. bare <time>) is broader
+    // than FreshnessAnalyzer's structured-date definition, so it must never refute.
+    assert.strictEqual(
+      checkFindingSignals('No content freshness signals found', { ...base, hasFreshnessSignal: false }).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('No content freshness signals found', { ...base, hasFreshnessSignal: true }).status,
+      'unverified',
+    );
+    // a Last-Modified header alone (no DOM signal) → not "no freshness" → unverified, never confirmed
+    assert.strictEqual(
+      checkFindingSignals('No content freshness signals found', {
+        ...base,
+        hasFreshnessSignal: false,
+        headers: { 'last-modified': 'Wed, 01 Jan 2025 00:00:00 GMT' },
+      }).status,
+      'unverified',
+    );
+  });
+
+  void it('text-to-HTML ratio confirms when low (confirm-only)', () => {
+    assert.strictEqual(
+      checkFindingSignals('Low text-to-HTML ratio', { ...base, textHtmlRatio: 0.05 }).status,
+      'confirmed',
+    );
+    assert.strictEqual(
+      checkFindingSignals('Low text-to-HTML ratio', { ...base, textHtmlRatio: 0.6 }).status,
+      'unverified',
+    );
+  });
+
+  void it('click-depth wording and cross-page aggregates are owned (site-level, not "no live checker")', () => {
+    for (const t of [
+      'Page is more than 4 clicks from homepage',
+      'Low anchor text diversity',
+      'Significant internal linking opportunities',
+      'Most pages lack freshness signals',
+    ]) {
+      const r = checkFindingSignals(t, base, 1);
+      assert.doesNotMatch(r.reason, /no live checker/i, `"${t}" should be owned`);
+      assert.strictEqual(r.status, 'unverified', `"${t}" is a site-level non-decision`);
+    }
   });
 
   void it('total-image-size confirms over the threshold, confirm-only under it (lazy images)', () => {
@@ -5738,6 +5926,20 @@ void describe('live-verifier: broken-outbound match split', () => {
     videoCount: 0,
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
+    videosWithoutPoster: 0,
+    videosWithoutTitle: 0,
+    autoplayVideosNoControls: 0,
+    hasManifestLink: false,
+    hasThemeColor: false,
+    hasAppleTouchIcon: false,
+    hasNoscript: false,
+    h2Count: 0,
+    inlineJsBytes: 0,
+    httpInternalLinks: 0,
+    redirectStatuses: [],
+    hasHeadingSkip: false,
+    textHtmlRatio: 0.5,
+    hasFreshnessSignal: false,
     internalLinkCount: 5,
     lcpMs: 0,
     fcpMs: 0,
@@ -5896,6 +6098,20 @@ void describe('live-verifier: Slice 2 header checkers', () => {
     videoCount: 0,
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
+    videosWithoutPoster: 0,
+    videosWithoutTitle: 0,
+    autoplayVideosNoControls: 0,
+    hasManifestLink: false,
+    hasThemeColor: false,
+    hasAppleTouchIcon: false,
+    hasNoscript: false,
+    h2Count: 0,
+    inlineJsBytes: 0,
+    httpInternalLinks: 0,
+    redirectStatuses: [],
+    hasHeadingSkip: false,
+    textHtmlRatio: 0.5,
+    hasFreshnessSignal: false,
     internalLinkCount: 5,
     lcpMs: 0,
     fcpMs: 0,
@@ -6257,6 +6473,20 @@ void describe('live-verifier: liveSignalsSnapshot (Slice 3 LLM evidence)', () =>
     videoCount: 0,
     hasVideoObjectSchema: false,
     videosWithoutCaptions: 0,
+    videosWithoutPoster: 0,
+    videosWithoutTitle: 0,
+    autoplayVideosNoControls: 0,
+    hasManifestLink: false,
+    hasThemeColor: false,
+    hasAppleTouchIcon: false,
+    hasNoscript: false,
+    h2Count: 0,
+    inlineJsBytes: 0,
+    httpInternalLinks: 0,
+    redirectStatuses: [],
+    hasHeadingSkip: false,
+    textHtmlRatio: 0.5,
+    hasFreshnessSignal: false,
     internalLinkCount: 5,
     lcpMs: 0,
     fcpMs: 0,

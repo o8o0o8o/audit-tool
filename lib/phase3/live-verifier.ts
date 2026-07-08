@@ -15,7 +15,8 @@
  *   • Network-bound — one fetch per DISTINCT first-example URL (deduped), not
  *     per occurrence.
  *
- * Scope: only CRITICAL / HIGH / MEDIUM findings are verified (LOW is skipped).
+ * Scope: all severities are verified (CRITICAL / HIGH / MEDIUM / LOW). When the
+ * global fetch budget is tight, high-severity sample URLs are fetched first.
  *
  * Three verdicts, mirroring the disk pass:
  *   • confirmed  — the live page exhibits the claimed defect.
@@ -28,7 +29,7 @@
  */
 
 import { chromium } from 'playwright';
-import type { Browser, Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
 import { AxeBuilder } from '@axe-core/playwright';
 import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT, CRAWL_SETTINGS } from '../constants';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
@@ -89,7 +90,7 @@ export type VerdictReason =
  *  `low` = an LLM/heuristic judgment over partial evidence. */
 export type Confidence = 'high' | 'medium' | 'low';
 
-export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM';
+export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface ReportFinding {
   /** The `### <title>` heading text, verbatim (markdown, may carry inline code). */
@@ -134,7 +135,8 @@ export interface LiveVerdict {
  * as a finding ONLY when its first non-empty line is a severity span — that
  * filters out the summary sections ("Top Priority Issues", "Quick Wins",
  * "Long-term Recommendations") whose headings carry no severity line.
- * LOW findings are dropped (CRITICAL/HIGH/MEDIUM only).
+ * All severities are kept, including LOW (AI-discovered findings are still
+ * excluded — they have no live checker; see below).
  */
 export function parseReportFindings(md: string): ReportFinding[] {
   const lines = md.split('\n');
@@ -160,7 +162,9 @@ export function parseReportFindings(md: string): ReportFinding[] {
     const sevM = headerLine.match(sevRe);
     if (!sevM) continue;
     const severity = sevM[1];
-    if (severity === 'LOW') continue;
+    // LOW findings are live-checked too (all severities). They share the same
+    // checker registry; the only severity-dependent behaviour is the fetch-budget
+    // ordering in verifyReportLive, which fills high-severity sample URLs first.
     const countM = headerLine.match(/affects\s+(\d+)\s+occurrence/);
     const count = countM ? parseInt(countM[1], 10) : 1;
     // Skip AI-discovered findings: they have no live checker, their example is
@@ -344,6 +348,26 @@ export interface LiveSignals {
   hasVideoObjectSchema: boolean;
   /** `<video>` elements with no `<track kind="captions"|"subtitles">`. */
   videosWithoutCaptions: number;
+  /** `<video>` elements with no `poster` attribute. Confirm-only (videos can lazy-mount). */
+  videosWithoutPoster: number;
+  /** `<video>` elements with no accessible name (aria-label/title/labelledby/track[label]). Confirm-only. */
+  videosWithoutTitle: number;
+  /** `<video autoplay>` elements without `controls`. Confirm-only. */
+  autoplayVideosNoControls: number;
+  /** `<link rel="manifest">` present. Server-rendered <head> → stable confirm/refute. */
+  hasManifestLink: boolean;
+  /** `<meta name="theme-color">` present. Stable confirm/refute. */
+  hasThemeColor: boolean;
+  /** `<link rel*="apple-touch-icon">` present. Stable confirm/refute. */
+  hasAppleTouchIcon: boolean;
+  /** `<noscript>` present anywhere in the document. Stable confirm/refute. */
+  hasNoscript: boolean;
+  /** Count of `<h2>` elements. Server-rendered → stable confirm/refute. */
+  h2Count: number;
+  /** Sum of inline (no-src) JS `<script>` text bytes. Stable confirm/refute. */
+  inlineJsBytes: number;
+  /** Same-host anchors whose href uses `http://` (mixed-protocol internal links). Confirm-only. */
+  httpInternalLinks: number;
   /** Same-origin (internal) anchors with an href — for the dead-end-page check. */
   internalLinkCount: number;
   /** Largest Contentful Paint (ms) from a PerformanceObserver; 0 when unmeasured. Volatile → confirm-only. */
@@ -361,6 +385,14 @@ export interface LiveSignals {
   /** HTTP redirect hops the navigation followed to reach `finalUrl` (0 = direct).
    *  Server-issued but can vary by geo/cookie/Accept-Language → confirm-only. */
   redirectCount: number;
+  /** Status code of each redirect hop (301/302/307/308…). Confirm-only (varies). */
+  redirectStatuses: number[];
+  /** A heading level was skipped (e.g. h1→h3). Server-rendered → confirm/refute. */
+  hasHeadingSkip: boolean;
+  /** Visible-text length / serialized-HTML length. Under-observable (content hydrates) → confirm-only. */
+  textHtmlRatio: number;
+  /** A freshness signal is present (time[datetime] / article meta / JSON-LD date). Confirm/refute. */
+  hasFreshnessSignal: boolean;
   /** True when the document head declares `<link rel="preload" as="image">`
    *  (an LCP-image preload). Server-rendered + stable. */
   hasImagePreload: boolean;
@@ -415,6 +447,7 @@ async function captureOne(
     hasTouch: true,
     userAgent: DEFAULT_USER_AGENT,
   });
+  await injectNamePolyfill(context);
   // Accurate per-request transfer sizes come from `request.sizes()` on
   // 'requestfinished' (real responseBodySize, incl. chunked) rather than the
   // unreliable content-length header.
@@ -511,7 +544,13 @@ async function captureOne(
       }
     }
 
-    const response = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+    // Wait for the DOM to be parsed, NOT the full `load` event. Under the
+    // re-applied crawl throttle (e.g. slow4g, 300kbit/s) `load` waits for every
+    // image/font/third-party byte and routinely exceeds `timeoutMs` on real
+    // pages — the page would then be wrongly recorded `unreachable`, killing
+    // EVERY (including stable DOM/header) checker on it. The capped `networkidle`
+    // settles + autoScroll below still let hydration and deferred content mount.
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     if (!response) return null;
     // Give client-side hydration / deferred content a chance to mount before we
     // read DOM signals. networkidle can never settle on sites with persistent
@@ -525,17 +564,22 @@ async function captureOne(
     const finalUrl = response.url();
     const pageHost = new URL(finalUrl).hostname;
 
-    // Count the HTTP redirect hops that led to this response (3xx chain). Walk
-    // the request's redirect ancestry; 0 means a direct (non-redirected) load.
+    // Count the HTTP redirect hops that led to this response (3xx chain) and
+    // record each hop's status code (301/302/307/308…). Walk the request's
+    // redirect ancestry; 0 means a direct (non-redirected) load.
     let redirectCount = 0;
+    const redirectStatuses: number[] = [];
     try {
       let prev = response.request().redirectedFrom();
       while (prev) {
         redirectCount++;
+        const resp = await prev.response();
+        const st = resp?.status();
+        if (typeof st === 'number') redirectStatuses.push(st);
         prev = prev.redirectedFrom();
       }
     } catch {
-      /* leave 0 → redirect-chain checker stays unverified, never a false drop */
+      /* leave 0 → redirect checkers stay unverified, never a false drop */
     }
 
     // Main-document response headers (lowercased keys), for the Slice 2 header
@@ -792,13 +836,92 @@ async function captureOne(
       for (const img of Array.from(document.images))
         if ((img.getAttribute('loading') ?? '') === 'lazy') lazyImageCount++;
 
-      // Videos + caption tracks.
+      // Videos + caption tracks, poster image, accessible title, autoplay-no-controls.
       const videoEls = Array.from(document.querySelectorAll('video'));
       const videoCount = videoEls.length;
       let videosWithoutCaptions = 0;
+      let videosWithoutPoster = 0;
+      let videosWithoutTitle = 0;
+      let autoplayVideosNoControls = 0;
       for (const v of videoEls) {
         if (!v.querySelector('track[kind="captions"], track[kind="subtitles"]')) videosWithoutCaptions++;
+        if (!v.getAttribute('poster')) videosWithoutPoster++;
+        const titled =
+          !!v.getAttribute('aria-label') ||
+          !!v.getAttribute('title') ||
+          !!v.getAttribute('aria-labelledby') ||
+          !!v.querySelector('track[label]');
+        if (!titled) videosWithoutTitle++;
+        if (v.hasAttribute('autoplay') && !v.hasAttribute('controls')) autoplayVideosNoControls++;
       }
+
+      // PWA / head presence signals — server-rendered in <head>, so stable
+      // confirm/refute (not CORS- or hydration-limited).
+      const hasManifestLink = !!document.querySelector('link[rel="manifest" i]');
+      const hasThemeColor = !!document.querySelector('meta[name="theme-color" i]');
+      const hasAppleTouchIcon = !!document.querySelector('link[rel*="apple-touch-icon" i]');
+      // A <noscript> counts only when it has MEANINGFUL fallback content — exactly
+      // mirroring TechnicalSeoAnalyzer.checkNoscriptContent (>50 chars, no
+      // iframe/img). Matching ANY <noscript> would wrongly refute (drop) the
+      // finding on the near-universal GTM tracking-pixel `<noscript><iframe>`.
+      let hasNoscript = false;
+      for (const ns of Array.from(document.querySelectorAll('noscript'))) {
+        const c = (ns.textContent ?? '').trim();
+        if (c.length > 50 && !c.includes('iframe') && !c.includes('img')) {
+          hasNoscript = true;
+          break;
+        }
+      }
+
+      // h2 count (heading structure).
+      const h2Count = document.querySelectorAll('h2').length;
+
+      // Inline JS: sum of every <script> with no src and a JS (or default/module)
+      // type — skips JSON-LD and other non-JS data blocks.
+      let inlineJsBytes = 0;
+      for (const sc of Array.from(document.querySelectorAll('script'))) {
+        if (sc.getAttribute('src')) continue;
+        const stype = (sc.getAttribute('type') ?? '').toLowerCase();
+        if (stype && !/javascript|module/.test(stype)) continue;
+        inlineJsBytes += (sc.textContent ?? '').length;
+      }
+
+      // Internal links served over http:// (mixed-protocol internal linking).
+      let httpInternalLinks = 0;
+      for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+        try {
+          const u = new URL(a.getAttribute('href') ?? '', location.href);
+          if (u.protocol === 'http:' && u.hostname === location.hostname) httpInternalLinks++;
+        } catch {
+          /* malformed href — ignore */
+        }
+      }
+
+      // Skipped heading level — computed with the SAME definition as
+      // HeadingAnalyzer (count-based, order-independent): a level h{i} has zero
+      // occurrences while the next-deeper level h{i+1} is present (e.g. no h2 but
+      // an h3 exists). Must NOT use a DOM-order ascending-jump heuristic — that
+      // misses non-ascending layouts (a widget h3 before the main h1) the analyzer
+      // flags, which would wrongly REFUTE (drop) a real finding.
+      const headingCounts = [1, 2, 3, 4, 5, 6].map((n) => document.querySelectorAll(`h${n}`).length);
+      let hasHeadingSkip = false;
+      for (let i = 0; i < 5; i++) {
+        if (headingCounts[i] === 0 && headingCounts[i + 1] > 0) hasHeadingSkip = true;
+      }
+
+      // Text-to-HTML ratio: visible text length / serialized HTML length.
+      const htmlLen = document.documentElement.outerHTML.length || 1;
+      const visibleText = (document.body?.innerText ?? '').replace(/\s+/g, ' ').trim();
+      const textHtmlRatio = visibleText.length / htmlLen;
+
+      // Content freshness: a <time datetime>, article published/modified meta, or
+      // JSON-LD datePublished/dateModified.
+      const hasFreshnessSignal =
+        !!document.querySelector('time[datetime]') ||
+        !!document.querySelector(
+          'meta[property="article:published_time"], meta[property="article:modified_time"]',
+        ) ||
+        ldBlocks.some((s) => /"date(Published|Modified)"\s*:/.test(s.textContent ?? ''));
 
       // Same-origin (internal) anchors — for the dead-end-page check. Also count
       // ALL anchors (totalLinkCount → "too many on-page links") and affiliate
@@ -869,6 +992,19 @@ async function captureOne(
         lazyImageCount,
         videoCount,
         videosWithoutCaptions,
+        videosWithoutPoster,
+        videosWithoutTitle,
+        autoplayVideosNoControls,
+        hasManifestLink,
+        hasThemeColor,
+        hasAppleTouchIcon,
+        hasNoscript,
+        h2Count,
+        inlineJsBytes,
+        httpInternalLinks,
+        hasHeadingSkip,
+        textHtmlRatio,
+        hasFreshnessSignal,
         internalLinkCount,
         totalLinkCount,
         affiliateLinksNoRel,
@@ -968,6 +1104,16 @@ async function captureOne(
       videoCount: dom.videoCount,
       hasVideoObjectSchema: dom.hasVideoObjectSchema,
       videosWithoutCaptions: dom.videosWithoutCaptions,
+      videosWithoutPoster: dom.videosWithoutPoster,
+      videosWithoutTitle: dom.videosWithoutTitle,
+      autoplayVideosNoControls: dom.autoplayVideosNoControls,
+      hasManifestLink: dom.hasManifestLink,
+      hasThemeColor: dom.hasThemeColor,
+      hasAppleTouchIcon: dom.hasAppleTouchIcon,
+      hasNoscript: dom.hasNoscript,
+      h2Count: dom.h2Count,
+      inlineJsBytes: dom.inlineJsBytes,
+      httpInternalLinks: dom.httpInternalLinks,
       internalLinkCount: dom.internalLinkCount,
       lcpMs: vitals.lcp,
       fcpMs: vitals.fcp,
@@ -976,16 +1122,95 @@ async function captureOne(
       consoleErrors,
       hasAuthorByline: dom.hasAuthorByline,
       redirectCount,
+      redirectStatuses,
+      hasHeadingSkip: dom.hasHeadingSkip,
+      textHtmlRatio: dom.textHtmlRatio,
+      hasFreshnessSignal: dom.hasFreshnessSignal,
       hasImagePreload: dom.hasImagePreload,
       totalLinkCount: dom.totalLinkCount,
       affiliateLinksNoRel: dom.affiliateLinksNoRel,
       hasNoindexMeta: dom.hasNoindexMeta,
     };
-  } catch {
+  } catch (e) {
+    liveFetchErrors.set(url, classifyFetchError(e));
     return null;
   } finally {
     await context.close().catch(() => undefined);
   }
+}
+
+/**
+ * Total live-navigation attempts (initial + retries), mirroring the crawler's
+ * retry budget (THRESHOLDS.RETRY_ATTEMPTS). The single-shot verify pass recorded
+ * the first transient miss as a permanent `unreachable` — the dominant cause of
+ * low live-confirmation rates, since the crawl itself reaches these same pages
+ * only by retrying.
+ */
+const LIVE_NAV_ATTEMPTS = 3;
+const LIVE_NAV_BACKOFF_MS = 800;
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Last live-fetch failure reason per URL, recorded by captureOne/fetchLightOnce
+ *  so the orchestrator can report WHY a page was unreachable (timeout / network /
+ *  nav-error) instead of the opaque catch-all. Reset per verifyReportLive run. */
+const liveFetchErrors = new Map<string, string>();
+
+function classifyFetchError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/timeout|timed out/i.test(msg)) return 'timeout';
+  if (/net::ERR_|\bERR_[A-Z_]+|ECONNRESET|ECONNREFUSED|socket hang up|ENOTFOUND/i.test(msg)) return 'network';
+  return 'nav-error';
+}
+
+/**
+ * tsx/esbuild compiles with keepNames, injecting `__name(fn, "fn")` wrappers
+ * around named functions nested inside `page.evaluate(() => …)` callbacks. That
+ * helper does NOT exist in the browser, so the WHOLE evaluate throws
+ * `ReferenceError: __name is not defined` — and captureOne's single catch then
+ * recorded the page as `unreachable`, even though it loaded fine (status 200).
+ * This silently neutered the live pass on any site whose DOM-signal evaluate
+ * tripped the helper. Inject a no-op shim as the first init script (string
+ * content, so it is itself immune to instrumentation). Mirrors the identical fix
+ * already in crawler-engine.ts and phase4/competitor-crawl.ts — which is exactly
+ * why the crawl reached these pages while the verify pass did not.
+ */
+async function injectNamePolyfill(context: BrowserContext): Promise<void> {
+  await context.addInitScript({ content: 'window.__name = window.__name || function (f) { return f; };' });
+}
+
+/** Short ` (reason)` suffix for an `unreachable` message, or '' when unknown. */
+function unreachableReason(url: string): string {
+  const why = liveFetchErrors.get(url);
+  return why ? ` (${why})` : '';
+}
+
+/**
+ * captureOne with retry: re-attempt a fetch that returned null (transient
+ * failure) up to {@link LIVE_NAV_ATTEMPTS} times with linear backoff. Clears the
+ * recorded error on success so a recovered page reports no failure reason.
+ */
+async function captureWithRetry(
+  browser: Browser,
+  url: string,
+  timeoutMs: number,
+  throttle: Throttle | undefined,
+  verbose: boolean,
+): Promise<LiveSignals | null> {
+  for (let n = 1; n <= LIVE_NAV_ATTEMPTS; n++) {
+    const signals = await captureOne(browser, url, timeoutMs, throttle);
+    if (signals) {
+      liveFetchErrors.delete(url);
+      return signals;
+    }
+    if (n < LIVE_NAV_ATTEMPTS) {
+      if (verbose)
+        console.log(
+          `  … retry ${n}/${LIVE_NAV_ATTEMPTS - 1} for ${url} (${liveFetchErrors.get(url) ?? 'unknown'})`,
+        );
+      await sleep(LIVE_NAV_BACKOFF_MS * n);
+    }
+  }
+  return null;
 }
 
 /* ----------------------------------------------------------- live checkers */
@@ -1630,14 +1855,19 @@ const CHECKERS: LiveChecker[] = [
     kind: 'duplicate',
     noFetch: true,
     match: (t) =>
-      /duplicate (page )?(title|meta description)/.test(t) || /parameterized urls share a (title|description)/.test(t),
+      /duplicate (page )?(title|meta description)/.test(t) ||
+      /identical (page )?(titles?|descriptions?|meta descriptions?)/.test(t) ||
+      /parameterized urls share a (title|description)/.test(t),
     check: () =>
       unverifiable('duplication needs ≥2 pages compared — single-page live fetch cannot confirm', 'site-level'),
   },
   {
     kind: 'site-graph',
     noFetch: true,
-    match: (t) => /orphan|unreachable|missing from sitemap|not (listed )?in sitemap|link equity|click depth/.test(t),
+    match: (t) =>
+      /orphan|unreachable|missing from sitemap|not (listed )?in sitemap|link equity|click depth|clicks? from (the )?home|more than \d+ clicks/.test(
+        t,
+      ),
     check: () => unverifiable('site-level (link graph / sitemap) — not derivable from one live page', 'site-level'),
   },
   {
@@ -1664,12 +1894,16 @@ const CHECKERS: LiveChecker[] = [
       ),
   },
   {
-    // "A notable share of pages have near-duplicate content" — a cross-page
-    // shingle-similarity aggregate (ContentSimilarityAnalyzer) over the whole
-    // crawl. Owned (not a "no live checker" gap) and routed to the offline/LLM pass.
+    // "A notable share of pages have near-duplicate content" / "Pages have very
+    // similar content" — a cross-page shingle-similarity aggregate
+    // (ContentSimilarityAnalyzer) over the whole crawl. Owned (not a "no live
+    // checker" gap) and routed to the offline/LLM pass.
     kind: 'near-duplicate-content',
     noFetch: true,
-    match: (t) => /near-duplicate content|near duplicate content|notable share.*near-duplicate/.test(t),
+    match: (t) =>
+      /near-duplicate content|near duplicate content|notable share.*near-duplicate|(very |highly )?similar content|pages have .*similar content/.test(
+        t,
+      ),
     check: () =>
       unverifiable(
         'cross-page near-duplicate-content aggregate (shingle similarity over the whole crawl) — not derivable from a single live page',
@@ -1762,6 +1996,27 @@ const CHECKERS: LiveChecker[] = [
     },
   },
   {
+    // "URL contains uppercase letters" — uppercase in the path/query is
+    // deterministic on the cited/sampled URL (the host is case-insensitive, so
+    // only path+query count). Mirrors UrlArchitectureAnalyzer's check, so it
+    // confirms AND refutes. Per-sample URL like url-length/url-depth.
+    kind: 'url-case',
+    match: (t) => /uppercase letters? in (the )?url|url.*contains? uppercase|uppercase.*in (the )?url/.test(t),
+    check: (s, f) => {
+      const u = s.url ?? s.finalUrl ?? f.exampleUrl ?? '';
+      let pathQuery: string;
+      try {
+        const parsed = new URL(u);
+        pathQuery = parsed.pathname + parsed.search;
+      } catch {
+        return unverifiable('cited URL is unparseable', 'inconclusive');
+      }
+      return /[A-Z]/.test(pathQuery)
+        ? confirmed(`URL path contains uppercase letters: ${pathQuery.slice(0, 60)}`)
+        : refuted(`URL path has no uppercase letters: ${pathQuery.slice(0, 60)}`);
+    },
+  },
+  {
     // "Session ID detected in URL" — the cited URL is deterministic, so this
     // confirms AND refutes against the flagged URL. Mirrors the analyzer's exact
     // detection (UrlArchitectureAnalyzer): a session-keyword QUERY PARAM key, or a
@@ -1816,6 +2071,165 @@ const CHECKERS: LiveChecker[] = [
     kind: 'inline-css',
     match: (t) => /inline css/.test(t),
     check: (s) => overOrUnsure(s.inlineCssBytes, THRESHOLDS.INLINE_CSS_SIZE_WARNING, 'inline CSS', ' bytes'),
+  },
+  // ---- Tier-B: kinds surfaced once LOW is live-checked, backed by new signals ----
+  {
+    // "Some pages have more than 10 h2 tags" — h2 count is server-rendered, so
+    // confirm AND refute against the threshold (mirrors multiple-h1).
+    kind: 'h2-count',
+    match: (t) => /more than \d+ h2|excessive h2|too many h2|h2 tags?/.test(t),
+    check: (s) => overLimit(s.h2Count, THRESHOLDS.H2_COUNT, 'h2 count'),
+  },
+  {
+    // "Large amount of inline JavaScript" — inline (no-src) <script> bytes vs the
+    // warning threshold. Confirm-only via overOrUnsure (frameworks can inject more
+    // inline JS while hydrating, so under-threshold at load isn't a refute).
+    kind: 'inline-js',
+    match: (t) => /inline javascript|inline js/.test(t),
+    check: (s) => overOrUnsure(s.inlineJsBytes, THRESHOLDS.INLINE_JS_SIZE_WARNING, 'inline JS', ' bytes'),
+  },
+  {
+    // "No web app manifest" — <link rel="manifest"> is server-rendered in <head>,
+    // so confirm (absent) AND refute (present).
+    kind: 'pwa-manifest',
+    match: (t) => /web app manifest|manifest\.json|no (web )?manifest|app not installable/.test(t),
+    check: (s) =>
+      s.hasManifestLink
+        ? refuted('a <link rel="manifest"> is present')
+        : confirmed('no <link rel="manifest"> in the document head'),
+  },
+  {
+    // "No theme-color meta tag" — server-rendered; confirm/refute.
+    kind: 'theme-color',
+    match: (t) => /theme-color/.test(t),
+    check: (s) =>
+      s.hasThemeColor
+        ? refuted('a <meta name="theme-color"> is present')
+        : confirmed('no <meta name="theme-color"> in the document head'),
+  },
+  {
+    // "No Apple touch icon" — server-rendered; confirm/refute.
+    kind: 'apple-touch-icon',
+    match: (t) => /apple[ -]touch[ -]icon/.test(t),
+    check: (s) =>
+      s.hasAppleTouchIcon
+        ? refuted('an apple-touch-icon link is present')
+        : confirmed('no apple-touch-icon link in the document head'),
+  },
+  {
+    // "No noscript fallback content" — <noscript> presence is server-rendered.
+    kind: 'noscript',
+    match: (t) => /noscript fallback|no noscript/.test(t),
+    check: (s) =>
+      s.hasNoscript
+        ? refuted('a <noscript> element is present')
+        : confirmed('no <noscript> fallback in the document'),
+  },
+  {
+    // "Videos without poster image" — confirm-only (videos can lazy-mount, so
+    // none-at-load isn't a refute).
+    kind: 'video-poster',
+    match: (t) => /videos? without (a )?poster|poster image/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.videosWithoutPoster > 0,
+        `${s.videosWithoutPoster} video(s) without a poster image`,
+        'no posterless video at load — videos may lazy-mount; not dropping',
+      ),
+  },
+  {
+    // "Videos without accessible title" — confirm-only.
+    kind: 'video-title',
+    match: (t) => /videos? without (an )?accessible title|videos? without (a )?title/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.videosWithoutTitle > 0,
+        `${s.videosWithoutTitle} video(s) with no accessible name`,
+        'no unlabelled video at load — videos may lazy-mount; not dropping',
+      ),
+  },
+  {
+    // "Autoplay video without pause controls" — confirm-only.
+    kind: 'autoplay-video',
+    match: (t) => /autoplay video|video.*autoplay|without pause controls/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.autoplayVideosNoControls > 0,
+        `${s.autoplayVideosNoControls} autoplaying video(s) without controls`,
+        'no autoplay-without-controls video at load — videos may lazy-mount; not dropping',
+      ),
+  },
+  {
+    // "Internal links use HTTP instead of HTTPS" — confirm-only (links hydrate).
+    kind: 'http-internal-links',
+    match: (t) => /internal links? use http|http instead of https/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.httpInternalLinks > 0,
+        `${s.httpInternalLinks} internal link(s) use http://`,
+        'no http:// internal link at load — links may hydrate; not dropping',
+      ),
+  },
+  // ---- Tier-C: deferred kinds now backed by signals (confirm-only / confirm-refute) ----
+  {
+    // "Requested URLs redirect before serving the page" — confirm-only on the live
+    // redirect count (redirects vary by geo/cookie, so absence isn't a refute).
+    kind: 'redirect-served',
+    match: (t) => /redirect before serving|requested urls? redirect/.test(t),
+    check: (s) =>
+      s.redirectCount > 0
+        ? confirmed(`the URL redirects ${s.redirectCount} time(s) before serving`)
+        : unverifiable('no redirect on this live load — redirects vary by geo/cookie; not dropping', 'volatile'),
+  },
+  {
+    // "Temporary redirect used instead of permanent" — confirm-only when a live
+    // hop is 302/303/307 (a temporary status). Never refutes (chain varies).
+    kind: 'redirect-temporary',
+    match: (t) => /temporary redirect|redirect used instead of permanent|302 redirect/.test(t),
+    check: (s) =>
+      s.redirectStatuses.some((c) => c === 302 || c === 303 || c === 307)
+        ? confirmed(`a temporary redirect (${s.redirectStatuses.join('→')}) was served`)
+        : unverifiable('no temporary-redirect hop on this live load; not dropping', 'volatile'),
+  },
+  {
+    // "Skipped heading level" / "incorrect h tags structure" — heading sequence is
+    // server-rendered, so confirm AND refute.
+    kind: 'skipped-heading',
+    match: (t) => /skipped heading|incorrect h tags? structure|heading.*level.*(skip|missing)|preceding tag h\d/.test(t),
+    check: (s) =>
+      s.hasHeadingSkip
+        ? confirmed('a heading level is skipped (e.g. h1→h3)')
+        : refuted('no heading level is skipped in the rendered document'),
+  },
+  {
+    // "Low text-to-HTML ratio" — confirm-only via presentOrUnsure: the ratio only
+    // RISES as content hydrates, so a not-low ratio at load isn't a refute.
+    kind: 'text-html-ratio',
+    match: (t) => /text-to-html ratio|text to html ratio/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.textHtmlRatio < 0.25,
+        `text-to-HTML ratio is low (${Math.round(s.textHtmlRatio * 100)}%)`,
+        'text-to-HTML ratio not low at load — content may hydrate; not dropping',
+      ),
+  },
+  {
+    // "No content freshness signals" (per-page). CONFIRM-ONLY: FreshnessAnalyzer
+    // counts only the Last-Modified header + VALID JSON-LD/`article:` dates
+    // (freshness-analyzer.ts:212) — NOT a bare `<time datetime>`, which
+    // `hasFreshnessSignal` also detects. Refuting on the broader DOM signal would
+    // drop the real finding on a page that renders a `<time>` date without any
+    // structured signal, so we never refute: confirm only when NO signal (DOM or
+    // Last-Modified header) is present. The site-wide "most pages lack" variant is
+    // a cross-page aggregate (handled site-level below).
+    kind: 'freshness',
+    match: (t) => /(content freshness|freshness signal)/.test(t) && !/most pages/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        !s.hasFreshnessSignal && !s.headers['last-modified'],
+        'no freshness signal (no date markup or Last-Modified header) on the page',
+        'a freshness signal is present at load; not dropping',
+      ),
   },
   {
     // Duplicate hreflang declarations in the head — server-rendered + stable.
@@ -2047,6 +2461,25 @@ const CHECKERS: LiveChecker[] = [
           : unverifiable(
               'no contrast violations on the rendered page at load — interaction-gated views unscanned; not dropping',
             ),
+  },
+  {
+    // Cross-page / site-wide aggregates that NO single live page can adjudicate:
+    // anchor-text distribution, internal-link-graph opportunities, site-wide thin
+    // content / freshness / author coverage, cross-page URL patterns, sitemap
+    // crawl coverage. Owned as a `noFetch` site-level non-decision so they report
+    // "site-level" rather than the misleading "no live checker". MUST stay LAST in
+    // CHECKERS so every specific per-page checker matches first.
+    kind: 'cross-page-aggregate',
+    noFetch: true,
+    match: (t) =>
+      /anchor text|linking opportunit|hub pages|pages with few links|top external link destinations|share of pages have insufficient|most pages lack|most content pages lack|unstructured url pattern|sitemap urls were not successfully crawled/.test(
+        t,
+      ),
+    check: () =>
+      unverifiable(
+        'cross-page / site-wide aggregate — needs the whole crawl, not a single live page',
+        'site-level',
+      ),
   },
 ];
 
@@ -2359,6 +2792,7 @@ async function buildReachable(
     viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
     userAgent: DEFAULT_USER_AGENT,
   });
+  await injectNamePolyfill(context);
   let visited = 0;
   // True once we DISCOVER a reachable URL but stop enqueuing it for crawling
   // (cap reached). The graph is then only partially explored, so a URL absent
@@ -2408,20 +2842,35 @@ async function buildReachable(
   return { set: reachable, capped: queue.length > 0 || suppressed };
 }
 
-/** Light fetch: status + title + description + word count (no heavy instrumentation). */
-async function fetchLight(
-  browser: Browser,
-  url: string,
-  timeoutMs: number,
-): Promise<{ status: number; title: string; description: string | null; h1: string; wordCount: number } | null> {
+type LightFetch = { status: number; title: string; description: string | null; h1: string; wordCount: number };
+
+/**
+ * Light fetch with retry: status + title + description + word count (no heavy
+ * instrumentation). Backs the duplicate / cannibalisation / broken-outbound /
+ * pagination verifiers. Retries transient failures like {@link captureWithRetry}
+ * so a single miss doesn't wrongly leave those findings unverified.
+ */
+async function fetchLight(browser: Browser, url: string, timeoutMs: number): Promise<LightFetch | null> {
+  for (let n = 1; n <= LIVE_NAV_ATTEMPTS; n++) {
+    const r = await fetchLightOnce(browser, url, timeoutMs);
+    if (r) return r;
+    if (n < LIVE_NAV_ATTEMPTS) await sleep(LIVE_NAV_BACKOFF_MS * n);
+  }
+  return null;
+}
+
+async function fetchLightOnce(browser: Browser, url: string, timeoutMs: number): Promise<LightFetch | null> {
   if (!liveFetchAllowed(url)) return null;
   const context = await browser.newContext({
     viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
     userAgent: DEFAULT_USER_AGENT,
   });
+  await injectNamePolyfill(context);
   try {
     const page = await context.newPage();
-    const resp = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+    // domcontentloaded (not `load`) — see captureOne: full `load` over a throttled
+    // link routinely times out, which here would wrongly leave the finding unverified.
+    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     if (!resp) return null;
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => undefined);
     const dom = await page.evaluate(() => {
@@ -2723,6 +3172,7 @@ async function verifyPagination(f: ReportFinding, browser: Browser, timeoutMs: n
     viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
     userAgent: DEFAULT_USER_AGENT,
   });
+  await injectNamePolyfill(context);
   try {
     const page = await context.newPage();
     let probed = 0;
@@ -2823,8 +3273,14 @@ export function resolveSiteOrigin(findings: ReportFinding[]): string | null {
 export const MAX_SAMPLES_PER_FINDING = 3;
 /** Global ceiling on distinct per-page live fetches across the whole report.
  *  When hit, remaining sample URLs are dropped (logged, not silent) so a huge
- *  report can't fan out unbounded fetches. */
-const MAX_LIVE_FETCHES = 80;
+ *  report can't fan out unbounded fetches. Now that LOW findings are live-checked
+ *  too (≈2× the finding set), the budget is collected in severity-priority order
+ *  (see verifyReportLive) so a tight cap drops LOW sample URLs before high-severity
+ *  ones; the ceiling is raised to absorb the extra LOW findings. */
+const MAX_LIVE_FETCHES = 200;
+
+/** Severity collection priority (lower = fetched first under the budget cap). */
+const SEVERITY_ORDER: Record<Severity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 /** The example URLs to sample for a finding: the first occurrence always, plus
  *  up to MAX_SAMPLES_PER_FINDING-1 more for a plural finding (capped by how many
@@ -2978,9 +3434,12 @@ export async function captureAnomalyEvidence(
         hasTouch: true,
         userAgent: DEFAULT_USER_AGENT,
       });
+      await injectNamePolyfill(context);
       try {
         const page = await context.newPage();
-        const resp = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+        // domcontentloaded (not `load`) for the same throttle/timeout reason as
+        // captureOne; the networkidle settle below renders enough for the shot.
+        const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
         await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => undefined);
         let screenshot: string | null = null;
         try {
@@ -3004,15 +3463,28 @@ export async function captureAnomalyEvidence(
 }
 
 /**
- * Parse the report, re-fetch each finding's example(s), and re-assert the claim
- * live. Per-page findings sample up to {@link MAX_SAMPLES_PER_FINDING} distinct
- * example pages (deduped, globally capped); special / site-level / no-fetch kinds
- * keep their dedicated verifiers. Findings with no example URL or no matching
- * checker resolve to `unverified` with a categorized reason code.
+ * Parse the report and verify it live. Thin wrapper over {@link verifyFindings}
+ * for callers (and tests) that start from `audit-report.md`. The phase runner
+ * uses {@link verifyFindings} directly with the FULL prepared finding set, so it
+ * is not limited to the findings the curated report renders as blocks.
  */
 export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions = {}): Promise<LiveVerifyResult> {
+  return verifyFindings(parseReportFindings(reportMd), opts);
+}
+
+/**
+ * Re-fetch each finding's example(s) and re-assert the claim live. Per-page
+ * findings sample up to {@link MAX_SAMPLES_PER_FINDING} distinct example pages
+ * (deduped, globally capped in severity-priority order); special / site-level /
+ * no-fetch kinds keep their dedicated verifiers. Findings with no example URL or
+ * no matching checker resolve to `unverified` with a categorized reason code.
+ */
+export async function verifyFindings(
+  findings: ReportFinding[],
+  opts: LiveVerifyOptions = {},
+): Promise<LiveVerifyResult> {
   const timeoutMs = opts.timeoutMs ?? THRESHOLDS.PAGE_TIMEOUT;
-  const findings = parseReportFindings(reportMd);
+  liveFetchErrors.clear();
   const verdicts: LiveVerdict[] = [];
 
   // The audited site's host: same-host re-fetches are allowed even if private
@@ -3043,7 +3515,12 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
   let hasSpecial = false;
   let needsHomepage = false;
   let droppedSampleUrls = 0;
-  for (const { f, checker } of plan) {
+  // Collect sample URLs in severity-priority order so that when the global fetch
+  // cap is tight, LOW sample URLs are dropped before CRITICAL/HIGH/MEDIUM ones.
+  // Stable sort keeps report order within a severity. Flag-setting below is
+  // order-independent, so iterating the sorted plan is safe.
+  const orderedPlan = [...plan].sort((a, b) => SEVERITY_ORDER[a.f.severity] - SEVERITY_ORDER[b.f.severity]);
+  for (const { f, checker } of orderedPlan) {
     if (!checker) continue;
     if (checker.kind === 'site-graph') needsSiteCtx = true;
     if (checker.siteWidePage) needsHomepage = true;
@@ -3084,7 +3561,7 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
       for (const url of urlsToFetch) {
         n++;
         if (opts.verbose) console.log(`  … live-fetching (${n}/${urlsToFetch.size}) ${url}`);
-        cache.set(url, await captureOne(browser, url, timeoutMs, opts.throttle));
+        cache.set(url, await captureWithRetry(browser, url, timeoutMs, opts.throttle, !!opts.verbose));
         fetchProgress?.tick();
       }
       fetchProgress?.done(`Re-fetched ${urlsToFetch.size} page(s)`);
@@ -3094,7 +3571,8 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
       if (needsHomepage && siteOrigin) {
         const homeUrl = `${siteOrigin}/`;
         if (opts.verbose) console.log(`  … live-fetching site homepage for site-wide checks: ${homeUrl}`);
-        homepageSignals = cache.get(homeUrl) ?? (await captureOne(browser, homeUrl, timeoutMs, opts.throttle));
+        homepageSignals =
+          cache.get(homeUrl) ?? (await captureWithRetry(browser, homeUrl, timeoutMs, opts.throttle, !!opts.verbose));
         cache.set(homeUrl, homepageSignals);
       }
 
@@ -3221,7 +3699,9 @@ export async function verifyReportLive(reportMd: string, opts: LiveVerifyOptions
     }
     const results: CheckResult[] = sampleUrls.map((u) => {
       const signals = cache.get(u);
-      return signals ? checker.check(signals, f) : unverifiable(`could not load ${u}`, 'unreachable');
+      return signals
+        ? checker.check(signals, f)
+        : unverifiable(`could not load ${u}${unreachableReason(u)}`, 'unreachable');
     });
     verdicts.push(toVerdict(f, checker.kind, aggregateSampledVerdict(results, f.count)));
   }

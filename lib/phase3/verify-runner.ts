@@ -50,14 +50,17 @@ import {
   type VisionVerifyItem,
 } from './llm-finding-verify';
 import {
-  verifyReportLive,
+  verifyFindings,
   liveSignalsSnapshot,
   captureAnomalyEvidence,
   type Throttle,
   type LiveVerdict,
   type VerdictReason,
   type LiveSignals,
+  type ReportFinding,
+  type Severity,
 } from './live-verifier';
+import type { IssueDetail } from '../phase2/types';
 
 export interface VerifyPhaseOptions {
   /** Surface API/cache errors and per-finding verdict logs. */
@@ -107,7 +110,7 @@ export function loadPhase2State(runDir: string): Phase2State | null {
  * Two implementations, both feeding a SEPARATE `audit-report.verified.*`
  * (the Phase 2 originals are never touched):
  *   • Live re-fetch (default) — parses `audit-report.md`, re-fetches each
- *     CRITICAL/HIGH/MEDIUM finding's first example, re-asserts the claim
+ *     finding's example(s) (all severities), re-asserts the claim
  *     against the current page.
  *   • Deterministic disk pass (SEO_AUDIT_VERIFY_OFFLINE=1) — re-checks each
  *     finding against the crawl data on disk; reproducible, no network.
@@ -368,7 +371,7 @@ const REASON_LABELS: Record<VerdictReason, string> = {
 };
 
 /**
- * A blockquote line breaking the `unverified` C/H/M verdicts down by reason code,
+ * A blockquote line breaking the `unverified` verdicts down by reason code,
  * most-common first — so the report distinguishes "we checked hard and can't
  * decide" from "we never tried." Returns '' when nothing was unverified.
  */
@@ -382,12 +385,13 @@ export function verdictBreakdownLine(verdicts: LiveVerdict[]): string {
   // summing to 15 and read it as broken arithmetic — the missing 30 were the
   // confirmed/refuted findings, which by definition aren't part of an
   // "unverified" breakdown. (The main banner's much larger unverified count is a
-  // different, full-finding-set basis, not this CRITICAL/HIGH/MEDIUM subset.)
+  // different, full-finding-set basis — every prepared finding incl. section-capped
+  // and AI-discovered ones — not just the live-checked set counted here.)
   const unverifiedCount = [...byCode.values()].reduce((a, b) => a + b, 0);
   const parts = [...byCode.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([c, n]) => `${n} ${REASON_LABELS[c] ?? c}`);
-  return `> **Why findings are unverified** (${unverifiedCount} of the ${verdicts.length} live-checked CRITICAL/HIGH/MEDIUM findings remain unverified): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
+  return `> **Why findings are unverified** (${unverifiedCount} of the ${verdicts.length} live-checked findings remain unverified): ${parts.join(', ')}. None of these are defects — each is a deliberate non-decision.\n`;
 }
 
 /** First real http(s) URL across a finding's example strings (skips templated
@@ -460,8 +464,8 @@ export function writeRefutedReport(
 
 /**
  * Live verification (default). Parses the report Phase 2 wrote
- * (`audit-report.md`), takes each CRITICAL/HIGH/MEDIUM finding's first
- * concrete example, RE-FETCHES that page live, and re-asserts the claim against
+ * (`audit-report.md`), takes each finding's first concrete example (all
+ * severities), RE-FETCHES that page live, and re-asserts the claim against
  * the current page. Confirmed → ✓ Verified; refuted → dropped (no longer true /
  * false positive); the rest stay *unverified* (site-level, cross-page, or
  * needing instrumentation a single light load can't provide).
@@ -655,13 +659,47 @@ async function verifyAnomaliesLive(
   return { aiConfirmed, aiDisputed };
 }
 
+/**
+ * Build the live-verification finding list from the FULL prepared finding set
+ * (`preparedDetails`) — every severity incl. LOW, each with its example URLs —
+ * rather than only the findings the curated report renders as `###` blocks (which
+ * are capped per section). `title` is set to `sanitizeProse(message)` so verdicts
+ * map straight back to the rendered findings' VerifyView. Example URLs are pulled
+ * from each finding's `examples[]` (templated `{N}` series keys skipped, deduped,
+ * capped). AI-discovered findings are excluded — they have no live checker and are
+ * verified separately against fresh screenshots.
+ */
+export function findingsFromDetails(details: Record<string, IssueDetail>): ReportFinding[] {
+  const findings: ReportFinding[] = [];
+  for (const [message, d] of Object.entries(details)) {
+    if (d.aiDiscovered) continue;
+    const exampleUrls: string[] = [];
+    for (const ex of d.examples ?? []) {
+      const urls = ex.match(/https?:\/\/[^\s)\]<>"']+/g);
+      if (urls)
+        for (const u of urls) {
+          if (/[{}]/.test(u)) continue; // templated series key — not a real page
+          if (!exampleUrls.includes(u)) exampleUrls.push(u);
+        }
+      if (exampleUrls.length >= 6) break;
+    }
+    findings.push({
+      title: sanitizeProse(message),
+      severity: (d.severity || '').toUpperCase() as Severity,
+      count: d.count,
+      exampleUrl: exampleUrls[0],
+      exampleUrls,
+    });
+  }
+  return findings;
+}
+
 async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedState): Promise<string | null> {
   const reportPath = path.join(artifacts.runDir, 'audit-report.md');
   if (!fs.existsSync(reportPath)) {
     console.log('⚠️  Live verification skipped: audit-report.md not found.');
     return null;
   }
-  const reportMd = fs.readFileSync(reportPath, 'utf8');
 
   // Match the crawl's network/CPU throttle (recorded in metadata when the crawl
   // ran with --perf) so live perf signals (TTFB/CLS/TBT) are comparable.
@@ -673,13 +711,21 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   // (which left them `unverified` on large sites). Undefined → live BFS fallback.
   const siteData = loadSiteData(artifacts.runDir, loadAllPages(artifacts.runDir)) ?? undefined;
 
-  console.log("🔎 Live verification: re-fetching each finding's example(s) and re-asserting the claim…");
-  const { verdicts, signalsByUrl } = await verifyReportLive(reportMd, { verbose: state.verbose, throttle, siteData });
-
-  // Map parsed report titles → in-memory finding messages. The renderer emits
-  // `### ${sanitizeProse(message)}`, so a parsed title equals
-  // sanitizeProse(message); match on that to build the render's VerifyView.
+  // Verify the FULL prepared finding set (every severity incl. LOW, with example
+  // URLs) — NOT just the findings the curated report renders as blocks (capped per
+  // section). This is what lets the live pass confirm far more than the dozen-odd
+  // per section the PDF shows, shrinking the "unverified" remainder.
   const baseDetails = preparedDetails(artifacts, state.suppressed);
+  const findings = findingsFromDetails(baseDetails);
+
+  console.log(
+    `🔎 Live verification: re-fetching ${findings.length} findings' example(s) and re-asserting the claim…`,
+  );
+  const { verdicts, signalsByUrl } = await verifyFindings(findings, { verbose: state.verbose, throttle, siteData });
+
+  // Map finding titles → in-memory finding messages. The renderer emits
+  // `### ${sanitizeProse(message)}` and findingsFromDetails sets title =
+  // sanitizeProse(message), so match on that to build the render's VerifyView.
   const titleToMessage = new Map<string, string>();
   for (const message of Object.keys(baseDetails)) {
     const key = sanitizeProse(message);
@@ -757,15 +803,15 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   const aiNote = aiConfirmed.size > 0 ? ` + ${aiConfirmed.size} AI-confirmed` : '';
   const disputeNote = aiDisputed > 0 ? `, ${aiDisputed} AI-disputed (kept)` : '';
   console.log(
-    `✓ Live verification: ${confirmedCount} confirmed${aiNote}, ${refutedCount} refuted (dropped)${disputeNote}, ${unverifiedCount} unverified (of ${renderedTotal}; ${verdicts.length} CRITICAL/HIGH/MEDIUM findings parsed).`,
+    `✓ Live verification: ${confirmedCount} confirmed${aiNote}, ${refutedCount} refuted (dropped)${disputeNote}, ${unverifiedCount} unverified (of ${renderedTotal}; ${verdicts.length} findings parsed, all severities).`,
   );
 
   const stamp = `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`;
   const banner =
-    `> **🔎 Live verification pass.** Each CRITICAL/HIGH/MEDIUM issue's example(s) were **re-fetched live** ` +
+    `> **🔎 Live verification pass.** Each issue's example(s), all severities, were **re-fetched live** ` +
     `(${stamp}) and its claim re-checked against the current page — not the crawl-time snapshot. ` +
     `**${confirmedCount} confirmed**${aiConfirmed.size > 0 ? `, **${aiConfirmed.size} confirmed by AI review**` : ''}, **${refutedCount} refuted** (dropped as no-longer-true / false positive), ` +
-    `${unverifiedCount} *unverified* — i.e. lower-severity findings (not live-checked), site-level / cross-page claims, multi-page findings whose other pages weren't sampled, or those needing instrumentation a single live load can't provide (not a defect). ` +
+    `${unverifiedCount} *unverified* — i.e. site-level / cross-page claims, multi-page findings whose other pages weren't sampled, findings with no concrete example URL, or those needing instrumentation a single live load can't provide (not a defect). ` +
     `The AI review only adds confirmations; it never drops a finding. ` +
     `Because the live site can change, this report reflects a point in time. Each issue below carries its status.\n` +
     verdictBreakdownLine(verdicts);

@@ -151,7 +151,7 @@ function reportIssues(result: AnalyzerResult, reportIssue: ReportIssueFn, url: s
  * Each analyzer group has a timeout to prevent hung analyzers from freezing the crawl
  */
 export async function runAnalyzers(
-  chromePage: ChromePage,
+  chromePage: ChromePage | null,
   parsedPage: ParsedPage,
   url: string,
   pageData: PageInfo,
@@ -163,6 +163,18 @@ export async function runAnalyzers(
   servedHtml?: string,
 ): Promise<void> {
   const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
+  // No-playwright mode: there is no live page. Analyzers that only read
+  // `parsedPage`/headers still run; analyzers that dereference the browser page
+  // (bucket-b markup readers not yet ported, and bucket-c runtime/visual ones)
+  // are gated to their fallback so they neither throw nor log noise. `cp` is a
+  // non-null alias used only inside gated factories that never execute when
+  // `noPw` — bucket-a analyzers receive it but ignore it (verified chromePage-free).
+  const noPw = options.noPlaywright === true;
+  const cp = chromePage as ChromePage;
+  // Some analyzers are async (return a Promise), a few are synchronous (return a
+  // plain result); Promise.allSettled accepts both, so `run` is typed `unknown`.
+  const run = (idx: number, browserOnly: boolean, factory: () => unknown): unknown =>
+    noPw && browserOnly ? group1Fallbacks[idx] : factory();
   // Cast requests for analyzer compatibility (analyzers use broader parameter types)
   const analyzerRequests = requests as unknown as NetworkRequest[];
 
@@ -227,88 +239,88 @@ export async function runAnalyzers(
     { issues: [], warnings: [], info: {} }, // spellingResult
   ];
 
+  // Each element is `run(fallbackIndex, browserOnly, factory)`. When no-playwright
+  // is active, `browserOnly: true` entries resolve to their positional fallback
+  // instead of executing (no throw, no log). `browserOnly: false` entries run in
+  // both modes — bucket-a (ignore the page) and the bucket-b markup readers that
+  // accept a null chromePage and fall back to `parsedPage`. Positions MUST match
+  // the destructuring order + `group1Fallbacks`.
   const browserAnalyzersSettled = await withTimeout(
     Promise.allSettled([
       // Core SEO
-      HeadingAnalyzer.analyzeHeadings(parsedPage, url),
-      ImageAnalyzer.extractImageAlts(parsedPage),
-      LinkQualityAnalyzer.analyzeLinkQuality(chromePage, parsedPage, url, options.origin, {}),
-      StructuredDataAnalyzer.analyzeStructuredData(chromePage),
-      IndexabilityAnalyzer.analyzeIndexability(
-        chromePage,
-        parsedPage,
-        url,
-        pageData.status ?? 0,
-        pageData.responseHeaders ?? {},
+      run(0, false, () => HeadingAnalyzer.analyzeHeadings(parsedPage, url)),
+      run(1, false, () => ImageAnalyzer.extractImageAlts(parsedPage)),
+      run(2, false, () => LinkQualityAnalyzer.analyzeLinkQuality(chromePage, parsedPage, url, options.origin, {})),
+      run(3, false, () => StructuredDataAnalyzer.analyzeStructuredData(chromePage, parsedPage)),
+      run(4, false, () =>
+        IndexabilityAnalyzer.analyzeIndexability(cp, parsedPage, url, pageData.status ?? 0, pageData.responseHeaders ?? {}),
       ),
-      CrawlabilityAnalyzer.analyzeCrawlability(chromePage, parsedPage, url, pageData),
-      InternationalSEOAnalyzer.analyzeInternationalSEO(chromePage, parsedPage, url, pageData.responseHeaders),
+      run(5, false, () => CrawlabilityAnalyzer.analyzeCrawlability(cp, parsedPage, url, pageData)),
+      run(6, false, () => InternationalSEOAnalyzer.analyzeInternationalSEO(cp, parsedPage, url, pageData.responseHeaders)),
 
       // Content & UX
-      MobileFriendlyAnalyzer.analyzeMobileFriendly(chromePage),
-      AccessibilityAnalyzer.analyzeAccessibility(chromePage),
-      ContentQualityAnalyzer.analyzeContentQuality(chromePage, url, pageContent),
-      FormAccessibilityAnalyzer.analyze(chromePage, parsedPage, url),
+      run(7, true, () => MobileFriendlyAnalyzer.analyzeMobileFriendly(cp)),
+      run(8, true, () => AccessibilityAnalyzer.analyzeAccessibility(cp)),
+      run(9, true, () => ContentQualityAnalyzer.analyzeContentQuality(cp, url, pageContent)),
+      run(10, false, () => FormAccessibilityAnalyzer.analyze(cp, parsedPage, url)),
 
       // Social & Analytics
-      SocialMediaAnalyzer.analyzeSocialMediaTags(chromePage, parsedPage, url),
-      AnalyticsTrackingAnalyzer.analyzeAnalyticsTracking(chromePage, parsedPage, url),
+      run(11, false, () => SocialMediaAnalyzer.analyzeSocialMediaTags(cp, parsedPage, url)),
+      run(12, false, () => AnalyticsTrackingAnalyzer.analyzeAnalyticsTracking(cp, parsedPage, url)),
 
       // Security
-      SecurityAnalyzer.analyzeSecurity(chromePage, parsedPage, url, pageData.responseHeaders),
-      CookieConsentAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
+      run(13, true, () => SecurityAnalyzer.analyzeSecurity(cp, parsedPage, url, pageData.responseHeaders)),
+      run(14, true, () => CookieConsentAnalyzer.analyze(cp, parsedPage, analyzerRequests, url)),
 
       // Performance
-      CachingAnalyzer.analyzeCaching(chromePage, analyzerRequests, url),
-      ImageOptimizationAnalyzer.analyzeImageOptimization(chromePage, requests, url),
-      ResourceOptimizationAnalyzer.analyzeResourceOptimization(chromePage, analyzerRequests, url),
-      FontLoadingAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, url),
-      ThirdPartyAnalyzer.analyze(chromePage, analyzerRequests, url, options.origin),
-      CriticalPathAnalyzer.analyze(chromePage, parsedPage, analyzerRequests, pageData.metrics ?? {}, url),
-      ConnectionTimingAnalyzer.analyze(chromePage, analyzerRequests, url),
+      run(15, true, () => CachingAnalyzer.analyzeCaching(cp, analyzerRequests, url)),
+      run(16, true, () => ImageOptimizationAnalyzer.analyzeImageOptimization(cp, requests, url)),
+      run(17, true, () => ResourceOptimizationAnalyzer.analyzeResourceOptimization(cp, analyzerRequests, url)),
+      run(18, true, () => FontLoadingAnalyzer.analyze(cp, parsedPage, analyzerRequests, url)),
+      run(19, true, () => ThirdPartyAnalyzer.analyze(cp, analyzerRequests, url, options.origin)),
+      run(20, true, () => CriticalPathAnalyzer.analyze(cp, parsedPage, analyzerRequests, pageData.metrics ?? {}, url)),
+      run(21, true, () => ConnectionTimingAnalyzer.analyze(cp, analyzerRequests, url)),
 
       // Advanced
-      PaginationAnalyzer.analyze(chromePage, parsedPage, url, servedHtml),
-      MediaSEOAnalyzer.analyze(chromePage, parsedPage, pageData, url),
-      WebComponentAnalyzer.analyze(chromePage, parsedPage, url),
+      run(22, true, () => PaginationAnalyzer.analyze(cp, parsedPage, url, servedHtml)),
+      run(23, false, () => MediaSEOAnalyzer.analyze(cp, parsedPage, pageData, url)),
+      run(24, true, () => WebComponentAnalyzer.analyze(cp, parsedPage, url)),
 
       // AEO / AI Search Readiness
-      AEOAnalyzer.analyze(chromePage, parsedPage, url),
+      run(25, false, () => AEOAnalyzer.analyze(cp, parsedPage, url)),
 
-      // Technology detection (with error handling)
-      TechnologyDetector.detect(
-        chromePage,
-        parsedPage,
-        pageContent,
-        pageData.responseHeaders ?? {},
-        analyzerRequests,
-      ).catch((err) => {
-        if (options.verbose)
-          console.warn(
-            `[tech-detect] CDP detection failed, falling back to HTML: ${err instanceof Error ? err.message : err}`,
-          );
-        const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
-        return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders ?? {}, scriptSrcs);
-      }),
+      // Technology detection — self-heals to HTML-only detection (no browser needed)
+      run(26, false, () =>
+        TechnologyDetector.detect(cp, parsedPage, pageContent, pageData.responseHeaders ?? {}, analyzerRequests).catch(
+          (err) => {
+            if (options.verbose)
+              console.warn(
+                `[tech-detect] CDP detection failed, falling back to HTML: ${err instanceof Error ? err.message : err}`,
+              );
+            const scriptSrcs = Object.keys(requests || {}).filter((u) => u.endsWith('.js'));
+            return TechnologyDetector.detectFromHtml(pageContent, pageData.responseHeaders ?? {}, scriptSrcs);
+          },
+        ),
+      ),
 
       // CTA Detection
-      CTADetectorAnalyzer.analyzeCTAs(chromePage, parsedPage, url),
+      run(27, true, () => CTADetectorAnalyzer.analyzeCTAs(cp, parsedPage, url)),
 
       // Language Detection
-      LanguageDetectionAnalyzer.analyzeLanguage(chromePage, parsedPage, url, pageData),
+      run(28, false, () => LanguageDetectionAnalyzer.analyzeLanguage(chromePage, parsedPage, url, pageData)),
 
-      // Security (browser-based)
-      ColorContrastAnalyzer.analyze(chromePage, url),
-      ReducedMotionAnalyzer.analyze(chromePage, parsedPage, url),
-      AriaLiveAnalyzer.analyze(chromePage, url),
-      DOMComplexityAnalyzer.analyze(chromePage, url),
-      DeprecatedHTMLAnalyzer.analyze(chromePage, parsedPage, url),
-      InterstitialAnalyzer.analyze(chromePage, url),
-      AdDensityAnalyzer.analyze(chromePage, url),
-      SRIAnalyzer.analyze(parsedPage, url),
-      InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url),
-      OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
-      SpellingGrammarAnalyzer.analyze(chromePage, url),
+      // Security / a11y (browser-based)
+      run(29, true, () => ColorContrastAnalyzer.analyze(cp, url)),
+      run(30, true, () => ReducedMotionAnalyzer.analyze(cp, parsedPage, url)),
+      run(31, false, () => AriaLiveAnalyzer.analyze(chromePage, parsedPage, url)),
+      run(32, true, () => DOMComplexityAnalyzer.analyze(cp, url)),
+      run(33, true, () => DeprecatedHTMLAnalyzer.analyze(cp, parsedPage, url)),
+      run(34, true, () => InterstitialAnalyzer.analyze(cp, url)),
+      run(35, true, () => AdDensityAnalyzer.analyze(cp, url)),
+      run(36, false, () => SRIAnalyzer.analyze(parsedPage, url)),
+      run(37, false, () => InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url)),
+      run(38, false, () => OpenRedirectAnalyzer.analyze(pageData, parsedPage, url)),
+      run(39, true, () => SpellingGrammarAnalyzer.analyze(cp, url)),
     ]),
     analyzerTimeout,
     `Analyzer timeout for ${url}`,
@@ -476,15 +488,19 @@ export async function runAnalyzers(
   // These analyze pageData populated by Group 1
   // ============================================================
 
-  // Soft 404 detection (needs contentQuality.wordCount from Group 1)
-  const soft404Result = await withTimeout(
-    Soft404Analyzer.analyze(chromePage, parsedPage, url, pageData),
-    analyzerTimeout,
-    `Soft404 analyzer timeout for ${url}`,
-  ).catch((e) => {
-    if (options.verbose) console.warn(`[soft404] Analyzer failed for ${url}: ${e instanceof Error ? e.message : e}`);
-    return { soft404Data: null, issues: [], warnings: [] };
-  });
+  // Soft 404 detection (needs contentQuality.wordCount from Group 1). Browser-
+  // based; skipped in no-playwright mode (bucket-b — a parsedPage port is a
+  // Stage-2 follow-up). Status-based 404s are still recorded in #processPageData.
+  const soft404Result = noPw
+    ? { soft404Data: null, issues: [], warnings: [] }
+    : await withTimeout(
+        Soft404Analyzer.analyze(cp, parsedPage, url, pageData),
+        analyzerTimeout,
+        `Soft404 analyzer timeout for ${url}`,
+      ).catch((e) => {
+        if (options.verbose) console.warn(`[soft404] Analyzer failed for ${url}: ${e instanceof Error ? e.message : e}`);
+        return { soft404Data: null, issues: [], warnings: [] };
+      });
   pageData.soft404 = soft404Result.soft404Data;
   reportIssues(soft404Result, reportIssue, url);
 
@@ -492,9 +508,9 @@ export async function runAnalyzers(
   // never eats that budget; uses its own isolated page. Bounded per-audit by
   // PaginationAnalyzer's probe budget. Only runs for JS-driven "next" controls
   // (static-href series are covered post-crawl by BrokenPaginationAnalyzer).
-  if (pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
+  if (!noPw && pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
     const probeResult = await withTimeout(
-      PaginationAnalyzer.probeJsNext(chromePage, url, options.evidenceDir),
+      PaginationAnalyzer.probeJsNext(cp, url, options.evidenceDir),
       CRAWL_SETTINGS.BROKEN_PAGINATION_PROBE_TIMEOUT_MS + 2000,
       `Pagination probe timeout for ${url}`,
     ).catch((e) => {
@@ -617,7 +633,7 @@ export async function runAnalyzers(
   if (options.perf) {
     try {
       const coverageResult = await withTimeout(
-        CodeCoverageAnalyzer.analyze(chromePage, analyzerRequests, url),
+        CodeCoverageAnalyzer.analyze(cp, analyzerRequests, url),
         analyzerTimeout,
         `Coverage analyzer timeout for ${url}`,
       );

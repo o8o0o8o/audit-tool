@@ -15,6 +15,9 @@ export interface CrawlerInternalOptions {
   screenshots: boolean;
   analysis: Record<string, unknown>;
   perf: boolean;
+  /** When true, never launch Chromium — acquire pages via plain HTTP and run
+   *  only browser-free analysis. See lib/crawler/http-fetch.ts + browser-guard.ts. */
+  noPlaywright: boolean;
   origin: string;
   networkConditions: Record<string, NetworkCondition>;
   cpuConditions: Record<string, CpuCondition>;
@@ -174,7 +177,8 @@ export interface CrawlResults {
 
 export interface CrawlSinglePageParams {
   url: string;
-  context: BrowserContext;
+  /** Null in no-playwright mode — the page is fetched over plain HTTP instead. */
+  context: BrowserContext | null;
   results: CrawlResults;
   incomingLinksTracking: Map<string, Set<string>>;
   sitemapUrls: Record<string, SitemapUrl & { alternates?: Record<string, { hreflang: string }> }>;
@@ -194,7 +198,8 @@ export interface CrawlSinglePageParams {
 
 export interface ProcessPageDataParams {
   page: BasicTestResult;
-  chromePage: ChromePage;
+  /** Null in no-playwright mode — analysis runs off the fetched HTML instead. */
+  chromePage: ChromePage | null;
   url: string;
   results: CrawlResults;
   incomingLinksTracking: Map<string, Set<string>>;

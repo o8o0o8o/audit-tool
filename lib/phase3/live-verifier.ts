@@ -28,8 +28,8 @@
  *                  (CLS/TBT, code coverage, axe contrast). Never a defect marker.
  */
 
-import { chromium } from 'playwright';
 import type { Browser, BrowserContext, Page } from 'playwright';
+import { launchChromium } from '../crawler/browser-guard';
 import { AxeBuilder } from '@axe-core/playwright';
 import { THRESHOLDS, DEFAULT_USER_AGENT, VIEWPORT, CRAWL_SETTINGS } from '../constants';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
@@ -3495,7 +3495,7 @@ export async function captureAnomalyEvidence(
       return undefined;
     }
   })();
-  const browser = await chromium.launch();
+  const browser = await launchChromium(undefined, 'live-verifier');
   try {
     for (const url of unique) {
       if (!liveFetchAllowed(url)) continue;
@@ -3623,7 +3623,7 @@ export async function verifyFindings(
   let homepageSignals: LiveSignals | null = null;
 
   if (urlsToFetch.size > 0 || hasSpecial || needsSiteCtx || (needsHomepage && siteOrigin)) {
-    const browser = await chromium.launch();
+    const browser = await launchChromium(undefined, 'live-verifier');
     try {
       // 1. Per-page signal captures. Sequential page loads — the dominant cost
       // of the live pass — so show an in-place counter + ETA (verbose keeps the

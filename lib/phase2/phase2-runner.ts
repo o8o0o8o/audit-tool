@@ -2753,7 +2753,9 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   }
 
   const pdfPath = path.join(runDir, 'audit-report.pdf');
-  await timedStep('Rendering PDF', () =>
+  // renderMarkdownToPdf returns the ACTUAL written path — the .pdf normally, or
+  // the .html in no-playwright mode (PDF rendering needs Chromium and is skipped).
+  const writtenPath = await timedStep('Rendering report', () =>
     renderMarkdownToPdf(markdown, pdfPath, {
       title: `${artifacts.manifest.domain} — audit report`,
       // Base at the run dir (where the .md/.html/.pdf live) so the `evidence/<dir>/…`
@@ -2762,5 +2764,5 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
     }),
   );
 
-  return pdfPath;
+  return writtenPath;
 }

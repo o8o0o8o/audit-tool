@@ -1353,6 +1353,9 @@ export interface CrawlProfile {
   perf: boolean;
   network: NetworkCondition | null;
   cpu: CpuCondition | null;
+  /** True when the crawl ran with --no-playwright (HTTP-only, no browser). Read
+   *  by the Phase-3 verifier so a standalone re-run also forces the offline path. */
+  noPlaywright?: boolean;
 }
 
 export interface AuditConfig {
@@ -1662,6 +1665,10 @@ export interface ParsedArgs {
   noScore: boolean;
   evidence: boolean;
   evidenceCap: number;
+  /** When true, run the entire audit WITHOUT launching Playwright/Chromium:
+   *  pages are fetched over plain HTTP and only browser-free analysis runs.
+   *  Default off. */
+  noPlaywright: boolean;
   /** Phase 4 — opt-in competitive content research + content plan. */
   contentResearch: boolean;
   /** Comma-separated competitor URLs or a path to a file (one URL per line). Optional — LLM discovers when omitted. */
@@ -1683,6 +1690,8 @@ export interface SEODataOptions {
   evidence?: boolean;
   /** Cap on representative-page samples (default 10). */
   evidenceCap?: number;
+  /** When true, run the entire audit without launching Chromium (HTTP fetch only). */
+  noPlaywright?: boolean;
 }
 
 // ─── History Types ──────────────────────────────────────────────────────────
@@ -1840,6 +1849,8 @@ export interface CrawlerEngineOptions {
   saveHtml: boolean;
   screenshots: boolean;
   perf: boolean;
+  /** When true, never launch Chromium — acquire pages via plain HTTP. */
+  noPlaywright?: boolean;
   origin: string | null;
   networkConditions: Record<string, NetworkCondition>;
   cpuConditions: Record<string, CpuCondition>;

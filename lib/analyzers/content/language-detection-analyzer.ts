@@ -4,6 +4,7 @@
  * and compares it with the declared html lang attribute and Content-Language header.
  */
 
+import { parse } from 'node-html-parser';
 import { SEVERITY } from '../../constants';
 import { getTopEntries, shortenUrl } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
@@ -519,22 +520,42 @@ class LanguageDetectionAnalyzer {
    * @param {object} pageData - Page data (for accessing intl SEO results)
    * @returns {object} Analysis results
    */
-  static async analyzeLanguage(chromePage: ChromePage, parsedPage: ParsedPage, url: string, pageData: PageInfo) {
+  static async analyzeLanguage(chromePage: ChromePage | null, parsedPage: ParsedPage, url: string, pageData: PageInfo) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
 
-    // Extract text content from main content area
-    const textContent = await chromePage.evaluate(() => {
-      const mainContent = document.querySelector('main, article, [role="main"]') ?? document.body;
-      const clone = mainContent.cloneNode(true);
-      (clone as Element)
-        .querySelectorAll(
-          'script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], code, pre',
-        )
-        .forEach((el) => (el as Element).remove());
-      const text = (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
-      return text.substring(0, 5000); // Limit for performance
-    });
+    // Extract text content from main content area. In no-playwright mode read
+    // the same main-content text from the parsed HTML (faithful for SSR).
+    const textContent = chromePage
+      ? await chromePage.evaluate(() => {
+          const mainContent = document.querySelector('main, article, [role="main"]') ?? document.body;
+          const clone = mainContent.cloneNode(true);
+          (clone as Element)
+            .querySelectorAll(
+              'script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], code, pre',
+            )
+            .forEach((el) => (el as Element).remove());
+          const text = (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
+          return text.substring(0, 5000); // Limit for performance
+        })
+      : (() => {
+          const src =
+            parsedPage.querySelector('main') ??
+            parsedPage.querySelector('article') ??
+            parsedPage.querySelector('[role="main"]') ??
+            parsedPage.querySelector('body') ??
+            parsedPage;
+          // Work on a DETACHED copy — parsedPage is shared with later analyzers,
+          // so we must never mutate it (the browser path clones via cloneNode).
+          const clone = parse(src.outerHTML || '');
+          clone
+            .querySelectorAll(
+              'script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], code, pre',
+            )
+            .forEach((el) => el.remove());
+          const text = (clone.text ?? '').replace(/\s+/g, ' ').trim();
+          return text.substring(0, 5000);
+        })();
 
     // Get declared language
     const htmlLang = parsedPage?.querySelector('html')?.getAttribute('lang') ?? null;

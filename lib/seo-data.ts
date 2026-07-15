@@ -43,6 +43,7 @@ class SEOData {
   #screenshots: boolean;
   #evidence: boolean;
   #evidenceCap: number;
+  #noPlaywright: boolean;
 
   origin: string | null;
   domainName: string | null;
@@ -84,6 +85,7 @@ class SEOData {
     this.#screenshots = options.screenshots ?? false;
     this.#evidence = options.evidence ?? true;
     this.#evidenceCap = options.evidenceCap ?? 10;
+    this.#noPlaywright = options.noPlaywright ?? false;
 
     // Initialize incoming links tracking (Map<target, Set<source>>)
     this.#incomingLinksTracking = new Map();
@@ -179,6 +181,7 @@ class SEOData {
         saveHtml: this.#saveHtml,
         screenshots: this.#screenshots,
         perf: this.#perf,
+        noPlaywright: this.#noPlaywright,
         origin: this.origin,
         networkConditions: this.networkConditions,
         cpuConditions: this.cpuConditions,

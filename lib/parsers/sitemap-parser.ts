@@ -7,6 +7,7 @@ import { parse, type HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { fetchWithTimeout, readResponseTextCapped } from '../utils';
 import { fetchTextViaBrowser } from '../crawler/browser-fetch';
+import { isNoPlaywright } from '../crawler/browser-guard';
 import { isFetchAllowed } from '../../validators';
 
 /** Origin hostname for the SSRF same-host allowance, or undefined. */
@@ -35,10 +36,13 @@ async function fetchSitemapText(url: string): Promise<{ status: number; text: st
     return { status: response.status, text };
   }
   // Plain fetch blocked or returned a non-sitemap body — a real browser can clear
-  // a JS bot-protection challenge and reach the actual XML.
-  const viaBrowser = await fetchTextViaBrowser(url, THRESHOLDS.MAX_SITEMAP_FETCH).catch(() => null);
-  if (viaBrowser && looksLikeSitemap(viaBrowser.text)) {
-    return viaBrowser;
+  // a JS bot-protection challenge and reach the actual XML. Skipped entirely in
+  // no-playwright mode (the browser fallback would launch Chromium).
+  if (!isNoPlaywright()) {
+    const viaBrowser = await fetchTextViaBrowser(url, THRESHOLDS.MAX_SITEMAP_FETCH).catch(() => null);
+    if (viaBrowser && looksLikeSitemap(viaBrowser.text)) {
+      return viaBrowser;
+    }
   }
   return { status: response.status, text };
 }

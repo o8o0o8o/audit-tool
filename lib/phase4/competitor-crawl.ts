@@ -12,7 +12,9 @@
  * content/editorial paths are prioritised. Every URL passes the SSRF guard.
  */
 
-import { chromium, type Browser } from 'playwright';
+import { type Browser } from 'playwright';
+import { launchChromium, isNoPlaywright } from '../crawler/browser-guard';
+import { fetchPageViaHttp } from '../crawler/http-fetch';
 import { parse } from 'node-html-parser';
 import { CONTENT_RESEARCH, STOP_WORDS } from '../constants';
 import { isFetchAllowed } from '../../validators';
@@ -194,6 +196,64 @@ async function fetchPage(browser: Browser, url: string, timeoutMs: number): Prom
   }
 }
 
+/** No-playwright homepage link scrape: fetch + node-html-parser (no browser). */
+async function urlsFromHomepageHttp(origin: string, host: string, timeoutMs: number): Promise<string[]> {
+  const res = await fetchPageViaHttp(origin, { originHost: host, timeoutMs });
+  if (res.status !== 200 || !res.html) return [origin];
+  const root = parse(res.html);
+  const seen = new Set<string>([origin]);
+  for (const a of root.querySelectorAll('a[href]')) {
+    const href = a.getAttribute('href');
+    if (!href) continue;
+    try {
+      const u = new URL(href, origin);
+      if (u.host !== host) continue;
+      u.hash = '';
+      seen.add(u.toString());
+    } catch {
+      /* skip */
+    }
+  }
+  return [...seen];
+}
+
+/** No-playwright page fetch: mirrors fetchPage() using fetch + node-html-parser
+ *  (same title/headings/main-text extraction, no browser). Null on failure. */
+async function fetchPageHttp(url: string, host: string, timeoutMs: number): Promise<FetchedPage | null> {
+  const res = await fetchPageViaHttp(url, { originHost: host, timeoutMs });
+  if (res.status !== 200 || !res.html) return null;
+  const root = parse(res.html);
+  const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
+  const pick = (sel: string) =>
+    root
+      .querySelectorAll(sel)
+      .map((e) => norm(e.text))
+      .filter(Boolean);
+  // Pick headings from the full document BEFORE stripping chrome for the text body.
+  const title = norm(root.querySelector('title')?.text);
+  const h1 = pick('h1');
+  const h2 = pick('h2');
+  const h3 = pick('h3');
+  const main =
+    root.querySelector('main') ??
+    root.querySelector('article') ??
+    root.querySelector('[role="main"]') ??
+    root.querySelector('body') ??
+    root;
+  main
+    .querySelectorAll('script, style, nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"]')
+    .forEach((el) => el.remove());
+  let text = norm(main.text);
+  if (!text) {
+    const body = root.querySelector('body');
+    if (body) {
+      body.querySelectorAll('script, style').forEach((el) => el.remove());
+      text = norm(body.text);
+    }
+  }
+  return { url, title, h1, h2, h3, text };
+}
+
 /** Build a minimal PageInfo carrying the topic signal the gap analyzer reads. */
 function toPageInfo(fp: FetchedPage): PageInfo {
   const wordCount = fp.text ? fp.text.split(/\s+/).filter(Boolean).length : 0;
@@ -251,16 +311,18 @@ export async function crawlCompetitor(originInput: string, opts: { verbose?: boo
   }
 
   const timeoutMs = CONTENT_RESEARCH.COMPETITOR_PAGE_TIMEOUT_MS;
+  // No-playwright mode: crawl competitors over plain HTTP (no browser launched).
+  const noPw = isNoPlaywright();
   // Launch INSIDE the try so a browser failure (e.g. missing binary) degrades
   // to a per-competitor error rather than aborting the whole phase.
   let browser: Browser | null = null;
   try {
-    browser = await chromium.launch();
-    const b = browser; // non-null binding for closures (narrowing isn't preserved in arrows)
+    if (!noPw) browser = await launchChromium(undefined, 'competitor-crawl');
+    const b = browser as Browser; // non-null binding for the browser path's closures
     let urls = await urlsFromSitemap(origin, host);
     if (!urls.length) {
       if (opts.verbose) console.log(`   ${host}: no sitemap, scraping homepage links`);
-      urls = await urlsFromHomepage(b, origin, host, timeoutMs);
+      urls = noPw ? await urlsFromHomepageHttp(origin, host, timeoutMs) : await urlsFromHomepage(b, origin, host, timeoutMs);
     }
     // SSRF re-check every candidate, prioritise content, cap.
     const safe = urls.filter((u) => isFetchAllowed(u, { originHost: host }).allowed);
@@ -269,7 +331,9 @@ export async function crawlCompetitor(originInput: string, opts: { verbose?: boo
       console.log(`   ${host}: capping ${urls.length} candidate URLs to ${selected.length}`);
     }
 
-    const fetched = await pool(selected, CONTENT_RESEARCH.COMPETITOR_FETCH_CONCURRENCY, (u) => fetchPage(b, u, timeoutMs));
+    const fetched = await pool(selected, CONTENT_RESEARCH.COMPETITOR_FETCH_CONCURRENCY, (u) =>
+      noPw ? fetchPageHttp(u, host, timeoutMs) : fetchPage(b, u, timeoutMs),
+    );
     const pages: Record<string, PageInfo> = {};
     for (const fp of fetched) {
       if (fp && fp.text) pages[fp.url] = toPageInfo(fp);

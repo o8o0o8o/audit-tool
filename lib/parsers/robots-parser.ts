@@ -7,6 +7,7 @@
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { formatBytes, readResponseTextCapped } from '../utils';
 import { fetchTextViaBrowser } from '../crawler/browser-fetch';
+import { isNoPlaywright } from '../crawler/browser-guard';
 
 /** True when the text contains at least one robots.txt directive (vs. an HTML challenge page). */
 function looksLikeRobots(text: string): boolean {
@@ -109,7 +110,7 @@ class RobotsParser {
       // A plain fetch can be blocked by bot protection (e.g. a 429 + JS challenge
       // page) — retry through a real browser, which can clear the challenge, before
       // treating a non-200 as an error.
-      if (effectiveStatus !== 200) {
+      if (effectiveStatus !== 200 && !isNoPlaywright()) {
         const viaBrowser = await fetchTextViaBrowser(origin + '/robots.txt', THRESHOLDS.MAX_ROBOTS_FETCH).catch(
           () => null,
         );

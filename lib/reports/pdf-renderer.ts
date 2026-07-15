@@ -12,7 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { chromium } from 'playwright';
+import { launchChromium, isNoPlaywright } from '../crawler/browser-guard';
 import { marked } from 'marked';
 
 export interface PdfRenderOptions {
@@ -534,6 +534,15 @@ export async function renderMarkdownToPdf(
   const htmlPath = outputPath.replace(/\.pdf$/i, '.html');
   fs.writeFileSync(htmlPath, html);
 
+  // No-playwright mode: PDF rendering needs Chromium (`page.pdf()`), so skip it
+  // AFTER writing the .html (which is Chromium-free) and BEFORE launching the
+  // browser. Return the .html path so callers have a real artifact. A documented
+  // limitation — the browser-free audit emits .md + .html, no .pdf.
+  if (isNoPlaywright()) {
+    console.log(`   📄 PDF skipped (no-playwright mode) — HTML report written: ${htmlPath}`);
+    return htmlPath;
+  }
+
   // Use page.goto(file://) instead of setContent so file:// image URLs are
   // permitted (setContent runs in an about:blank context which blocks them).
   //
@@ -543,7 +552,7 @@ export async function renderMarkdownToPdf(
   // silently lose the report.
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const browser = await chromium.launch();
+    const browser = await launchChromium(undefined, 'pdf-renderer');
     try {
       const context = await browser.newContext();
       const page = await context.newPage();

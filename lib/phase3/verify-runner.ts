@@ -136,12 +136,39 @@ export async function runVerifyPhase(runDir: string, options: VerifyPhaseOptions
     verbose: options.verbose === true,
   };
 
+  // No-playwright audits verify browser-free: force the deterministic offline
+  // disk pass (no live browser re-fetch). Detected from the persisted crawl
+  // profile so a STANDALONE re-run (`runVerifyPhase(runDir)` with no prior env)
+  // still does the right thing. Also arm the browser-launch guard so any live
+  // path that might still be reached throws rather than launching Chromium.
+  const crawlNoPw = crawlWasNoPlaywright(artifacts.runDir);
+  if (crawlNoPw) process.env.SEO_AUDIT_NO_PLAYWRIGHT = '1';
+
   // Live re-fetch verification (default). Set SEO_AUDIT_VERIFY_OFFLINE=1 to use
   // the legacy deterministic disk pass (reproducible, no network) instead.
-  if (process.env.SEO_AUDIT_VERIFY_OFFLINE !== '1') {
+  if (process.env.SEO_AUDIT_VERIFY_OFFLINE !== '1' && !crawlNoPw && process.env.SEO_AUDIT_NO_PLAYWRIGHT !== '1') {
     return await runLiveVerification(artifacts, state);
   }
   return await runOfflineVerification(artifacts, state);
+}
+
+/**
+ * True when the crawl that produced this run was executed with `--no-playwright`
+ * (persisted to `metadata.json.gz`'s crawlProfile). Lets the verify phase force
+ * the browser-free offline pass even on a standalone re-run. Fail-open: false on
+ * any read error.
+ */
+function crawlWasNoPlaywright(runDir: string): boolean {
+  try {
+    const file = path.join(runDir, 'metadata.json.gz');
+    if (!fs.existsSync(file)) return false;
+    const meta = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')) as {
+      crawlProfile?: CrawlProfile | null;
+    };
+    return meta.crawlProfile?.noPlaywright === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -290,11 +317,11 @@ async function runOfflineVerification(artifacts: AuditArtifacts, state: Resolved
   fs.writeFileSync(mdPath, markdown);
 
   const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
-  await renderMarkdownToPdf(markdown, pdfPath, {
+  const writtenPath = await renderMarkdownToPdf(markdown, pdfPath, {
     title: `${artifacts.manifest.domain} — verified audit report`,
     imageBaseDir: artifacts.runDir,
   });
-  console.log(`📄 Verified report: ${pdfPath}`);
+  console.log(`📄 Verified report: ${writtenPath}`);
 
   // Capture the deterministically-dropped findings in a separate report. Use the
   // verifier's own worst-first example selector so the URL shown is the one the
@@ -831,11 +858,11 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   fs.writeFileSync(mdPath, markdown);
 
   const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
-  await renderMarkdownToPdf(markdown, pdfPath, {
+  const writtenPath = await renderMarkdownToPdf(markdown, pdfPath, {
     title: `${artifacts.manifest.domain} — verified audit report (live)`,
     imageBaseDir: artifacts.runDir,
   });
-  console.log(`📄 Verified report (live): ${pdfPath}`);
+  console.log(`📄 Verified report (live): ${writtenPath}`);
 
   // Capture the dropped findings in a separate report (candidate false positives).
   const refutedEntries: RefutedEntry[] = [...refutedMessages].map((m) => {

@@ -12,7 +12,7 @@
  * plain fetch has failed or returned an unexpected (non-XML / non-text) body.
  */
 
-import { chromium } from 'playwright';
+import { launchChromium } from './browser-guard';
 import { DEFAULT_USER_AGENT, THRESHOLDS } from '../constants';
 
 export interface BrowserFetchResult {
@@ -34,7 +34,7 @@ export interface BrowserFetchResult {
 export async function fetchTextViaBrowser(url: string, maxBytes: number): Promise<BrowserFetchResult> {
   let browser;
   try {
-    browser = await chromium.launch();
+    browser = await launchChromium(undefined, 'browser-fetch fallback');
     const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT });
     const page = await context.newPage();
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: THRESHOLDS.PAGE_TIMEOUT });

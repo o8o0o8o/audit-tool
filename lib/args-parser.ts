@@ -88,6 +88,7 @@ function parseArgs(args: string[]): ParsedArgs {
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
+    noPlaywright: false, // When true, run the whole audit without launching Chromium (HTTP fetch only)
     contentResearch: false, // Phase 4 — competitive content research + content plan (opt-in)
     competitors: null, // Competitor URLs (CSV or file path); optional — LLM discovers when omitted
     warnings: [] as string[], // Collect validation warnings
@@ -143,6 +144,8 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.noScore = true;
     } else if (arg === '--score') {
       parsed.noScore = false;
+    } else if (arg === '--no-playwright') {
+      parsed.noPlaywright = true;
     } else if (arg === '--content-research') {
       parsed.contentResearch = true;
     } else if (arg.startsWith('--competitors=')) {

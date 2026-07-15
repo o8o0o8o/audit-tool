@@ -17,6 +17,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { renderMarkdownToPdf } from '../reports/pdf-renderer';
 import { loadArtifacts } from '../phase2/phase2-runner';
 import { loadAllPages } from '../phase3/finding-verifier';
@@ -243,6 +244,23 @@ export async function runContentResearchPhase(
 ): Promise<string | null> {
   console.log('\n🔬 Phase 4 — competitive content research…');
   const verbose = options.verbose === true;
+
+  // Standalone re-run parity with Phase 3: if the crawl ran with --no-playwright
+  // (persisted to metadata.json.gz's crawlProfile), force the browser-free path
+  // here too, so a direct `runContentResearchPhase(runDir)` call in a fresh
+  // process (where the env signal isn't set) never launches Chromium. Fail-open.
+  try {
+    const metaFile = path.join(runDir, 'metadata.json.gz');
+    if (fs.existsSync(metaFile)) {
+      const meta = JSON.parse(zlib.gunzipSync(fs.readFileSync(metaFile)).toString('utf8')) as {
+        crawlProfile?: { noPlaywright?: boolean } | null;
+      };
+      if (meta.crawlProfile?.noPlaywright === true) process.env.SEO_AUDIT_NO_PLAYWRIGHT = '1';
+    }
+  } catch {
+    /* fail-open — a full in-run invocation already has the env signal set */
+  }
+
   const artifacts = loadArtifacts(runDir);
   const ourPages = pagesRecord(runDir);
   if (!Object.keys(ourPages).length) {
@@ -341,8 +359,10 @@ export async function runContentResearchPhase(
   }
 
   const pdfPath = path.join(runDir, 'content-research-report.pdf');
+  let writtenPath: string;
   try {
-    await renderMarkdownToPdf(markdown, pdfPath, {
+    // Actual written path — .pdf normally, or .html in no-playwright mode.
+    writtenPath = await renderMarkdownToPdf(markdown, pdfPath, {
       title: `${artifacts.manifest?.domain ?? ourOrigin} — content research`,
       imageBaseDir: runDir,
     });
@@ -351,6 +371,6 @@ export async function runContentResearchPhase(
     return mdPath;
   }
 
-  console.log(`📄 Content research report: ${pdfPath}`);
-  return pdfPath;
+  console.log(`📄 Content research report: ${writtenPath}`);
+  return writtenPath;
 }

@@ -119,6 +119,15 @@ async function audit() {
     // Parse command-line arguments
     const args = parseArgs(process.argv.slice(2));
 
+    // No-playwright mode: set the process-scoped guard signal as EARLY as possible
+    // (right after parsing, before any sub-command) so the browser-launch guard is
+    // active at every sink — robots.txt/sitemap fetch fallbacks, the crawl, and all
+    // phases. The flag-off path never sets this, so the guard is a pure no-op by
+    // default. See lib/crawler/browser-guard.ts.
+    if (args.noPlaywright) {
+      process.env.SEO_AUDIT_NO_PLAYWRIGHT = '1';
+    }
+
     // Handle --sites: batch audit multiple URLs from a file
     if (args.sites) {
       if (!fs.existsSync(args.sites)) {
@@ -162,6 +171,7 @@ async function audit() {
           const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, {
             verbose: args.verbose,
             limit: args.limit ?? 20, // Default limit for batch mode
+            noPlaywright: args.noPlaywright,
           });
           await batchSeo.audit();
 
@@ -343,6 +353,10 @@ async function audit() {
     if (args.limit) console.log(`🔢 Page limit: ${args.limit}`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
 
+    if (args.noPlaywright) {
+      console.log('🚫 no-playwright mode: HTTP-only crawl, browser data (perf/vitals/screenshots/coverage) unavailable');
+    }
+
     // Check if comparison mode
     if (args.compare || args.compareSitemap) {
       if (!args.origin && !args.sitemap) {
@@ -408,6 +422,7 @@ async function audit() {
       cruxApiKey: config.apiKeys?.crux ?? null,
       evidence: args.evidence,
       evidenceCap: args.evidenceCap,
+      noPlaywright: args.noPlaywright,
     });
     _seoInstance = seo;
 

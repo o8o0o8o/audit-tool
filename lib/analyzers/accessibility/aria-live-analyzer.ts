@@ -4,10 +4,10 @@
  */
 
 import { SEVERITY } from '../../constants';
-import type { Issue, ChromePage } from '../../types';
+import type { Issue, ChromePage, ParsedPage } from '../../types';
 
 class AriaLiveAnalyzer {
-  static async analyze(chromePage: ChromePage, _url: string) {
+  static async analyze(chromePage: ChromePage | null, parsedPage: ParsedPage, _url: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const info: {
@@ -29,7 +29,10 @@ class AriaLiveAnalyzer {
     };
 
     try {
-      const result = await chromePage.evaluate(() => {
+      // No-playwright mode: reproduce the same counts from the parsed HTML
+      // (aria-live / role attributes are static markup — faithful for SSR).
+      const result = chromePage
+        ? await chromePage.evaluate(() => {
         // Find all live region elements
         const ariaLiveElements = document.querySelectorAll('[aria-live]');
         const alertElements = document.querySelectorAll('[role="alert"]');
@@ -77,7 +80,47 @@ class AriaLiveAnalyzer {
           empty,
           large,
         };
-      });
+          })
+        : (() => {
+            const q = (sel: string) => parsedPage.querySelectorAll(sel);
+            const ariaLiveElements = q('[aria-live]');
+            const alertElements = q('[role="alert"]');
+            const statusElements = q('[role="status"]');
+            const logElements = q('[role="log"]');
+            const timerElements = q('[role="timer"]');
+            let assertive = 0;
+            let polite = 0;
+            let empty = 0;
+            let large = 0;
+            for (const el of ariaLiveElements) {
+              const value = el.getAttribute('aria-live');
+              if (value === 'assertive') assertive++;
+              else if (value === 'polite') polite++;
+              const text = (el.text || '').trim();
+              if (!text) empty++;
+              if (text.length > 500) large++;
+            }
+            for (const el of alertElements) {
+              const text = (el.text || '').trim();
+              if (!text) empty++;
+              if (text.length > 500) large++;
+            }
+            for (const el of statusElements) {
+              const text = (el.text || '').trim();
+              if (!text) empty++;
+            }
+            return {
+              ariaLive: ariaLiveElements.length,
+              alerts: alertElements.length,
+              status: statusElements.length,
+              logs: logElements.length,
+              timers: timerElements.length,
+              assertive,
+              polite,
+              empty,
+              large,
+            };
+          })();
 
       info.totalLiveRegions = result.ariaLive + result.alerts + result.status + result.logs + result.timers;
       info.assertiveRegions = result.assertive + result.alerts;

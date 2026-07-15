@@ -4,8 +4,9 @@
  */
 
 import { parse } from 'node-html-parser';
-import { chromium } from 'playwright';
-import type { Request as PlaywrightRequest, Response as PlaywrightResponse } from 'playwright';
+import type { Request as PlaywrightRequest, Response as PlaywrightResponse, Browser, BrowserContext } from 'playwright';
+import { launchChromium } from './browser-guard';
+import { fetchPageViaHttp } from './http-fetch';
 import type {
   ChromePage,
   PageInfo,
@@ -200,6 +201,7 @@ class CrawlerEngine {
       screenshots: options.screenshots || false,
       analysis: (config.analysis || {}) as Record<string, unknown>,
       perf: options.perf || false,
+      noPlaywright: options.noPlaywright ?? false,
       origin: options.origin ?? '',
       networkConditions: options.networkConditions,
       cpuConditions: options.cpuConditions,
@@ -603,35 +605,43 @@ class CrawlerEngine {
       perf: !!this.#options.perf,
       network: this.#options.networkConditions?.slow4g ?? null,
       cpu: this.#options.cpuConditions?.normal ?? null,
+      noPlaywright: !!this.#options.noPlaywright,
     };
-    let browser;
+    let browser: Browser | undefined;
+    // In no-playwright mode `context` stays null: pages are fetched over plain
+    // HTTP (see #crawlSinglePage) and no Chromium is launched. Every downstream
+    // consumer (#crawlSinglePage, #processPageData) guards on a null context /
+    // chromePage, so the default browser path is unchanged.
+    let context: BrowserContext | null = null;
     let sigintHandler: (() => void) | undefined;
     try {
-      browser = await chromium.launch();
-      const contextOptions: Record<string, unknown> = {
-        viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
-        // Always send a realistic UA. Falling back to Playwright's default
-        // "HeadlessChrome" UA gets the crawler 403'd by bot-protection on many
-        // sites, silently dropping pages from the audit.
-        userAgent: this.#options.userAgent || DEFAULT_USER_AGENT,
-      };
-      // Custom request headers (auth tokens, or a vendor protection-bypass
-      // token for auditing your own protected site) — applied to every request.
-      if (this.#options.headers && Object.keys(this.#options.headers).length > 0) {
-        contextOptions.extraHTTPHeaders = this.#options.headers;
-      }
-      const context = await browser.newContext(
-        contextOptions as { viewport: { width: number; height: number }; userAgent?: string },
-      );
-
-      // Inject __name polyfill for tsx/esbuild compatibility.
-      // tsx compiles with keepNames:true, injecting __name() calls into serialized
-      // page.evaluate() callbacks. This polyfill ensures __name exists in the browser.
-      await context.addInitScript(() => {
-        if (typeof (globalThis as unknown as Record<string, unknown>).__name === 'undefined') {
-          (globalThis as unknown as Record<string, unknown>).__name = (target: unknown, _value: unknown) => target;
+      if (!this.#options.noPlaywright) {
+        browser = await launchChromium(undefined, 'crawler-engine');
+        const contextOptions: Record<string, unknown> = {
+          viewport: { width: VIEWPORT.WIDTH, height: VIEWPORT.HEIGHT },
+          // Always send a realistic UA. Falling back to Playwright's default
+          // "HeadlessChrome" UA gets the crawler 403'd by bot-protection on many
+          // sites, silently dropping pages from the audit.
+          userAgent: this.#options.userAgent || DEFAULT_USER_AGENT,
+        };
+        // Custom request headers (auth tokens, or a vendor protection-bypass
+        // token for auditing your own protected site) — applied to every request.
+        if (this.#options.headers && Object.keys(this.#options.headers).length > 0) {
+          contextOptions.extraHTTPHeaders = this.#options.headers;
         }
-      });
+        context = await browser.newContext(
+          contextOptions as { viewport: { width: number; height: number }; userAgent?: string },
+        );
+
+        // Inject __name polyfill for tsx/esbuild compatibility.
+        // tsx compiles with keepNames:true, injecting __name() calls into serialized
+        // page.evaluate() callbacks. This polyfill ensures __name exists in the browser.
+        await context.addInitScript(() => {
+          if (typeof (globalThis as unknown as Record<string, unknown>).__name === 'undefined') {
+            (globalThis as unknown as Record<string, unknown>).__name = (target: unknown, _value: unknown) => target;
+          }
+        });
+      }
 
       const alternatesErrors: Issue[] = [];
       const uniqueTitles = new Map<string, string>();
@@ -1065,6 +1075,46 @@ class CrawlerEngine {
   }
 
   /**
+   * No-playwright page acquisition: fetch the page over plain HTTP and build a
+   * BasicTestResult with the browser-only fields left empty (no vitals, no
+   * network log, no metrics, no console). Returns null on a hard fetch failure
+   * (network error / SSRF block) so the caller records a failed page.
+   * @private
+   */
+  async #basicTestHttp(url: string): Promise<BasicTestResult | null> {
+    const res = await fetchPageViaHttp(url, {
+      userAgent: this.#options.userAgent,
+      headers: this.#options.headers,
+      originHost: this.#options.origin ? new URL(this.#options.origin).hostname : undefined,
+    });
+    if (res.status === 0) {
+      handlePageError(
+        new Error(res.error ?? 'fetch failed'),
+        url,
+        // results is not needed by handlePageError's failure accounting here; a
+        // null status is surfaced as a failed page by the caller.
+        { pageData: { byError: {} } } as unknown as CrawlResults,
+        this.#options.verbose,
+        this.#reportIssue,
+        this.#callbacks.saveAttempt,
+        this.#callbacks.checkAttempts,
+      );
+      return null;
+    }
+    return {
+      status: res.status,
+      requests: {},
+      totalResponseSize: Buffer.byteLength(res.html, 'utf8'),
+      metrics: {} as unknown as BasicTestResult['metrics'],
+      redirectChain: res.redirectChain,
+      responseHeaders: res.headers,
+      consoleData: null,
+      servedHtml: res.html,
+      url,
+    };
+  }
+
+  /**
    * Crawl a single page
    * @private
    */
@@ -1086,15 +1136,20 @@ class CrawlerEngine {
       paginationSeriesCounts,
     } = params;
 
-    const chromePage = await context.newPage();
+    // No-playwright mode: no browser context, so no Playwright page — pages are
+    // fetched over plain HTTP and chromePage stays null throughout processing.
+    const noPw = this.#options.noPlaywright || !context;
+    const chromePage = noPw ? null : await context!.newPage();
     let isMultiLang = false;
     let failed: boolean;
 
     try {
-      const page = await withTimeout<BasicTestResult | null>(
-        this.#basicTest(chromePage, this.#options.networkConditions.slow4g, this.#options.cpuConditions.normal, url)
-          .then(async (data): Promise<BasicTestResult> => ({ ...data, url }))
-          .catch((error: Error): null => {
+      const page = noPw
+        ? await withTimeout<BasicTestResult | null>(
+            this.#basicTestHttp(url),
+            THRESHOLDS.PAGE_TIMEOUT,
+            'HTTP fetch failed. Page failed to load ' + url,
+          ).catch((error: Error): null => {
             handlePageError(
               error,
               url,
@@ -1105,13 +1160,28 @@ class CrawlerEngine {
               this.#callbacks.checkAttempts,
             );
             return null;
-          }),
-        THRESHOLDS.PAGE_TIMEOUT,
-        'Core Web Vitals test failed. Page failed to load ' + url,
-      );
+          })
+        : await withTimeout<BasicTestResult | null>(
+            this.#basicTest(chromePage!, this.#options.networkConditions.slow4g, this.#options.cpuConditions.normal, url)
+              .then(async (data): Promise<BasicTestResult> => ({ ...data, url }))
+              .catch((error: Error): null => {
+                handlePageError(
+                  error,
+                  url,
+                  results,
+                  this.#options.verbose,
+                  this.#reportIssue,
+                  this.#callbacks.saveAttempt,
+                  this.#callbacks.checkAttempts,
+                );
+                return null;
+              }),
+            THRESHOLDS.PAGE_TIMEOUT,
+            'Core Web Vitals test failed. Page failed to load ' + url,
+          );
 
       if (!page) {
-        await chromePage.close();
+        if (chromePage) await chromePage.close();
         return { failed: true, errorType: 'page_load_failed' };
       }
 
@@ -1142,11 +1212,11 @@ class CrawlerEngine {
       this.#callbacks.saveAttempt(url);
       this.#callbacks.checkAttempts(url);
       failed = true;
-      await chromePage.close();
+      if (chromePage) await chromePage.close();
       return { isMultiLang, failed, errorType };
     }
 
-    await chromePage.close();
+    if (chromePage) await chromePage.close();
     return { isMultiLang, failed };
   }
 
@@ -1346,8 +1416,21 @@ class CrawlerEngine {
 
     results.pageData.totalWithoutError += 1;
 
-    // Get page content
-    const pageContent = await chromePage.content();
+    // Get page content. In no-playwright mode there is no live page, so use the
+    // HTML fetched over HTTP (carried on the BasicTestResult as servedHtml).
+    const pageContent = chromePage ? await chromePage.content() : servedHtml ?? '';
+
+    // No-playwright: a 200 with an EMPTY body is a non-HTML resource — http-fetch
+    // returns html:'' for non-HTML content-types (a PDF/image loc in the sitemap,
+    // or a download link). Record it as processed but SKIP HTML analysis, which
+    // would otherwise emit spurious "missing title/description/canonical/H1"
+    // findings against a non-HTML URL. (The browser path never hits this — a live
+    // page always yields chromePage.content().)
+    if (!chromePage && this.#options.noPlaywright && !pageContent) {
+      results.pageData.processedPages.add(url);
+      return { isMultiLang: false, failed: false };
+    }
+
     const parsedPage = parse(pageContent);
 
     // Stable content hash — used by the comparison classifier to tell apart
@@ -1358,13 +1441,14 @@ class CrawlerEngine {
     // Save HTML snapshot if enabled
     saveHtmlSnapshot(pageContent, url, this.#options);
 
-    // Save viewport screenshot if enabled
-    await saveScreenshot(chromePage, url, this.#options);
+    // Save viewport screenshot if enabled (browser-only).
+    if (chromePage) await saveScreenshot(chromePage, url, this.#options);
 
     // Decide once per page whether this URL gets the full evidence capture
     // (screenshots, request log, accessibility dump). The actual capture
-    // happens after runAnalyzers so accessibility data is available.
-    const captureEvidence = !!this.#options.evidenceDir && this.#sampler.shouldSample(url);
+    // happens after runAnalyzers so accessibility data is available. No live
+    // page ⇒ no evidence capture in no-playwright mode.
+    const captureEvidence = !!chromePage && !!this.#options.evidenceDir && this.#sampler.shouldSample(url);
 
     // Collect links and track incoming links
     const linksResult = collectLinks(
@@ -1446,8 +1530,11 @@ class CrawlerEngine {
     // Check Core Web Vitals thresholds
     checkVitalsThresholds(pageData, url, TTFB ?? 0, FCP ?? 0, LCP ?? 0, CLS ?? 0, this.#reportIssue);
 
-    // Process title
-    const title = await chromePage.evaluate(() => document.querySelector('title')?.innerText);
+    // Process title. In no-playwright mode read from the parsed HTML instead of
+    // the live page (node-html-parser `.text` ≈ the browser's innerText here).
+    const title = chromePage
+      ? await chromePage.evaluate(() => document.querySelector('title')?.innerText)
+      : parsedPage.querySelector('title')?.text?.trim();
     const titleResult = processTitle(title, url, uniqueTitles, this.#reportIssue);
     if (titleResult.title) {
       pageData.title = titleResult.title;
@@ -1455,22 +1542,44 @@ class CrawlerEngine {
     }
 
     // Process meta tags
-    const metaTags = await chromePage.evaluate(() =>
-      Array.from(document.querySelectorAll('meta')).map((meta) => ({
-        name: meta.name || meta.getAttribute('property'),
-        content: meta.content,
-      })),
-    );
+    const metaTags = chromePage
+      ? await chromePage.evaluate(() =>
+          Array.from(document.querySelectorAll('meta')).map((meta) => ({
+            name: meta.name || meta.getAttribute('property'),
+            content: meta.content,
+          })),
+        )
+      : parsedPage.querySelectorAll('meta').map((meta) => ({
+          name: meta.getAttribute('name') ?? meta.getAttribute('property') ?? '',
+          content: meta.getAttribute('content') ?? '',
+        }));
     processMetaTags(metaTags, pageData, url, uniqueDescriptions, this.#reportIssue);
 
-    // Process link tags (canonical, alternates)
-    const linkTags = await chromePage.evaluate(() =>
-      Array.from(document.querySelectorAll('link')).map((link) => ({
-        rel: link.rel,
-        hrefLang: (link as unknown as { hrefLang: string }).hrefLang,
-        href: link.href,
-      })),
-    );
+    // Process link tags (canonical, alternates). The browser resolves `link.href`
+    // to an absolute URL, so mirror that for the parsed path by resolving the raw
+    // attribute against the page URL (canonical/alternate comparisons expect it).
+    const linkTags = chromePage
+      ? await chromePage.evaluate(() =>
+          Array.from(document.querySelectorAll('link')).map((link) => ({
+            rel: link.rel,
+            hrefLang: (link as unknown as { hrefLang: string }).hrefLang,
+            href: link.href,
+          })),
+        )
+      : parsedPage.querySelectorAll('link').map((link) => {
+          const rawHref = link.getAttribute('href') ?? '';
+          let href = rawHref;
+          try {
+            href = rawHref ? new URL(rawHref, url).href : '';
+          } catch {
+            /* leave raw */
+          }
+          return {
+            rel: link.getAttribute('rel') ?? '',
+            hrefLang: link.getAttribute('hreflang') ?? '',
+            href,
+          };
+        });
     const linkResult = processLinkTags(linkTags, pageData, url, sitemapUrls, this.#options.origin, this.#reportIssue);
     const isMultiLang = linkResult.isMultiLang;
 

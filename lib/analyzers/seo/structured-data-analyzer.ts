@@ -1,4 +1,4 @@
-import type { ChromePage } from '../../types';
+import type { ChromePage, ParsedPage } from '../../types';
 
 interface JsonLdSchemaInfo {
   type: string;
@@ -15,8 +15,37 @@ interface MicrodataItem {
 }
 
 class StructuredDataAnalyzer {
-  static async analyzeStructuredData(page: ChromePage) {
-    return await page.evaluate(() => {
+  static async analyzeStructuredData(page: ChromePage | null, parsedPage?: ParsedPage) {
+    // Extract the raw JSON-LD script texts + microdata itemtypes from whichever
+    // source is available; the browser path reads the live DOM, the no-playwright
+    // path reads the parsed HTML. All parsing/validation then runs in Node via
+    // the shared #buildResult (behavior-preserving — same output either way).
+    let jsonLdTexts: string[] = [];
+    let itemTypes: string[] = [];
+    if (page) {
+      const ex = await page.evaluate(() => ({
+        jsonLdTexts: Array.from(document.querySelectorAll('script[type="application/ld+json"]')).map(
+          (s) => s.textContent ?? '',
+        ),
+        itemTypes: Array.from(document.querySelectorAll('[itemscope]'))
+          .map((el) => el.getAttribute('itemtype') ?? '')
+          .filter(Boolean),
+      }));
+      jsonLdTexts = ex.jsonLdTexts;
+      itemTypes = ex.itemTypes;
+    } else if (parsedPage) {
+      jsonLdTexts = parsedPage.querySelectorAll('script[type="application/ld+json"]').map((s) => s.text ?? '');
+      itemTypes = parsedPage
+        .querySelectorAll('[itemscope]')
+        .map((el) => el.getAttribute('itemtype') ?? '')
+        .filter(Boolean);
+    }
+    return StructuredDataAnalyzer.#buildResult(jsonLdTexts, itemTypes);
+  }
+
+  /** Pure JSON-LD + microdata validation, shared by the browser and
+   *  no-playwright paths. Operates only on the extracted strings — no DOM. */
+  static #buildResult(jsonLdTexts: string[], itemTypes: string[]) {
       const result = {
         hasStructuredData: false,
         jsonLdSchemas: [] as JsonLdSchemaInfo[],
@@ -125,12 +154,10 @@ class StructuredDataAnalyzer {
         return Array.isArray(schema['@type']) ? schema['@type'][0] : schema['@type'];
       };
 
-      // Check for JSON-LD
-      const jsonLdScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
-
-      for (const script of jsonLdScripts) {
+      // Check for JSON-LD (raw script texts passed in)
+      for (const scriptText of jsonLdTexts) {
         try {
-          const data = JSON.parse(script.textContent!) as Record<string, unknown> | Record<string, unknown>[];
+          const data = JSON.parse(scriptText) as Record<string, unknown> | Record<string, unknown>[];
           const schemas = Array.isArray(data) ? data : [data];
 
           for (const schema of schemas) {
@@ -194,23 +221,18 @@ class StructuredDataAnalyzer {
         }
       }
 
-      // Check for Microdata
-      const microdataItems = document.querySelectorAll('[itemscope]');
-      for (const item of microdataItems) {
-        const itemType = item.getAttribute('itemtype');
-        if (itemType) {
-          result.microdataItems.push({
-            type: itemType.split('/').pop(),
-            full: itemType,
-          });
-        }
+      // Check for Microdata (raw itemtype strings passed in)
+      for (const itemType of itemTypes) {
+        result.microdataItems.push({
+          type: itemType.split('/').pop(),
+          full: itemType,
+        });
       }
 
       result.total = result.jsonLdSchemas.length + result.microdataItems.length;
       result.hasStructuredData = result.total > 0;
 
       return result;
-    });
   }
 }
 

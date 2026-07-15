@@ -4,7 +4,7 @@ import type { ChromePage, ParsedPage, PageInfo } from '../../types';
 
 class LinkQualityAnalyzer {
   static async analyzeLinkQuality(
-    chromePage: ChromePage,
+    chromePage: ChromePage | null,
     parsedPage: ParsedPage,
     url: string,
     origin: string,
@@ -32,18 +32,49 @@ class LinkQualityAnalyzer {
       internalNofollowLinks: [] as { href: string; anchorText: string }[],
     };
 
-    // Get all links with detailed information
-    const linkElements = await chromePage.evaluate(
-      ({ currentUrl: _currentUrl, origin }) => {
-        const links = Array.from(document.querySelectorAll('a[href]'));
-        return links.map((link) => {
-          const href = (link as HTMLAnchorElement).href;
-          const anchorText = link.textContent?.trim() ?? link.getAttribute('aria-label') ?? '';
-          const rel = (link as HTMLAnchorElement).rel || '';
-          const isNofollow = rel.includes('nofollow');
-          const isExternal = href && !href.startsWith(origin) && !href.startsWith('/') && !href.startsWith('#');
-          const isInternal = href && (href.startsWith(origin) || href.startsWith('/')) && !href.startsWith('#');
+    // Get all links with detailed information. In no-playwright mode read the
+    // same set from the parsed HTML, resolving hrefs to absolute (mirroring the
+    // browser's `link.href`) — faithful for server-rendered anchors.
+    const linkElements = chromePage
+      ? await chromePage.evaluate(
+          ({ currentUrl: _currentUrl, origin }) => {
+            const links = Array.from(document.querySelectorAll('a[href]'));
+            return links.map((link) => {
+              const href = (link as HTMLAnchorElement).href;
+              const anchorText = link.textContent?.trim() ?? link.getAttribute('aria-label') ?? '';
+              const rel = (link as HTMLAnchorElement).rel || '';
+              const isNofollow = rel.includes('nofollow');
+              const isExternal = href && !href.startsWith(origin) && !href.startsWith('/') && !href.startsWith('#');
+              const isInternal = href && (href.startsWith(origin) || href.startsWith('/')) && !href.startsWith('#');
 
+              return {
+                href,
+                anchorText,
+                rel,
+                isNofollow,
+                isExternal,
+                isInternal,
+                target: (link as HTMLAnchorElement).target,
+                classList: Array.from(link.classList),
+              };
+            });
+          },
+          { currentUrl: url, origin },
+        )
+      : parsedPage.querySelectorAll('a[href]').map((link) => {
+          const rawHref = link.getAttribute('href') ?? '';
+          let href = rawHref;
+          try {
+            href = rawHref ? new URL(rawHref, url).href : '';
+          } catch {
+            /* leave raw */
+          }
+          const anchorText = (link.text?.trim() || link.getAttribute('aria-label') || '').trim();
+          const rel = link.getAttribute('rel') ?? '';
+          const isNofollow = rel.includes('nofollow');
+          const isExternal = !!href && !href.startsWith(origin) && !rawHref.startsWith('/') && !rawHref.startsWith('#');
+          const isInternal = !!href && (href.startsWith(origin) || rawHref.startsWith('/')) && !rawHref.startsWith('#');
+          const classAttr = link.getAttribute('class') ?? '';
           return {
             href,
             anchorText,
@@ -51,13 +82,10 @@ class LinkQualityAnalyzer {
             isNofollow,
             isExternal,
             isInternal,
-            target: (link as HTMLAnchorElement).target,
-            classList: Array.from(link.classList),
+            target: link.getAttribute('target') ?? '',
+            classList: classAttr ? classAttr.split(/\s+/).filter(Boolean) : [],
           };
         });
-      },
-      { currentUrl: url, origin },
-    );
 
     linkAnalysis.totalLinks = linkElements.length;
 

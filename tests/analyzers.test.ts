@@ -1104,6 +1104,20 @@ void describe('consolidateFindings (Phase 2 de-dup)', () => {
     assert.strictEqual(out['Multiple tracking cookies set before consent'].severity, 'high');
   });
 
+  void it('keeps "Third-party cookies without consent" DISTINCT from "…set before consent" (report doc #2)', () => {
+    const out = consolidateFindings({
+      'Multiple tracking cookies set before consent': det({ severity: 'medium', count: 3 }),
+      'Third-party cookies without consent': det({ severity: 'medium', count: 4 }),
+    });
+    const keys = Object.keys(out);
+    // Two genuinely different privacy findings: a banner exists but cookies fire
+    // early (before consent) vs no banner at all for third-party cookies. The
+    // "…before consent" dedup group must NOT swallow the third-party one.
+    assert.ok(keys.includes('Multiple tracking cookies set before consent'));
+    assert.ok(keys.includes('Third-party cookies without consent'), 'third-party-without-consent must stay distinct');
+    assert.strictEqual(keys.length, 2);
+  });
+
   void it('folds the site-wide infinite-scroll restatement into the per-page finding', () => {
     const out = consolidateFindings({
       'Infinite scroll without pagination fallback': det({ severity: 'high', count: 6 }),
@@ -1577,7 +1591,7 @@ void describe('benchmarkFor', () => {
     assert.ok(/≤5 render-blocking/.test(benchmarkFor('Some pages have too many render-blocking resources') ?? ''));
     assert.ok(/80%/.test(benchmarkFor('High percentage of unused CSS') ?? ''));
     assert.ok(/70%/.test(benchmarkFor('High percentage of unused JavaScript') ?? ''));
-    assert.ok(/third-party payload/i.test(benchmarkFor('Excessive third-party payload') ?? ''));
+    assert.ok(/third-party payload/i.test(benchmarkFor('Large third-party payload') ?? ''));
   });
 
   void it('every benchmark states both a target and a rationale', () => {
@@ -2686,7 +2700,7 @@ void describe('isVolatileFinding', () => {
     assert.strictEqual(isVolatileFinding('TTFB exceeds threshold'), true);
     assert.strictEqual(isVolatileFinding('Core Web Vitals fail on /products'), true);
     assert.strictEqual(isVolatileFinding('High percentage of unused JavaScript'), true);
-    assert.strictEqual(isVolatileFinding('Excessive third-party payload'), true);
+    assert.strictEqual(isVolatileFinding('Large third-party payload'), true);
   });
 
   void it('does not flag structural findings', () => {
@@ -3771,7 +3785,7 @@ void describe('finding-verifier', () => {
     );
     assert.strictEqual(verifyFinding('Excessive DOM size', detail(['https://e.com/x']), p).status, 'confirmed');
     assert.strictEqual(
-      verifyFinding('Excessive third-party payload', detail(['https://e.com/x']), p).status,
+      verifyFinding('Large third-party payload', detail(['https://e.com/x']), p).status,
       'confirmed',
     );
   });
@@ -4454,6 +4468,7 @@ void describe('live-verifier: checker refute contract', () => {
     semanticRatio: 0.5,
     emptyAnchorCount: 0,
     inputsWithoutAutocomplete: 0,
+    selfPostGetForms: 0,
     scriptsNoSri: 0,
     maxChildren: 5,
     jpgPngImages: 0,
@@ -4701,6 +4716,16 @@ void describe('live-verifier: checker refute contract', () => {
     }
   });
 
+  void it('form-empty-action checker owns "Form submits to itself via GET" (confirm-only, never refutes)', () => {
+    const t = 'Form submits to itself via GET';
+    // Owned — not the "no live checker" fallback (CLAUDE.md invariant).
+    assert.doesNotMatch(checkFindingSignals(t, base, 1).reason, /no live checker/i, `"${t}" should be owned`);
+    // Present at load → confirmed.
+    assert.strictEqual(checkFindingSignals(t, { ...base, selfPostGetForms: 1 }, 1).status, 'confirmed');
+    // Absent at load → unverified (forms can hydrate), NOT refuted.
+    assert.strictEqual(checkFindingSignals(t, { ...base, selfPostGetForms: 0 }, 1).status, 'unverified');
+  });
+
   void it('near-duplicate-content matcher owns the "very similar content" wording', () => {
     for (const t of ['Pages have very similar content', 'A notable share of pages have highly similar content']) {
       assert.doesNotMatch(checkFindingSignals(t, base, 2).reason, /no live checker/i, `"${t}" should be owned`);
@@ -4938,6 +4963,29 @@ void describe('live-verifier: checker refute contract', () => {
       checkFindingSignals(
         'Some URLs are too long',
         { ...base, url: 'https://x.example/a', finalUrl: 'https://x.example/a', description: 'x'.repeat(400) },
+        1,
+      ).status,
+      'refuted',
+    );
+  });
+
+  void it('url-length checkers use the right basis per finding: per-page = path+query vs RECOMMENDED, site-wide = full-URL vs MAX', () => {
+    // A long-origin / short-path URL: full length ≫ 100 but path+query = 8 (≤ 75).
+    const longOriginShortPath = `https://shop.${'x'.repeat(90)}.example.com/p?ref=x`;
+    // Site-wide "Some URLs are too long" (url-architecture-analyzer basis: full URL > 100) → confirmed.
+    assert.strictEqual(
+      checkFindingSignals(
+        'Some URLs are too long',
+        { ...base, url: longOriginShortPath, finalUrl: longOriginShortPath },
+        1,
+      ).status,
+      'confirmed',
+    );
+    // Per-page "URL is too long" (analyzer basis: path+query > 75) on the SAME URL → refuted (short path).
+    assert.strictEqual(
+      checkFindingSignals(
+        'URL is too long (short path here)',
+        { ...base, url: longOriginShortPath, finalUrl: longOriginShortPath },
         1,
       ).status,
       'refuted',
@@ -5891,6 +5939,7 @@ void describe('live-verifier: broken-outbound match split', () => {
     semanticRatio: 0.5,
     emptyAnchorCount: 0,
     inputsWithoutAutocomplete: 0,
+    selfPostGetForms: 0,
     scriptsNoSri: 0,
     maxChildren: 5,
     jpgPngImages: 0,
@@ -6063,6 +6112,7 @@ void describe('live-verifier: Slice 2 header checkers', () => {
     semanticRatio: 0.5,
     emptyAnchorCount: 0,
     inputsWithoutAutocomplete: 0,
+    selfPostGetForms: 0,
     scriptsNoSri: 0,
     maxChildren: 5,
     jpgPngImages: 0,
@@ -6500,6 +6550,7 @@ void describe('live-verifier: liveSignalsSnapshot (Slice 3 LLM evidence)', () =>
     affiliateLinksNoRel: 0,
     hasNoindexMeta: false,
     totalImageBytes: 0,
+    selfPostGetForms: 0,
   };
 
   void it('summarises signals, rounds ratios, nulls unmeasured coverage/contrast, and keeps only relevant headers', () => {
@@ -7006,7 +7057,7 @@ void describe('uniform fix recommendations', () => {
     'Some pages have descriptions that are too short',
     'Canonicals are not set for some pages',
     'Pages have image files larger than recommended',
-    'Excessive third-party payload',
+    'Large third-party payload',
     'Render-blocking third-party scripts',
     'Heavy advertising scripts',
     'LCP image not preloaded',
@@ -7059,7 +7110,7 @@ void describe('uniform fix recommendations', () => {
       'Orphan page (no internal links point to it)',
       'Paginated page has incorrect canonical',
       'Low structured data coverage',
-      'Excessive third-party payload',
+      'Large third-party payload',
     ];
     for (const msg of MUST_BE_NEXT_SPECIFIC) {
       const { fix, fromCatalog } = resolveFix(msg, true);
@@ -7747,5 +7798,189 @@ void describe('Phase 4 — create vs expand', () => {
     assert.strictEqual(plan[1].action, 'create');
     assert.strictEqual(plan[1].targetPage, undefined);
     assert.ok(/create a new page/i.test(plan[1].brief));
+  });
+});
+
+// ─── Report-doc QA fixes (tier-twins, form action, transient 5xx, spelling,
+//     cookie-banner precision, first-party host) ──────────────────────────────
+import { analyzeUrlStructure, isFirstPartyHost } from '../lib/utils';
+import { TechnicalSEOAnalyzer } from '../lib/analyzers/seo/technical-seo-analyzer';
+import { ThirdPartyAnalyzer } from '../lib/analyzers/performance/third-party-analyzer';
+import { FormAccessibilityAnalyzer } from '../lib/analyzers/accessibility/form-accessibility-analyzer';
+import { collectFailedRequests } from '../lib/phase2/llm-anomaly';
+import { detectMisspellings } from '../lib/analyzers/content/spelling-grammar-analyzer';
+import { hasGenericConsentBanner } from '../lib/analyzers/security/cookie-consent-analyzer';
+
+void describe('Report-doc fix — tier-twin collapse (report-rules.md §5)', () => {
+  void it('URL length: ONE "URL is too long" message at a fixed MEDIUM severity across both bands', () => {
+    const issuesFor = (pathLen: number) =>
+      analyzeUrlStructure('https://example.com/' + 'a'.repeat(pathLen), 'https://example.com').issues;
+    const hi = issuesFor(110).find((i) => /url is too long/i.test(i.message ?? '')); // > URL_LENGTH_MAX (100)
+    const lo = issuesFor(80).find((i) => /url is too long/i.test(i.message ?? '')); // > RECOMMENDED (75), < MAX
+    assert.ok(hi && lo, 'both bands emit a URL-length issue');
+    assert.strictEqual((hi!.message ?? '').split('(')[0].trim(), 'URL is too long');
+    assert.strictEqual((lo!.message ?? '').split('(')[0].trim(), 'URL is too long');
+    assert.strictEqual(hi!.severity, lo!.severity, 'severity is fixed across bands (determinism)');
+    assert.strictEqual(hi!.severity, 'medium');
+    assert.ok(!issuesFor(80).some((i) => /longer than recommended/i.test(i.message ?? '')), 'dropped twin gone');
+  });
+
+  void it('HTML size: ONE "Large HTML document" at fixed MEDIUM across both bands', () => {
+    const findingsFor = (bytes: number) => {
+      const issues: Parameters<typeof TechnicalSEOAnalyzer.checkHTMLSize>[2] = [];
+      const warnings: Parameters<typeof TechnicalSEOAnalyzer.checkHTMLSize>[3] = [];
+      TechnicalSEOAnalyzer.checkHTMLSize(
+        { htmlSize: bytes } as unknown as Parameters<typeof TechnicalSEOAnalyzer.checkHTMLSize>[0],
+        'https://e.com/p',
+        issues,
+        warnings,
+      );
+      return [...issues, ...warnings];
+    };
+    const big = findingsFor(4 * 1024 * 1024); // > 3MB
+    const mid = findingsFor(2 * 1024 * 1024); // > 1MB, < 3MB
+    assert.strictEqual(big.length, 1);
+    assert.strictEqual(mid.length, 1);
+    assert.strictEqual(big[0].message, 'Large HTML document');
+    assert.strictEqual(mid[0].message, 'Large HTML document');
+    assert.strictEqual(big[0].severity, 'medium');
+    assert.strictEqual(mid[0].severity, 'medium');
+    assert.ok(!findingsFor(4 * 1024 * 1024).some((f) => /exceeds 3mb/i.test(f.message ?? '')), 'dropped twin gone');
+  });
+
+  void it('third-party payload: ONE "Large third-party payload" at fixed MEDIUM across both bands', async () => {
+    const mockPage = { evaluate: async () => [] } as unknown as Parameters<typeof ThirdPartyAnalyzer.analyze>[0];
+    const run = async (bytes: number) => {
+      const reqs = {
+        'https://cdn.thirdparty.io/a.js': { size: bytes, resourceType: 'script' },
+      } as unknown as Parameters<typeof ThirdPartyAnalyzer.analyze>[1];
+      const { issues, warnings } = await ThirdPartyAnalyzer.analyze(mockPage, reqs, 'https://example.com/', 'https://example.com');
+      return [...issues, ...warnings].filter((f) => /third-party payload/i.test(f.message ?? ''));
+    };
+    const crit = await run(1_200_000); // > 1MB critical band
+    const warn = await run(600_000); // > 500KB warning band
+    assert.strictEqual(crit.length, 1);
+    assert.strictEqual(warn.length, 1);
+    assert.strictEqual(crit[0].message, 'Large third-party payload');
+    assert.strictEqual(warn[0].message, 'Large third-party payload');
+    assert.strictEqual(crit[0].severity, 'medium');
+    assert.strictEqual(warn[0].severity, 'medium');
+    assert.ok(!(await run(1_200_000)).some((f) => /excessive/i.test(f.message ?? '')), 'dropped twin gone');
+  });
+});
+
+void describe('Report-doc fix — deterministic form-action finding (narrowed to GET data-form)', () => {
+  const dummyPage = {} as unknown as Parameters<typeof FormAccessibilityAnalyzer.analyze>[0];
+  const run = async (html: string) => {
+    const parsed = parseHtml(html) as unknown as Parameters<typeof FormAccessibilityAnalyzer.analyze>[1];
+    const { issues, warnings } = await FormAccessibilityAnalyzer.analyze(dummyPage, parsed, 'https://e.com/');
+    return [...issues, ...warnings];
+  };
+  const fires = (fs: { message?: string }[]) => fs.some((f) => f.message === 'Form submits to itself via GET');
+
+  void it('FIRES on a GET data form with empty action (fields leak to URL)', async () => {
+    const fs = await run(
+      '<form method="get" action=""><input type="email" name="email"><textarea name="message"></textarea><button type="submit">Send</button></form>',
+    );
+    assert.ok(fires(fs), 'contact-style GET+empty-action form should fire');
+    assert.strictEqual(fs.find((f) => f.message === 'Form submits to itself via GET')!.severity, 'medium');
+  });
+  void it('does NOT fire on a search box (empty action, GET, single search input)', async () => {
+    assert.ok(!fires(await run('<form method="get" action="" role="search"><input type="search" name="q"></form>')));
+  });
+  void it('does NOT fire on a POST self-post form', async () => {
+    assert.ok(
+      !fires(await run('<form method="post" action=""><input type="email" name="email"><button type="submit">Go</button></form>')),
+    );
+  });
+  void it('does NOT fire on a form with a real off-page action', async () => {
+    assert.ok(!fires(await run('<form method="get" action="/search"><input type="text" name="query"></form>')));
+  });
+  void it('does NOT fire on a GET sort/filter/faceted-nav form (bookmarkable URL state is intentional)', async () => {
+    assert.ok(
+      !fires(
+        await run(
+          '<form method="get" action=""><select name="category"><option>a</option></select><select name="sort"><option>price</option></select><input type="text" name="min_price"></form>',
+        ),
+      ),
+    );
+  });
+  void it('does NOT fire on a GET search box with a non-canonical field name', async () => {
+    assert.ok(!fires(await run('<form method="get" action=""><input type="text" name="keywords"></form>')));
+  });
+  void it('does NOT fire on retail filter/store-locator GET forms whose field names contain product/location words', async () => {
+    // mobile/card/postal previously over-matched SENSITIVE_NAME_RE → filter-form FP.
+    assert.ok(!fires(await run('<form method="get" action=""><input type="text" name="mobile_brand"></form>')));
+    assert.ok(!fires(await run('<form method="get" action=""><input type="text" name="card_type"></form>')));
+    assert.ok(!fires(await run('<form method="get" action=""><input type="text" name="postal_code"></form>')));
+    assert.ok(!fires(await run('<form method="get" action=""><input type="text" name="street_filter"></form>')));
+  });
+  void it('FIRES on a GET login form (credentials would leak to the URL)', async () => {
+    assert.ok(
+      fires(await run('<form method="get" action=""><input type="text" name="user"><input type="password" name="pass"></form>')),
+    );
+  });
+});
+
+void describe('Report-doc fix — transient 5xx not treated as broken (RH)', () => {
+  void it('excludes 502/503/504 from failed requests but keeps 404/500', () => {
+    const reqs = {
+      requests: {
+        'https://e.com/img-a.jpg': { status: 502 },
+        'https://e.com/img-b.jpg': { status: 503 },
+        'https://e.com/img-c.jpg': { status: 504 },
+        'https://e.com/missing.js': { status: 404 },
+        'https://e.com/err.js': { status: 500 },
+        'https://e.com/ok.js': { status: 200 },
+      },
+    } as unknown as Parameters<typeof collectFailedRequests>[0];
+    const statuses = collectFailedRequests(reqs)
+      .map((r) => r.status)
+      .sort((a, b) => a - b);
+    assert.deepStrictEqual(statuses, [404, 500]);
+  });
+});
+
+void describe('Report-doc fix — spelling brand/proper-noun guard (Arrive)', () => {
+  void it('does NOT flag an always-capitalized brand but DOES flag a lowercase misspelling', () => {
+    const brandOnly = detectMisspellings('Welcome to Definately. Definately builds software with Definately tools.');
+    assert.ok(!brandOnly.misspellings.some((m) => m.word === 'definately'), 'always-capitalized brand not flagged');
+    const inProse = detectMisspellings('This feature is definately useful and definately fast.');
+    assert.ok(
+      inProse.misspellings.some((m) => m.word === 'definately' && m.correction === 'definitely'),
+      'genuine lowercase misspelling still flagged',
+    );
+  });
+});
+
+void describe('Report-doc fix — cookie banner precision (FR)', () => {
+  void it('does NOT treat a footer "Cookie Policy" LINK as a consent banner', () => {
+    const parsed = parseHtml(
+      '<footer><a id="cookie-policy" href="/cookies">Cookie Policy</a></footer>',
+    ) as unknown as Parameters<typeof hasGenericConsentBanner>[0];
+    assert.strictEqual(hasGenericConsentBanner(parsed), false);
+  });
+  void it('does NOT treat a semantic <footer> landmark with policy links as a banner', () => {
+    const parsed = parseHtml(
+      '<footer class="site-footer gdpr-links"><a href="/privacy">Privacy Settings</a></footer>',
+    ) as unknown as Parameters<typeof hasGenericConsentBanner>[0];
+    assert.strictEqual(hasGenericConsentBanner(parsed), false);
+  });
+  void it('DOES detect a real banner container that exposes a consent action', () => {
+    const parsed = parseHtml(
+      '<div class="cookie-consent-banner">We use cookies. <button>Accept all</button> <button>Reject</button></div>',
+    ) as unknown as Parameters<typeof hasGenericConsentBanner>[0];
+    assert.strictEqual(hasGenericConsentBanner(parsed), true);
+  });
+});
+
+void describe('Report-doc fix — first-party host www/sibling-subdomain (Lunacy)', () => {
+  void it('treats a sibling asset subdomain as first-party when the origin is www', () => {
+    assert.strictEqual(isFirstPartyHost('assets.lunacy.com', 'www.lunacy.com'), true);
+    assert.strictEqual(isFirstPartyHost('www.lunacy.com', 'lunacy.com'), true);
+  });
+  void it('still classifies a genuine third party as third-party', () => {
+    assert.strictEqual(isFirstPartyHost('cdn.jsdelivr.net', 'www.lunacy.com'), false);
+    assert.strictEqual(isFirstPartyHost('googletagmanager.com', 'lunacy.com'), false);
   });
 });

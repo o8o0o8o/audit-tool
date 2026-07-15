@@ -269,15 +269,21 @@ function analyzeUrlStructure(urlString: string, origin: string): UrlAnalysis {
       analysis.queryParamCount = url.searchParams.size;
     }
 
+    // Tier-twin collapsed to ONE message (report-rules.md §5): a single per-page
+    // URL-length finding regardless of which band the URL crosses. The crossed
+    // band + char count live in the parenthetical DETAIL (crawler-engine keys the
+    // finding on the text before "(" and keeps the parenthetical in the detail),
+    // and the severity is FIXED (MEDIUM) so the aggregator's first-seen-severity
+    // keying stays deterministic across crawl order.
     if (analysis.length > THRESHOLDS.URL_LENGTH_MAX) {
       analysis.issues.push({
-        severity: SEVERITY.HIGH,
-        message: `URL is too long (${analysis.length} chars, max recommended: ${THRESHOLDS.URL_LENGTH_MAX})`,
+        severity: SEVERITY.MEDIUM,
+        message: `URL is too long (${analysis.length} chars, exceeds max ${THRESHOLDS.URL_LENGTH_MAX})`,
       });
     } else if (analysis.length > THRESHOLDS.URL_LENGTH_RECOMMENDED) {
       analysis.issues.push({
         severity: SEVERITY.MEDIUM,
-        message: `URL is longer than recommended (${analysis.length} chars, recommended: ${THRESHOLDS.URL_LENGTH_RECOMMENDED})`,
+        message: `URL is too long (${analysis.length} chars, exceeds recommended ${THRESHOLDS.URL_LENGTH_RECOMMENDED})`,
       });
     }
 
@@ -464,9 +470,24 @@ function isSameDomain(url1: string, url2: string): boolean {
 /**
  * Check if a request hostname is first-party relative to the origin hostname.
  * Returns true if the hosts are the same or one is a subdomain of the other.
+ *
+ * A leading `www.` is stripped from both sides first, so when the crawl origin
+ * is `www.example.com` a sibling asset host like `assets.example.com` is still
+ * recognized as first-party (it endsWith `.example.com`). Without this, serving
+ * a site's own assets from a sibling subdomain while crawling the `www.` host
+ * mis-counted them as third-party and inflated the third-party-payload finding
+ * (a real audit FP on a banner-less/CDN-fronted site).
+ *
+ * NOTE: this does not do full public-suffix (eTLD+1) resolution — an origin on
+ * an arbitrary non-`www` subdomain (e.g. `app.example.com`) still won't merge
+ * `cdn.example.com`. General registrable-domain comparison needs a public-suffix
+ * list and is tracked as a follow-up.
  */
 function isFirstPartyHost(reqHost: string, originHost: string): boolean {
-  return reqHost === originHost || reqHost.endsWith('.' + originHost) || originHost.endsWith('.' + reqHost);
+  const strip = (h: string) => h.replace(/^www\./, '');
+  const r = strip(reqHost);
+  const o = strip(originHost);
+  return r === o || r.endsWith('.' + o) || o.endsWith('.' + r);
 }
 
 /**

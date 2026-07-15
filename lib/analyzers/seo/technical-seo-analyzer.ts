@@ -373,17 +373,21 @@ class TechnicalSEOAnalyzer {
     const htmlSize = pageData.htmlSize ?? pageData.totalResponseSize;
     if (!htmlSize) return;
 
-    // Flag very large HTML documents (>3MB)
+    // Tier-twin collapsed to ONE message (report-rules.md §5): a single
+    // "Large HTML document" finding covers both the >1MB and >3MB bands. The
+    // crossed band + byte size live in the DETAIL, and the severity is FIXED
+    // (MEDIUM) — the aggregator keys by message and keeps the first-seen
+    // severity, so a per-band severity would be crawl-order-dependent (§5/§6).
     if (htmlSize > 3 * 1024 * 1024) {
-      issues.push({
-        message: 'HTML document exceeds 3MB',
-        detail: `<a href="${url}">${url}</a> HTML is ${formatBytes(htmlSize)}. Very large HTML slows parsing, wastes crawl budget, and may hit Google's 15MB rendering limit.`,
-        severity: SEVERITY.HIGH,
+      warnings.push({
+        message: 'Large HTML document',
+        detail: `<a href="${url}">${url}</a> HTML is ${formatBytes(htmlSize)} (over the 3 MB severe band). Very large HTML slows parsing, wastes crawl budget, and may hit Google's 15MB rendering limit. Reduce it by removing unnecessary inline resources.`,
+        severity: SEVERITY.MEDIUM,
       });
     } else if (htmlSize > 1 * 1024 * 1024) {
       warnings.push({
         message: 'Large HTML document',
-        detail: `<a href="${url}">${url}</a> HTML is ${formatBytes(htmlSize)}. Consider reducing HTML size by removing unnecessary inline resources.`,
+        detail: `<a href="${url}">${url}</a> HTML is ${formatBytes(htmlSize)} (over the 1 MB band). Consider reducing HTML size by removing unnecessary inline resources.`,
         severity: SEVERITY.MEDIUM,
       });
     }

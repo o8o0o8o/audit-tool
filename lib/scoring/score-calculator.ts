@@ -564,12 +564,9 @@ const FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
       },
     ],
   },
-  'HTML document exceeds 3MB': {
-    effort: '30 minutes',
-    fix: 'Reduce HTML size by removing inline scripts/styles, using external files, implementing pagination, or lazy loading content.',
-    example: 'Move inline CSS to external stylesheets. Paginate long lists. Use API-driven content loading.',
-    resources: [],
-  },
+  // 'HTML document exceeds 3MB' was the severe-band twin of 'Large HTML document';
+  // the two collapsed into one canonical 'Large HTML document' finding
+  // (report-rules.md §5). Its fix recommendation lives in EXTENDED_FIX_RECOMMENDATIONS.
   'Pages have image files larger than recommended': {
     effort: '20 minutes',
     fix: 'Resize images to their display dimensions. Use modern formats (WebP/AVIF). Compress images to reduce file size.',

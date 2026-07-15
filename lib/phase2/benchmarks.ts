@@ -69,12 +69,10 @@ const RULES: BenchmarkRule[] = [
     text: `Flagged above ${kb(THRESHOLDS.UNUSED_CODE_BYTES_WARNING)} of unused code per page. Users download and parse bytes the page never executes.`,
   },
   {
-    match: /excessive third-party payload/i,
-    text: `Recommended: third-party payload under ${kb(THRESHOLDS.THIRD_PARTY_SIZE_WARNING)}; above ${mb(THRESHOLDS.THIRD_PARTY_SIZE_CRITICAL)} it dominates load time and main-thread work.`,
-  },
-  {
+    // Single canonical third-party-payload benchmark (tier-twin collapsed,
+    // report-rules.md §5). Covers both the >warning and >critical bands.
     match: /large third-party payload/i,
-    text: `Recommended: keep third-party payload under ${kb(THRESHOLDS.THIRD_PARTY_SIZE_WARNING)}; third-party code blocks the main thread and is outside your control.`,
+    text: `Recommended: keep third-party payload under ${kb(THRESHOLDS.THIRD_PARTY_SIZE_WARNING)}; above ${mb(THRESHOLDS.THIRD_PARTY_SIZE_CRITICAL)} it dominates load time and main-thread work. Third-party code blocks the main thread and is outside your control.`,
   },
   {
     match: /(too many )?third-party origins/i,
@@ -85,12 +83,10 @@ const RULES: BenchmarkRule[] = [
     text: `Recommended: ≤${THRESHOLDS.DOM_CHILDREN_WARNING} child elements per parent (Lighthouse). Large DOM branches slow style, layout, and rendering.`,
   },
   {
-    match: /html document exceeds 3mb/i,
-    text: `Flagged above 3 MB of HTML. Very large HTML slows parsing, wastes crawl budget, and approaches Google's 15 MB rendering limit.`,
-  },
-  {
+    // Single canonical HTML-size benchmark (tier-twin collapsed, report-rules.md §5).
+    // Covers both the >1 MB and >3 MB bands.
     match: /large html document/i,
-    text: `Flagged above 1 MB of HTML. Trim inline styles/scripts and server-rendered payload to speed up parsing.`,
+    text: `Flagged above 1 MB of HTML (severe above 3 MB). Very large HTML slows parsing, wastes crawl budget, and approaches Google's 15 MB rendering limit. Trim inline styles/scripts and server-rendered payload to speed up parsing.`,
   },
   {
     match: /page size is too big|page.*too big/i,

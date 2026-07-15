@@ -23,7 +23,65 @@ interface ConsentBannerDetection {
   method: string | null;
 }
 
+/** Consent-action phrases a genuine cookie banner exposes. */
+const CONSENT_ACTION_RE =
+  /\b(accept|agree|reject|decline|consent|allow all|manage (cookies|preferences)|cookie settings|privacy (settings|preferences))\b/i;
 
+/**
+ * Container tags a real banner uses (never a link/script/style/meta). Excludes
+ * semantic landmarks `footer`/`header`/`nav` on purpose: those legitimately hold
+ * policy links (a `<footer class="…gdpr…">Privacy Settings</footer>`), and
+ * counting them re-introduces the very footer-link false positive this heuristic
+ * was tightened to remove. A genuine consent banner is a div/aside/section/dialog.
+ */
+const BANNER_CONTAINER_TAGS = new Set(['div', 'aside', 'section', 'dialog', 'form']);
+
+/**
+ * Static "generic banner" heuristic (detection Method 3), extracted + hardened
+ * for unit testing.
+ *
+ * A genuine cookie banner is a CONTAINER element that both looks banner-ish by
+ * class/id AND actually exposes a consent action (Accept / Reject / Manage …).
+ * The previous version matched any element whose id merely CONTAINED
+ * "cookie"/"consent" (`[id*="cookie"]`, `[id*="consent"]`), so a footer
+ * "Cookie Policy" LINK (`<a id="cookie-policy">`) false-positived as a banner —
+ * which then mislabeled banner-less sites as "Multiple tracking cookies set
+ * before consent" (a real audit FP: a site with NO banner at all). Genuine
+ * visible / JS-injected banners are still caught by the Playwright visual pass
+ * (Method 4), so tightening this static heuristic improves precision without
+ * losing real banners.
+ */
+export function hasGenericConsentBanner(parsedPage: ParsedPage): boolean {
+  const selectors = [
+    '[class*="cookie-banner"]',
+    '[class*="cookie-consent"]',
+    '[class*="privacy-banner"]',
+    '[class*="cc-window"]',
+    '[class*="cky-consent"]',
+    '[class*="gdpr"]',
+    '[id*="cookie-banner"]',
+    '[id*="cookie-consent"]',
+    '[id*="consent-banner"]',
+    '[id*="cookie-notice"]',
+  ];
+  for (const selector of selectors) {
+    let els: ParsedPage[];
+    try {
+      els = parsedPage.querySelectorAll(selector);
+    } catch {
+      continue; // invalid selector — skip
+    }
+    for (const el of els) {
+      const tag = (el.tagName ?? '').toLowerCase();
+      if (!BANNER_CONTAINER_TAGS.has(tag)) continue; // a link/script is not a banner
+      const text = (el.textContent ?? '').trim();
+      // A banner surfaces a consent action; a bare styled div named "gdpr-badge"
+      // with no action text is not one.
+      if (text && CONSENT_ACTION_RE.test(text)) return true;
+    }
+  }
+  return false;
+}
 
 class CookieConsentAnalyzer {
   // Common cookie consent platforms
@@ -222,28 +280,13 @@ class CookieConsentAnalyzer {
       }
     }
 
-    // Method 3: Check for generic cookie banner patterns
-    const bannerSelectors = [
-      '[class*="cookie-banner"]',
-      '[class*="cookie-consent"]',
-      '[class*="gdpr"]',
-      '[class*="privacy-banner"]',
-      '[id*="cookie"]',
-      '[id*="consent"]',
-      '[class*="cc-window"]',
-      '[class*="cky-consent"]',
-    ];
-
-    for (const selector of bannerSelectors) {
-      try {
-        if (parsedPage.querySelector(selector)) {
-          result.detected = true;
-          result.method = 'generic-banner';
-          return result;
-        }
-      } catch {
-        // Invalid selector
-      }
+    // Method 3: Generic cookie-banner patterns (hardened — see hasGenericConsentBanner).
+    // Requires a container element that both looks banner-ish AND exposes a
+    // consent action, so a footer "Cookie Policy" link no longer false-positives.
+    if (hasGenericConsentBanner(parsedPage)) {
+      result.detected = true;
+      result.method = 'generic-banner';
+      return result;
     }
 
     // Method 4: Check for visible banner via Playwright

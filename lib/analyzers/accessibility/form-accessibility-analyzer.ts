@@ -20,6 +20,19 @@ interface FormAnalysis {
   inputsWithoutAutocomplete: number;
   requiredWithoutAria: number;
   placeholderAsLabel: number;
+  /**
+   * True only for the unambiguous defect: a form that self-posts via GET AND
+   * collects SENSITIVE / personal data — i.e. GET (or defaulted) method AND a
+   * non-navigating action (empty / missing / "#" / fragment-only / "javascript:")
+   * AND at least one sensitive field (email / password / tel input, a textarea,
+   * or a name matching PII patterns). Such a form leaks that data into the URL as
+   * query params instead of POSTing to a handler. Deliberately EXCLUDES the
+   * legitimate empty-action GET patterns — search boxes, and sort/filter/faceted
+   * navigation forms that intentionally keep state in a bookmarkable URL — so it
+   * does not re-introduce the false positives this analyzer's finding previously
+   * produced.
+   */
+  selfPostGetDataForm: boolean;
 }
 
 class FormAccessibilityAnalyzer {
@@ -93,6 +106,17 @@ class FormAccessibilityAnalyzer {
 
     // Check for specific form issues
     for (const formAnalysis of formData.forms) {
+      // Data-collection form self-posting via GET — fields leak to the URL as
+      // query params. ONE canonical message (fixed MEDIUM) so the LLM anomaly
+      // pass no longer produces varying titles for the same defect (report doc #4).
+      if (formAnalysis.selfPostGetDataForm) {
+        warnings.push({
+          message: 'Form submits to itself via GET',
+          detail: `Form ${formAnalysis.index + 1} on <a href="${url}">${url}</a> has an empty or missing action and uses the GET method, so its fields are appended to the current URL as query parameters instead of being sent to a handler. Set an explicit action and use POST for data submission.`,
+          severity: SEVERITY.MEDIUM,
+        });
+      }
+
       // Form without submit button
       if (!formAnalysis.hasSubmitButton && formAnalysis.inputs.length > 0) {
         warnings.push({
@@ -166,6 +190,7 @@ class FormAccessibilityAnalyzer {
       inputsWithoutAutocomplete: 0,
       requiredWithoutAria: 0,
       placeholderAsLabel: 0,
+      selfPostGetDataForm: false,
     };
 
     // Check for submit button
@@ -204,6 +229,36 @@ class FormAccessibilityAnalyzer {
         analysis.hasRadioGroups = true;
       }
     }
+
+    // Detect the unambiguous self-post-via-GET defect (see FormAnalysis doc).
+    // An empty/missing action + GET is VALID, intentional HTML for search boxes
+    // and — crucially — sort/filter/faceted-navigation forms, which deliberately
+    // put state in a shareable, bookmarkable, SEO-friendly URL. Flagging those
+    // would ADD false positives (the exact thing this run avoids). So we fire
+    // ONLY when the form collects SENSITIVE / personal data — the genuine defect
+    // is PII (email, password, message, phone, name, address, payment) leaking
+    // into the query string. A category/sort/keyword field is not sensitive.
+    const actionRaw = (form.getAttribute('action') ?? '').trim();
+    const actionLower = actionRaw.toLowerCase();
+    const isNonNavigatingAction =
+      actionRaw === '' || actionRaw === '#' || actionRaw.startsWith('#') || actionLower.startsWith('javascript:');
+    const isGetMethod = analysis.method.trim().toLowerCase() !== 'post'; // GET or defaulted
+    // Sensitivity is detected primarily by input TYPE (semantic: email/password/tel)
+    // and free-text body (textarea). Name matching is restricted to UNAMBIGUOUS
+    // contact/PII tokens — deliberately NOT product/location words like
+    // `mobile`/`card`/`phone`/`postal`/`address`/`street`, which double as retail
+    // filter and store-locator field names (`mobile_brand`, `card_type`,
+    // `postal_code`) and would re-introduce the filter-form false positive.
+    const SENSITIVE_INPUT_TYPES = new Set(['email', 'password', 'tel']);
+    const SENSITIVE_NAME_RE =
+      /(e-?mail|passw|message|comment|enquir|inquir|first-?name|last-?name|full-?name|\bfname\b|\blname\b|cvv|\bcc-|\bssn\b)/i;
+    const hasSensitiveField = analysis.inputs.some(
+      (i) =>
+        (!!i.type && SENSITIVE_INPUT_TYPES.has(i.type)) ||
+        i.type === 'textarea' || // a free-text body is a contact/feedback signal, never a filter/search control
+        (!!i.name && SENSITIVE_NAME_RE.test(i.name)),
+    );
+    analysis.selfPostGetDataForm = isGetMethod && isNonNavigatingAction && hasSensitiveField;
 
     return analysis;
   }

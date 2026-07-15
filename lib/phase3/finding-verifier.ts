@@ -927,13 +927,13 @@ const VERIFIERS: Verifier[] = [
   numericVerifier('dom-children', (m) => /(element|node)/.test(m) && /too many children/.test(m),
     (p) => domComplexityOf(p)?.maxChildren, THRESHOLDS.DOM_CHILDREN_WARNING, 'over', 'max element children', false),
 
-  // "Excessive DOM size" (large node count). Note: "Large HTML document" /
-  // "HTML document exceeds 3MB" are byte-size findings, not node-count — they
-  // intentionally fall through to the LLM/CLI pass.
+  // "Excessive DOM size" (large node count). Note: "Large HTML document" is a
+  // byte-size finding (both size bands collapsed into it, report-rules.md §5),
+  // not node-count — it intentionally falls through to the LLM/CLI pass.
   numericVerifier('excessive-dom', (m) => /(excessive dom|dom size|too many (dom )?nodes)/.test(m),
     (p) => domComplexityOf(p)?.totalNodes, THRESHOLDS.DOM_NODES_WARNING, 'over', 'DOM node count', false),
 
-  // "Excessive third-party payload".
+  // "Large third-party payload" (both size bands collapsed into it, §5).
   numericVerifier('third-party-payload', (m) => /third-?party/.test(m) && /(payload|size|bytes|weight)/.test(m),
     thirdPartySizeOf, THRESHOLDS.THIRD_PARTY_SIZE_WARNING, 'over', 'third-party payload', false),
 

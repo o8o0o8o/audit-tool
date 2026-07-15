@@ -218,7 +218,8 @@ export const NEXTJS_FIX_OVERRIDES: Record<string, Partial<FixRecommendation>> = 
   },
 
   // ── Third-party weight ──────────────────────────────────────────────────────
-  'Excessive third-party payload': {
+  // Canonical message after the tier-twin collapse (report-rules.md §5).
+  'Large third-party payload': {
     fix: 'Load third-party tags through next/script with strategy="lazyOnload" so they fetch after the page is interactive, lazy-load heavy embeds (video / chat / maps) with next/dynamic on interaction, and drop unused vendors.',
     example: "import Script from 'next/script';\n\n<Script src=\"https://cdn.vendor.com/widget.js\" strategy=\"lazyOnload\" />",
     resources: [NEXT_DOCS.script, { text: 'Optimizing 3rd-Party', url: 'https://web.dev/articles/optimizing-third-party-javascript' }],

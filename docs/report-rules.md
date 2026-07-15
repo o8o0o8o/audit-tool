@@ -109,10 +109,33 @@ once. For the same reason the message's severity must be **fixed**, not derived
 per page from the band: `ErrorAggregator.addError` keys by message and keeps the
 *first-seen* severity, so a per-page-varying severity would make the finding's
 severity depend on the non-deterministic crawl-completion order (a §6 violation).
+Collapsed the same way (one message, fixed **MEDIUM** severity, band in the
+detail): **URL length** — `URL is too long` (the `URL is longer than
+recommended` warning-band twin was removed; `lib/utils.ts`); **HTML size** —
+`Large HTML document` (the `HTML document exceeds 3MB` failure-band twin was
+removed; `technical-seo-analyzer.ts`); **third-party payload** — `Large
+third-party payload` (the `Excessive third-party payload` failure-band twin was
+removed; `third-party-analyzer.ts`). When collapsing a twin, also re-key its
+downstream identity maps — `fix-recommendations-extended.ts`, `seo-catalog.ts`,
+`score-calculator.ts`, `nextjs-recommendations.ts` — and its
+`lib/phase3/live-verifier.ts` matcher(s) + `lib/phase2/benchmarks.ts` regex onto
+the surviving canonical, or the fix/benchmark/verification silently drops.
+
 This is distinct from the deliberate *per-page vs site-wide* twins above (e.g.
 `Large web font payload` / `Excessive web font payload`), which describe
 different scopes and are reconciled by `DEDUP_GROUPS` — not two bands of the same
 per-page measurement.
+
+**Form-action findings are unified.** A data-collection form that self-posts via
+GET (empty/missing/`#`/`javascript:` action + GET method + a non-search data
+field) emits one deterministic finding — `Form submits to itself via GET`
+(`form-accessibility-analyzer.ts`, fixed MEDIUM) — instead of the LLM anomaly
+pass free-forming per-form titles ("Contact form has empty action", "Sign Up
+form uses GET", …). The anomaly prompt (`llm-anomaly.ts`) also pins the stable
+`kind` slug `form-empty-action` for any such defect so per-page variants
+consolidate. Empty-action forms that are search boxes or POST self-submits are
+NOT flagged — those are valid HTML, and flagging them re-introduces false
+positives.
 
 ## 6. Determinism contract
 

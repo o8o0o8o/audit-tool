@@ -87,7 +87,7 @@ Find UNEXPECTED, concrete problems that automated rule-based checks miss — esp
 - Buttons or links that go nowhere, to a 404/5xx, or to "#"
 - Calls-to-action whose label doesn't match their destination
 - Pagination that appears unbounded / never terminates, or "load more" that re-fetches identical content
-- Forms with no action, posting to the wrong place, or missing critical fields
+- Forms with an empty/missing action, self-posting, submitting via GET so fields leak to the URL, posting to the wrong place, or missing critical fields — for ANY of these form empty/missing-action defects, use the EXACT kind "form-empty-action" (see the kind rule below), regardless of the form's label (Contact / Sign Up / Newsletter / …)
 - Visually broken layout: overlapping or cut-off content, invisible text, missing images
 - Placeholder or contradictory content (lorem ipsum, "TODO", test data)
 - Anything a human would immediately call a bug
@@ -101,20 +101,41 @@ Rules:
 
 Output ONLY a JSON array (no prose, no markdown fences). Each item:
 {"title": string (<=80 chars), "kind": string, "severity": "critical|high|medium|low", "section": "...", "evidence": string, "recommendation": string}
-"kind" is a short stable kebab-case slug naming the DEFECT CLASS, not the page — e.g. "clutch-badge-403", "contact-form-get-action", "hero-image-404". Use the SAME slug whenever you see the same kind of defect, so identical issues found on different pages can be grouped. Be consistent and generic in the slug; keep page-specific detail in "evidence".
+"kind" is a short stable kebab-case slug naming the DEFECT CLASS, not the page — e.g. "clutch-badge-403", "hero-image-404". Use the SAME slug whenever you see the same kind of defect, so identical issues found on different pages can be grouped. Be consistent and generic in the slug; keep page-specific detail in "evidence".
+CANONICAL KINDS (use these EXACT slugs so the same defect always groups into one finding): any form with an empty/missing/self-posting action (including GET-with-empty-action, "posts to itself", "no action attribute") → "form-empty-action". Never invent per-form variants like "contact-form-get-action" or "signup-form-empty-action" — they all collapse to "form-empty-action".
 Return [] when nothing is wrong.`;
+
+/**
+ * Transient gateway statuses. A resource returning one of these at crawl time is
+ * usually momentarily unavailable (bad gateway / service unavailable / gateway
+ * timeout), NOT a permanently broken resource. Feeding them to the anomaly LLM
+ * as failed requests produces false positives — a real audit reported an RH
+ * thumbnail as a "broken thumbnail" over a one-off 502. Persistent failures
+ * (4xx, and non-transient 5xx like 500/501/505) are kept: they reproduce.
+ */
+export const TRANSIENT_HTTP_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+
+/**
+ * Failed requests worth surfacing to the anomaly pass: status ≥ 400, EXCLUDING
+ * the transient gateway statuses above. Pure + exported for unit testing.
+ */
+export function collectFailedRequests(
+  requests: RequestsFile | null,
+): Array<{ url: string; status: number; type?: string }> {
+  const out: Array<{ url: string; status: number; type?: string }> = [];
+  if (!requests?.requests) return out;
+  for (const [url, r] of Object.entries(requests.requests)) {
+    if (typeof r.status === 'number' && r.status >= 400 && !TRANSIENT_HTTP_STATUSES.has(r.status)) {
+      out.push({ url, status: r.status, type: r.resourceType });
+    }
+  }
+  return out;
+}
 
 /** Compact, token-frugal view of a page's interactive signals. */
 function buildSignals(page: PageInfo | undefined, requests: RequestsFile | null): Record<string, unknown> {
   const link = page?.linkAnalysis ?? {};
-  const failedRequests: Array<{ url: string; status: number; type?: string }> = [];
-  if (requests?.requests) {
-    for (const [url, r] of Object.entries(requests.requests)) {
-      if (typeof r.status === 'number' && r.status >= 400) {
-        failedRequests.push({ url, status: r.status, type: r.resourceType });
-      }
-    }
-  }
+  const failedRequests = collectFailedRequests(requests);
   const pg = page?.paginationData;
   return {
     title: page?.title,

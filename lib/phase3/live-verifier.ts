@@ -287,6 +287,9 @@ export interface LiveSignals {
   semanticRatio: number;
   emptyAnchorCount: number;
   inputsWithoutAutocomplete: number;
+  /** Count of forms that self-post via GET with a sensitive field (fields would
+   *  leak to the URL). Under-observable (forms can hydrate) → confirm-only. */
+  selfPostGetForms: number;
   scriptsNoSri: number;
   maxChildren: number;
   jpgPngImages: number;
@@ -684,6 +687,34 @@ async function captureOne(
         if (!inp.getAttribute('autocomplete')) inputsWithoutAutocomplete++;
       }
 
+      // Self-post-via-GET data forms — mirrors FormAccessibilityAnalyzer's
+      // detection (GET/defaulted method + non-navigating action + a sensitive
+      // field: email/password/tel input, a textarea, or a PII-pattern name), so
+      // the "Form submits to itself via GET" finding has a live owner.
+      let selfPostGetForms = 0;
+      const SENSITIVE_TYPES = ['email', 'password', 'tel'];
+      const SENSITIVE_NAME =
+        /(e-?mail|passw|message|comment|enquir|inquir|first-?name|last-?name|full-?name|\bfname\b|\blname\b|cvv|\bcc-|\bssn\b)/i;
+      for (const form of Array.from(document.querySelectorAll('form'))) {
+        const method = (form.getAttribute('method') ?? 'get').trim().toLowerCase();
+        if (method === 'post') continue;
+        const action = (form.getAttribute('action') ?? '').trim();
+        const nonNav =
+          action === '' || action === '#' || action.startsWith('#') || action.toLowerCase().startsWith('javascript:');
+        if (!nonNav) continue;
+        let sensitive = false;
+        for (const el of Array.from(form.querySelectorAll('input, textarea, select'))) {
+          const tag = el.tagName.toLowerCase();
+          const t = (el.getAttribute('type') ?? (tag === 'textarea' ? 'textarea' : 'text')).toLowerCase();
+          const nm = el.getAttribute('name') ?? '';
+          if (t === 'textarea' || SENSITIVE_TYPES.includes(t) || (nm && SENSITIVE_NAME.test(nm))) {
+            sensitive = true;
+            break;
+          }
+        }
+        if (sensitive) selfPostGetForms++;
+      }
+
       let scriptsNoSri = 0;
       for (const s of Array.from(document.querySelectorAll('script[src]'))) {
         const src = s.getAttribute('src') ?? '';
@@ -969,6 +1000,7 @@ async function captureOne(
         semanticRatio,
         emptyAnchorCount,
         inputsWithoutAutocomplete,
+        selfPostGetForms,
         scriptsNoSri,
         maxChildren,
         jpgPngImages,
@@ -1066,6 +1098,7 @@ async function captureOne(
       semanticRatio: dom.semanticRatio,
       emptyAnchorCount: dom.emptyAnchorCount,
       inputsWithoutAutocomplete: dom.inputsWithoutAutocomplete,
+      selfPostGetForms: dom.selfPostGetForms,
       scriptsNoSri: dom.scriptsNoSri,
       maxChildren: dom.maxChildren,
       jpgPngImages: dom.jpgPngImages,
@@ -1424,11 +1457,11 @@ const CHECKERS: LiveChecker[] = [
       ),
   },
   {
-    kind: 'html-exceeds-3mb',
-    match: (t) => /html/.test(t) && /3\s?mb|exceeds/.test(t),
-    check: (s) => overOrUnsure(s.htmlBytes, 3_000_000, 'served HTML', ' bytes'),
-  },
-  {
+    // Single HTML-size checker. The former 'html-exceeds-3mb' band-twin was
+    // removed when the analyzer collapsed both bands into one 'Large HTML
+    // document' message (report-rules.md §5) — nothing emits an "exceeds 3MB"
+    // title anymore. Confirm against the entry (1MB) band; the finding's own
+    // detail records which band the crawl-time page crossed.
     kind: 'large-html',
     match: (t) => /(large|big).*html|html.*(large|document)/.test(t),
     check: (s) => overOrUnsure(s.htmlBytes, 1_000_000, 'served HTML', ' bytes'),
@@ -1549,6 +1582,22 @@ const CHECKERS: LiveChecker[] = [
         s.inputsWithoutAutocomplete > 0,
         `${s.inputsWithoutAutocomplete} input(s) without autocomplete`,
         'no inputs without autocomplete at load — forms may mount behind interaction; not dropping',
+      ),
+  },
+  {
+    // "Form submits to itself via GET" (FormAccessibilityAnalyzer) — a GET/
+    // defaulted form with a non-navigating action + a sensitive field, so its
+    // fields leak to the URL. Confirm-only, like the sibling form checkers above:
+    // a self-posting GET form is a stable server-rendered signal when present,
+    // but forms can hydrate behind interaction, so 0 at load isn't proof the
+    // defect is gone — never refute.
+    kind: 'form-empty-action',
+    match: (t) => /form/.test(t) && /(submits to itself|self-post|posts to itself|empty action|missing action)/.test(t),
+    check: (s) =>
+      presentOrUnsure(
+        s.selfPostGetForms > 0,
+        `${s.selfPostGetForms} form(s) self-post via GET with a sensitive field`,
+        'no self-post-GET data form at load — forms may mount behind interaction; not dropping',
       ),
   },
   {
@@ -1961,15 +2010,38 @@ const CHECKERS: LiveChecker[] = [
     check: () => unverifiable('robots.txt AI-crawler rules handled by the special verifier', 'site-level'),
   },
   {
-    // URL length — the cited URL string is deterministic, so this confirms AND
-    // refutes against the flagged page.
+    // Per-page "URL is too long" (both size bands collapsed into one message,
+    // report-rules.md §5). The analyzer's basis is PATH+QUERY length >
+    // URL_LENGTH_RECOMMENDED (lib/utils.ts analyzeUrlStructure), so confirm/refute
+    // against path+query vs RECOMMENDED — NOT full-URL vs MAX, or a legitimate
+    // recommended-band (76–100-char) finding is falsely refuted. Ordered BEFORE
+    // the site-wide checker; note this matcher (`url is too long`) does NOT match
+    // the site-wide "some urls are too long" wording ("urls are" ≠ "url is").
     kind: 'url-length',
-    match: (t) => /url is too long|some urls are too long|url.*longer than recommended/.test(t),
+    match: (t) => /url is too long/.test(t),
     check: (s, f) => {
-      // Measure the page actually sampled (`s.url` = the requested sample URL =
-      // the analyzer's basis) so multi-sample aggregation evaluates EACH example,
-      // not the first cited URL N times. Fall back to the cited URL only when no
-      // live signal carries one.
+      const u = s.url ?? s.finalUrl ?? f.exampleUrl ?? '';
+      let plen: number;
+      try {
+        const parsed = new URL(u);
+        plen = (parsed.pathname + parsed.search).length;
+      } catch {
+        plen = u.length; // not a parseable absolute URL — fall back to raw length
+      }
+      return plen > THRESHOLDS.URL_LENGTH_RECOMMENDED
+        ? confirmed(`URL is ${plen} chars (path+query, > ${THRESHOLDS.URL_LENGTH_RECOMMENDED})`)
+        : refuted(`URL is ${plen} chars (path+query, ≤ ${THRESHOLDS.URL_LENGTH_RECOMMENDED})`);
+    },
+  },
+  {
+    // Site-wide "Some URLs are too long" — a DIFFERENT analyzer
+    // (url-architecture-analyzer) whose basis is FULL-URL length > URL_LENGTH_MAX
+    // (100), not path+query. Judge on full-URL vs MAX so a long-origin/short-path
+    // URL (path+query ≤ 75 but full > 100 — the shape this finding actually cites)
+    // confirms instead of being falsely refuted.
+    kind: 'urls-too-long-sitewide',
+    match: (t) => /some urls are too long/.test(t),
+    check: (s, f) => {
       const u = s.url ?? s.finalUrl ?? f.exampleUrl ?? '';
       const len = u.length;
       return len > THRESHOLDS.URL_LENGTH_MAX

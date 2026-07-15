@@ -199,17 +199,21 @@ class ThirdPartyAnalyzer {
 
     // Generate issues
 
-    // Too much third-party payload
+    // Too much third-party payload. Tier-twin collapsed to ONE message
+    // (report-rules.md §5): a single 'Large third-party payload' finding covers
+    // both the >warning and >critical bands. The crossed band + byte size live in
+    // the DETAIL, and the severity is FIXED (MEDIUM) so the aggregator's
+    // first-seen-severity keying stays deterministic across crawl order.
     if (thirdPartyData.totalSize > THRESHOLDS.THIRD_PARTY_SIZE_CRITICAL) {
-      issues.push({
-        message: 'Excessive third-party payload',
-        detail: `<a href="${url}">${url}</a> loads ${formatBytes(thirdPartyData.totalSize)} from third parties. This significantly impacts load time.`,
-        severity: SEVERITY.HIGH,
+      warnings.push({
+        message: 'Large third-party payload',
+        detail: `<a href="${url}">${url}</a> loads ${formatBytes(thirdPartyData.totalSize)} from third parties (over the ${formatBytes(THRESHOLDS.THIRD_PARTY_SIZE_CRITICAL)} severe band). This significantly impacts load time.`,
+        severity: SEVERITY.MEDIUM,
       });
     } else if (thirdPartyData.totalSize > THRESHOLDS.THIRD_PARTY_SIZE_WARNING) {
       warnings.push({
         message: 'Large third-party payload',
-        detail: `<a href="${url}">${url}</a> loads ${formatBytes(thirdPartyData.totalSize)} from third parties.`,
+        detail: `<a href="${url}">${url}</a> loads ${formatBytes(thirdPartyData.totalSize)} from third parties (over the ${formatBytes(THRESHOLDS.THIRD_PARTY_SIZE_WARNING)} band).`,
         severity: SEVERITY.MEDIUM,
       });
     }

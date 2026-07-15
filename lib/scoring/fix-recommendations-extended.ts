@@ -521,15 +521,12 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
   },
 
   // ─── Performance: third-party / fonts / DOM ──────────────────────────────
-  'Excessive third-party payload': {
-    effort: '2-4 hours',
-    fix: 'Third-party resources (scripts, embeds, media, fonts) exceed the budget. Audit /third-party-summary in Chrome DevTools: defer non-critical scripts, lazy-load embeds and videos, self-host or compress heavy media, and remove unused vendors.',
-    example: '<script src="analytics.js" defer></script>\n<!-- Use lite-youtube-embed instead of full YouTube iframe -->',
-    resources: [{ text: 'Optimizing 3rd-Party', url: 'https://web.dev/articles/optimizing-third-party-javascript' }],
-  },
+  // Single canonical third-party-payload finding (tier-twin collapsed, report-rules.md §5).
+  // Covers both the >warning and >critical bands; the crossed band is in the detail.
   'Large third-party payload': {
-    effort: '1 hour',
-    fix: 'Significant third-party payload. Lazy-load below-the-fold widgets, replace heavy embeds with facades, and audit which vendors are actually used.',
+    effort: '2-4 hours',
+    fix: 'Third-party resources (scripts, embeds, media, fonts) exceed the budget (the detail shows the size and which band it crossed). Audit /third-party-summary in Chrome DevTools: defer non-critical scripts, lazy-load embeds and videos with facades, self-host or compress heavy media, and remove unused vendors.',
+    example: '<script src="analytics.js" defer></script>\n<!-- Use lite-youtube-embed instead of full YouTube iframe -->',
     resources: [{ text: 'Optimizing 3rd-Party', url: 'https://web.dev/articles/optimizing-third-party-javascript' }],
   },
   'Heavy advertising scripts': {
@@ -1736,6 +1733,12 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     example: '<button type="submit">Send</button>',
     resources: [],
   },
+  'Form submits to itself via GET': {
+    effort: '15 minutes',
+    fix: 'The form has an empty/missing action and uses GET, so submitted fields are exposed in the URL (bookmarked, logged, and cached) instead of sent to a handler. Set an explicit action pointing at your endpoint and use method="post" for anything that collects user data.',
+    example: '<form action="/contact" method="post"> … </form>',
+    resources: [],
+  },
   'Placeholder used instead of label': {
     effort: '15 minutes',
     fix: 'Placeholder is not a label — it disappears on focus and has poor contrast. Always pair an input with a visible <label>.',
@@ -1998,14 +2001,11 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'A URL value is empty or undefined where one was expected. Likely a data-pipeline bug — verify the source provides a value.',
     resources: [],
   },
+  // Single canonical URL-length finding (tier-twin collapsed, report-rules.md §5).
+  // Covers both the >recommended and >max bands; the crossed band is in the detail.
   'URL is too long': {
     effort: '20 minutes',
-    fix: 'URL exceeds the recommended maximum. Shorten by removing unnecessary path segments or moving state to query/POST.',
-    resources: [],
-  },
-  'URL is longer than recommended': {
-    effort: '15 minutes',
-    fix: 'URL is longer than recommended (>75 chars). Shorten where possible — search results display ~70 characters of URL.',
+    fix: 'URL is longer than recommended for SEO (the detail shows the length and which band it crossed). Shorten by removing unnecessary path segments or moving state to query/POST — search results display only ~70 characters of the URL.',
     resources: [],
   },
   'URL is too deep': {

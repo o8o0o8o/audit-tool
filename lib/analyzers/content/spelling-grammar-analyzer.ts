@@ -180,6 +180,48 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   writting: 'writing',
 };
 
+/**
+ * Pure misspelling detector over already-extracted visible page text. Exported
+ * for unit testing. Case-aware brand/proper-noun guard: a dictionary hit that
+ * never appears in all-lowercase form on the page is treated as a proper noun
+ * and skipped (removes false positives on capitalized brand words without
+ * dropping genuine misspellings, which appear lowercased in prose).
+ */
+export function detectMisspellings(pageText: string): {
+  totalWords: number;
+  misspellings: { word: string; correction: string; count: number }[];
+  totalMisspellings: number;
+} {
+  const rawTokens = (pageText.match(/[A-Za-z][A-Za-z'-]*/g) ?? []).filter((w) => w.length > 2);
+
+  const seenLowercase = new Set<string>();
+  for (const tok of rawTokens) {
+    if (tok === tok.toLowerCase()) seenLowercase.add(tok);
+  }
+
+  const misspellingCounts: Record<string, { correction: string; count: number }> = {};
+  for (const tok of rawTokens) {
+    const word = tok.toLowerCase();
+    const correction = COMMON_MISSPELLINGS[word];
+    // Skip degenerate self-mapping dictionary entries.
+    if (!correction || correction === word) continue;
+    // Skip likely proper nouns / brands: only ever appear capitalized.
+    if (!seenLowercase.has(word)) continue;
+    if (!misspellingCounts[word]) {
+      misspellingCounts[word] = { correction, count: 0 };
+    }
+    misspellingCounts[word].count++;
+  }
+
+  const misspellings = Object.entries(misspellingCounts)
+    .map(([word, data]) => ({ word, correction: data.correction, count: data.count }))
+    .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word))
+    .slice(0, 20);
+  const totalMisspellings = Object.values(misspellingCounts).reduce((sum, v) => sum + v.count, 0);
+
+  return { totalWords: rawTokens.length, misspellings, totalMisspellings };
+}
+
 class SpellingGrammarAnalyzer {
   static async analyze(chromePage: ChromePage, _url: string) {
     const issues: Issue[] = [];
@@ -227,37 +269,11 @@ class SpellingGrammarAnalyzer {
         return { issues, warnings, info };
       }
 
-      // Tokenize into words
-      const words = pageText
-        .toLowerCase()
-        .replace(/[^a-z\s'-]/g, ' ')
-        .split(/\s+/)
-        .filter((w) => w.length > 2);
-
-      info.totalWords = words.length;
-
-      // Check against misspelling dictionary
-      const misspellingCounts: Record<string, { correction: string; count: number }> = {};
-
-      for (const word of words) {
-        const correction = COMMON_MISSPELLINGS[word];
-        // Guard against degenerate dictionary entries that map a word to itself
-        // (a real word would otherwise be flagged as its own misspelling).
-        if (correction && correction !== word) {
-          if (!misspellingCounts[word]) {
-            misspellingCounts[word] = { correction, count: 0 };
-          }
-          misspellingCounts[word].count++;
-        }
-      }
-
-      // Sort by count descending
-      info.misspellings = Object.entries(misspellingCounts)
-        .map(([word, data]) => ({ word, correction: data.correction, count: data.count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
-
-      info.totalMisspellings = Object.values(misspellingCounts).reduce((sum, v) => sum + v.count, 0);
+      // Detect misspellings (pure, case-aware brand guard — see detectMisspellings).
+      const spell = detectMisspellings(pageText);
+      info.totalWords = spell.totalWords;
+      info.misspellings = spell.misspellings;
+      info.totalMisspellings = spell.totalMisspellings;
     } catch {
       return { issues, warnings, info };
     }

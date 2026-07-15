@@ -87,7 +87,7 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   'Excessive DOM size': { tier: 'warning', category: 'performance' },
   'Some pages have excessive third-party payload': { tier: 'warning', category: 'performance' },
   'Some pages have render-blocking third-party scripts': { tier: 'warning', category: 'performance' },
-  'HTML document exceeds 3MB': { tier: 'warning', category: 'performance' },
+  'Large HTML document': { tier: 'warning', category: 'performance' },
 
   // ─── Security ─────────────────────────────────────────────────────────────
   'External scripts missing Subresource Integrity (SRI)': { tier: 'warning', category: 'security' },

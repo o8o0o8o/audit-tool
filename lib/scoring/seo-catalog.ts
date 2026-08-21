@@ -57,6 +57,12 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   "Some loc and canonical don't match": { tier: 'error', category: 'seo' },
   'Some pages are not listed in sitemap': { tier: 'warning', category: 'seo' },
   'Incorrect origin in sitemap': { tier: 'error', category: 'seo' },
+  // A sitemap-index <loc> that isn't absolute risks the whole index (and every
+  // nested sitemap under it) being rejected by search engines — error tier.
+  'Sitemap index contains non-absolute <loc> URLs': { tier: 'error', category: 'seo' },
+  // Same spec violation on a single <url><loc> — narrower blast radius (one
+  // sitemap's worth of URLs, not a whole index tree) — warning tier.
+  'Sitemap contains non-absolute <loc> URLs': { tier: 'warning', category: 'seo' },
   'Some pages have redirect chains or loops': { tier: 'error', category: 'seo' },
   'Soft 404 detected': { tier: 'error', category: 'seo' },
   'Pages blocked via X-Robots-Tag header': { tier: 'error', category: 'seo' },

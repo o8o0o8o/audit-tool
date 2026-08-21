@@ -27,6 +27,7 @@ import { collectLinks } from '../lib/crawler/page-data-builder';
 import { parse as parseHtml } from 'node-html-parser';
 import { recordPaginationNotFound, worstPaginationStreak } from '../lib/crawler/resilience';
 import type { FailureTracker } from '../lib/crawler/crawler-types';
+import { SitemapParser } from '../lib/parsers/sitemap-parser';
 
 // ============================================================
 // Broken-pagination abort scoping (crawler-engine consecutive-404 streak)
@@ -5764,7 +5765,7 @@ import {
   loadPhase2State,
   verdictBreakdownLine,
 } from '../lib/phase3/verify-runner';
-import { NETWORK_CONDITIONS, CPU_CONDITIONS } from '../lib/constants';
+import { NETWORK_CONDITIONS, CPU_CONDITIONS, SEVERITY } from '../lib/constants';
 import type { LiveVerdict } from '../lib/phase3/live-verifier';
 
 void describe('phase3: verdictBreakdownLine (Slice 0 taxonomy)', () => {
@@ -7982,5 +7983,54 @@ void describe('Report-doc fix — first-party host www/sibling-subdomain (Lunacy
   void it('still classifies a genuine third party as third-party', () => {
     assert.strictEqual(isFirstPartyHost('cdn.jsdelivr.net', 'www.lunacy.com'), false);
     assert.strictEqual(isFirstPartyHost('googletagmanager.com', 'lunacy.com'), false);
+  });
+});
+
+void describe('Sitemap-parser fix — relative <loc> resolution', () => {
+  void it('resolves a path-only <loc> in a <url> entry against the sitemap that referenced it', () => {
+    const doc = parseHtml('<urlset><url><loc>/en/foo</loc></url></urlset>');
+    const urls = doc.querySelectorAll('url');
+    const result = { sitemaps: {}, urls: {}, total: 0, errors: [] as Array<{ message: string; detail: string; severity: string }> };
+    SitemapParser.processSitemap(
+      urls as unknown as Parameters<typeof SitemapParser.processSitemap>[0],
+      'https://example.com',
+      'https://example.com/sitemap.xml',
+      result as unknown as Parameters<typeof SitemapParser.processSitemap>[3],
+    );
+    assert.strictEqual(result.total, 1);
+    assert.deepStrictEqual(Object.keys(result.urls), ['https://example.com/en/foo']);
+    // The URL is recovered, but the site's sitemap is still non-conformant —
+    // that must surface as its own finding, not pass silently.
+    assert.strictEqual(result.errors.length, 1);
+    assert.strictEqual(result.errors[0].message, 'Sitemap contains non-absolute <loc> URLs');
+    assert.strictEqual(result.errors[0].severity, SEVERITY.MEDIUM);
+  });
+
+  void it('leaves an already-absolute <loc> unchanged', () => {
+    const doc = parseHtml('<urlset><url><loc>https://example.com/page</loc></url></urlset>');
+    const urls = doc.querySelectorAll('url');
+    const result = { sitemaps: {}, urls: {}, total: 0, errors: [] as Array<{ message: string; detail: string; severity: string }> };
+    SitemapParser.processSitemap(
+      urls as unknown as Parameters<typeof SitemapParser.processSitemap>[0],
+      'https://example.com',
+      'https://example.com/sitemap.xml',
+      result as unknown as Parameters<typeof SitemapParser.processSitemap>[3],
+    );
+    assert.deepStrictEqual(Object.keys(result.urls), ['https://example.com/page']);
+  });
+
+  void it('still reports "Invalid URL format" for a <loc> unresolvable even against the sitemap URL', () => {
+    const doc = parseHtml('<urlset><url><loc>http://</loc></url></urlset>');
+    const urls = doc.querySelectorAll('url');
+    const result = { sitemaps: {}, urls: {}, total: 0, errors: [] as Array<{ message: string; detail: string; severity: string }> };
+    SitemapParser.processSitemap(
+      urls as unknown as Parameters<typeof SitemapParser.processSitemap>[0],
+      'https://example.com',
+      'https://example.com/sitemap.xml',
+      result as unknown as Parameters<typeof SitemapParser.processSitemap>[3],
+    );
+    assert.strictEqual(result.total, 0);
+    assert.strictEqual(result.errors.length, 1);
+    assert.match(result.errors[0].message, /Invalid URL format/);
   });
 });

@@ -410,6 +410,18 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'The sitemap has empty or missing <loc> entries. Regenerate from your CMS/build script and validate before deploying.',
     resources: [],
   },
+  'Sitemap index contains non-absolute <loc> URLs': {
+    effort: '15 minutes',
+    fix: 'Every <loc> in a sitemap index must be a fully-qualified absolute URL, not a path. Usually caused by a misconfigured base-URL setting in the sitemap generator (e.g. a Hugo site with baseURL set to "/"). A relative loc here risks the whole nested sitemap — or the entire index — being ignored by search engines.',
+    example: '<sitemap><loc>https://example.com/sitemap-pages.xml</loc></sitemap>   <!-- NOT <loc>/sitemap-pages.xml</loc> -->',
+    resources: [{ text: 'Sitemap Guide', url: 'https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap' }],
+  },
+  'Sitemap contains non-absolute <loc> URLs': {
+    effort: '15 minutes',
+    fix: 'Every <loc> in a sitemap must be a fully-qualified absolute URL, not a path. Usually caused by a misconfigured base-URL setting in the sitemap generator. Narrower impact than the same issue on a sitemap index — only this sitemap\'s URLs are affected.',
+    example: '<url><loc>https://example.com/page</loc></url>   <!-- NOT <loc>/page</loc> -->',
+    resources: [{ text: 'Sitemap Guide', url: 'https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap' }],
+  },
   'Sitemap URL uses HTTP instead of HTTPS': {
     effort: '5 minutes',
     fix: 'Use https:// for every <loc> entry. HTTP entries trigger redirect chains and waste crawl budget.',

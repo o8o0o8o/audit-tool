@@ -57,6 +57,11 @@ process.on('uncaughtException', (error) => {
 /** Severity ordering for prioritising which crawl findings to send to the LLM. */
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
+/** Previous audit's overall score for "vs Previous" — `??`, not `||`, so a real 0 isn't discarded as unmeasured. */
+export function previousScoreFrom(lastAudit: { summary?: { overallScore?: number | null } } | undefined): number | null {
+  return lastAudit?.summary?.overallScore ?? null;
+}
+
 /**
  * Assemble the grounding context for the LLM repo pass from the deterministic
  * result + the crawl aggregator. Pure data shaping — no I/O.
@@ -512,7 +517,7 @@ async function audit() {
           const history = manager.loadHistory();
           if (history?.audits && history.audits.length > 0) {
             const lastAudit = history.audits[history.audits.length - 1];
-            seo.data.previousScore = lastAudit.summary?.overallScore || null;
+            seo.data.previousScore = previousScoreFrom(lastAudit);
           }
         } catch (e: unknown) {
           console.debug('Could not load previous history:', (e as Error).message);

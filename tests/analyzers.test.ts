@@ -24,6 +24,7 @@ import type { PageInfo } from '../lib/types';
 import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
 import { getPaginationSeriesKey, normalizeUrlForComparison } from '../lib/utils';
 import { computeTotalPagesProcessed } from '../lib/orchestrators/audit-orchestrator';
+import { previousScoreFrom } from '../robots';
 import { collectLinks } from '../lib/crawler/page-data-builder';
 import { parse as parseHtml } from 'node-html-parser';
 import { recordPaginationNotFound, worstPaginationStreak } from '../lib/crawler/resilience';
@@ -8042,6 +8043,17 @@ void describe('Sitemap-parser fix — relative <loc> resolution', () => {
     assert.strictEqual(result.total, 0);
     assert.strictEqual(result.errors.length, 1);
     assert.match(result.errors[0].message, /Invalid URL format/);
+  });
+});
+
+void describe('previousScoreFrom', () => {
+  void it('keeps a real 0 instead of discarding it as unmeasured', () => {
+    assert.strictEqual(previousScoreFrom({ summary: { overallScore: 0 } }), 0);
+  });
+
+  void it('returns null for unmeasured or missing history', () => {
+    assert.strictEqual(previousScoreFrom({ summary: { overallScore: null } }), null);
+    assert.strictEqual(previousScoreFrom(undefined), null);
   });
 });
 

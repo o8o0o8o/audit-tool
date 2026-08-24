@@ -128,6 +128,18 @@ import { LinkingOpportunityAnalyzer } from '../analyzers/site-wide/linking-oppor
 import { DNSIPv6Analyzer } from '../analyzers/performance/dns-ipv6-analyzer';
 import { normalizeUrlForComparison } from '../utils';
 
+/**
+ * Total pages this run actually attempted — success + error, across both the
+ * sitemap crawl and the "missing from sitemap" second pass. Deliberately NOT
+ * the sitemap frontier size: that undercounts once pages discovered outside
+ * the sitemap get crawled too, especially with `--limit` capping the sitemap
+ * side but not the discovered-URL side (cli-summary's success-rate percentage
+ * must never exceed 100%, since it divides by exactly this value).
+ */
+export function computeTotalPagesProcessed(pageData: { totalWithoutError: number; totalWithError: number }): number {
+  return pageData.totalWithoutError + pageData.totalWithError;
+}
+
 class AuditOrchestrator {
   /**
    * Analyze all pages - main crawling orchestration
@@ -270,7 +282,14 @@ class AuditOrchestrator {
       }
     }
 
-    results.pageData.total = uniquePages.size;
+    // NOT uniquePages.size: that's just the sitemap frontier, and with
+    // --limit it's capped well below the pages actually crawled once the
+    // "missing from sitemap" second pass (collectedURLs, uncapped) runs —
+    // e.g. --limit=5 with 33 discovered-but-unlisted pages reports
+    // "5 crawled, 38 successful (760%)" in the CLI summary. total must count
+    // every page this run actually attempted, matching the same counters
+    // totalWithoutError/totalWithError already use as the success-rate numerator.
+    results.pageData.total = computeTotalPagesProcessed(results.pageData);
     results.pageData.isMultiLang = isMultiLang;
   }
 

@@ -23,6 +23,7 @@ import { getContentInsights } from '../lib/reports/sections/content-insights';
 import type { PageInfo } from '../lib/types';
 import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
 import { getPaginationSeriesKey, normalizeUrlForComparison } from '../lib/utils';
+import { computeTotalPagesProcessed } from '../lib/orchestrators/audit-orchestrator';
 import { collectLinks } from '../lib/crawler/page-data-builder';
 import { parse as parseHtml } from 'node-html-parser';
 import { recordPaginationNotFound, worstPaginationStreak } from '../lib/crawler/resilience';
@@ -8041,5 +8042,22 @@ void describe('Sitemap-parser fix — relative <loc> resolution', () => {
     assert.strictEqual(result.total, 0);
     assert.strictEqual(result.errors.length, 1);
     assert.match(result.errors[0].message, /Invalid URL format/);
+  });
+});
+
+void describe('computeTotalPagesProcessed — success rate must never exceed 100%', () => {
+  // Live repro: `--limit=5` caps the sitemap frontier to 5, but the
+  // "missing from sitemap" second pass isn't capped — 33 extra pages get
+  // crawled and counted into totalWithoutError, while the old
+  // `pageData.total = uniquePages.size` stayed at 5. The CLI summary then
+  // divided 38 successful by a denominator of 5 and printed "760.0%".
+  void it('counts every processed page (success + error), not just the sitemap frontier', () => {
+    const total = computeTotalPagesProcessed({ totalWithoutError: 38, totalWithError: 0 });
+    assert.strictEqual(total, 38);
+  });
+
+  void it('includes failed pages in the denominator too', () => {
+    const total = computeTotalPagesProcessed({ totalWithoutError: 30, totalWithError: 8 });
+    assert.strictEqual(total, 38);
   });
 });

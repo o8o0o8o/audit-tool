@@ -968,41 +968,50 @@ void describe('checkAlternateDuplicates', () => {
 });
 
 void describe('populateIncomingLinksCount', () => {
-  const build = (pageUrls: string[], incomingLinks: Record<string, string[]>) =>
-    ({
-      pageData: {
-        pages: Object.fromEntries(pageUrls.map((u) => [u, { url: u } as PageInfo])),
-        incomingLinks,
-      },
-    }) as unknown as Parameters<typeof populateIncomingLinksCount>[0];
+  const build = (pageUrls: string[]) => Object.fromEntries(pageUrls.map((u) => [u, { url: u } as PageInfo]));
 
   void it('counts incoming links when page URL matches the map key exactly', () => {
-    const r = build(['https://x.com/docs/install'], {
+    const pages = build(['https://x.com/docs/install']);
+    populateIncomingLinksCount(pages, {
       'https://x.com/docs/install': ['https://x.com/a', 'https://x.com/b'],
     });
-    populateIncomingLinksCount(r);
-    assert.strictEqual(r.pageData.pages['https://x.com/docs/install'].incomingLinksCount, 2);
-    assert.strictEqual(r.pageData.pages['https://x.com/docs/install'].hasIncomingLinks, true);
+    assert.strictEqual(pages['https://x.com/docs/install'].incomingLinksCount, 2);
+    assert.strictEqual(pages['https://x.com/docs/install'].hasIncomingLinks, true);
   });
 
   void it('resolves the bare-origin page against the normalized (trailing-slash) map key', () => {
     // The map is keyed by normalizeUrl(href); a link to "/" becomes
     // "https://x.com/", but the page may be crawled as the bare origin.
-    const r = build(['https://x.com'], {
+    const pages = build(['https://x.com']);
+    populateIncomingLinksCount(pages, {
       'https://x.com/': ['https://x.com/a', 'https://x.com/b', 'https://x.com/c'],
     });
-    populateIncomingLinksCount(r);
-    assert.strictEqual(r.pageData.pages['https://x.com'].incomingLinksCount, 3);
-    assert.strictEqual(r.pageData.pages['https://x.com'].hasIncomingLinks, true);
+    assert.strictEqual(pages['https://x.com'].incomingLinksCount, 3);
+    assert.strictEqual(pages['https://x.com'].hasIncomingLinks, true);
   });
 
   void it('marks pages with no incoming links as orphaned (count 0)', () => {
-    const r = build(['https://x.com/orphan'], {
+    const pages = build(['https://x.com/orphan']);
+    populateIncomingLinksCount(pages, {
       'https://x.com/other': ['https://x.com/a'],
     });
-    populateIncomingLinksCount(r);
-    assert.strictEqual(r.pageData.pages['https://x.com/orphan'].incomingLinksCount, 0);
-    assert.strictEqual(r.pageData.pages['https://x.com/orphan'].hasIncomingLinks, false);
+    assert.strictEqual(pages['https://x.com/orphan'].incomingLinksCount, 0);
+    assert.strictEqual(pages['https://x.com/orphan'].hasIncomingLinks, false);
+  });
+
+  void it('resolves a page URL against a map key that only differs by a trailing slash (PR #6-style review)', () => {
+    // Real-world case: a site's <a href> points to "/en/about" (no trailing
+    // slash) while the crawled/canonical page URL is "/en/about/" (with one)
+    // — normalizeUrl's WHATWG URL.href normalisation adds a trailing slash to
+    // a bare origin but does not add or strip one on a non-empty path, so
+    // neither the raw nor the normalised lookup would find this without the
+    // extra slash-toggled fallback.
+    const pages = build(['https://x.com/en/about/']);
+    populateIncomingLinksCount(pages, {
+      'https://x.com/en/about': ['https://x.com/en/'],
+    });
+    assert.strictEqual(pages['https://x.com/en/about/'].incomingLinksCount, 1);
+    assert.strictEqual(pages['https://x.com/en/about/'].hasIncomingLinks, true);
   });
 });
 

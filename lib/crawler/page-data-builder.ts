@@ -10,7 +10,6 @@ import { AxeBuilder } from '@axe-core/playwright';
 import type { Page as PlaywrightPage } from 'playwright';
 import type { PageInfo, SitemapUrl, Issue, HeadingAnalysis, UrlAnalysis, CodeCoverageData } from '../types';
 import type {
-  CrawlResults,
   RedirectEntry,
   RequestInfo,
   LinkEntry,
@@ -1446,18 +1445,32 @@ export async function captureRepresentativeEvidence(
 /**
  * Populate incoming links count for each page.
  *
- * The incomingLinks map is keyed by NORMALISED target URLs (see collectLinks),
- * so page URLs must be normalised the same way before lookup — otherwise pages
- * whose raw URL differs from its normalised form (e.g. the root `https://x.com`
- * vs the linked `https://x.com/`, or URLs carrying tracking params) would
- * always resolve to a count of 0.
+ * The incomingLinks map is keyed by NORMALISED target URLs (see collectLinks:
+ * `normalizeUrl(fullHref, queryParams)`), so page URLs must be normalised the
+ * same way before lookup — otherwise pages whose raw URL differs from its
+ * normalised form (e.g. the root `https://x.com` vs the linked
+ * `https://x.com/`, or URLs carrying tracking params) would always resolve to
+ * a count of 0.
+ *
+ * `normalizeUrl` is WHATWG `URL.href` normalisation — it adds a trailing `/`
+ * to a bare origin, but does NOT add or strip one on a non-empty path. A site
+ * that links to `/en/about` while its sitemap/canonical serves `/en/about/`
+ * (a very common pattern — the two differ only by a redirect) produces a
+ * genuine key mismatch that survives the raw+normalised fallback above. Try
+ * one more fallback with the trailing slash toggled before giving up.
  */
-export function populateIncomingLinksCount(results: CrawlResults, queryParams: QueryParamConfig = {}): void {
-  const incomingLinks = results.pageData.incomingLinks ?? {};
-  for (const url in results.pageData.pages) {
-    const incomingLinksArray = incomingLinks[url] ?? incomingLinks[normalizeUrl(url, queryParams)] ?? [];
-    const incomingLinksCount = Array.isArray(incomingLinksArray) ? incomingLinksArray.length : 0;
-    results.pageData.pages[url].incomingLinksCount = incomingLinksCount;
-    results.pageData.pages[url].hasIncomingLinks = incomingLinksCount > 0;
+export function populateIncomingLinksCount(
+  pages: Record<string, PageInfo>,
+  incomingLinks: Record<string, string[] | number> | undefined,
+  queryParams: QueryParamConfig = {},
+): void {
+  if (!incomingLinks) return;
+  for (const url in pages) {
+    const normalized = normalizeUrl(url, queryParams);
+    const slashToggled = normalized.endsWith('/') ? normalized.slice(0, -1) : `${normalized}/`;
+    const entry = incomingLinks[url] ?? incomingLinks[normalized] ?? incomingLinks[slashToggled];
+    const incomingLinksCount = Array.isArray(entry) ? entry.length : typeof entry === 'number' ? entry : 0;
+    pages[url].incomingLinksCount = incomingLinksCount;
+    pages[url].hasIncomingLinks = incomingLinksCount > 0;
   }
 }

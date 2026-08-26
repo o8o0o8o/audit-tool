@@ -1058,10 +1058,12 @@ class CrawlerEngine {
     incomingLinksTracking.clear();
 
     // Populate incoming-links counts on any pages still in memory. Note: pages
-    // flushed to disk during the crawl are evicted from memory, so the report
-    // derives counts from the persisted incomingLinks map at render time. This
-    // in-memory pass keeps still-resident pages (and orphan detection) correct.
-    populateIncomingLinksCount(results, this.#options.queryParams);
+    // flushed to disk during the crawl are evicted from memory, so this pass
+    // alone leaves evicted pages' counts stale — both the HTML report
+    // (data-processor.ts) and the orphan-page/sitemap-reconciliation findings
+    // (audit-orchestrator.ts's runSiteWideValidation) independently recompute
+    // this again against the fully-reloaded page set before they read it.
+    populateIncomingLinksCount(results.pageData.pages, results.pageData.incomingLinks, this.#options.queryParams);
   }
 
   /**

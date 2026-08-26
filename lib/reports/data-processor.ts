@@ -9,7 +9,7 @@ import { FileManager } from '../storage/file-manager';
 import { HistoryManager } from '../../historyManager';
 import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyzer';
 import { PageMatcher } from '../comparison/page-matcher';
-import { normalizeUrl } from '../utils';
+import { populateIncomingLinksCount } from '../crawler/page-data-builder';
 import type { PageInfo, PageData, AnalysisDetail, FailedBatch, ComparisonData } from '../types';
 
 class ReportDataProcessor {
@@ -142,7 +142,7 @@ class ReportDataProcessor {
     // per-page incomingLinksCount field cannot be persisted in the batch files
     // (pages are streamed to disk and evicted from memory before crawl-wide
     // incoming-link totals are known), so the report must compute it here.
-    ReportDataProcessor.#populateIncomingLinksCounts(pages, incomingLinks);
+    populateIncomingLinksCount(pages, incomingLinks);
 
     // Reconstruct the data structure expected by report generators
     return {
@@ -167,26 +167,6 @@ class ReportDataProcessor {
         summary: analysis.summary,
       },
     };
-  }
-
-  /**
-   * Populate `incomingLinksCount` / `hasIncomingLinks` on each page from the
-   * authoritative incoming-links map. The map is keyed by normalised target
-   * URLs, so page URLs are normalised before lookup (with a raw-key fallback
-   * for already-normalised keys). Mutates the pages object in place.
-   * @private
-   */
-  static #populateIncomingLinksCounts(
-    pages: Record<string, PageInfo>,
-    incomingLinks: Record<string, string[] | number> | undefined,
-  ) {
-    if (!incomingLinks || !pages) return;
-    for (const url in pages) {
-      const entry = incomingLinks[url] ?? incomingLinks[normalizeUrl(url)];
-      const count = Array.isArray(entry) ? entry.length : typeof entry === 'number' ? entry : 0;
-      pages[url].incomingLinksCount = count;
-      pages[url].hasIncomingLinks = count > 0;
-    }
   }
 
   /**
@@ -227,7 +207,7 @@ class ReportDataProcessor {
     // Derive per-page incoming-link counts from the authoritative map (see the
     // multi-file path for rationale).
     if (jsonData.pageData?.pages) {
-      ReportDataProcessor.#populateIncomingLinksCounts(jsonData.pageData.pages, jsonData.pageData.incomingLinks);
+      populateIncomingLinksCount(jsonData.pageData.pages, jsonData.pageData.incomingLinks);
     }
 
     return jsonData;

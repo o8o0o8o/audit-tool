@@ -8,6 +8,8 @@ import * as path from 'path';
 import { SEVERITY, CRAWL_SETTINGS } from '../constants';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
+import { populateIncomingLinksCount } from '../crawler/page-data-builder';
+import type { QueryParamConfig } from '../crawler/crawler-types';
 import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel } from '../types';
 
 interface AnalyzeContext {
@@ -757,6 +759,16 @@ class AuditOrchestrator {
         console.error(`Error running ${validator.name} validator:`, (error as Error).message);
       }
     }
+
+    // Recompute incoming-link counts against the fully-reloaded page set before
+    // orphan detection reads them — pages evicted mid-crawl had their
+    // hasIncomingLinks baked in from an incomplete incoming-links map (see
+    // populateIncomingLinksCount's doc comment), so re-run it here against the
+    // now-complete data, same as the HTML report path already does.
+    // config.queryParams comes back loosely typed from loadConfig's raw JSON
+    // shape; config-loader's validateConfig already constrains `mode` to the
+    // real union at load time, so this narrowing cast is safe.
+    populateIncomingLinksCount(pageData.pages, pageData.incomingLinks, config.queryParams as QueryParamConfig);
 
     // Identify orphaned pages, and reconcile sitemap URLs against crawl status
     // codes (A1.4) — both moved here (from the crawl-time analyzePages path) so

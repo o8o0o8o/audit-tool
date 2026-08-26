@@ -391,7 +391,7 @@ function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: numb
     { pattern: /heading.*structure|heading.*hierarchy/i, title: 'Heading structure issues' },
     { pattern: /duplicate.*title/i, title: 'Duplicate titles' },
     { pattern: /duplicate.*description/i, title: 'Duplicate descriptions' },
-    { pattern: /broken.*link|404/i, title: 'Broken links' },
+    { pattern: /broken.*link|link.*404|404.*link/i, title: 'Broken links' },
     { pattern: /slow.*ttfb|ttfb.*slow/i, title: 'Slow server response' },
     { pattern: /lcp|largest.*contentful/i, title: 'Slow page rendering (LCP)' },
     { pattern: /cls|layout.*shift/i, title: 'Layout shift issues (CLS)' },

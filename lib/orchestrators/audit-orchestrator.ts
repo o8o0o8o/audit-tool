@@ -236,11 +236,13 @@ class AuditOrchestrator {
     // persisted incomingLinks map is the authoritative source the report reads.
     crawlerEngine.finalizeIncomingLinks(results, incomingLinksTracking);
 
-    // Identify orphaned pages
-    AuditOrchestrator.#reportOrphanedPages(results, saveError);
-
-    // Reconcile sitemap URLs against crawl status codes (A1.4).
-    AuditOrchestrator.#reconcileSitemapStatusCodes(results, saveError);
+    // Orphaned-page detection and sitemap/crawl-status reconciliation both moved
+    // to runSiteWideValidation() — they read results.pageData.pages, and at this
+    // point in the crawl some already-processed pages may still be evicted from
+    // memory (progress-manager evicts to avoid OOM); the caller only reloads them
+    // right before runSiteWideValidation runs, so checking here produced false
+    // "not crawled" / silently-skipped-orphan results for pages that were in fact
+    // crawled fine. See #reportOrphanedPages / #reconcileSitemapStatusCodes.
 
     // Per-URL PSI lab data for representative pages (A4). No-op when --perf is
     // off, evidence capture is disabled, or no pages were sampled.
@@ -416,10 +418,19 @@ class AuditOrchestrator {
   /**
    * Reconcile sitemap URLs against crawl status codes.
    * Emits one aggregated finding per outcome bucket (4xx, 5xx, 3xx, not-crawled).
+   *
+   * Must run against the FULLY reloaded page set (post-`reloadEvictedPages`) —
+   * called from runSiteWideValidation, never from the crawl-time analyzePages
+   * path, where already-crawled pages can still be evicted from memory and
+   * would falsely land in the notCrawled bucket.
    * @private
    */
-  static #reconcileSitemapStatusCodes(results: AnalyzeContext['results'], saveError: SaveErrorFn) {
-    const sitemapUrls = Object.keys(results.sitemaps.urls);
+  static #reconcileSitemapStatusCodes(
+    pages: Record<string, PageInfo>,
+    sitemapUrlsRecord: Record<string, unknown>,
+    saveError: SaveErrorFn,
+  ) {
+    const sitemapUrls = Object.keys(sitemapUrlsRecord);
     if (sitemapUrls.length === 0) return;
 
     const buckets = {
@@ -430,7 +441,7 @@ class AuditOrchestrator {
     };
 
     for (const url of sitemapUrls) {
-      const page = results.pageData.pages[url];
+      const page = pages[url];
       const status = page?.statusCode ?? page?.status;
       if (!status || typeof status !== 'number') {
         buckets.notCrawled.push(url);
@@ -496,14 +507,18 @@ class AuditOrchestrator {
   }
 
   /**
-   * Report orphaned pages (pages without incoming links)
+   * Report orphaned pages (pages without incoming links).
+   *
+   * Same reload-ordering requirement as #reconcileSitemapStatusCodes — must
+   * run against the fully-reloaded page set, not mid-crawl, or an evicted
+   * (temporarily absent) page is silently skipped instead of checked.
    * @private
    */
-  static #reportOrphanedPages(results: AnalyzeContext['results'], saveError: SaveErrorFn) {
+  static #reportOrphanedPages(pages: Record<string, PageInfo>, saveError: SaveErrorFn) {
     let orphanedPagesCount = 0;
 
-    for (const url in results.pageData.pages) {
-      const page = results.pageData.pages[url];
+    for (const url in pages) {
+      const page = pages[url];
       // Page is orphaned if it has no incoming links and is in the sitemap
       if (!page.hasIncomingLinks && page.foundIn === 'sitemap') {
         orphanedPagesCount++;
@@ -742,6 +757,12 @@ class AuditOrchestrator {
         console.error(`Error running ${validator.name} validator:`, (error as Error).message);
       }
     }
+
+    // Identify orphaned pages, and reconcile sitemap URLs against crawl status
+    // codes (A1.4) — both moved here (from the crawl-time analyzePages path) so
+    // they read the fully-reloaded page set, not a partially-evicted one.
+    AuditOrchestrator.#reportOrphanedPages(pageData.pages, saveError);
+    AuditOrchestrator.#reconcileSitemapStatusCodes(pageData.pages, sitemapUrls, saveError);
 
     // Run async/data-storing validators that need special result handling
     await AuditOrchestrator.#runDataStoringValidators(pageData, origin, saveError);

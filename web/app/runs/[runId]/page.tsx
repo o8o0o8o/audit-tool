@@ -72,7 +72,7 @@ export default function RunPage({ params }: { params: Promise<{ runId: string }>
             <ul>
               {reports.map((f) => (
                 <li key={f.url}>
-                  <a data-testid="report-link" href={f.url} target="_blank" rel="noreferrer">
+                  <a data-testid="report-link" href={`/view/${runId}/${f.name}`} target="_blank" rel="noreferrer">
                     {f.name}
                   </a>
                 </li>

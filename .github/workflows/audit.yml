@@ -59,7 +59,12 @@ jobs:
       IN_CONCURRENCY: ${{ inputs.concurrency }}
       IN_LIMIT: ${{ inputs.limit }}
       IN_EVIDENCE_CAP: ${{ inputs.evidence_cap }}
+      # Either a legacy Blob read-write token, or Vercel credentials to pull OIDC Blob access
+      # (see web/scripts/vercel-blob-env.sh).
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Validate inputs
         run: |
@@ -94,7 +99,9 @@ jobs:
           yarn --cwd web install --frozen-lockfile
 
       - name: Report running
-        run: node web/scripts/upload-results.mjs --status=running
+        run: |
+          source web/scripts/vercel-blob-env.sh
+          node web/scripts/upload-results.mjs --status=running
 
       - name: Run audit
         env:
@@ -122,6 +129,7 @@ jobs:
             cancelled) status=cancelled ;;
             *) status=failed ;;
           esac
+          source web/scripts/vercel-blob-env.sh
           node web/scripts/upload-results.mjs --status="$status"
 
       - name: Upload results artifact

@@ -252,7 +252,9 @@ The LLM passes additionally rely on the `claude` CLI being on `PATH` when no API
 
 **GitHub repository secrets**
 
-- `BLOB_READ_WRITE_TOKEN` — the same Blob store token, so the workflow can upload results.
+- Blob access for the upload steps, one of:
+  - `VERCEL_TOKEN` (account token), `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` — for newer OIDC-only Blob stores (no read-write token). The workflow runs `vercel env pull` for the Development environment before each upload to get `BLOB_STORE_ID` + a short-lived `VERCEL_OIDC_TOKEN` (`web/scripts/vercel-blob-env.sh`), so the store must be connected to Development and OIDC federation enabled.
+  - `BLOB_READ_WRITE_TOKEN` — for older stores that still issue one; takes precedence when set.
 - Optional: `ANTHROPIC_API_KEY` (for `--llm` / `--verify` LLM stages), `CRUX_API_KEY`.
 
 Dispatch requires the `DISPATCH_SECRET` value in the `x-dispatch-key` header; without `DISPATCH_SECRET` configured the endpoint fails closed and refuses every dispatch. A best-effort per-IP rate limit (`DISPATCH_RATE_LIMIT`, per serverless instance) answers excess requests with 429. Private/localhost targets are rejected by hostname; the crawler's own URL guards still apply on the runner. Results are also kept for 14 days as a workflow artifact.

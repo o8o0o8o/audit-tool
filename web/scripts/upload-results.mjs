@@ -2,7 +2,8 @@
 // Uploads an audit run folder to Vercel Blob under audits/<RUN_ID>/ and writes audits/<RUN_ID>/status.json.
 //
 // Usage: node web/scripts/upload-results.mjs --status=running|succeeded|failed|cancelled [--results=<audit-results dir>]
-// Env: RUN_ID, AUDIT_URL, AUDIT_OPTIONS (JSON), AUDIT_STARTED_AT (ISO), BLOB_READ_WRITE_TOKEN,
+// Env: RUN_ID, AUDIT_URL, AUDIT_OPTIONS (JSON), AUDIT_STARTED_AT (ISO), BLOB_READ_WRITE_TOKEN or
+//      BLOB_STORE_ID + VERCEL_OIDC_TOKEN (see vercel-blob-env.sh),
 //      GITHUB_SERVER_URL / GITHUB_REPOSITORY / GITHUB_RUN_ID (for the Actions run link).
 import { put } from '@vercel/blob';
 import { readdir, readFile, stat } from 'node:fs/promises';

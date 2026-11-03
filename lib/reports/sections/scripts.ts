@@ -3199,13 +3199,19 @@ function getScripts(data: ReportSectionData) {
               h2.style.justifyContent = 'space-between';
               h2.appendChild(toggle);
 
-              // Content to collapse = everything after h2 parent
+              // Content to collapse = h2's own following siblings, plus the header wrapper's
+              // siblings when h2 sits inside firstChild (previously only the latter, which is
+              // empty when firstChild wraps the whole section, so nothing collapsed). Remember
+              // each element's inline display (e.g. 'grid') so re-expanding restores it.
               var contentElements = [];
-              var sibling = h2.parentElement === firstChild ? firstChild.nextElementSibling : h2.nextElementSibling;
-              while (sibling) {
-                  contentElements.push(sibling);
-                  sibling = sibling.nextElementSibling;
+              function collectFrom(sibling) {
+                  while (sibling) {
+                      contentElements.push({ el: sibling, shownDisplay: sibling.style.display });
+                      sibling = sibling.nextElementSibling;
+                  }
               }
+              collectFrom(h2.nextElementSibling);
+              if (h2.parentElement === firstChild) collectFrom(firstChild.nextElementSibling);
 
               // Saved state
               var saved = localStorage.getItem('seo-collapse-' + id);
@@ -3214,8 +3220,8 @@ function getScripts(data: ReportSectionData) {
                   var isCollapsed = toggle.classList.toggle('collapsed');
                   toggle.textContent = isCollapsed ? '▶' : '▼';
                   toggle.title = isCollapsed ? 'Expand section' : 'Collapse section';
-                  contentElements.forEach(function(el) {
-                      el.style.display = isCollapsed ? 'none' : '';
+                  contentElements.forEach(function(item) {
+                      item.el.style.display = isCollapsed ? 'none' : item.shownDisplay;
                   });
                   localStorage.setItem('seo-collapse-' + id, isCollapsed ? '1' : '0');
               });
@@ -3224,8 +3230,8 @@ function getScripts(data: ReportSectionData) {
               if (saved === '1') {
                   toggle.classList.add('collapsed');
                   toggle.textContent = '▶';
-                  contentElements.forEach(function(el) {
-                      el.style.display = 'none';
+                  contentElements.forEach(function(item) {
+                      item.el.style.display = 'none';
                   });
               }
           });

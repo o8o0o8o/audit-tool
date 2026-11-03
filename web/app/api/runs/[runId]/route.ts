@@ -17,7 +17,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
     const res = await fetch(blob.url, { cache: 'no-store' });
     if (!res.ok) return NextResponse.json({ error: 'status unavailable' }, { status: 502 });
     return NextResponse.json(await res.json(), { headers: { 'Cache-Control': 'no-store' } });
-  } catch {
+  } catch (err) {
+    console.error('blob status read failed', err);
     return NextResponse.json({ error: 'blob storage unavailable' }, { status: 502 });
   }
 }

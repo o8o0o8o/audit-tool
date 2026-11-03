@@ -18,8 +18,9 @@ export default async function RunsPage() {
   let error: string | null = null;
   try {
     runs = await listStatusBlobs();
-  } catch {
-    error = 'Could not read runs from Blob storage. Is BLOB_READ_WRITE_TOKEN configured?';
+  } catch (err) {
+    console.error('blob list failed', err);
+    error = 'Could not read runs from Blob storage. Check that a Blob store is connected to this project (see the function logs).';
   }
 
   return (

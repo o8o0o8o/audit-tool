@@ -240,6 +240,23 @@ Resume loads checkpoint + archive files automatically.
 
 The LLM passes additionally rely on the `claude` CLI being on `PATH` when no API key is set.
 
+## Web dispatcher (Vercel)
+
+`web/` is a small Next.js app that starts audits from a browser and shows their reports. Audits can't run inside Vercel functions (Playwright, long runtimes), so the page dispatches `.github/workflows/audit.yml` through the GitHub API; the workflow runs `npx tsx start.ts`, then uploads the run folder to Vercel Blob under `audits/<run_id>/` together with a `status.json` the page reads.
+
+**Vercel project**
+
+- Import the repo and set **Root Directory** to `web`.
+- Link a Vercel Blob store (provides `BLOB_READ_WRITE_TOKEN`).
+- Environment variables: `GITHUB_TOKEN` (fine-grained token, repository access to this repo, **Actions: read & write**), `DISPATCH_SECRET` (required; every dispatch is refused with a 500 while it is unset), and optionally `DISPATCH_RATE_LIMIT` (dispatches per IP per window, default 5), `GITHUB_OWNER` (default `o8o0o8o`), `GITHUB_REPO` (default `audit-tool`), `GITHUB_WORKFLOW` (default `audit.yml`), `GITHUB_REF` (default `main`). See `web/.env.example`.
+
+**GitHub repository secrets**
+
+- `BLOB_READ_WRITE_TOKEN` — the same Blob store token, so the workflow can upload results.
+- Optional: `ANTHROPIC_API_KEY` (for `--llm` / `--verify` LLM stages), `CRUX_API_KEY`.
+
+Dispatch requires the `DISPATCH_SECRET` value in the `x-dispatch-key` header; without `DISPATCH_SECRET` configured the endpoint fails closed and refuses every dispatch. A best-effort per-IP rate limit (`DISPATCH_RATE_LIMIT`, per serverless instance) answers excess requests with 429. Private/localhost targets are rejected by hostname; the crawler's own URL guards still apply on the runner. Results are also kept for 14 days as a workflow artifact.
+
 ## Development
 
 ```bash

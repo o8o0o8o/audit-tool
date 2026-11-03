@@ -7,7 +7,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    ignores: ['dist/', 'node_modules/', 'audit-results/', 'coverage/'],
+    ignores: ['dist/', 'node_modules/', 'audit-results/', 'coverage/', 'web/**', '.priest/**'],
   },
   {
     languageOptions: {

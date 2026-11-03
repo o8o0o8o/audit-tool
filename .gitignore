@@ -55,3 +55,6 @@ package-lock.json
 
 # local fix/review patch notes
 .patches
+# web dispatcher (Next.js on Vercel)
+web/.next
+web/node_modules

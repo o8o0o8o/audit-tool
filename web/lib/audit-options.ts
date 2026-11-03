@@ -1,0 +1,137 @@
+export interface AuditOptions {
+  url: string;
+  perf: boolean;
+  llm: boolean;
+  verify: boolean;
+  contentResearch: boolean;
+  concurrency: number;
+  limit: number | null;
+  evidenceCap: number;
+}
+
+export type ParseResult = { ok: true; options: AuditOptions } | { ok: false; errors: string[] };
+
+export type WorkflowInputs = Record<string, string>;
+
+export const RUN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{7,63}$/;
+
+export const CONCURRENCY_MIN = 1;
+export const CONCURRENCY_MAX = 20;
+export const CONCURRENCY_DEFAULT = 5;
+export const EVIDENCE_CAP_MIN = 1;
+export const EVIDENCE_CAP_MAX = 100;
+export const EVIDENCE_CAP_DEFAULT = 10;
+export const LIMIT_MAX = 100000;
+
+// Cheap syntactic guard against obvious internal targets, NOT complete SSRF protection: names that
+// resolve to private addresses get through. The crawler's own isFetchAllowed is the real check.
+function isPrivateHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1' || host === '::' || host === '0.0.0.0') return true;
+  if (host.includes(':')) {
+    // IPv6: unique-local fc00::/7, link-local fe80::/10, IPv4-mapped ::ffff:*
+    return /^f[cd][0-9a-f]{0,2}:/.test(host) || /^fe[89ab][0-9a-f]?:/.test(host) || host.startsWith('::ffff:');
+  }
+  const octets = host.split('.');
+  if (octets.length !== 4 || !octets.every((o) => /^\d{1,3}$/.test(o))) return false;
+  const [a, b] = octets.map(Number);
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) || a === 0 || (a === 100 && b >= 64 && b <= 127);
+}
+
+function parseUrl(raw: unknown, errors: string[]): string {
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    errors.push('url is required');
+    return '';
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    errors.push('url is not a valid URL');
+    return '';
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    errors.push('url must use http or https');
+    return '';
+  }
+  if (isPrivateHostname(parsed.hostname)) {
+    errors.push('url must not point at localhost or a private network');
+    return '';
+  }
+  return parsed.origin;
+}
+
+function parseBool(raw: unknown): boolean {
+  return raw === true || raw === 'true' || raw === 'on' || raw === '1';
+}
+
+function parseInteger(raw: unknown, name: string, min: number, max: number, errors: string[]): number | null {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    errors.push(`${name} must be an integer between ${min} and ${max}`);
+    return null;
+  }
+  return value;
+}
+
+export function parseAuditRequest(body: unknown): ParseResult {
+  if (typeof body !== 'object' || body === null) return { ok: false, errors: ['request body must be a JSON object'] };
+  const b = body as Record<string, unknown>;
+  const errors: string[] = [];
+  const url = parseUrl(b.url, errors);
+  const concurrency = parseInteger(b.concurrency, 'concurrency', CONCURRENCY_MIN, CONCURRENCY_MAX, errors);
+  const limit = parseInteger(b.limit, 'limit', 1, LIMIT_MAX, errors);
+  const evidenceCap = parseInteger(b.evidenceCap, 'evidenceCap', EVIDENCE_CAP_MIN, EVIDENCE_CAP_MAX, errors);
+  if (errors.length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    options: {
+      url,
+      perf: parseBool(b.perf),
+      llm: parseBool(b.llm),
+      verify: parseBool(b.verify),
+      contentResearch: parseBool(b.contentResearch),
+      concurrency: concurrency ?? CONCURRENCY_DEFAULT,
+      limit,
+      evidenceCap: evidenceCap ?? EVIDENCE_CAP_DEFAULT,
+    },
+  };
+}
+
+export function isValidRunId(id: unknown): id is string {
+  return typeof id === 'string' && RUN_ID_PATTERN.test(id);
+}
+
+export function newRunId(now: Date = new Date()): string {
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15).toLowerCase();
+  const random = Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+  return `${stamp}-${random}`;
+}
+
+export function toWorkflowInputs(opts: AuditOptions, runId: string): WorkflowInputs {
+  return {
+    url: opts.url,
+    run_id: runId,
+    perf: String(opts.perf),
+    llm: String(opts.llm),
+    verify: String(opts.verify),
+    content_research: String(opts.contentResearch),
+    concurrency: String(opts.concurrency),
+    limit: opts.limit === null ? '' : String(opts.limit),
+    evidence_cap: String(opts.evidenceCap),
+  };
+}
+
+/** CLI flags for `start.ts`; `.github/workflows/audit.yml` builds the same list in shell. */
+export function toCliArgs(inputs: WorkflowInputs): string[] {
+  const args = [`--origin=${inputs.url}`];
+  if (inputs.perf === 'true') args.push('--perf');
+  if (inputs.llm === 'true') args.push('--llm');
+  if (inputs.verify === 'true') args.push('--verify');
+  if (inputs.content_research === 'true') args.push('--content-research');
+  if (inputs.concurrency) args.push(`--concurrency=${inputs.concurrency}`);
+  if (inputs.limit) args.push(`--limit=${inputs.limit}`);
+  if (inputs.evidence_cap) args.push(`--evidence-cap=${inputs.evidence_cap}`);
+  return args;
+}

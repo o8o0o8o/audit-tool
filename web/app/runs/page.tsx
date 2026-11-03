@@ -1,0 +1,42 @@
+import { list, type ListBlobResultBlob } from '@vercel/blob';
+
+export const dynamic = 'force-dynamic';
+
+async function listStatusBlobs(): Promise<ListBlobResultBlob[]> {
+  const statuses: ListBlobResultBlob[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: 'audits/', cursor });
+    statuses.push(...page.blobs.filter((b) => /^audits\/[^/]+\/status\.json$/.test(b.pathname)));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  return statuses.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+}
+
+export default async function RunsPage() {
+  let runs: ListBlobResultBlob[] = [];
+  let error: string | null = null;
+  try {
+    runs = await listStatusBlobs();
+  } catch {
+    error = 'Could not read runs from Blob storage. Is BLOB_READ_WRITE_TOKEN configured?';
+  }
+
+  return (
+    <main>
+      <h1>Audit runs</h1>
+      {error && <p role="alert">{error}</p>}
+      {!error && runs.length === 0 && <p>No runs yet.</p>}
+      <ul>
+        {runs.map((blob) => {
+          const runId = blob.pathname.split('/')[1];
+          return (
+            <li key={blob.pathname}>
+              <a href={`/runs/${runId}`}>{runId}</a> — updated {blob.uploadedAt.toISOString()}
+            </li>
+          );
+        })}
+      </ul>
+    </main>
+  );
+}

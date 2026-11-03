@@ -38,6 +38,8 @@ interface AnalyzeContext {
   };
   incomingLinksTracking: Map<string, Set<string>>;
   saveError: SaveErrorFn;
+  /** Site origin; when the sitemap yields no URLs the crawl is seeded from its homepage. */
+  origin?: string | null;
   resultsDir: string;
 }
 
@@ -158,6 +160,17 @@ class AuditOrchestrator {
       if (crawlFrontierKeys.has(key)) continue;
       crawlFrontierKeys.add(key);
       pagesToCrawl.push(url);
+    }
+
+    // No sitemap URLs (missing/empty sitemap): seed from the homepage so link
+    // discovery still finds the site, instead of auditing 0 pages. The seed is
+    // NOT added to uniquePages, so it stays correctly "not in sitemap".
+    const { origin } = context;
+    if (pagesToCrawl.length === 0 && origin) {
+      const home = `${origin.replace(/\/+$/, '')}/`;
+      console.log(`Sitemap has no URLs; crawling from the homepage (${home}) instead.`);
+      crawlFrontierKeys.add(normalizeUrlForComparison(home));
+      pagesToCrawl.push(home);
     }
 
     // Detect multilanguage site

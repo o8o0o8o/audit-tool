@@ -467,6 +467,7 @@ class SEOData {
       incomingLinksTracking: this.#incomingLinksTracking,
       saveError: this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.analyzePages>[0]['saveError'],
       resultsDir: this.resultsDir,
+      origin: this.origin,
     });
   }
 

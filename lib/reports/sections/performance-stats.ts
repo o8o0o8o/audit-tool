@@ -48,7 +48,10 @@ function getPerformanceStats(data: ReportSectionData) {
   const lcpValues = extractMetricValues(pagesWithPerf, (p) => p.LCP ?? 0);
   const clsValues = extractMetricValues(pagesWithPerf, (p) => p.CLS ?? 0, 0);
   const fcpValues = extractMetricValues(pagesWithPerf, (p) => p.FCP ?? 0);
-  const inpValues = extractMetricValues(pagesWithPerf, (p) => p.INP ?? 0);
+  // INP of exactly 0 means no real interaction fired during the crawl (lab collection never
+  // dispatches synthetic clicks/keypresses), not a genuinely instant response — exclude it like
+  // the comparison view already does, so the stat card doesn't render fake all-zero percentiles.
+  const inpValues = extractMetricValues(pagesWithPerf, (p) => p.INP ?? 0, 1);
   const pageSizes = extractMetricValues(pagesArray, (p) => p.totalResponseSize ?? 0);
 
   const avg = (arr: number[]): string | number =>

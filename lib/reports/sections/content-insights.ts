@@ -517,12 +517,16 @@ function getCTASection(pages: PageInfo[]) {
     if (s.aboveFoldCount > 0) pagesWithAboveFoldCTA++;
   }
 
+  // Only show conversion-element types actually present — a type a site
+  // simply doesn't use (e.g. no phone links) isn't a finding worth its own
+  // zero-value card next to types that ARE in use.
   const cards = [
     { label: 'Forms', value: totalForms, icon: '📝', color: 'var(--color-info)' },
     { label: 'CTA Buttons', value: totalCTAButtons, icon: '🔘', color: 'var(--purple-500)' },
     { label: 'Phone Links', value: totalPhone, icon: '📞', color: 'var(--color-success)' },
     { label: 'Email Links', value: totalEmail, icon: '✉️', color: 'var(--color-warning)' },
   ]
+    .filter((c) => c.value > 0)
     .map(
       (c) => `
     <div style="background: var(--color-bg-surface); padding: 15px; border-radius: var(--radius-lg); text-align: center; border: 1px solid var(--color-border-default);">
@@ -533,10 +537,15 @@ function getCTASection(pages: PageInfo[]) {
     )
     .join('');
 
+  // Nothing to show: no non-zero type breakdown, no pages missing a CTA, no
+  // pages with one above the fold — an all-zero footer with no cards above
+  // it isn't a finding, it's an empty box.
+  if (!cards && pagesWithNoCTAs === 0 && pagesWithAboveFoldCTA === 0) return '';
+
   return `
     <div style="margin-bottom: 30px;">
       <h3 style="color: var(--gray-800); margin-bottom: 12px;">🎯 Conversion Elements</h3>
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 15px;">${cards}</div>
+      ${cards ? `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 15px;">${cards}</div>` : ''}
       <div style="display: flex; gap: 12px;">
         <div style="padding: 10px 16px; background: ${pagesWithNoCTAs > 0 ? '#fef2f2' : '#f0fdf4'}; border-radius: var(--radius-md); font-size: var(--font-size-sm);">
           <strong>${pagesWithNoCTAs}</strong> pages with no CTAs

@@ -3,6 +3,7 @@
  * Handles site-wide validation and audit workflow coordination
  */
 
+import { detectLanguagePatternsInUrls } from './language-pattern-detector';
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { SEVERITY, CRAWL_SETTINGS } from '../constants';
@@ -329,111 +330,13 @@ class AuditOrchestrator {
     }
 
     // Check URL patterns for language indicators (/en/, /de/, /fr/, /en-us/, etc.)
-    const langPatterns = AuditOrchestrator.#detectLanguagePatternsInUrls(results.sitemaps.urls);
+    const langPatterns = detectLanguagePatternsInUrls(results.sitemaps.urls);
     if (langPatterns.isMultiLang) {
       console.log(`Detected multilanguage site from URL patterns: ${langPatterns.languages.join(', ')}`);
       return true;
     }
 
     return false;
-  }
-
-  /**
-   * Detect language patterns in URLs (subdirectories like /en/, /de/, /fr/)
-   * @private
-   */
-  static #detectLanguagePatternsInUrls(urls: Record<string, SitemapUrl>) {
-    // Common language codes (ISO 639-1)
-    const langCodes = new Set([
-      'en',
-      'de',
-      'fr',
-      'es',
-      'it',
-      'pt',
-      'nl',
-      'pl',
-      'ru',
-      'ja',
-      'ko',
-      'zh',
-      'ar',
-      'he',
-      'hi',
-      'th',
-      'vi',
-      'id',
-      'ms',
-      'tr',
-      'sv',
-      'da',
-      'no',
-      'fi',
-      'cs',
-      'hu',
-      'ro',
-      'bg',
-      'uk',
-      'el',
-      'sk',
-      'sl',
-      'hr',
-      'sr',
-      'lt',
-      'lv',
-      'et',
-      'ca',
-      'eu',
-      'gl',
-      'cy',
-      'ga',
-      'mt',
-      'is',
-      'mk',
-      'sq',
-      'bs',
-    ]);
-
-    // Extended patterns: en-us, en-gb, de-de, etc.
-    const langRegionPattern = /^\/([a-z]{2})(-[a-z]{2})?\//i;
-
-    const detectedLanguages = new Set<string>();
-    let urlsChecked = 0;
-    const maxUrlsToCheck = 100; // Limit for performance
-
-    for (const url in urls) {
-      if (urlsChecked >= maxUrlsToCheck) break;
-      urlsChecked++;
-
-      try {
-        const parsed = new URL(url);
-
-        // Check for subdirectory pattern: /en/, /de/, /en-us/
-        const pathMatch = parsed.pathname.match(langRegionPattern);
-        if (pathMatch) {
-          const langCode = pathMatch[1].toLowerCase();
-          if (langCodes.has(langCode)) {
-            detectedLanguages.add(langCode);
-          }
-        }
-
-        // Check for subdomain pattern: en.example.com, de.example.com
-        const hostParts = parsed.hostname.split('.');
-        if (hostParts.length >= 2) {
-          const subdomain = hostParts[0].toLowerCase();
-          if (langCodes.has(subdomain) && subdomain !== 'www') {
-            detectedLanguages.add(subdomain);
-          }
-        }
-      } catch {
-        // Invalid URL, skip
-      }
-    }
-
-    return {
-      isMultiLang: detectedLanguages.size >= 2, // Need at least 2 different languages
-      languages: Array.from(detectedLanguages),
-    };
   }
 
   /**

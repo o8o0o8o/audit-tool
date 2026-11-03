@@ -47,7 +47,8 @@ permissions:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest (26.04) is not supported by Playwright 1.50.
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     env:
       RUN_ID: ${{ inputs.run_id }}
@@ -92,11 +93,14 @@ jobs:
             yarn.lock
             web/yarn.lock
 
+      # First, so the always() status upload works even if the audit's own install fails.
+      - name: Install upload dependencies
+        run: yarn --cwd web install --frozen-lockfile
+
       - name: Install dependencies
         run: |
           yarn install --frozen-lockfile
           npx playwright install --with-deps chromium
-          yarn --cwd web install --frozen-lockfile
 
       - name: Report running
         run: |

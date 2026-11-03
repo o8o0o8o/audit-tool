@@ -25,9 +25,30 @@ function getExecutiveSummary(data: ReportSectionData) {
   return getSingleExecutiveSummary(data);
 }
 
+/** Real sitemap URL count: sums per-sitemap totals, since `sitemaps.total` can be `--limit`-truncated. */
+function getRealSitemapTotal(sitemaps: Record<string, unknown>): number {
+  const summed = Object.keys(sitemaps)
+    .filter((key) => key !== 'urls' && key !== 'total' && typeof sitemaps[key] === 'object')
+    .reduce(
+      (sum, key) => sum + ((((sitemaps[key] ?? {}) as Record<string, unknown>).total as number | undefined) ?? 0),
+      0,
+    );
+  return summed > 0 ? summed : ((sitemaps.total as number) ?? 0);
+}
+
+/** Pages crawled vs. the sitemap total (`total: null` = no sitemap, size unknown); null when nothing was crawled. */
+function getCrawlScope(
+  jsonData: Record<string, unknown>,
+  pages: PageInfo[],
+): { crawled: number; total: number | null } | null {
+  if (pages.length === 0) return null;
+  const total = getRealSitemapTotal((jsonData.sitemaps ?? {}) as Record<string, unknown>);
+  return { crawled: pages.length, total: total > 0 ? total : null };
+}
+
 /** Single-origin executive summary (original behavior) */
 function getSingleExecutiveSummary(data: ReportSectionData) {
-  const { jsonData } = data;
+  const { jsonData, pages } = data;
   const summary = extractSummary(jsonData);
   const overallScore = (summary.overallScore ?? 0) as number;
   const categoryScores = (summary.categoryScores ?? {}) as Record<string, number>;
@@ -35,6 +56,19 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
   const scoreClass = getScoreClass(overallScore);
 
   const letterGrade = getLetterGrade(overallScore);
+
+  // A capped run (--limit) or a sitemap-less crawl isn't a whole-site verdict: say "Score" and how many pages it covers.
+  const scope = getCrawlScope(jsonData, pages ?? []);
+  const isBounded = scope !== null && (scope.total === null || scope.crawled < scope.total);
+  const scoreLabel = isBounded ? 'Score' : 'Site Health';
+  const scopeNoteText = !scope
+    ? ''
+    : scope.total !== null
+      ? `Based on ${scope.crawled} of ${scope.total} pages found on this site — not a full-site score.`
+      : `Based on ${scope.crawled} page${scope.crawled === 1 ? '' : 's'} — no sitemap was found for this site, so full-site coverage isn't known.`;
+  const scopeNoteHtml = isBounded
+    ? `<div class="text-center" style="margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-muted);">${scopeNoteText}</div>`
+    : '';
 
   const crawlAbortedBanner = getCrawlAbortedBanner(jsonData);
 
@@ -58,9 +92,10 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
         <div class="score-circle" style="position: relative;">
           <div class="score-ring" style="--score: ${overallScore}; --color: ${getScoreColor(overallScore)};"></div>
           <div class="score-number ${scoreClass}">${overallScore}</div>
-          <div class="score-label">Site Health (${letterGrade})</div>
+          <div class="score-label">${scoreLabel} (${letterGrade})</div>
         </div>
       </div>
+      ${scopeNoteHtml}
 
       <div class="summary-grid">
         <div class="summary-card">
@@ -254,7 +289,9 @@ function getInsightHighlights(jsonData: Record<string, unknown>) {
   }
 
   if (insights.pagesWithoutCTAs > pages.length * 0.3) {
-    badges.push(`<span class="insight-badge info">🎯 ${insights.pagesWithoutCTAs} page${insights.pagesWithoutCTAs > 1 ? 's' : ''} without CTAs</span>`);
+    badges.push(
+      `<span class="insight-badge info">🎯 ${insights.pagesWithoutCTAs} page${insights.pagesWithoutCTAs > 1 ? 's' : ''} without CTAs</span>`,
+    );
   }
 
   if (badges.length === 0) return '';
@@ -337,20 +374,19 @@ function getDualCategoryBars(
   _originLabel: string,
   _compareLabel: string,
 ) {
-  return CATEGORY_KEYS
-    .map((key) => {
-      const name = CATEGORY_NAMES[key];
-      const originScore = originScores[key] || 0;
-      const compareScore = compareScores[key] || 0;
-      const delta = compareScore - originScore;
-      const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[key] || {};
-      const icon = config.icon || '';
-      const description = CATEGORY_DESCRIPTIONS[key] || '';
+  return CATEGORY_KEYS.map((key) => {
+    const name = CATEGORY_NAMES[key];
+    const originScore = originScores[key] || 0;
+    const compareScore = compareScores[key] || 0;
+    const delta = compareScore - originScore;
+    const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[key] || {};
+    const icon = config.icon || '';
+    const description = CATEGORY_DESCRIPTIONS[key] || '';
 
-      const deltaColor = getDeltaCssColor(delta);
-      const deltaText = delta !== 0 ? `${delta > 0 ? '+' : ''}${delta}` : '—';
+    const deltaColor = getDeltaCssColor(delta);
+    const deltaText = delta !== 0 ? `${delta > 0 ? '+' : ''}${delta}` : '—';
 
-      return `
+    return `
       <div class="mb-5" title="${description}">
         <div class="flex justify-between mb-2 text-sm">
           <span>${icon} ${name}</span>
@@ -374,8 +410,7 @@ function getDualCategoryBars(
         </div>
       </div>
     `;
-    })
-    .join('');
+  }).join('');
 }
 
 /**

@@ -453,7 +453,7 @@ function getCrawlAbortedBanner(jsonData: Record<string, unknown>): string {
   }
 
   return `
-    <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: #fecaca;">
+    <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: var(--color-error-border);">
       ${abortBlock}${truncatedBlock}
     </div>
   `;

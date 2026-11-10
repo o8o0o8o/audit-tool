@@ -17,7 +17,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write '**/*.{ts,json,md}'",
     "format:check": "prettier --check '**/*.{ts,json,md}'",
-    "test": "tsx --test 'tests/**/*.test.ts'"
+    "test": "tsx --test 'tests/**/*.test.ts'",
+    "preview:report": "tsx scripts/preview-report.ts"
   },
   "author": "Sergey Labut",
   "license": "ISC",

@@ -269,7 +269,10 @@ yarn typecheck    # tsc --noEmit
 yarn lint         # eslint .   (yarn lint:fix to autofix)
 yarn format       # prettier --write   (yarn format:check to verify)
 yarn test         # tsx --test tests/**/*.test.ts
+yarn preview:report  # render the fixture audit to web/public/report/index.html
 ```
+
+The HTML report and the web dispatcher use the FocusReactive brand theme (black background, `#00E56D` accent, Inter). Tokens live in `lib/reports/sections/design-tokens.ts` (report) and `web/app/globals.css` (web app); `yarn preview:report` renders `tests/fixtures/report-fixture/` so the theme can be viewed at `/report/index.html` under `yarn --cwd web dev`.
 
 Run `typecheck`, `lint`, `format:check`, and `test` before committing — these are the same checks a CI workflow should gate on.
 

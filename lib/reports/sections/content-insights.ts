@@ -258,11 +258,11 @@ function getComparisonOutboundLinksSection(
           : '<span style="color: var(--color-border-strong);">0</span>';
       const badge =
         data.originCount > 0 && data.compareCount === 0
-          ? '<span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:9999px;font-size:var(--font-size-2xs);margin-left:4px;">Fixed</span>'
+          ? '<span style="background:var(--color-success-bg);color:var(--color-success-text);padding:1px 6px;border-radius:9999px;font-size:var(--font-size-2xs);margin-left:4px;">Fixed</span>'
           : data.originCount === 0 && data.compareCount > 0
-            ? '<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:9999px;font-size:var(--font-size-2xs);margin-left:4px;">New</span>'
+            ? '<span style="background:var(--color-error-bg);color:var(--color-error-text);padding:1px 6px;border-radius:9999px;font-size:var(--font-size-2xs);margin-left:4px;">New</span>'
             : '';
-      return `<tr style="border-bottom: 1px solid var(--color-bg-surface-alt);"><td style="padding: 6px 8px; font-size: var(--font-size-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a>${badge}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; color: ${statusColor}; font-weight: var(--font-weight-semibold); white-space: nowrap;">${data.status ?? '?'}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; white-space: nowrap;">${oLabel}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; white-space: nowrap;">${cLabel}</td></tr>`;
+      return `<tr style="border-bottom: 1px solid var(--color-bg-surface-alt);"><td style="padding: 6px 8px; font-size: var(--font-size-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: var(--color-error); display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a>${badge}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; color: ${statusColor}; font-weight: var(--font-weight-semibold); white-space: nowrap;">${data.status ?? '?'}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; white-space: nowrap;">${oLabel}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; white-space: nowrap;">${cLabel}</td></tr>`;
     })
     .join('');
 
@@ -271,7 +271,7 @@ function getComparisonOutboundLinksSection(
       ? `
       <table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); overflow: hidden; margin-top: 12px;">
         <colgroup><col><col style="width: 70px;"><col style="width: 80px;"><col style="width: 80px;"></colgroup>
-        <thead><tr style="background: var(--color-bg-page); border-bottom: 2px solid #e5e7eb;">
+        <thead><tr style="background: var(--color-bg-page); border-bottom: 2px solid var(--color-border-default);">
           <th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold);">Broken URL</th>
           <th style="padding: 8px; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-align: center;">Status</th>
           <th style="padding: 8px; font-size: var(--font-size-xs); color: var(--color-info); font-weight: var(--font-weight-semibold); text-align: center;">${escapeHtml(originLabel)}</th>
@@ -286,24 +286,24 @@ function getComparisonOutboundLinksSection(
       <h3 style="color: var(--gray-800); margin-bottom: 12px;">🔗 Outbound Link Health</h3>
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
         <div style="background: var(--color-success-bg); padding: 12px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-xs); color: #047857; margin-bottom: 4px;">Checked</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-success-text); margin-bottom: 4px;">Checked</div>
           <div style="display: flex; justify-content: center; gap: 12px;">
             <div><span style="font-size: var(--font-size-2xs); color: var(--color-info);">${originLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #059669;">${o.checked}</span></div>
             <div><span style="font-size: var(--font-size-2xs); color: var(--purple-400);">${compareLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #059669;">${c.checked}</span></div>
           </div>
         </div>
-        <div style="background: ${o.broken > 0 || c.broken > 0 ? '#fef2f2' : '#f0fdf4'}; padding: 12px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-xs); color: ${o.broken > 0 || c.broken > 0 ? '#991b1b' : '#047857'}; margin-bottom: 4px;">Broken</div>
+        <div style="background: ${o.broken > 0 || c.broken > 0 ? 'var(--color-error-bg)' : 'var(--color-success-bg)'}; padding: 12px; border-radius: var(--radius-lg); text-align: center;">
+          <div style="font-size: var(--font-size-xs); color: ${o.broken > 0 || c.broken > 0 ? 'var(--color-error-text)' : 'var(--color-success-text)'}; margin-bottom: 4px;">Broken</div>
           <div style="display: flex; justify-content: center; gap: 12px;">
             <div><span style="font-size: var(--font-size-2xs); color: var(--color-info);">${originLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: ${o.broken > 0 ? 'var(--red-600)' : 'var(--green-emerald-600)'};">${o.broken}</span></div>
             <div><span style="font-size: var(--font-size-2xs); color: var(--purple-400);">${compareLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: ${c.broken > 0 ? 'var(--red-600)' : 'var(--green-emerald-600)'};">${c.broken}</span></div>
           </div>
         </div>
         <div style="background: var(--amber-100); padding: 12px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-xs); color: #a16207; margin-bottom: 4px;">Redirected</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-warning-text); margin-bottom: 4px;">Redirected</div>
           <div style="display: flex; justify-content: center; gap: 12px;">
-            <div><span style="font-size: var(--font-size-2xs); color: var(--color-info);">${originLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #92400e;">${o.redirected}</span></div>
-            <div><span style="font-size: var(--font-size-2xs); color: var(--purple-400);">${compareLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #92400e;">${c.redirected}</span></div>
+            <div><span style="font-size: var(--font-size-2xs); color: var(--color-info);">${originLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${o.redirected}</span></div>
+            <div><span style="font-size: var(--font-size-2xs); color: var(--purple-400);">${compareLabel}</span><br><span style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${c.redirected}</span></div>
           </div>
         </div>
       </div>
@@ -336,7 +336,7 @@ function getPageRankSection(pages: PageInfo[]) {
       return `
       <tr>
         <td style="padding: 6px 8px; font-size: var(--font-size-xs); color: var(--color-text-disabled);">${i + 1}</td>
-        <td style="padding: 6px 8px; font-size: var(--font-size-sm);"><a href="${escapeHtml(p.url)}" target="_blank" style="color: #2563eb; text-decoration: none;">${escapeHtml(shortUrl)}</a></td>
+        <td style="padding: 6px 8px; font-size: var(--font-size-sm);"><a href="${escapeHtml(p.url)}" target="_blank" style="color: var(--color-link); text-decoration: none;">${escapeHtml(shortUrl)}</a></td>
         <td style="padding: 6px 8px; width: 200px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <div style="flex: 1; height: 8px; background: var(--color-border-default); border-radius: var(--radius-sm); overflow: hidden;">
@@ -372,7 +372,7 @@ function getPageRankSection(pages: PageInfo[]) {
           <table style="width: 100%; border-collapse: collapse;"><tbody>${topRows}</tbody></table>
         </div>
         <div>
-          <h4 style="font-size: var(--font-size-sm); color: #dc2626; margin-bottom: 8px;">Lowest Equity Pages</h4>
+          <h4 style="font-size: var(--font-size-sm); color: var(--color-error); margin-bottom: 8px;">Lowest Equity Pages</h4>
           <table style="width: 100%; border-collapse: collapse;"><tbody>${bottomRows}</tbody></table>
         </div>
       </div>
@@ -409,12 +409,12 @@ function getContentSimilaritySection(pages: PageInfo[]) {
           } catch {
             short = u;
           }
-          return `<li style="font-size: var(--font-size-xs); margin: 2px 0;"><a href="${escapeHtml(u)}" target="_blank" style="color: #2563eb;">${escapeHtml(short)}</a></li>`;
+          return `<li style="font-size: var(--font-size-xs); margin: 2px 0;"><a href="${escapeHtml(u)}" target="_blank" style="color: var(--color-link);">${escapeHtml(short)}</a></li>`;
         })
         .join('');
       return `<div style="background: var(--amber-100); padding: 10px; border-radius: var(--radius-md); margin-bottom: 8px;">
-      <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: #92400e; margin-bottom: 4px;">${g.size} similar pages</div>
-      <ul style="margin: 0; padding-left: 16px;">${urls}${g.urls.length > 4 ? `<li style="font-size: var(--font-size-xs); color: #92400e;">...and ${g.urls.length - 4} more</li>` : ''}</ul>
+      <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-warning-text); margin-bottom: 4px;">${g.size} similar pages</div>
+      <ul style="margin: 0; padding-left: 16px;">${urls}${g.urls.length > 4 ? `<li style="font-size: var(--font-size-xs); color: var(--color-warning-text);">...and ${g.urls.length - 4} more</li>` : ''}</ul>
     </div>`;
     })
     .join('');
@@ -424,12 +424,12 @@ function getContentSimilaritySection(pages: PageInfo[]) {
       <h3 style="color: var(--gray-800); margin-bottom: 12px;">📑 Near-Duplicate Content</h3>
       <div style="display: flex; gap: 15px; margin-bottom: 15px;">
         <div style="background: var(--amber-100); padding: 15px 20px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #92400e;">${withSimilarity.length}</div>
-          <div style="font-size: var(--font-size-xs); color: #a16207;">Pages affected</div>
+          <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${withSimilarity.length}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-warning-text);">Pages affected</div>
         </div>
         <div style="background: var(--amber-100); padding: 15px 20px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #92400e;">${Object.keys(groups).length}</div>
-          <div style="font-size: var(--font-size-xs); color: #a16207;">Similarity groups</div>
+          <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${Object.keys(groups).length}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-warning-text);">Similarity groups</div>
         </div>
       </div>
       ${groupHtml}
@@ -465,7 +465,7 @@ function getLanguageSection(pages: PageInfo[]) {
         <span style="min-width: 30px; font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); text-transform: uppercase;">${escapeHtml(lang)}</span>
         <div style="flex: 1; height: 20px; background: var(--color-border-default); border-radius: var(--radius-sm); position: relative;">
           <div style="width: ${pct}%; height: 100%; background: #3b82f6; border-radius: var(--radius-sm);"></div>
-          <span style="position: absolute; top: 0; left: 8px; line-height: 20px; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: ${labelInside ? 'white' : '#374151'};">${label}</span>
+          <span style="position: absolute; top: 0; left: 8px; line-height: 20px; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: ${labelInside ? 'white' : 'var(--color-text-secondary)'};">${label}</span>
         </div>
       </div>`;
     })
@@ -478,16 +478,16 @@ function getLanguageSection(pages: PageInfo[]) {
         ${
           mismatches > 0
             ? `<div style="background: var(--color-error-bg); padding: 12px 16px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #dc2626;">${mismatches}</div>
-          <div style="font-size: var(--font-size-xs); color: #991b1b;">Language mismatches</div>
+          <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-error);">${mismatches}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-error-text);">Language mismatches</div>
         </div>`
             : ''
         }
         ${
           missingLang > 0
             ? `<div style="background: var(--amber-100); padding: 12px 16px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #92400e;">${missingLang}</div>
-          <div style="font-size: var(--font-size-xs); color: #a16207;">Missing lang attr</div>
+          <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${missingLang}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-warning-text);">Missing lang attr</div>
         </div>`
             : ''
         }
@@ -547,7 +547,7 @@ function getCTASection(pages: PageInfo[]) {
       <h3 style="color: var(--gray-800); margin-bottom: 12px;">🎯 Conversion Elements</h3>
       ${cards ? `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 15px;">${cards}</div>` : ''}
       <div style="display: flex; gap: 12px;">
-        <div style="padding: 10px 16px; background: ${pagesWithNoCTAs > 0 ? '#fef2f2' : '#f0fdf4'}; border-radius: var(--radius-md); font-size: var(--font-size-sm);">
+        <div style="padding: 10px 16px; background: ${pagesWithNoCTAs > 0 ? 'var(--color-error-bg)' : 'var(--color-success-bg)'}; border-radius: var(--radius-md); font-size: var(--font-size-sm);">
           <strong>${pagesWithNoCTAs}</strong> pages with no CTAs
         </div>
         <div style="padding: 10px 16px; background: var(--color-success-bg); border-radius: var(--radius-md); font-size: var(--font-size-sm);">
@@ -642,7 +642,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
           : data.status >= 400
             ? 'var(--orange-ea580c, #ea580c)'
             : 'var(--color-text-muted)';
-      return `<tr style="border-bottom: 1px solid var(--color-bg-surface-alt);"><td style="padding: 6px 8px; font-size: var(--font-size-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: #dc2626; display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; color: ${statusColor}; font-weight: var(--font-weight-semibold); white-space: nowrap;">${data.status ?? '?'}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
+      return `<tr style="border-bottom: 1px solid var(--color-bg-surface-alt);"><td style="padding: 6px 8px; font-size: var(--font-size-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;" title="${escapeHtml(url)}"><a href="${escapeHtml(url)}" target="_blank" style="color: var(--color-error); display: block; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(url)}</a></td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; color: ${statusColor}; font-weight: var(--font-weight-semibold); white-space: nowrap;">${data.status ?? '?'}</td><td style="padding: 6px 8px; font-size: var(--font-size-xs); text-align: center; white-space: nowrap;">${data.count}</td></tr>`;
     })
     .join('');
 
@@ -652,18 +652,18 @@ function getOutboundLinksSection(pages: PageInfo[]) {
       <div style="display: flex; gap: 12px; margin-bottom: 15px;">
         <div style="background: var(--color-success-bg); padding: 12px 20px; border-radius: var(--radius-lg); text-align: center;">
           <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #059669;">${totalChecked}</div>
-          <div style="font-size: var(--font-size-xs); color: #047857;">Checked</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-success-text);">Checked</div>
         </div>
-        <div style="background: ${totalBroken > 0 ? '#fef2f2' : '#f0fdf4'}; padding: 12px 20px; border-radius: var(--radius-lg); text-align: center;">
+        <div style="background: ${totalBroken > 0 ? 'var(--color-error-bg)' : 'var(--color-success-bg)'}; padding: 12px 20px; border-radius: var(--radius-lg); text-align: center;">
           <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: ${totalBroken > 0 ? 'var(--red-600)' : 'var(--green-emerald-600)'};">${totalBroken}</div>
-          <div style="font-size: var(--font-size-xs); color: ${totalBroken > 0 ? '#991b1b' : '#047857'};">Broken</div>
+          <div style="font-size: var(--font-size-xs); color: ${totalBroken > 0 ? 'var(--color-error-text)' : 'var(--color-success-text)'};">Broken</div>
         </div>
         <div style="background: var(--amber-100); padding: 12px 20px; border-radius: var(--radius-lg); text-align: center;">
-          <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #92400e;">${totalRedirected}</div>
-          <div style="font-size: var(--font-size-xs); color: #a16207;">Redirected</div>
+          <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${totalRedirected}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-warning-text);">Redirected</div>
         </div>
       </div>
-      ${brokenList ? `<table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); overflow: hidden;"><colgroup><col><col style="width: 70px;"><col style="width: 80px;"></colgroup><thead><tr style="background: var(--color-bg-page); border-bottom: 2px solid #e5e7eb;"><th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold);">Broken URL</th><th style="padding: 8px; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-align: center;">Status</th><th style="padding: 8px; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-align: center;">Pages</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
+      ${brokenList ? `<table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); overflow: hidden;"><colgroup><col><col style="width: 70px;"><col style="width: 80px;"></colgroup><thead><tr style="background: var(--color-bg-page); border-bottom: 2px solid var(--color-border-default);"><th style="padding: 8px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold);">Broken URL</th><th style="padding: 8px; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-align: center;">Status</th><th style="padding: 8px; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-align: center;">Pages</th></tr></thead><tbody>${brokenList}</tbody></table>` : ''}
     </div>`;
 }
 
@@ -691,11 +691,11 @@ function getResponseHeadersSection(pages: PageInfo[]) {
   const items = [];
   if (withXRobotsNoindex > 0)
     items.push(
-      `<span style="background: var(--color-error-bg); color: #991b1b; padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${withXRobotsNoindex} noindex via X-Robots-Tag</span>`,
+      `<span style="background: var(--color-error-bg); color: var(--color-error-text); padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${withXRobotsNoindex} noindex via X-Robots-Tag</span>`,
     );
   if (withDynamicServing > 0)
     items.push(
-      `<span style="background: var(--amber-100); color: #92400e; padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${withDynamicServing} dynamic serving (Vary: User-Agent)</span>`,
+      `<span style="background: var(--amber-100); color: var(--color-warning-text); padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${withDynamicServing} dynamic serving (Vary: User-Agent)</span>`,
     );
   if (withPreloadHints > 0)
     items.push(
@@ -703,7 +703,7 @@ function getResponseHeadersSection(pages: PageInfo[]) {
     );
   if (withHttpCanonical > 0)
     items.push(
-      `<span style="background: var(--blue-50); color: #1d4ed8; padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${withHttpCanonical} with HTTP canonical</span>`,
+      `<span style="background: var(--blue-50); color: var(--color-info-text); padding: 4px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">${withHttpCanonical} with HTTP canonical</span>`,
     );
 
   return `

@@ -58,3 +58,6 @@ package-lock.json
 # web dispatcher (Next.js on Vercel)
 web/.next
 web/node_modules
+
+# Generated brand preview of the HTML report (yarn run preview:report)
+web/public/report/

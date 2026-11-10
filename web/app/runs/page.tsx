@@ -20,20 +20,26 @@ export default async function RunsPage() {
     runs = await listStatusBlobs();
   } catch (err) {
     console.error('blob list failed', err);
-    error = 'Could not read runs from Blob storage. Check that a Blob store is connected to this project (see the function logs).';
+    error =
+      'Could not read runs from Blob storage. Check that a Blob store is connected to this project (see the function logs).';
   }
 
   return (
     <main>
       <h1>Audit runs</h1>
-      {error && <p role="alert">{error}</p>}
-      {!error && runs.length === 0 && <p>No runs yet.</p>}
-      <ul>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {!error && runs.length === 0 && <p className="muted">No runs yet.</p>}
+      <ul className="run-list">
         {runs.map((blob) => {
           const runId = blob.pathname.split('/')[1];
           return (
             <li key={blob.pathname}>
-              <a href={`/runs/${runId}`}>{runId}</a> — updated {blob.uploadedAt.toISOString()}
+              <a href={`/runs/${runId}`}>{runId}</a>{' '}
+              <span className="muted">— updated {blob.uploadedAt.toISOString()}</span>
             </li>
           );
         })}

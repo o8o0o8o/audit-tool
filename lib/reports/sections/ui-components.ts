@@ -114,7 +114,7 @@ function getUIComponents(): string {
 
     /* Status badge (solid bg, white text) */
     .ui-badge--status {
-      color: var(--color-text-inverse);
+      color: #000;
       min-width: 40px;
       text-align: center;
       padding: 3px var(--space-3);
@@ -154,8 +154,9 @@ function getUIComponents(): string {
 
     .ui-section {
       background: var(--color-bg-surface);
+      border: 1px solid var(--color-border-default);
       padding: var(--space-7) var(--space-8);
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-sm);
       margin-bottom: var(--space-6);
     }
@@ -183,17 +184,20 @@ function getUIComponents(): string {
 
     .ui-hero--purple {
       background: var(--gradient-executive);
-      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+      box-shadow: none;
+      border: 1px solid var(--color-border-default);
     }
 
     .ui-hero--green {
       background: var(--gradient-success);
-      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+      box-shadow: none;
+      border: 1px solid var(--color-border-default);
     }
 
     .ui-hero--red {
       background: var(--gradient-danger);
-      box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+      box-shadow: none;
+      border: 1px solid var(--color-border-default);
     }
 
     .ui-hero__title {
@@ -289,7 +293,7 @@ function getUIComponents(): string {
       justify-content: center;
       font-size: var(--font-size-xs);
       font-weight: var(--font-weight-semibold);
-      color: var(--color-text-inverse);
+      color: #000;
     }
 
     .ui-progress__bar--good {
@@ -321,50 +325,40 @@ function getUIComponents(): string {
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      border: none;
-      padding: var(--space-3) var(--space-5);
-      border-radius: var(--radius-md);
+      border: 1px solid var(--color-accent);
+      padding: var(--space-3) var(--space-6);
+      border-radius: var(--radius-pill);
       cursor: pointer;
+      font-family: var(--font-family-sans);
       font-size: var(--font-size-sm);
       font-weight: var(--font-weight-medium);
-      transition: all var(--transition-normal);
-      box-shadow: var(--shadow-sm);
+      transition: background-color var(--transition-fast), transform var(--transition-fast);
     }
 
     .ui-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
+      transform: scale(0.98);
     }
 
-    .ui-btn:active {
-      transform: translateY(0);
-    }
-
-    .ui-btn--primary {
-      background: var(--gradient-indigo);
-      color: var(--color-text-inverse);
-    }
-
-    .ui-btn--primary:hover {
-      background: linear-gradient(135deg, var(--indigo-600) 0%, var(--purple-600) 100%);
-    }
-
+    .ui-btn--primary,
     .ui-btn--export {
-      background: var(--gradient-success);
-      color: var(--color-text-inverse);
+      background: var(--color-accent);
+      color: var(--color-on-accent);
     }
 
+    .ui-btn--primary:hover,
     .ui-btn--export:hover {
-      background: linear-gradient(135deg, var(--green-emerald-600) 0%, var(--green-emerald-700) 100%);
+      background: var(--color-accent-light);
+      border-color: var(--color-accent-light);
     }
 
     .ui-btn--pdf {
-      background: var(--gradient-purple);
-      color: var(--color-text-inverse);
+      background: transparent;
+      color: var(--color-text-primary);
     }
 
     .ui-btn--pdf:hover {
-      background: linear-gradient(135deg, var(--purple-600) 0%, var(--purple-700) 100%);
+      background: var(--color-accent);
+      color: var(--color-on-accent);
     }
 
     .ui-btn--secondary {

@@ -2,9 +2,6 @@
 
 import { useState, type FormEvent } from 'react';
 
-const fieldStyle = { display: 'flex', flexDirection: 'column' as const, gap: 4, marginBottom: 12 };
-const inputStyle = { padding: 8, fontSize: 16, maxWidth: '100%', boxSizing: 'border-box' as const };
-
 export default function DispatchPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,54 +42,57 @@ export default function DispatchPage() {
   return (
     <main>
       <h1>Run an SEO audit</h1>
-      <form onSubmit={onSubmit}>
-        <label style={fieldStyle}>
+      <form className="card" onSubmit={onSubmit}>
+        <label className="form-field">
           Website URL
-          <input name="url" type="url" required placeholder="https://example.com" style={inputStyle} />
+          <input name="url" type="url" required placeholder="https://example.com" className="form-input" />
         </label>
-        <label style={fieldStyle}>
+        <label className="form-field">
           Access key (only if the server requires one)
-          <input name="accessKey" type="password" autoComplete="current-password" style={inputStyle} />
+          <input name="accessKey" type="password" autoComplete="current-password" className="form-input" />
         </label>
-        <fieldset style={{ marginBottom: 12 }}>
+        <fieldset className="form-options">
           <legend>Options</legend>
-          <label style={{ display: 'block' }}>
+          <label className="form-check">
             <input name="perf" type="checkbox" /> Performance metrics (--perf)
           </label>
-          <label style={{ display: 'block' }}>
+          <label className="form-check">
             <input name="llm" type="checkbox" /> LLM passes (--llm)
           </label>
-          <label style={{ display: 'block' }}>
+          <label className="form-check">
             <input name="verify" type="checkbox" /> Live verification (--verify)
           </label>
-          <label style={{ display: 'block' }}>
+          <label className="form-check">
             <input name="contentResearch" type="checkbox" /> Content research (--content-research)
           </label>
         </fieldset>
-        <label style={fieldStyle}>
+        <label className="form-field">
           Concurrency (1–20)
-          <input name="concurrency" type="number" min={1} max={20} defaultValue={5} style={inputStyle} />
+          <input name="concurrency" type="number" min={1} max={20} defaultValue={5} className="form-input" />
         </label>
-        <label style={fieldStyle}>
+        <label className="form-field">
           Page limit (optional)
-          <input name="limit" type="number" min={1} placeholder="all pages" style={inputStyle} />
+          <input name="limit" type="number" min={1} placeholder="all pages" className="form-input" />
         </label>
-        <label style={fieldStyle}>
+        <label className="form-field">
           Evidence cap (1–100)
-          <input name="evidenceCap" type="number" min={1} max={100} defaultValue={10} style={inputStyle} />
+          <input name="evidenceCap" type="number" min={1} max={100} defaultValue={10} className="form-input" />
         </label>
-        <button type="submit" disabled={submitting} style={{ padding: '8px 16px', fontSize: 16 }}>
+        <button type="submit" className="btn" disabled={submitting}>
           {submitting ? 'Dispatching…' : 'Start audit'}
         </button>
       </form>
       {error && (
-        <p role="alert" style={{ color: '#b00020' }}>
+        <p role="alert" className="error">
           {error}
         </p>
       )}
       {runId && (
         <p>
-          Audit dispatched. <a href={`/runs/${runId}`}>View run {runId}</a>
+          Audit dispatched.{' '}
+          <a className="link-accent" href={`/runs/${runId}`}>
+            View run {runId}
+          </a>
         </p>
       )}
     </main>

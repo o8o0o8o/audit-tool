@@ -348,7 +348,7 @@ function getAnalysisConfigCard(jsonData: Record<string, unknown>) {
       ${
         analysisSettings.length > 0
           ? `
-        <div style="border-top: 1px solid #e5e7eb; padding-top: 10px;">
+        <div style="border-top: 1px solid var(--color-border-default); padding-top: 10px;">
           <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: 6px;">Analysis Settings</div>
           ${analysisSettings.map((s) => `<div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 3px 0;">${escapeHtml(s)}</div>`).join('')}
         </div>

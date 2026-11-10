@@ -276,11 +276,11 @@ function getTechnologyStack(data: ReportSectionData) {
           // Check if this is a new technology compared to previous audit
           const isNew = (comparison.newTechs as string[]).includes(name);
           const newBadge = isNew
-            ? `<span style="font-size: 9px; color: white; background: #10b981; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: var(--font-weight-semibold);">NEW</span>`
+            ? `<span style="font-size: 9px; color: #000; background: var(--color-success); padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: var(--font-weight-semibold);">NEW</span>`
             : '';
 
           return `
-          <div class="tech-badge" data-tip="${escapeHtml(tooltipContent)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${isNew ? '#d1fae5' : color + '15'}; border: 1px solid ${isNew ? 'var(--color-success)' : color + '40'}; border-radius: var(--radius-md); margin: 4px; cursor: help;">
+          <div class="tech-badge" data-tip="${escapeHtml(tooltipContent)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${isNew ? 'var(--color-success-bg)' : color + '15'}; border: 1px solid ${isNew ? 'var(--color-success)' : color + '40'}; border-radius: var(--radius-md); margin: 4px; cursor: help;">
             <span style="font-weight: var(--font-weight-semibold); color: ${color};">${escapeHtml(name)}</span>${newBadge}
             <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); background: var(--color-bg-surface-alt); padding: 2px 6px; border-radius: var(--radius-sm);">${percentage}%</span>
             ${detectionIcons ? `<span style="font-size: var(--font-size-2xs); opacity: 0.7;">${detectionIcons}</span>` : ''}
@@ -322,15 +322,15 @@ function getTechnologyStack(data: ReportSectionData) {
       <h2>🔧 Technology Stack</h2>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #667eea; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
           <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${detectedTechs.length}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.9;">Technologies</div>
         </div>
-        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #f093fb; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
           <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${totalCategories}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.9;">Categories</div>
         </div>
-        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #4facfe; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
           <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${pages.length}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.9;">Pages Analyzed</div>
         </div>
@@ -352,7 +352,7 @@ function getTechnologyStack(data: ReportSectionData) {
           ${comparison.removedTechs
             .map(
               (name) => `
-            <span style="display: inline-block; padding: 4px 10px; background: #fee2e2; border: 1px solid var(--color-error-border); border-radius: var(--radius-sm); color: var(--color-error-text); font-size: var(--font-size-sm); text-decoration: line-through;">${escapeHtml(name)}</span>
+            <span style="display: inline-block; padding: 4px 10px; background: var(--color-error-bg); border: 1px solid var(--color-error-border); border-radius: var(--radius-sm); color: var(--color-error-text); font-size: var(--font-size-sm); text-decoration: line-through;">${escapeHtml(name)}</span>
           `,
             )
             .join('')}
@@ -375,12 +375,12 @@ function getTechnologyStack(data: ReportSectionData) {
           : ''
       }
 
-      <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: var(--radius-lg); border-left: 4px solid var(--color-info);">
-        <h4 style="margin: 0 0 10px; color: #1e40af;">💡 About Technology Detection</h4>
-        <p style="margin: 0 0 12px; color: #1e40af; font-size: var(--font-size-base); line-height: 1.6;">
+      <div style="margin-top: 20px; padding: 15px; background: var(--color-info-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-info);">
+        <h4 style="margin: 0 0 10px; color: var(--color-info-text);">💡 About Technology Detection</h4>
+        <p style="margin: 0 0 12px; color: var(--color-info-text); font-size: var(--font-size-base); line-height: 1.6;">
           Technologies are detected by analyzing multiple signals. <strong>Hover over each technology</strong> to see how it was detected.
         </p>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--font-size-xs); color: #1e40af;">
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--font-size-xs); color: var(--color-info-text);">
           <span title="Detected via HTML content patterns">📄 HTML patterns</span>
           <span title="Detected via script source URLs">📜 Script URLs</span>
           <span title="Detected via meta tags (e.g., generator)">🏷️ Meta tags</span>
@@ -424,15 +424,15 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
       <h2>🔧 Technology Stack (Comparison)</h2>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #667eea; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
           <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${shared.length}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.9;">Shared</div>
         </div>
-        <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #3b82f6; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
           <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${onlyOrigin.length}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.9;">Only ${escapeHtml(originLabel)}</div>
         </div>
-        <div style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #a855f7; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
           <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${onlyCompare.length}</div>
           <div style="font-size: var(--font-size-sm); opacity: 0.9;">Only ${escapeHtml(compareLabel)}</div>
         </div>
@@ -444,7 +444,7 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
             ? `
         <div style="margin-bottom: 20px;">
           <h4 style="color: var(--color-text-secondary); margin-bottom: 10px;">Shared Technologies (${shared.length})</h4>
-          <div style="display: flex; flex-wrap: wrap;">${renderBadges(shared, 'background:var(--color-bg-surface-alt);color:var(--color-text-secondary);border:1px solid #e5e7eb')}</div>
+          <div style="display: flex; flex-wrap: wrap;">${renderBadges(shared, 'background:var(--color-bg-surface-alt);color:var(--color-text-secondary);border:1px solid var(--color-border-default)')}</div>
         </div>`
             : ''
         }
@@ -453,8 +453,8 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
           onlyOrigin.length > 0
             ? `
         <div style="margin-bottom: 20px;">
-          <h4 style="color: #1d4ed8; margin-bottom: 10px;">Only in ${escapeHtml(originLabel)} (${onlyOrigin.length})</h4>
-          <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyOrigin, 'background:var(--blue-100);color:#1d4ed8;border:1px solid #93c5fd')}</div>
+          <h4 style="color: var(--color-info-text); margin-bottom: 10px;">Only in ${escapeHtml(originLabel)} (${onlyOrigin.length})</h4>
+          <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyOrigin, 'background:var(--blue-100);color:var(--color-info-text);border:1px solid #93c5fd')}</div>
         </div>`
             : ''
         }
@@ -463,8 +463,8 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
           onlyCompare.length > 0
             ? `
         <div style="margin-bottom: 20px;">
-          <h4 style="color: #7c3aed; margin-bottom: 10px;">Only in ${escapeHtml(compareLabel)} (${onlyCompare.length})</h4>
-          <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyCompare, 'background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd')}</div>
+          <h4 style="color: #A47BFF; margin-bottom: 10px;">Only in ${escapeHtml(compareLabel)} (${onlyCompare.length})</h4>
+          <div style="display: flex; flex-wrap: wrap;">${renderBadges(onlyCompare, 'background:var(--color-bg-surface-alt);color:#A47BFF;border:1px solid #c4b5fd')}</div>
         </div>`
             : ''
         }

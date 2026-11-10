@@ -16,85 +16,90 @@ function getDesignTokens(): string {
          Raw palette — use semantic tokens in components
          ============================================ */
 
-      /* Gray scale */
-      --gray-50:  #f9fafb;
-      --gray-100: #f3f4f6;
-      --gray-200: #e5e7eb;
-      --gray-300: #d1d5db;
-      --gray-400: #9ca3af;
-      --gray-500: #6b7280;
-      --gray-600: #4b5563;
-      --gray-700: #374151;
-      --gray-800: #1f2937;
-      --gray-900: #111827;
+      /* FocusReactive brand palette (focusreactive.com _variables.sass) */
+      --fr-black:        #000000;
+      --fr-white:        #ffffff;
+      --fr-dark:         #0E0E0E;
+      --fr-grey-100:     #171717;
+      --fr-grey-120:     #191919;
+      --fr-grey-200:     #2C2C2C;
+      --fr-grey-700:     #727272;
+      --fr-text-soft:    #A3A3A3;
+      --fr-accent:       #00E56D;
+      --fr-accent-light: #00FF79;
 
-      /* Blue */
-      --blue-50:  #eff6ff;
-      --blue-100: #dbeafe;
-      --blue-200: #bfdbfe;
-      --blue-400: #60a5fa;
-      --blue-500: #3b82f6;
-      --blue-600: #2563eb;
-      --blue-700: #1d4ed8;
-      --blue-800: #1e40af;
+      /* Gray scale — inverted for the dark theme (50 = darkest surface, 900 = brightest text) */
+      --gray-50:  #0E0E0E;
+      --gray-100: #171717;
+      --gray-200: #2C2C2C;
+      --gray-300: #3A3A3A;
+      --gray-400: #A3A3A3;
+      --gray-500: #A3A3A3;
+      --gray-600: #BDBDBD;
+      --gray-700: #D4D4D4;
+      --gray-800: #EDEDED;
+      --gray-900: #FFFFFF;
 
-      /* Green */
-      --green-50:  #f0fdf4;
-      --green-100: #dcfce7;
-      --green-200: #bbf7d0;
-      --green-400: #4ade80;
-      --green-500: #22c55e;
-      --green-600: #16a34a;
-      --green-700: #15803d;
-      --green-800: #166534;
-      --green-emerald-500: #10b981;
-      --green-emerald-600: #059669;
-      --green-emerald-700: #047857;
+      /* Hue scales — 50–200 are dark tints (backgrounds/borders), 400–600 are on-black fills, 700+ are light text */
+      --blue-50:  #0D1626;
+      --blue-100: #13213A;
+      --blue-200: #1F3A66;
+      --blue-400: #8AB4FF;
+      --blue-500: #6EA0FF;
+      --blue-600: #6EA0FF;
+      --blue-700: #A8C8FF;
+      --blue-800: #C4DAFF;
 
-      /* Red */
-      --red-50:  #fef2f2;
-      --red-100: #fee2e2;
-      --red-200: #fecaca;
-      --red-400: #f87171;
-      --red-500: #ef4444;
-      --red-600: #dc2626;
-      --red-700: #b91c1c;
-      --red-800: #991b1b;
-      --red-900: #7f1d1d;
+      --green-50:  #07190F;
+      --green-100: #0B2616;
+      --green-200: #134A2A;
+      --green-400: #00FF79;
+      --green-500: #00E56D;
+      --green-600: #00E56D;
+      --green-700: #5CFFA6;
+      --green-800: #8FFFC2;
+      --green-emerald-500: #00E56D;
+      --green-emerald-600: #00C95F;
+      --green-emerald-700: #00A84F;
 
-      /* Amber */
-      --amber-50:  #fffbeb;
-      --amber-100: #fef3c7;
-      --amber-200: #fde68a;
-      --amber-400: #fbbf24;
-      --amber-500: #f59e0b;
-      --amber-600: #d97706;
-      --amber-700: #b45309;
-      --amber-800: #92400e;
+      --red-50:  #220C0C;
+      --red-100: #331212;
+      --red-200: #5C1F1F;
+      --red-400: #FF8A8A;
+      --red-500: #FF6B6B;
+      --red-600: #FF6B6B;
+      --red-700: #FF9C9C;
+      --red-800: #FFB4B4;
+      --red-900: #FFD0D0;
 
-      /* Orange */
-      --orange-50:  #fff7ed;
-      --orange-100: #ffedd5;
-      --orange-200: #fed7aa;
-      --orange-500: #f97316;
-      --orange-700: #c2410c;
-      --orange-800: #9a3412;
+      --amber-50:  #211808;
+      --amber-100: #33250C;
+      --amber-200: #5C4415;
+      --amber-400: #FFC94D;
+      --amber-500: #FFB020;
+      --amber-600: #FFB020;
+      --amber-700: #FFC94D;
+      --amber-800: #FFD98A;
 
-      /* Purple */
-      --purple-400: #a855f7;
-      --purple-500: #8b5cf6;
-      --purple-600: #7c3aed;
-      --purple-700: #6d28d9;
+      --orange-50:  #22140A;
+      --orange-100: #331E0F;
+      --orange-200: #5C351A;
+      --orange-500: #FF9A4D;
+      --orange-700: #FFB020;
+      --orange-800: #FFC266;
 
-      /* Indigo */
-      --indigo-400: #818cf8;
-      --indigo-500: #6366f1;
-      --indigo-600: #4f46e5;
-      --indigo-accent: #667eea;
-      --indigo-deep: #764ba2;
+      --purple-400: #C4A5FF;
+      --purple-500: #B794FF;
+      --purple-600: #A47BFF;
+      --purple-700: #8F5FFF;
 
-      /* Pink */
-      --pink-500: #ec4899;
+      --indigo-400: #A5ADFF;
+      --indigo-500: #8F98FF;
+      --indigo-600: #7C86FF;
+      --indigo-accent: #171717;
+      --indigo-deep: #0E0E0E;
+
+      --pink-500: #FF7AB8;
 
 
       /* ============================================
@@ -102,24 +107,29 @@ function getDesignTokens(): string {
          Use these in components
          ============================================ */
 
-      /* Text */
-      --color-text-primary:   var(--gray-900);
-      --color-text-secondary: var(--gray-700);
-      --color-text-muted:     var(--gray-500);
-      --color-text-disabled:  var(--gray-400);
+      /* Text — #727272 is decoration-only on black; secondary text uses #A3A3A3 for WCAG AA */
+      --color-text-primary:   var(--fr-white);
+      --color-text-secondary: #D4D4D4;
+      --color-text-muted:     var(--fr-text-soft);
+      --color-text-disabled:  var(--fr-text-soft);
       --color-text-inverse:   #ffffff;
 
       /* Backgrounds */
-      --color-bg-page:        var(--gray-50);
-      --color-bg-surface:     #ffffff;
-      --color-bg-surface-alt: var(--gray-100);
-      --color-bg-hover:       var(--gray-100);
-      --color-bg-active:      var(--gray-200);
+      --color-bg-page:        var(--fr-black);
+      --color-bg-surface:     var(--fr-dark);
+      --color-bg-surface-alt: var(--fr-grey-100);
+      --color-bg-hover:       var(--fr-grey-120);
+      --color-bg-active:      var(--fr-grey-200);
 
       /* Borders */
-      --color-border-default: var(--gray-200);
-      --color-border-subtle:  var(--gray-100);
-      --color-border-strong:  var(--gray-300);
+      --color-border-default: var(--fr-grey-200);
+      --color-border-subtle:  var(--fr-grey-100);
+      --color-border-strong:  var(--fr-grey-700);
+
+      /* Brand accent */
+      --color-accent:       var(--fr-accent);
+      --color-accent-light: var(--fr-accent-light);
+      --color-on-accent:    var(--fr-black);
 
       /* Status colors */
       --color-success:     var(--green-emerald-500);
@@ -131,7 +141,7 @@ function getDesignTokens(): string {
       --color-info:        var(--blue-500);
       --color-info-alt:    var(--blue-600);
 
-      /* Status backgrounds (light tints) */
+      /* Status backgrounds (dark tints) */
       --color-success-bg:     var(--green-50);
       --color-success-border: var(--green-200);
       --color-success-text:   var(--green-800);
@@ -146,15 +156,15 @@ function getDesignTokens(): string {
       --color-info-text:      var(--blue-800);
 
       /* Links */
-      --color-link:       var(--blue-600);
-      --color-link-hover: var(--blue-700);
+      --color-link:       var(--fr-accent);
+      --color-link-hover: var(--fr-accent-light);
 
       /* Severity */
       --color-severity-critical-bg:     var(--red-50);
-      --color-severity-critical-text:   var(--red-800);
+      --color-severity-critical-text:   #FF6B6B;
       --color-severity-critical-border: var(--red-200);
       --color-severity-high-bg:         var(--orange-50);
-      --color-severity-high-text:       var(--orange-700);
+      --color-severity-high-text:       #FFB020;
       --color-severity-high-border:     var(--orange-200);
       --color-severity-medium-bg:       var(--amber-50);
       --color-severity-medium-text:     var(--amber-700);
@@ -180,7 +190,7 @@ function getDesignTokens(): string {
          TYPOGRAPHY
          ============================================ */
 
-      --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --font-family-sans: 'Inter', Helvetica, sans-serif;
       --font-family-mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Courier New', monospace;
 
       /* Font sizes — base bumped to 15px for readability */
@@ -234,19 +244,21 @@ function getDesignTokens(): string {
 
       --radius-sm:   4px;
       --radius-md:   6px;
-      --radius-lg:   8px;
-      --radius-xl:   12px;
+      --radius-lg:   12px;
+      --radius-xl:   16px;
       --radius-full: 9999px;
+      --radius-card: 16px;
+      --radius-pill: 100px;
 
 
       /* ============================================
          SHADOWS
          ============================================ */
 
-      --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.1);
-      --shadow-md:  0 4px 6px rgba(0, 0, 0, 0.1);
-      --shadow-lg:  0 10px 25px rgba(0, 0, 0, 0.12);
-      --shadow-xl:  0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      --shadow-sm:  none;
+      --shadow-md:  none;
+      --shadow-lg:  0 10px 25px rgba(0, 0, 0, 0.6);
+      --shadow-xl:  0 20px 40px rgba(0, 0, 0, 0.7);
 
 
       /* ============================================
@@ -261,11 +273,11 @@ function getDesignTokens(): string {
          GRADIENTS
          ============================================ */
 
-      --gradient-executive: linear-gradient(135deg, var(--indigo-accent) 0%, var(--indigo-deep) 100%);
-      --gradient-success:   linear-gradient(135deg, var(--green-emerald-500) 0%, var(--green-emerald-600) 100%);
-      --gradient-danger:    linear-gradient(135deg, var(--red-500) 0%, var(--red-600) 100%);
-      --gradient-purple:    linear-gradient(135deg, var(--purple-500) 0%, var(--purple-600) 100%);
-      --gradient-indigo:    linear-gradient(135deg, var(--indigo-500) 0%, var(--indigo-600) 100%);
+      --gradient-executive: linear-gradient(var(--fr-dark), var(--fr-dark));
+      --gradient-success:   linear-gradient(135deg, #0B2616 0%, #134A2A 100%);
+      --gradient-danger:    linear-gradient(135deg, #2A0E0E 0%, #3A1212 100%);
+      --gradient-purple:    linear-gradient(var(--fr-grey-200), var(--fr-grey-200));
+      --gradient-indigo:    linear-gradient(var(--fr-grey-100), var(--fr-grey-100));
     }
   `;
 }

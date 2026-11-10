@@ -312,6 +312,11 @@ function getScripts(data: ReportSectionData) {
 
   return `
       <script>
+      if (typeof Chart !== 'undefined') {
+          Chart.defaults.color = '#A3A3A3';
+          Chart.defaults.borderColor = '#2C2C2C';
+          Chart.defaults.font.family = "'Inter', Helvetica, sans-serif";
+      }
       (function() {
           // Client-side HTML escaping for XSS prevention
           function esc(str) {
@@ -597,12 +602,12 @@ function getScripts(data: ReportSectionData) {
 
               // Build severity badge
               const severityColors = {
-                  'CRITICAL': 'background: var(--red-600); color: var(--color-text-inverse);',
-                  'HIGH': 'background: #ea580c; color: var(--color-text-inverse);',
-                  'MEDIUM': 'background: var(--color-warning); color: var(--color-text-inverse);',
-                  'LOW': 'background: var(--color-info); color: white;'
+                  'CRITICAL': 'background: var(--color-severity-critical-bg); color: var(--color-severity-critical-text); border: 1px solid var(--color-severity-critical-border);',
+                  'HIGH': 'background: var(--color-severity-high-bg); color: var(--color-severity-high-text); border: 1px solid var(--color-severity-high-border);',
+                  'MEDIUM': 'background: var(--color-severity-medium-bg); color: var(--color-severity-medium-text); border: 1px solid var(--color-severity-medium-border);',
+                  'LOW': 'background: var(--color-severity-low-bg); color: var(--color-severity-low-text); border: 1px solid var(--color-severity-low-border);'
               };
-              const severityStyle = severityColors[severity] || 'background: var(--color-text-muted); color: var(--color-text-inverse);';
+              const severityStyle = severityColors[severity] || 'background: var(--color-bg-surface-alt); color: var(--color-text-muted);';
 
               // Build HTML content
               let html = '<div class="issue-details">';
@@ -2494,7 +2499,7 @@ function getScripts(data: ReportSectionData) {
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">1-6</kbd></td><td style="border:none;">Jump to section</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">Esc</kbd></td><td style="border:none;">Close modals</td></tr>' +
                   '</table>' +
-                  '<button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:6px 16px;background:#3b82f6;color:white;border:none;border-radius:var(--radius-md);cursor:pointer;">Close</button>' +
+                  '<button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:6px 16px;background:var(--color-accent);color:#000;border-radius:100px;border:none;border-radius:var(--radius-md);cursor:pointer;">Close</button>' +
                   '</div>';
               modal.addEventListener('click', function(e) {
                   if (e.target === modal) modal.remove();
@@ -3176,7 +3181,9 @@ function getScripts(data: ReportSectionData) {
           sections.forEach(function(s) { observer.observe(s); });
       })();
 
-      // === Collapsible Sections ===
+      </script>
+      <script>
+      // Own script tag so the collapse toggles still work when an earlier block throws (e.g. Chart.js CDN unreachable).
       (function() {
           var sectionIds = ['executive-summary', 'quick-wins', 'top-issues', 'performance', 'charts', 'pages-table'];
           sectionIds.forEach(function(id) {

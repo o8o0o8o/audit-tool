@@ -1,0 +1,200 @@
+{
+  "robots": {
+    "sitemaps": [
+      "https://fixture.example/sitemap.xml"
+    ],
+    "user-agent": {
+      "*": {
+        "disallow": []
+      }
+    }
+  },
+  "sitemaps": {
+    "urls": {
+      "https://fixture.example/": {},
+      "https://fixture.example/about": {},
+      "https://fixture.example/blog": {},
+      "https://fixture.example/blog/post-1": {},
+      "https://fixture.example/contact": {}
+    },
+    "total": 5
+  },
+  "pageData": {
+    "pages": {
+      "https://fixture.example/": {
+        "url": "https://fixture.example/",
+        "status": 200,
+        "title": "Fixture page 0 \u2014 example title text",
+        "description": "A fixture description used to render the brand preview report with enough characters to look real.",
+        "canonical": "https://fixture.example/",
+        "h1": "Heading 0",
+        "wordCount": 350,
+        "inSitemap": true,
+        "loadTime": 900,
+        "metrics": {
+          "ttfb": 300,
+          "lcp": 1800,
+          "cls": 0.0,
+          "fcp": 1200
+        },
+        "headings": {
+          "h1Count": 1
+        },
+        "indexability": {
+          "isIndexable": true,
+          "hasNoindexTag": false
+        }
+      },
+      "https://fixture.example/about": {
+        "url": "https://fixture.example/about",
+        "status": 200,
+        "title": "Fixture page 1 \u2014 example title text",
+        "description": "A fixture description used to render the brand preview report with enough characters to look real.",
+        "canonical": "https://fixture.example/about",
+        "h1": "Heading 1",
+        "wordCount": 470,
+        "inSitemap": true,
+        "loadTime": 1050,
+        "metrics": {
+          "ttfb": 500,
+          "lcp": 2300,
+          "cls": 0.02,
+          "fcp": 1400
+        },
+        "headings": {
+          "h1Count": 1
+        },
+        "indexability": {
+          "isIndexable": true,
+          "hasNoindexTag": false
+        }
+      },
+      "https://fixture.example/blog": {
+        "url": "https://fixture.example/blog",
+        "status": 200,
+        "title": "Fixture page 2 \u2014 example title text",
+        "description": "A fixture description used to render the brand preview report with enough characters to look real.",
+        "canonical": "https://fixture.example/blog",
+        "h1": "Heading 2",
+        "wordCount": 590,
+        "inSitemap": true,
+        "loadTime": 1200,
+        "metrics": {
+          "ttfb": 700,
+          "lcp": 2800,
+          "cls": 0.04,
+          "fcp": 1600
+        },
+        "headings": {
+          "h1Count": 2
+        },
+        "indexability": {
+          "isIndexable": true,
+          "hasNoindexTag": false
+        }
+      },
+      "https://fixture.example/blog/post-1": {
+        "url": "https://fixture.example/blog/post-1",
+        "status": 200,
+        "title": "Fixture page 3 \u2014 example title text",
+        "description": "A fixture description used to render the brand preview report with enough characters to look real.",
+        "canonical": "https://fixture.example/blog/post-1",
+        "h1": "Heading 3",
+        "wordCount": 710,
+        "inSitemap": true,
+        "loadTime": 1350,
+        "metrics": {
+          "ttfb": 900,
+          "lcp": 3300,
+          "cls": 0.06,
+          "fcp": 1800
+        },
+        "headings": {
+          "h1Count": 1
+        },
+        "indexability": {
+          "isIndexable": true,
+          "hasNoindexTag": false
+        }
+      },
+      "https://fixture.example/contact": {
+        "url": "https://fixture.example/contact",
+        "status": 200,
+        "title": "Fixture page 4 \u2014 example title text",
+        "description": "A fixture description used to render the brand preview report with enough characters to look real.",
+        "canonical": "https://fixture.example/contact",
+        "h1": "Heading 4",
+        "wordCount": 830,
+        "inSitemap": true,
+        "loadTime": 1500,
+        "metrics": {
+          "ttfb": 1100,
+          "lcp": 3800,
+          "cls": 0.08,
+          "fcp": 2000
+        },
+        "headings": {
+          "h1Count": 1
+        },
+        "indexability": {
+          "isIndexable": true,
+          "hasNoindexTag": false
+        }
+      }
+    },
+    "processedPages": [
+      "https://fixture.example/",
+      "https://fixture.example/about",
+      "https://fixture.example/blog",
+      "https://fixture.example/blog/post-1",
+      "https://fixture.example/contact"
+    ],
+    "totalWithoutError": 5,
+    "totalWithError": 0,
+    "byError": {},
+    "attempts": {}
+  },
+  "timing": {
+    "elapsedTimeFormatted": "1m 2s"
+  },
+  "isMultiLang": false,
+  "analysis": {
+    "overall": [],
+    "details": {
+      "Missing meta description": {
+        "severity": "CRITICAL",
+        "count": 2,
+        "examples": [
+          "https://fixture.example/blog",
+          "https://fixture.example/contact"
+        ]
+      },
+      "Multiple H1 tags": {
+        "severity": "HIGH",
+        "count": 1,
+        "examples": [
+          "https://fixture.example/blog"
+        ]
+      },
+      "Title too long": {
+        "severity": "MEDIUM",
+        "count": 3,
+        "examples": [
+          "https://fixture.example/",
+          "https://fixture.example/about",
+          "https://fixture.example/blog/post-1"
+        ]
+      },
+      "Images without alt text": {
+        "severity": "LOW",
+        "count": 4,
+        "examples": [
+          "https://fixture.example/about"
+        ]
+      }
+    },
+    "summary": {
+      "totalIssues": 10
+    }
+  }
+}

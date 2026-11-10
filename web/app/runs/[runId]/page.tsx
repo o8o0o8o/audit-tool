@@ -22,7 +22,10 @@ const POLL_MS = 15000;
 
 function isReport(name: string): boolean {
   if (name.includes('/')) return false;
-  return /^(audit-report(\.verified)?|content-research-report)\.(pdf|html)$/.test(name) || /^[^/]+\.[a-z]{2,}\.html$/i.test(name);
+  return (
+    /^(audit-report(\.verified)?|content-research-report)\.(pdf|html)$/.test(name) ||
+    /^[^/]+\.[a-z]{2,}\.html$/i.test(name)
+  );
 }
 
 export default function RunPage({ params }: { params: Promise<{ runId: string }> }) {
@@ -62,14 +65,14 @@ export default function RunPage({ params }: { params: Promise<{ runId: string }>
   return (
     <main>
       <h1>Run {runId}</h1>
-      {error && <p>{error}</p>}
+      {error && <p className="muted">{error}</p>}
       {status && (
         <>
           <p data-testid="run-status">Status: {status.status}</p>
           {status.url && <p>Site: {status.url}</p>}
-          {status.error && <p style={{ color: '#b00020' }}>{status.error}</p>}
+          {status.error && <p className="error">{status.error}</p>}
           {reports.length > 0 && (
-            <ul>
+            <ul className="run-list">
               {reports.map((f) => (
                 <li key={f.url}>
                   <a data-testid="report-link" href={`/view/${runId}/${f.name}`} target="_blank" rel="noreferrer">
@@ -81,7 +84,13 @@ export default function RunPage({ params }: { params: Promise<{ runId: string }>
           )}
           {status.ghRunUrl && (
             <p>
-              <a data-testid="gh-run-link" href={status.ghRunUrl} target="_blank" rel="noreferrer">
+              <a
+                className="link-accent"
+                data-testid="gh-run-link"
+                href={status.ghRunUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
                 GitHub Actions run
               </a>
             </p>

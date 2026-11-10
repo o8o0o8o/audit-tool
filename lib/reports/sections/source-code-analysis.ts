@@ -66,7 +66,9 @@ function getLlmFindings(repo: Record<string, unknown>) {
     .map((f) => {
       const kind = String(f.kind ?? 'novel');
       const kindLabel = kind === 'confirmation' ? '✓ Confirms crawl finding' : '✨ New issue';
-      const fileRow = f.file ? `<div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><code>${escapeHtml(String(f.file))}</code></div>` : '';
+      const fileRow = f.file
+        ? `<div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><code>${escapeHtml(String(f.file))}</code></div>`
+        : '';
       const fixRow = f.fix
         ? `<div style="margin-top: 6px; font-size: var(--font-size-sm);"><strong>Fix:</strong> ${renderRepoDetailHtml(String(f.fix))}</div>`
         : '';
@@ -77,7 +79,7 @@ function getLlmFindings(repo: Record<string, unknown>) {
         <div style="font-weight: var(--font-weight-medium);">${escapeHtml(String(f.message ?? ''))}</div>
         <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin: 2px 0;">${escapeHtml(kindLabel)}</div>
         ${fileRow}
-        <div style="font-size: var(--font-size-sm); color: #4b5563; margin-top: 4px;">${renderRepoDetailHtml(String(f.detail ?? ''))}</div>
+        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: 4px;">${renderRepoDetailHtml(String(f.detail ?? ''))}</div>
         ${fixRow}
       </td>
     </tr>`;
@@ -119,15 +121,15 @@ function getFrameworkInfo(repo: Record<string, unknown>) {
 
   return `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px;">
-      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+      <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #667eea; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
         <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold);">${escapeHtml(repo.framework)}</div>
         <div style="font-size: var(--font-size-sm); opacity: 0.9;">Framework${routerInfo}</div>
       </div>
-      <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+      <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #f093fb; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
         <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold);">${repo.version ? escapeHtml(repo.version) : 'N/A'}</div>
         <div style="font-size: var(--font-size-sm); opacity: 0.9;">Version</div>
       </div>
-      <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: var(--radius-xl); color: white; text-align: center;">
+      <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #4facfe; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
         <div style="font-size: var(--font-size-md); font-weight: var(--font-weight-bold);">${configInfo}</div>
         <div style="font-size: var(--font-size-sm); opacity: 0.9;">Config File</div>
       </div>
@@ -161,7 +163,7 @@ function getConfigValidation(repo: Record<string, unknown>) {
     <tr>
       <td style="padding: 10px 12px;">${getSeverityBadge(f.severity as string)}</td>
       <td style="padding: 10px 12px; font-weight: var(--font-weight-medium);">${escapeHtml(f.message)}</td>
-      <td style="padding: 10px 12px; font-size: var(--font-size-sm); color: #4b5563;">${renderRepoDetailHtml((f.detail as string) ?? '')}</td>
+      <td style="padding: 10px 12px; font-size: var(--font-size-sm); color: var(--color-text-muted);">${renderRepoDetailHtml((f.detail as string) ?? '')}</td>
     </tr>
   `,
     )
@@ -173,7 +175,7 @@ function getConfigValidation(repo: Record<string, unknown>) {
       <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: var(--color-bg-page); border-bottom: 2px solid #e5e7eb;">
+            <tr style="background: var(--color-bg-page); border-bottom: 2px solid var(--color-border-default);">
               <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; width: 100px;">Severity</th>
               <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Finding</th>
               <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Details</th>
@@ -218,8 +220,8 @@ function getRouteCoverage(repo: Record<string, unknown>) {
         <td style="padding: 8px 12px; font-size: var(--font-size-sm); color: var(--color-text-muted);"><code>${escapeHtml(r.file)}</code></td>
         <td style="padding: 8px 12px;">${
           r.isDynamic
-            ? '<span style="color: #7c3aed; font-size: var(--font-size-xs);">dynamic</span>'
-            : '<span style="color: #2563eb; font-size: var(--font-size-xs);">static</span>'
+            ? '<span style="color: #A47BFF; font-size: var(--font-size-xs);">dynamic</span>'
+            : '<span style="color: var(--color-link); font-size: var(--font-size-xs);">static</span>'
         }</td>
       </tr>
     `,
@@ -232,7 +234,7 @@ function getRouteCoverage(repo: Record<string, unknown>) {
         <div style="overflow-x: auto;">
           <table style="width: 100%; border-collapse: collapse;">
             <thead>
-              <tr style="background: var(--color-error-bg); border-bottom: 1px solid #fecaca;">
+              <tr style="background: var(--color-error-bg); border-bottom: 1px solid var(--color-error-border);">
                 <th style="padding: 8px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-error-text);">Route Pattern</th>
                 <th style="padding: 8px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-error-text);">Source File</th>
                 <th style="padding: 8px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-error-text);">Type</th>
@@ -269,7 +271,7 @@ function getRouteCoverage(repo: Record<string, unknown>) {
           <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Missing</div>
         </div>
         <div style="text-align: center; padding: 15px; background: var(--color-bg-page); border-radius: var(--radius-lg);">
-          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: #7c3aed;">${stats.dynamicRoutes || 0}</div>
+          <div style="font-size: 28px; font-weight: var(--font-weight-bold); color: #A47BFF;">${stats.dynamicRoutes || 0}</div>
           <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Dynamic</div>
         </div>
       </div>
@@ -330,7 +332,7 @@ function getSourceMapping(repo: Record<string, unknown>) {
       <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr style="background: var(--color-bg-page); border-bottom: 2px solid #e5e7eb;">
+            <tr style="background: var(--color-bg-page); border-bottom: 2px solid var(--color-border-default);">
               <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Issue</th>
               <th style="padding: 10px 12px; text-align: left; font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Source Location(s)</th>
             </tr>

@@ -172,7 +172,7 @@ function getIssuesDetail(data: ReportSectionData) {
 
 function renderFilterPill(value: string, label: string, count: number, active = false) {
   const sev = SEVERITY_STYLES[value];
-  const activeStyle = active ? 'background:var(--gray-800);color:white;border-color:var(--gray-800);' : '';
+  const activeStyle = active ? 'background:var(--color-accent);color:#000;border-color:var(--color-accent);' : '';
   const dotHtml = sev
     ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sev.dot};margin-right:4px;"></span>`
     : '';
@@ -238,7 +238,8 @@ function renderIssueDetail(
           // that interpolate attacker-controlled page content (titles, anchor
           // text, hrefs). Rendering them raw is stored XSS in a report the
           // author opens locally (often file://). Matches top-issues/quick-wins.
-          (ex) => `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(ex)}</div>`,
+          (ex) =>
+            `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(ex)}</div>`,
           `issue-detail-more-${idx}`,
           VISIBLE,
           count,
@@ -343,8 +344,8 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
         fixedCount > 0 || newCount > 0
           ? `
       <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-        ${fixedCount > 0 ? `<div style="background: #f0fdf4; border: 1px solid var(--color-success-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #166534;"><strong>${fixedCount} issue${fixedCount > 1 ? 's' : ''}</strong> fixed in ${escapeHtml(compareLabel)}</div>` : ''}
-        ${newCount > 0 ? `<div style="background: #fef2f2; border: 1px solid var(--color-error-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #991b1b;"><strong>${newCount} new issue${newCount > 1 ? 's' : ''}</strong> in ${escapeHtml(compareLabel)}</div>` : ''}
+        ${fixedCount > 0 ? `<div style="background: var(--color-success-bg); border: 1px solid var(--color-success-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--color-success-text);"><strong>${fixedCount} issue${fixedCount > 1 ? 's' : ''}</strong> fixed in ${escapeHtml(compareLabel)}</div>` : ''}
+        ${newCount > 0 ? `<div style="background: var(--color-error-bg); border: 1px solid var(--color-error-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--color-error-text);"><strong>${newCount} new issue${newCount > 1 ? 's' : ''}</strong> in ${escapeHtml(compareLabel)}</div>` : ''}
       </div>
       `
           : ''

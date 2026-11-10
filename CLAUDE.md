@@ -345,6 +345,10 @@ npx playwright install
 npx tsx start.ts --origin=<website-url> [--perf] [--save-html] [--screenshots] [--proceed] [--concurrency=<number>]
 ```
 
+### Report theme preview
+
+The HTML report uses the FocusReactive brand theme (dark, `#00E56D` accent, Inter) from `lib/reports/sections/design-tokens.ts`; `yarn run preview:report` renders `tests/fixtures/report-fixture/` into `web/public/report/index.html` (gitignored).
+
 ### Export to CSV
 
 ```bash

@@ -113,6 +113,9 @@ function generateHTML(
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${isComparison ? `SEO Comparison: ${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : `SEO Audit Report - ${escapeHtml(safeDomainName)}`}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
       <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
       ${getStyles()}
   </head>
@@ -135,42 +138,12 @@ function generateHTML(
           <a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>
       </nav>
 
-      <!-- Floating action button menu -->
-      <div class="fab-container">
-          <div class="fab-menu" id="fabMenu">
-              <div class="fab-label">Share</div>
-              <button class="fab-item" onclick="shareReport()">📤 Share Report</button>
-              <button class="fab-item" onclick="copyScoreSummary()">📋 Copy Summary</button>
-              <div class="fab-divider"></div>
-              <div class="fab-label">Export</div>
-              <button class="fab-item" onclick="exportCSV('summary')">📊 Summary CSV</button>
-              <button class="fab-item" onclick="exportCSV('issues')">⚠️ Issues CSV</button>
-              <button class="fab-item" onclick="exportCSV('pages')">📄 Pages CSV</button>
-              <button class="fab-item" onclick="exportCSV('performance')">⚡ Performance CSV</button>
-              <button class="fab-item" onclick="exportCSV('issues')">📋 Issues CSV</button>
-              <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
-              <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
-              <button class="fab-item" onclick="exportAll()">📦 Export All</button>
-          </div>
-          <button class="fab-toggle" id="fabToggle" title="Quick actions">+</button>
-      </div>
-
-      <!-- Back to top button -->
-      <button class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top (T)" aria-label="Back to top">↑</button>
-
-      <!-- Global search -->
-      <div class="global-search" id="globalSearch">
-          <input type="text" id="globalSearchInput" placeholder="Search report..." autocomplete="off">
-          <span class="search-count" id="searchCount"></span>
-      </div>
-
-      <!-- Keyboard shortcut hint -->
-      <div class="keyboard-hint" id="keyboardHint">
-          Press <kbd>?</kbd> for keyboard shortcuts &middot; <kbd>s</kbd> to search
-      </div>
-
       <div class="container">
           <header>
+              <div class="fr-header-bar">
+                  <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
+                  <span class="fr-header-tag">SEO Audit</span>
+              </div>
               ${jsonData.branding?.logo ? `<img src="${escapeHtml(jsonData.branding.logo)}" alt="Logo" style="max-height:40px;margin-bottom:10px;">` : ''}
               <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}${isComparison ? 'SEO Comparison Report' : 'SEO Audit Report'}</h1>
               <p class="subtitle">${isComparison ? `${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : escapeHtml(safeDomainName)}</p>
@@ -183,18 +156,18 @@ function generateHTML(
                   </div>
                   <div class="stat">
                       <span class="stat-label">Successful:</span>
-                      <span class="stat-value" style="color: #10b981;">${pageData.totalWithoutError || 0}</span>
+                      <span class="stat-value" style="color: var(--color-success);">${pageData.totalWithoutError || 0}</span>
                   </div>
                   <div class="stat">
                       <span class="stat-label">With Errors:</span>
-                      <span class="stat-value" style="color: #ef4444;">${pageData.totalWithError || 0}</span>
+                      <span class="stat-value" style="color: var(--color-error);">${pageData.totalWithError || 0}</span>
                   </div>
                   ${
                     (jsonData.sitemaps?.total ?? 0) > pages.length
                       ? `
                   <div class="stat">
                       <span class="stat-label">Not Crawled:</span>
-                      <span class="stat-value" style="color: #f59e0b;">${(jsonData.sitemaps?.total ?? 0) - pages.length}</span>
+                      <span class="stat-value" style="color: var(--color-warning);">${(jsonData.sitemaps?.total ?? 0) - pages.length}</span>
                   </div>
                   `
                       : ''
@@ -211,70 +184,70 @@ function generateHTML(
                   }
                   <div class="stat">
                       <span class="stat-label">In Sitemap:</span>
-                      <span class="stat-value" style="color: #2563eb;">${pagesFromSitemap}</span>
+                      <span class="stat-value" style="color: var(--color-link);">${pagesFromSitemap}</span>
                   </div>
                   ${
                     pagesDiscovered > 0
                       ? `
                   <div class="stat">
                       <span class="stat-label">Discovered:</span>
-                      <span class="stat-value" style="color: #f59e0b;">${pagesDiscovered}</span>
+                      <span class="stat-value" style="color: var(--color-warning);">${pagesDiscovered}</span>
                   </div>
                   `
                       : ''
                   }
                   <div class="stat">
                       <span class="stat-label">Multilanguage:</span>
-                      <span class="stat-value" style="color: ${jsonData.isMultiLang ? '#10b981' : '#9ca3af'};">${jsonData.isMultiLang ? 'Yes' : 'No'}</span>
+                      <span class="stat-value" style="color: ${jsonData.isMultiLang ? 'var(--color-success)' : 'var(--color-text-muted)'};">${jsonData.isMultiLang ? 'Yes' : 'No'}</span>
                   </div>
               </div>
 
-              <div class="export-section" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px; backdrop-filter: blur(10px);">
-                  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                      <div style="font-size: 14px; opacity: 0.9;">
+              <div class="export-section">
+                  <div class="export-section-inner">
+                      <div class="export-section-label">
                           📊 <strong>Export Data:</strong> Download audit data for analysis in Excel, Google Sheets, or other tools
                       </div>
-                      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                          <button onclick="exportCSV('pages')" class="export-btn">📄 Pages CSV</button>
-                          <button onclick="showIssueFilterModal()" class="export-btn">⚠️ Issues CSV</button>
-                          <button onclick="exportCSV('performance')" class="export-btn">⚡ Performance CSV</button>
-                          <button onclick="exportCSV('issues')" class="export-btn">📋 All Issues CSV</button>
-                          <button onclick="exportCSV('summary')" class="export-btn">📊 Summary CSV</button>
-                          <button onclick="saveToPDF()" class="pdf-btn">📥 Save to PDF</button>
-                          <button onclick="exportMarkdown()" class="export-btn" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">📝 Markdown</button>
-                          <button onclick="exportAll()" class="export-btn" style="background: linear-gradient(135deg, #ec4899 0%, #be185d 100%);">📦 Export All</button>
+                      <div class="export-section-actions">
+                          <button onclick="exportCSV('pages')" class="export-btn fr-btn fr-btn--sm">📄 Pages CSV</button>
+                          <button onclick="showIssueFilterModal()" class="export-btn fr-btn fr-btn--sm">⚠️ Issues CSV</button>
+                          <button onclick="exportCSV('performance')" class="export-btn fr-btn fr-btn--sm">⚡ Performance CSV</button>
+                          <button onclick="exportCSV('issues')" class="export-btn fr-btn fr-btn--sm">📋 All Issues CSV</button>
+                          <button onclick="exportCSV('summary')" class="export-btn fr-btn fr-btn--sm">📊 Summary CSV</button>
+                          <button onclick="saveToPDF()" class="pdf-btn fr-btn fr-btn--sm fr-btn--outline">📥 Save to PDF</button>
+                          <button onclick="exportMarkdown()" class="export-btn fr-btn fr-btn--sm fr-btn--outline">📝 Markdown</button>
+                          <button onclick="exportAll()" class="export-btn fr-btn fr-btn--sm fr-btn--outline">📦 Export All</button>
                       </div>
                   </div>
               </div>
 
               <!-- Issue Export Filter Modal -->
               <div id="issueFilterModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-                  <div style="background: white; padding: 25px; border-radius: 12px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                      <h3 style="margin: 0 0 20px; color: #1f2937;">Export Issues - Filter Options</h3>
+                  <div style="background: var(--color-bg-surface); border: 1px solid var(--color-border-default); padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                      <h3 style="margin: 0 0 20px; color: var(--color-text-primary);">Export Issues - Filter Options</h3>
                       <div style="margin-bottom: 15px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Severity Levels:</label>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Severity Levels:</label>
                           <div style="display: flex; gap: 15px; flex-wrap: wrap;">
                               <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterCritical" checked> <span style="color: #ef4444;">Critical</span>
+                                  <input type="checkbox" id="filterCritical" checked> <span style="color: var(--color-error);">Critical</span>
                               </label>
                               <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterHigh" checked> <span style="color: #f59e0b;">High</span>
+                                  <input type="checkbox" id="filterHigh" checked> <span style="color: var(--color-warning);">High</span>
                               </label>
                               <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterMedium" checked> <span style="color: #3b82f6;">Medium</span>
+                                  <input type="checkbox" id="filterMedium" checked> <span style="color: var(--color-info);">Medium</span>
                               </label>
                               <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterLow" checked> <span style="color: #6b7280;">Low</span>
+                                  <input type="checkbox" id="filterLow" checked> <span style="color: var(--color-text-muted);">Low</span>
                               </label>
                           </div>
                       </div>
                       <div style="margin-bottom: 20px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Minimum Affected Pages:</label>
-                          <input type="number" id="filterMinPages" value="1" min="1" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Minimum Affected Pages:</label>
+                          <input type="number" id="filterMinPages" value="1" min="1" style="width: 100%; padding: 8px 12px; border: 1px solid var(--color-border-default); border-radius: 6px; font-size: 14px; background: transparent; color: var(--color-text-primary);">
                       </div>
                       <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                          <button onclick="hideIssueFilterModal()" style="padding: 8px 16px; border: 1px solid #d1d5db; background: white; border-radius: 6px; cursor: pointer;">Cancel</button>
-                          <button onclick="exportFilteredIssues()" style="padding: 8px 16px; border: none; background: #3b82f6; color: white; border-radius: 6px; cursor: pointer;">Export CSV</button>
+                          <button onclick="hideIssueFilterModal()" class="fr-btn fr-btn--sm fr-btn--outline">Cancel</button>
+                          <button onclick="exportFilteredIssues()" class="fr-btn fr-btn--sm">Export CSV</button>
                       </div>
                   </div>
               </div>
@@ -283,14 +256,14 @@ function generateHTML(
           ${
             loadError
               ? `
-          <div class="section" style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-              <h2 style="color: #dc2626; margin-top: 0;">⚠️ Report Generation Error</h2>
-              <p style="color: #991b1b;">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
+          <div class="section" style="background: var(--color-error-bg); border: 1px solid var(--color-error-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+              <h2 style="color: var(--color-error); margin-top: 0;">⚠️ Report Generation Error</h2>
+              <p style="color: var(--color-error-text);">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
               <details style="margin-top: 10px;">
-                  <summary style="cursor: pointer; color: #dc2626; font-weight: 600;">Error Details</summary>
-                  <pre style="background: #fee2e2; padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: #991b1b;">${escapeHtml((loadError as Error).message)}${(loadError as Error).stack ? '\n\n' + escapeHtml((loadError as Error).stack) : ''}</pre>
+                  <summary style="cursor: pointer; color: var(--color-error); font-weight: 600;">Error Details</summary>
+                  <pre style="background: var(--color-error-bg); padding: 10px; border-radius: 4px; margin-top: 10px; overflow-x: auto; color: var(--color-error-text);">${escapeHtml((loadError as Error).message)}${(loadError as Error).stack ? '\n\n' + escapeHtml((loadError as Error).stack) : ''}</pre>
               </details>
-              <p style="color: #6b7280; margin-top: 15px; font-size: 14px;">
+              <p style="color: var(--color-text-muted); margin-top: 15px; font-size: 14px;">
                   <strong>Troubleshooting:</strong> Check that the audit data file exists and is not corrupted.
                   Try re-running the audit with <code>--proceed</code> flag to resume from the last checkpoint.
               </p>
@@ -359,15 +332,52 @@ function generateHTML(
           </div>
 
           <footer>
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                  <p>SEO Audit Tool v${pkg.version} - Generated ${new Date().toISOString()}</p>
-                  <p style="opacity: 0.7;">Node.js ${process.version} | Playwright | ${pages.length} pages analyzed</p>
-                  <div style="display: flex; gap: 8px;">
-                      <button onclick="shareReport()" style="padding: 4px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; cursor: pointer; font-size: 12px;">Share</button>
-                      <button onclick="window.print()" style="padding: 4px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; cursor: pointer; font-size: 12px;">Print</button>
+              <div class="fr-footer-inner">
+                  <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
+                  <div class="fr-footer-meta">
+                      <p>SEO Audit Tool v${pkg.version} - Generated ${new Date().toISOString()}</p>
+                      <p>Node.js ${process.version} | Playwright | ${pages.length} pages analyzed</p>
+                  </div>
+                  <div class="fr-footer-actions">
+                      <button onclick="shareReport()" class="fr-btn fr-btn--sm fr-btn--outline">Share</button>
+                      <button onclick="window.print()" class="fr-btn fr-btn--sm fr-btn--outline">Print</button>
                   </div>
               </div>
           </footer>
+      </div>
+
+      <!-- Floating action button menu -->
+      <div class="fab-container">
+          <div class="fab-menu" id="fabMenu">
+              <div class="fab-label">Share</div>
+              <button class="fab-item" onclick="shareReport()">📤 Share Report</button>
+              <button class="fab-item" onclick="copyScoreSummary()">📋 Copy Summary</button>
+              <div class="fab-divider"></div>
+              <div class="fab-label">Export</div>
+              <button class="fab-item" onclick="exportCSV('summary')">📊 Summary CSV</button>
+              <button class="fab-item" onclick="exportCSV('issues')">⚠️ Issues CSV</button>
+              <button class="fab-item" onclick="exportCSV('pages')">📄 Pages CSV</button>
+              <button class="fab-item" onclick="exportCSV('performance')">⚡ Performance CSV</button>
+              <button class="fab-item" onclick="exportCSV('issues')">📋 Issues CSV</button>
+              <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
+              <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
+              <button class="fab-item" onclick="exportAll()">📦 Export All</button>
+          </div>
+          <button class="fab-toggle" id="fabToggle" title="Quick actions">+</button>
+      </div>
+
+      <!-- Back to top button -->
+      <button class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top (T)" aria-label="Back to top">↑</button>
+
+      <!-- Global search -->
+      <div class="global-search" id="globalSearch">
+          <input type="text" id="globalSearchInput" placeholder="Search report..." autocomplete="off">
+          <span class="search-count" id="searchCount"></span>
+      </div>
+
+      <!-- Keyboard shortcut hint -->
+      <div class="keyboard-hint" id="keyboardHint">
+          Press <kbd>?</kbd> for keyboard shortcuts &middot; <kbd>s</kbd> to search
       </div>
 
       <!-- Modal for detailed information -->

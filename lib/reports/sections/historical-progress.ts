@@ -40,7 +40,7 @@ function getHistoricalProgress(data: ReportSectionData) {
           ${getInfoCard('Total Issues', currentIssues, 'var(--color-warning)', 'var(--amber-600)', 'Found in this audit')}
           ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
         </div>
-        <div style="padding: 30px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: var(--radius-xl); text-align: center; border: 2px dashed #3b82f6;">
+        <div style="padding: 30px; background: linear-gradient(135deg, var(--color-info-bg) 0%, var(--color-info-bg) 100%); border-radius: var(--radius-xl); text-align: center; border: 2px dashed #3b82f6;">
           <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
           <h3 style="color: var(--blue-800); margin-bottom: 10px;">This is your first audit!</h3>
           <p style="color: var(--blue-800); max-width: 500px; margin: 0 auto; line-height: 1.6;">
@@ -184,7 +184,7 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
         <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default);">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="color: var(--color-text-disabled); font-size: var(--font-size-xs);">${index + 1}.</span>
-            <span style="font-size: var(--font-size-sm); color: #374151;">${escapeHtml(truncateIssue(item.issue, 60))}</span>
+            <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${escapeHtml(truncateIssue(item.issue, 60))}</span>
           </div>
         </td>
         <td style="padding: 12px; border-bottom: 1px solid var(--color-border-default); text-align: center;">
@@ -311,7 +311,7 @@ function getInfoCard(
   subtitle: string,
 ) {
   return `
-    <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: var(--radius-lg); text-align: center;">
+    <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid ${gradientStart}; color: var(--color-text-primary); padding: 20px; border-radius: var(--radius-lg); text-align: center;">
       <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 10px;">${title}</div>
       <div style="font-size: 32px; font-weight: var(--font-weight-bold);">${value}</div>
       <div style="font-size: var(--font-size-xs); opacity: 0.9;">${subtitle}</div>

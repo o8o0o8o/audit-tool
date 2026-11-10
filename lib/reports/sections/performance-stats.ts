@@ -54,8 +54,7 @@ function getPerformanceStats(data: ReportSectionData) {
   const inpValues = extractMetricValues(pagesWithPerf, (p) => p.INP ?? 0, 1);
   const pageSizes = extractMetricValues(pagesArray, (p) => p.totalResponseSize ?? 0);
 
-  const avg = (arr: number[]): string | number =>
-    arr.length > 0 ? statAvg(arr).toFixed(0) : 0;
+  const avg = (arr: number[]): string | number => (arr.length > 0 ? statAvg(arr).toFixed(0) : 0);
   const p50 = (arr: number[]) => statPercentile(arr, 0.5);
   const p75 = (arr: number[]) => statPercentile(arr, 0.75);
   const p95 = (arr: number[]) => statPercentile(arr, 0.95);
@@ -75,7 +74,7 @@ function getPerformanceStats(data: ReportSectionData) {
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px;">
         ${ttfbValues.length > 0 ? getStatCard('ttfb', '⚡ TTFB', 'var(--purple-500)', 'var(--purple-600)', ttfbValues, 'ms', avg, p50, p75, p95, p99) : ''}
-        ${lcpValues.length > 0 ? getStatCard('lcp', '🎨 LCP', 'var(--pink-500)', '#db2777', lcpValues, 'ms', avg, p50, p75, p95, p99) : ''}
+        ${lcpValues.length > 0 ? getStatCard('lcp', '🎨 LCP', 'var(--pink-500)', '#FF7AB8', lcpValues, 'ms', avg, p50, p75, p95, p99) : ''}
         ${clsValues.length > 0 ? getClsCard(clsValues, avg, p50, p75, p95, p99) : ''}
         ${inpValues.length > 0 ? getStatCard('inp', '👆 INP', 'var(--orange-500)', '#ea580c', inpValues, 'ms', avg, p50, p75, p95, p99) : ''}
         ${pageSizes.length > 0 ? getPageSizeCard(pageSizes, avg, p50, p75, p95, p99) : ''}
@@ -192,26 +191,26 @@ function getCrUXSection(
     : 'Last 28 days';
 
   return `
-    <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border-radius: var(--radius-xl); border: 2px solid #10b981;">
+    <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, var(--color-success-bg) 0%, var(--color-success-bg) 100%); border-radius: var(--radius-xl); border: 2px solid #10b981;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <div>
           <h3 style="margin: 0; color: var(--color-success-text); display: flex; align-items: center; gap: 8px;">
             🌐 Chrome UX Report (CrUX) - Real User Data
-            <span style="background: var(--color-success); color: white; font-size: var(--font-size-2xs); padding: 2px 6px; border-radius: var(--radius-sm); font-weight: var(--font-weight-semibold);">FIELD DATA</span>
+            <span style="background: var(--color-success); color: #000; font-size: var(--font-size-2xs); padding: 2px 6px; border-radius: var(--radius-sm); font-weight: var(--font-weight-semibold);">FIELD DATA</span>
           </h3>
-          <p style="margin: 5px 0 0; font-size: var(--font-size-xs); color: #047857;">
+          <p style="margin: 5px 0 0; font-size: var(--font-size-xs); color: var(--color-success-text);">
             Real-world performance from actual Chrome users. ${periodText}.
           </p>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: var(--font-size-xs); color: #047857;">Origin: ${cruxData.target ?? 'N/A'}</div>
-          <div style="font-size: var(--font-size-xs); color: #047857;">Type: ${cruxData.targetType === 'origin' ? 'Origin-level' : 'URL-level'}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-success-text);">Origin: ${cruxData.target ?? 'N/A'}</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-success-text);">Type: ${cruxData.targetType === 'origin' ? 'Origin-level' : 'URL-level'}</div>
         </div>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
         ${metricsHtml}
       </div>
-      <p style="margin: 15px 0 0; font-size: var(--font-size-xs); color: #047857; text-align: center;">
+      <p style="margin: 15px 0 0; font-size: var(--font-size-xs); color: var(--color-success-text); text-align: center;">
         ℹ️ Field data from real users is more accurate than lab tests. Lab tests show controlled conditions; field data shows actual user experience.
       </p>
     </div>
@@ -241,7 +240,7 @@ function getStatCard(
   const learnMore = info.learnMore ?? '';
 
   return `
-    <div style="background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%); color: white; padding: 20px; border-radius: var(--radius-lg);" title="${description}">
+    <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid ${gradientStart}; color: var(--color-text-primary); padding: 20px; border-radius: var(--radius-lg);" title="${description}">
       <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 4px;">${icon} ${fullName}</div>
       <div style="font-size: var(--font-size-xs); opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${unit}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--font-size-xs);">
@@ -272,7 +271,7 @@ function getClsCard(
   const learnMore = info.learnMore ?? '';
 
   return `
-    <div style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); color: white; padding: 20px; border-radius: var(--radius-lg);" title="${description}">
+    <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #14b8a6; color: var(--color-text-primary); padding: 20px; border-radius: var(--radius-lg);" title="${description}">
       <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 4px;">📐 Cumulative Layout Shift</div>
       <div style="font-size: var(--font-size-xs); opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}${learnMore ? ` • <a href="${learnMore}" target="_blank" style="color: white; text-decoration: underline;">Learn more</a>` : ''}</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--font-size-xs);">
@@ -302,7 +301,7 @@ function getPageSizeCard(
   const threshold = (THRESHOLDS.PAGE_SIZE / (1024 * 1024)).toFixed(1);
 
   return `
-    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 20px; border-radius: var(--radius-lg);" title="${description}">
+    <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #f59e0b; color: var(--color-text-primary); padding: 20px; border-radius: var(--radius-lg);" title="${description}">
       <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 4px;">📦 Total Page Size</div>
       <div style="font-size: var(--font-size-xs); opacity: 0.75; margin-bottom: 12px;">Target: ≤${threshold}MB • Smaller pages load faster</div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--font-size-xs);">
@@ -429,8 +428,8 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
         ${
           recommendation
             ? `
-        <div style="margin-top: 15px; padding: 12px; background: #fffbeb; border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
-          <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: #92400e; margin-bottom: 4px;">Top recommendation:</div>
+        <div style="margin-top: 15px; padding: 12px; background: var(--color-warning-bg); border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
+          <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-warning-text); margin-bottom: 4px;">Top recommendation:</div>
           <div style="font-size: var(--font-size-sm); color: #78350f;">${escapeHtml(recommendation)}</div>
         </div>
         `
@@ -489,7 +488,7 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
       key: 'lcp',
       label: '🎨 LCP',
       unit: 'ms',
-      colors: ['var(--pink-500)', '#db2777'],
+      colors: ['var(--pink-500)', '#FF7AB8'],
       oVals: origin.lcp,
       cVals: compare.lcp,
     },
@@ -497,7 +496,7 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
       key: 'cls',
       label: '📐 CLS',
       unit: '',
-      colors: ['#14b8a6', '#0d9488'],
+      colors: ['#14b8a6', '#2DD4BF'],
       oVals: origin.cls,
       cVals: compare.cls,
       isCls: true,
@@ -541,7 +540,7 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
       const fullName = info.fullName ?? m.label;
 
       return `
-        <div style="background: linear-gradient(135deg, ${m.colors[0]} 0%, ${m.colors[1]} 100%); color: white; padding: 20px; border-radius: var(--radius-lg);">
+        <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid ${m.colors[0]}; color: var(--color-text-primary); padding: 20px; border-radius: var(--radius-lg);">
           <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 12px;">${m.label} ${fullName !== m.label ? `(${fullName})` : ''}</div>
           <div class="dual-stat-card">
             <div class="dual-stat-side">

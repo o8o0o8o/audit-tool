@@ -28,6 +28,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <title>Audit Comparison - ${escapeHtml(domainName)}</title>
     <style>
         ${getDesignTokens()}
@@ -39,8 +42,10 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: var(--gradient-executive);
+            font-family: var(--font-family-sans);
+            background: var(--color-bg-page);
+            color: var(--color-text-primary);
+            color-scheme: dark;
             padding: 40px 20px;
             min-height: 100vh;
         }
@@ -51,11 +56,11 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .header {
-            background: white;
+            background: var(--color-bg-surface-alt);
+            border: 1px solid var(--color-border-default);
             padding: 30px;
-            border-radius: var(--radius-xl);
+            border-radius: var(--radius-card);
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .header h1 {
@@ -69,11 +74,11 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .section {
-            background: white;
+            background: var(--color-bg-surface-alt);
+            border: 1px solid var(--color-border-default);
             padding: 30px;
-            border-radius: var(--radius-xl);
+            border-radius: var(--radius-card);
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .section h2 {
@@ -163,7 +168,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
             justify-content: center;
             font-size: 32px;
             font-weight: 700;
-            color: white;
+            color: #000;
         }
 
         .score-circle.old {
@@ -246,8 +251,32 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         }
 
         .summary-banner.unchanged {
-            background: linear-gradient(135deg, var(--gray-500) 0%, var(--gray-600) 100%);
-            color: white;
+            background: var(--color-bg-surface-alt);
+            border: 1px solid var(--color-border-default);
+            color: var(--color-text-primary);
+        }
+
+        @media print {
+            :root {
+                --color-bg-page: #fff;
+                --color-bg-surface: #fff;
+                --color-bg-surface-alt: #fff;
+                --color-text-primary: #000;
+                --color-text-secondary: #000;
+                --color-text-muted: #333;
+                --color-border-default: #ccc;
+            }
+
+            body, .header, .section, .summary-banner {
+                background: #fff !important;
+                background-image: none !important;
+                color: #000 !important;
+                border-color: #ccc !important;
+            }
+
+            h1, h2, h3, p, span, td, th, li, a { color: #000 !important; }
+
+            button, .fr-btn { display: none !important; }
         }
     </style>
 </head>

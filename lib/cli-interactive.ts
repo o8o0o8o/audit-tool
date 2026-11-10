@@ -35,7 +35,10 @@ Options:
   --exclude=<pattern>       Exclude URLs matching regex pattern (repeatable)
   --limit=<n>               Max number of pages to audit
   --dry-run                 Show URLs that would be audited, then exit
-  --preset=<name>           Audit preset: quick, standard, or deep
+  --preset=<name>           Audit preset: quick, standard, deep, sales,
+                            marketing, seo, or custom
+  --sections=<csv>          Report sections for --preset=custom
+  --checks=<csv>            Finding groups for --preset=custom
   --no-score                Omit all scores from the curated PDF report
                             (category projections + per-finding point chips)
   --ci[=<threshold>]        CI mode: exit code 1 if score < threshold (default: 70)
@@ -170,7 +173,7 @@ async function interactiveMode() {
 
   // Preset selection
   const presetAnswer = await ask(
-    'Audit preset [1=quick ~2s/page, 2=standard ~4s/page, 3=deep ~6s/page] (default: 2): ',
+    'Audit preset [1=quick ~2s/page, 2=standard ~4s/page, 3=deep ~6s/page, 4=sales, 5=marketing, 6=seo] (default: 2): ',
   );
   if (presetAnswer === '1') {
     args.preset = 'quick';
@@ -181,6 +184,15 @@ async function interactiveMode() {
     args.perf = true;
     args.concurrency = 3;
     args.concurrencyExplicit = true;
+  } else if (presetAnswer === '4') {
+    args.preset = 'sales';
+    args.perf = true;
+  } else if (presetAnswer === '5') {
+    args.preset = 'marketing';
+    args.perf = true;
+  } else if (presetAnswer === '6') {
+    args.preset = 'seo';
+    args.perf = true;
   } else {
     args.preset = 'standard';
   }

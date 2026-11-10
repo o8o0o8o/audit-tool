@@ -29,6 +29,7 @@ import {
   sanitizeProse,
   stripHtml,
   type Phase2State,
+  type ReportSelection,
 } from '../phase2/phase2-runner';
 import type { AuditArtifacts } from '../phase2/types';
 import type { Section } from '../phase2/categorize';
@@ -78,6 +79,7 @@ interface ResolvedState {
   anomalies: Anomaly[];
   suppressed: ReadonlySet<string>;
   noScore: boolean;
+  selection: ReportSelection;
   verbose: boolean;
 }
 
@@ -133,6 +135,7 @@ export async function runVerifyPhase(runDir: string, options: VerifyPhaseOptions
     anomalies: (persisted?.anomalies ?? []) as Anomaly[],
     suppressed: new Set(persisted?.suppressed ?? []),
     noScore: options.noScore ?? persisted?.noScore ?? false,
+    selection: { sections: persisted?.sections, checks: persisted?.checks },
     verbose: options.verbose === true,
   };
 
@@ -193,7 +196,7 @@ async function runOfflineVerification(artifacts: AuditArtifacts, state: Resolved
   // Stage 1 — deterministic. Verify over exactly the set the main report
   // rendered (post LLM-suppression). `loadSiteData` adds the link graph + robots
   // + sitemap (from incoming-links/metadata) so site-level findings are checkable.
-  const baseDetails = preparedDetails(artifacts, state.suppressed);
+  const baseDetails = preparedDetails(artifacts, state.suppressed, state.selection.checks);
   const site = loadSiteData(artifacts.runDir, pages) ?? undefined;
   const summary = verifyDetails(baseDetails, pages, site);
   for (const message of summary.refuted) {
@@ -284,6 +287,7 @@ async function runOfflineVerification(artifacts: AuditArtifacts, state: Resolved
     { confirmed: summary.confirmed, aiConfirmed },
     banner,
     state.noScore,
+    state.selection,
   );
 
   const mdPath = path.join(artifacts.runDir, 'audit-report.verified.md');
@@ -715,7 +719,7 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   // URLs) — NOT just the findings the curated report renders as blocks (capped per
   // section). This is what lets the live pass confirm far more than the dozen-odd
   // per section the PDF shows, shrinking the "unverified" remainder.
-  const baseDetails = preparedDetails(artifacts, state.suppressed);
+  const baseDetails = preparedDetails(artifacts, state.suppressed, state.selection.checks);
   const findings = findingsFromDetails(baseDetails);
 
   console.log(
@@ -825,6 +829,7 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
     { confirmed, aiConfirmed },
     banner,
     state.noScore,
+    state.selection,
   );
 
   const mdPath = path.join(artifacts.runDir, 'audit-report.verified.md');

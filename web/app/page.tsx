@@ -2,16 +2,47 @@
 
 import { useState, type FormEvent } from 'react';
 
+const PRESETS = [
+  { value: 'full', label: 'Full audit', summary: 'Every report section, using the options you would get with no preset.' },
+  { value: 'sales', label: 'Sales', summary: 'Short executive summary, technology stack, CTAs/conversion and top issues.' },
+  { value: 'marketing', label: 'Marketing', summary: 'SEO, content, CTAs/conversion, UX, performance and privacy.' },
+  { value: 'seo', label: 'SEO', summary: 'The full technical SEO set.' },
+  { value: 'custom', label: 'Custom', summary: 'Pick the report sections yourself.' },
+] as const;
+
+const SECTIONS: { value: string; label: string }[] = [
+  { value: 'executive-summary', label: 'Executive summary' },
+  { value: 'technology-stack', label: 'Technology stack' },
+  { value: 'cta', label: 'CTAs / conversion' },
+  { value: 'top-issues', label: 'Top issues' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'seo', label: 'SEO' },
+  { value: 'privacy', label: 'Privacy' },
+  { value: 'accessibility', label: 'Accessibility' },
+  { value: 'ux', label: 'UX' },
+  { value: 'technical', label: 'Technical' },
+  { value: 'charts', label: 'Charts' },
+  { value: 'content-insights', label: 'Content insights' },
+  { value: 'pages', label: 'Pages table' },
+  { value: 'source-code', label: 'Source code' },
+  { value: 'history', label: 'History' },
+];
+
 export default function DispatchPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  const [preset, setPreset] = useState<string>('full');
+  const isCustom = preset === 'custom';
+  const summary = PRESETS.find((p) => p.value === preset)?.summary;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const body = {
       url: form.get('url'),
+      preset,
+      sections: isCustom ? form.getAll('sections') : [],
       perf: form.get('perf') === 'on',
       llm: form.get('llm') === 'on',
       verify: form.get('verify') === 'on',
@@ -51,6 +82,24 @@ export default function DispatchPage() {
           Access key (only if the server requires one)
           <input name="accessKey" type="password" autoComplete="current-password" className="form-input" />
         </label>
+        <fieldset className="form-presets">
+          <legend>Preset</legend>
+          <div className="preset-row">
+            {PRESETS.map((p) => (
+              <label key={p.value} className="preset-choice">
+                <input
+                  name="preset"
+                  type="radio"
+                  value={p.value}
+                  checked={preset === p.value}
+                  onChange={() => setPreset(p.value)}
+                />
+                {p.label}
+              </label>
+            ))}
+          </div>
+          <p className="muted preset-summary">{summary}</p>
+        </fieldset>
         <fieldset className="form-options">
           <legend>Options</legend>
           <label className="form-check">
@@ -65,6 +114,14 @@ export default function DispatchPage() {
           <label className="form-check">
             <input name="contentResearch" type="checkbox" /> Content research (--content-research)
           </label>
+          <p className="form-subhead" hidden={!isCustom}>Report sections</p>
+          <div className="section-grid" hidden={!isCustom}>
+            {SECTIONS.map((sec) => (
+              <label key={sec.value} className="form-check">
+                <input name="sections" type="checkbox" value={sec.value} defaultChecked /> {sec.label}
+              </label>
+            ))}
+          </div>
         </fieldset>
         <label className="form-field">
           Concurrency (1–20)

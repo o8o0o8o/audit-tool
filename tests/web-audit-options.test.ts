@@ -1,7 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import { isValidRunId, newRunId, parseAuditRequest, toCliArgs, toWorkflowInputs } from '../web/lib/audit-options';
+import { ROLE_PRESETS, REPORT_SECTIONS } from '../lib/presets';
+import {
+  WEB_PRESETS,
+  WEB_REPORT_SECTIONS,
+  isValidRunId,
+  newRunId,
+  parseAuditRequest,
+  toCliArgs,
+  toWorkflowInputs,
+} from '../web/lib/audit-options';
 
 void describe('web audit options', () => {
   void it('accepts a valid request and fills defaults', () => {
@@ -10,6 +19,8 @@ void describe('web audit options', () => {
     if (!result.ok) return;
     assert.deepStrictEqual(result.options, {
       url: 'https://example.com',
+      preset: null,
+      sections: [],
       perf: false,
       llm: false,
       verify: false,
@@ -56,6 +67,8 @@ void describe('web audit options', () => {
     assert.deepStrictEqual(inputs, {
       url: 'https://example.com',
       run_id: 'run-12345678',
+      preset: '',
+      sections: '',
       perf: 'true',
       llm: 'true',
       verify: 'true',
@@ -74,6 +87,43 @@ void describe('web audit options', () => {
       '--limit=5',
       '--evidence-cap=20',
     ]);
+  });
+
+  void it('keeps presets and sections in lockstep with lib/presets.ts', () => {
+    assert.deepStrictEqual([...WEB_PRESETS], [...ROLE_PRESETS]);
+    assert.deepStrictEqual([...WEB_REPORT_SECTIONS], [...REPORT_SECTIONS]);
+  });
+
+  void it('passes a role preset through and keeps option toggles', () => {
+    const result = parseAuditRequest({ url: 'https://example.com', preset: 'sales', perf: true, llm: true });
+    assert.ok(result.ok);
+    if (!result.ok) return;
+    assert.strictEqual(result.options.perf, true);
+    assert.strictEqual(result.options.llm, true);
+    const args = toCliArgs(toWorkflowInputs(result.options, 'run-12345678'));
+    assert.deepStrictEqual(args.slice(0, 2), ['--origin=https://example.com', '--preset=sales']);
+    assert.ok(!args.some((a) => a.startsWith('--sections=')));
+    assert.ok(args.includes('--perf') && args.includes('--llm'));
+  });
+
+  void it('maps a custom preset with sections in canonical order', () => {
+    const result = parseAuditRequest({ url: 'https://example.com', preset: 'custom', sections: ['seo', 'cta'], perf: 'on' });
+    assert.ok(result.ok);
+    if (!result.ok) return;
+    const args = toCliArgs(toWorkflowInputs(result.options, 'run-12345678'));
+    assert.deepStrictEqual(args.slice(0, 4), ['--origin=https://example.com', '--preset=custom', '--sections=cta,seo', '--perf']);
+  });
+
+  void it('rejects unknown presets, unknown sections and bad section combos', () => {
+    for (const body of [
+      { url: 'https://example.com', preset: 'bogus' },
+      { url: 'https://example.com', preset: 'custom' },
+      { url: 'https://example.com', preset: 'custom', sections: ['nope'] },
+      { url: 'https://example.com', preset: 'seo', sections: ['seo'] },
+    ]) {
+      assert.strictEqual(parseAuditRequest(body).ok, false, JSON.stringify(body));
+    }
+    assert.ok(parseAuditRequest({ url: 'https://example.com', preset: 'full' }).ok);
   });
 
   void it('validates run ids', () => {

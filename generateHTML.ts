@@ -10,6 +10,8 @@ import { sanitizeDomainName } from './validators';
 import { ReportDataProcessor } from './lib/reports/data-processor';
 import { escapeHtml } from './lib/reports/html-utils';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
+import { categorize } from './lib/phase2/categorize';
+import { matchesChecks, type CheckName, type HtmlSectionId } from './lib/presets';
 
 // Import section generators
 import {
@@ -32,11 +34,88 @@ interface ComparisonOptions {
   compareDomainName: string;
 }
 
+export interface HtmlReportSelection {
+  /** Sections to render, in this order; `undefined` ⇒ every section in default order. */
+  sections?: HtmlSectionId[];
+  /** Check groups whose findings are kept; `undefined` ⇒ no finding filter. */
+  checks?: CheckName[];
+}
+
+const NAV_LINKS: Partial<Record<HtmlSectionId, string>> = {
+  'executive-summary':
+    '<a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>',
+  'issues-detail': '<a href="#issues-detail" title="Issues">📋<span class="nav-label">Issues</span></a>',
+  performance: '<a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>',
+  charts: '<a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>',
+  'content-insights':
+    '<a href="#content-insights" title="Content Insights">🔍<span class="nav-label">Insights</span></a>',
+  'pages-table': '<a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>',
+};
+
+const TAB_LABELS: Partial<Record<HtmlSectionId, string>> = {
+  'executive-summary': 'Summary',
+  'issues-detail': 'Issues',
+  performance: 'Performance',
+  charts: 'Charts',
+  'content-insights': 'Insights',
+  'technology-stack': 'Tech Stack',
+  'pages-table': 'Pages',
+};
+
+const DEFAULT_NAV_ORDER: HtmlSectionId[] = [
+  'executive-summary',
+  'issues-detail',
+  'performance',
+  'charts',
+  'content-insights',
+  'pages-table',
+];
+const DEFAULT_TAB_ORDER: HtmlSectionId[] = [
+  'executive-summary',
+  'issues-detail',
+  'performance',
+  'charts',
+  'content-insights',
+  'technology-stack',
+  'pages-table',
+];
+const DEFAULT_BODY_ORDER: HtmlSectionId[] = [
+  'history',
+  'executive-summary',
+  'issues-detail',
+  'performance',
+  'charts',
+  'technology-stack',
+  'source-code',
+  'content-insights',
+  'pages-table',
+];
+
+function filterFindingsByChecks(jsonData: Record<string, unknown>, checks: readonly CheckName[]): void {
+  const analysis = jsonData.analysis as
+    | { details?: Record<string, unknown>; bySeverity?: Record<string, string[]>; overall?: unknown[] }
+    | undefined;
+  if (!analysis) return;
+  const keep = (message: string) => matchesChecks(message, categorize(message), checks);
+  if (analysis.details) {
+    analysis.details = Object.fromEntries(Object.entries(analysis.details).filter(([message]) => keep(message)));
+  }
+  if (analysis.bySeverity) {
+    for (const severity of Object.keys(analysis.bySeverity)) {
+      analysis.bySeverity[severity] = analysis.bySeverity[severity].filter(keep);
+    }
+  }
+  if (Array.isArray(analysis.overall)) {
+    analysis.overall = analysis.overall.filter((m) => typeof m !== 'string' || keep(m));
+  }
+}
+
 function generateHTML(
   file: string,
   domainName: string,
   outputPath: string | null = null,
   comparisonOpts?: ComparisonOptions,
+  selection: HtmlReportSelection = {},
 ) {
   // Sanitize domain name to prevent injection
   const safeDomainName = sanitizeDomainName(domainName);
@@ -85,6 +164,7 @@ function generateHTML(
   }
 
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
+  if (selection.checks) filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
 
   const pagesWithMetrics = pages.filter((p) => p.TTFB !== undefined);
 
@@ -103,6 +183,48 @@ function generateHTML(
     hasPerformanceMetrics: pagesWithMetrics.length > 0,
     comparison: (reportData as Record<string, unknown>).comparison as ReportSectionData['comparison'],
   };
+
+  const bodyFragments: Record<HtmlSectionId, () => string> = {
+    history: () => getHistoricalProgress(sectionData),
+    'executive-summary': () => `<div id="executive-summary">
+          ${getExecutiveSummary(sectionData)}
+          </div>`,
+    'issues-detail': () => `<div id="issues-detail">
+          ${getIssuesDetail(sectionData)}
+          </div>`,
+    performance: () => `<div id="performance">
+          ${getPerformanceStats(sectionData)}
+          </div>`,
+    charts: () => `<div id="charts">
+          ${getChartsSection()}
+          </div>`,
+    'technology-stack': () => `<div id="technology-stack">
+          ${getTechnologyStack(sectionData)}
+          </div>`,
+    'source-code': () => getSourceCodeAnalysis(sectionData),
+    'content-insights': () => `<div id="content-insights">
+          ${getContentInsights(sectionData)}
+          </div>`,
+    'pages-table': () => `<div id="pages-table">
+          ${getPagesTable(sectionData)}
+          </div>`,
+  };
+  const chosen = selection.sections;
+  const inOrder = (defaults: HtmlSectionId[]) => (chosen ? chosen.filter((id) => defaults.includes(id)) : defaults);
+  const navLinks = inOrder(DEFAULT_NAV_ORDER)
+    .map((id) => NAV_LINKS[id])
+    .join('\n          ');
+  const sectionTabs = inOrder(DEFAULT_TAB_ORDER)
+    .map(
+      (id, i) =>
+        `<button class="section-tab${i === 0 ? ' active' : ''}" data-target="${id}">${TAB_LABELS[id]}</button>`,
+    )
+    .join('\n              ');
+  const bodyHtml = inOrder(DEFAULT_BODY_ORDER).map((id) => bodyFragments[id]());
+  // The default layout keeps config info just before the pages table; a preset puts it last.
+  const configAt = chosen ? bodyHtml.length : bodyHtml.length - 1;
+  bodyHtml.splice(configAt, 0, getConfigInfo(sectionData));
+  const sectionsHtml = bodyHtml.join('\n\n          ');
 
   const safeCompareDomain = isComparison && comparisonOpts ? sanitizeDomainName(comparisonOpts.compareDomainName) : '';
 
@@ -130,12 +252,7 @@ function generateHTML(
 
       <!-- Sticky navigation sidebar -->
       <nav class="report-nav" id="reportNav" aria-label="Report sections">
-          <a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>
-          <a href="#issues-detail" title="Issues">📋<span class="nav-label">Issues</span></a>
-          <a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>
-          <a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>
-          <a href="#content-insights" title="Content Insights">🔍<span class="nav-label">Insights</span></a>
-          <a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>
+          ${navLinks}
       </nav>
 
       <div class="container">
@@ -288,48 +405,10 @@ function generateHTML(
 
           <!-- Section tabs for quick navigation -->
           <div class="section-tabs" id="sectionTabs">
-              <button class="section-tab active" data-target="executive-summary">Summary</button>
-              <button class="section-tab" data-target="issues-detail">Issues</button>
-              <button class="section-tab" data-target="performance">Performance</button>
-              <button class="section-tab" data-target="charts">Charts</button>
-              <button class="section-tab" data-target="content-insights">Insights</button>
-              <button class="section-tab" data-target="technology-stack">Tech Stack</button>
-              <button class="section-tab" data-target="pages-table">Pages</button>
+              ${sectionTabs}
           </div>
 
-          ${getHistoricalProgress(sectionData)}
-
-          <div id="executive-summary">
-          ${getExecutiveSummary(sectionData)}
-          </div>
-
-          <div id="issues-detail">
-          ${getIssuesDetail(sectionData)}
-          </div>
-
-          <div id="performance">
-          ${getPerformanceStats(sectionData)}
-          </div>
-
-          <div id="charts">
-          ${getChartsSection()}
-          </div>
-
-          <div id="technology-stack">
-          ${getTechnologyStack(sectionData)}
-          </div>
-
-          ${getSourceCodeAnalysis(sectionData)}
-
-          <div id="content-insights">
-          ${getContentInsights(sectionData)}
-          </div>
-
-          ${getConfigInfo(sectionData)}
-
-          <div id="pages-table">
-          ${getPagesTable(sectionData)}
-          </div>
+          ${sectionsHtml}
 
           <footer>
               <div class="fr-footer-inner">

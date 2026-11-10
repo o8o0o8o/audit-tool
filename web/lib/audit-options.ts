@@ -1,5 +1,30 @@
+/** Mirrors ROLE_PRESETS / REPORT_SECTIONS in lib/presets.ts (tests assert they stay equal). */
+export const WEB_PRESETS = ['sales', 'marketing', 'seo', 'custom'] as const;
+export type WebPreset = (typeof WEB_PRESETS)[number];
+export const WEB_REPORT_SECTIONS = [
+  'executive-summary',
+  'technology-stack',
+  'cta',
+  'top-issues',
+  'performance',
+  'seo',
+  'privacy',
+  'accessibility',
+  'ux',
+  'technical',
+  'charts',
+  'content-insights',
+  'pages',
+  'source-code',
+  'history',
+] as const;
+
 export interface AuditOptions {
   url: string;
+  /** `null` runs the full audit with no preset. */
+  preset: WebPreset | null;
+  /** Report sections for the `custom` preset; empty otherwise. */
+  sections: string[];
   perf: boolean;
   llm: boolean;
   verify: boolean;
@@ -65,6 +90,27 @@ function parseBool(raw: unknown): boolean {
   return raw === true || raw === 'true' || raw === 'on' || raw === '1';
 }
 
+function parsePreset(raw: unknown, errors: string[]): WebPreset | null {
+  if (raw === undefined || raw === null || raw === '' || raw === 'full') return null;
+  if (typeof raw === 'string' && (WEB_PRESETS as readonly string[]).includes(raw)) return raw as WebPreset;
+  errors.push(`preset must be one of: full, ${WEB_PRESETS.join(', ')}`);
+  return null;
+}
+
+function parseSections(raw: unknown, preset: WebPreset | null, errors: string[]): string[] {
+  const list = raw === undefined || raw === null || raw === '' ? [] : Array.isArray(raw) ? raw : [raw];
+  const known = WEB_REPORT_SECTIONS as readonly string[];
+  const sections = [...new Set(list.map(String))];
+  const unknown = sections.filter((s) => !known.includes(s));
+  if (unknown.length > 0) errors.push(`unknown sections: ${unknown.join(', ')}`);
+  if (preset !== 'custom') {
+    if (sections.length > 0) errors.push('sections are only valid with the custom preset');
+    return [];
+  }
+  if (sections.length === 0) errors.push('the custom preset needs at least one section');
+  return known.filter((s) => sections.includes(s));
+}
+
 function parseInteger(raw: unknown, name: string, min: number, max: number, errors: string[]): number | null {
   if (raw === undefined || raw === null || raw === '') return null;
   const value = typeof raw === 'number' ? raw : Number(raw);
@@ -80,6 +126,8 @@ export function parseAuditRequest(body: unknown): ParseResult {
   const b = body as Record<string, unknown>;
   const errors: string[] = [];
   const url = parseUrl(b.url, errors);
+  const preset = parsePreset(b.preset, errors);
+  const sections = parseSections(b.sections, preset, errors);
   const concurrency = parseInteger(b.concurrency, 'concurrency', CONCURRENCY_MIN, CONCURRENCY_MAX, errors);
   const limit = parseInteger(b.limit, 'limit', 1, LIMIT_MAX, errors);
   const evidenceCap = parseInteger(b.evidenceCap, 'evidenceCap', EVIDENCE_CAP_MIN, EVIDENCE_CAP_MAX, errors);
@@ -88,6 +136,8 @@ export function parseAuditRequest(body: unknown): ParseResult {
     ok: true,
     options: {
       url,
+      preset,
+      sections,
       perf: parseBool(b.perf),
       llm: parseBool(b.llm),
       verify: parseBool(b.verify),
@@ -113,6 +163,8 @@ export function toWorkflowInputs(opts: AuditOptions, runId: string): WorkflowInp
   return {
     url: opts.url,
     run_id: runId,
+    preset: opts.preset ?? '',
+    sections: opts.sections.join(','),
     perf: String(opts.perf),
     llm: String(opts.llm),
     verify: String(opts.verify),
@@ -126,6 +178,8 @@ export function toWorkflowInputs(opts: AuditOptions, runId: string): WorkflowInp
 /** CLI flags for `start.ts`; `.github/workflows/audit.yml` builds the same list in shell. */
 export function toCliArgs(inputs: WorkflowInputs): string[] {
   const args = [`--origin=${inputs.url}`];
+  if (inputs.preset) args.push(`--preset=${inputs.preset}`);
+  if (inputs.sections) args.push(`--sections=${inputs.sections}`);
   if (inputs.perf === 'true') args.push('--perf');
   if (inputs.llm === 'true') args.push('--llm');
   if (inputs.verify === 'true') args.push('--verify');

@@ -41,6 +41,14 @@ on:
         description: Evidence sample cap (1-100)
         type: string
         default: '10'
+      preset:
+        description: Audit preset (sales, marketing, seo, custom; empty = full audit)
+        type: string
+        default: ''
+      sections:
+        description: Report sections for the custom preset (comma-separated)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -60,6 +68,8 @@ jobs:
       IN_CONCURRENCY: ${{ inputs.concurrency }}
       IN_LIMIT: ${{ inputs.limit }}
       IN_EVIDENCE_CAP: ${{ inputs.evidence_cap }}
+      IN_PRESET: ${{ inputs.preset }}
+      IN_SECTIONS: ${{ inputs.sections }}
       # Either a legacy Blob read-write token, or Vercel credentials to pull OIDC Blob access
       # (see web/scripts/vercel-blob-env.sh).
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
@@ -78,10 +88,15 @@ jobs:
               echo "::error::numeric inputs must be integers"; exit 1
             fi
           done
+          case "$IN_PRESET" in ''|sales|marketing|seo|custom) ;; *) echo "::error::invalid preset"; exit 1 ;; esac
+          if [ -n "$IN_SECTIONS" ] && ! printf '%s' "$IN_SECTIONS" | grep -Eq '^[a-z-]+(,[a-z-]+)*$'; then
+            echo "::error::invalid sections"; exit 1
+          fi
           echo "AUDIT_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           echo "AUDIT_OPTIONS=$(jq -cn --arg perf "$IN_PERF" --arg llm "$IN_LLM" --arg verify "$IN_VERIFY" \
             --arg contentResearch "$IN_CONTENT_RESEARCH" --arg concurrency "$IN_CONCURRENCY" \
-            --arg limit "$IN_LIMIT" --arg evidenceCap "$IN_EVIDENCE_CAP" '$ARGS.named')" >> "$GITHUB_ENV"
+            --arg limit "$IN_LIMIT" --arg evidenceCap "$IN_EVIDENCE_CAP" \
+            --arg preset "$IN_PRESET" --arg sections "$IN_SECTIONS" '$ARGS.named')" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
 
@@ -114,6 +129,8 @@ jobs:
         # Mirrors toCliArgs() in web/lib/audit-options.ts.
         run: |
           args=("--origin=$AUDIT_URL")
+          [ -n "$IN_PRESET" ] && args+=("--preset=$IN_PRESET")
+          [ -n "$IN_SECTIONS" ] && args+=("--sections=$IN_SECTIONS")
           [ "$IN_PERF" = "true" ] && args+=("--perf")
           [ "$IN_LLM" = "true" ] && args+=("--llm")
           [ "$IN_VERIFY" = "true" ] && args+=("--verify")

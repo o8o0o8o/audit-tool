@@ -29,6 +29,12 @@ interface ConfigRecord {
   includeUrls?: string[];
   /** Phase 4 — competitor URLs for competitive content research (optional). */
   competitors?: string[];
+  /** Audit preset (quick|standard|deep|sales|marketing|seo|custom); CLI `--preset` wins. */
+  preset?: string;
+  /** Report sections for `preset: "custom"`. */
+  sections?: string[];
+  /** Finding groups for `preset: "custom"`. */
+  checks?: string[];
   analysis?: {
     similarityThreshold?: number;
     jsUnusedThreshold?: number;
@@ -256,6 +262,10 @@ const CONFIG_SCHEMA = {
   },
   excludeUrls: { type: 'array', itemType: 'string' },
   includeUrls: { type: 'array', itemType: 'string' },
+  competitors: { type: 'array', itemType: 'string' },
+  preset: { type: 'string' },
+  sections: { type: 'array', itemType: 'string' },
+  checks: { type: 'array', itemType: 'string' },
   analysis: {
     type: 'object',
     allowedKeys: [
@@ -297,6 +307,18 @@ function validateConfig(config: ConfigRecord) {
       warnings.push(
         `Unknown config key "${key}" - will be ignored. Valid keys: ${[...allowedTopLevelKeys].join(', ')}`,
       );
+      delete validated[key];
+    }
+  }
+
+  if (validated.preset !== undefined && typeof validated.preset !== 'string') {
+    warnings.push(`Invalid preset: ${String(validated.preset)} (must be a string)`);
+    delete validated.preset;
+  }
+  for (const key of ['sections', 'checks'] as const) {
+    const list = validated[key];
+    if (list !== undefined && (!Array.isArray(list) || list.some((v) => typeof v !== 'string'))) {
+      warnings.push(`Invalid ${key}: must be an array of strings`);
       delete validated[key];
     }
   }

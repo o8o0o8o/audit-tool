@@ -136,6 +136,8 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.limit) childArgs.push(`--limit=${args.limit}`);
     if (args.dryRun) childArgs.push('--dry-run');
     if (args.preset) childArgs.push(`--preset=${args.preset}`);
+    if (args.sections?.length) childArgs.push(`--sections=${args.sections.join(',')}`);
+    if (args.checks?.length) childArgs.push(`--checks=${args.checks.join(',')}`);
     if (args.webhook) childArgs.push(`--webhook=${args.webhook}`);
     if (args.generateCi) childArgs.push('--generate-ci');
     if (args.validateConfig) childArgs.push('--validate-config');

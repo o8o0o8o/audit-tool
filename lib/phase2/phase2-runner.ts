@@ -24,6 +24,7 @@ import { nextjsOverrideFor, isNextjsAudit } from '../scoring/nextjs-recommendati
 import type { FixRecommendation } from '../types';
 import { normalizeMessage as _normalizeMessage, normalizeMessageForLookup } from '../utils/finding-id';
 import { categorize, type Section } from './categorize';
+import { matchesChecks, type CheckName } from '../presets';
 import { benchmarkFor } from './benchmarks';
 import { mergeNumericVariants } from '../scoring/merge-variants';
 import { consolidateFindings, findingGroupKey } from './consolidate';
@@ -64,6 +65,10 @@ export interface Phase2Options {
    *  (`+~N pts`), and the methodology paragraph that explains them. Findings,
    *  severities, counts and fixes are all unaffected. */
   noScore?: boolean;
+  /** Report sections to render, in this order; `undefined` ⇒ every section in default order. */
+  sections?: Section[];
+  /** Check groups whose findings are kept; `undefined` ⇒ no finding filter. */
+  checks?: CheckName[];
   /** Surface API/cache errors. */
   verbose?: boolean;
 }
@@ -393,8 +398,22 @@ function applySuppression(
 /** Prepared details with verification suppression already applied. Exported
  *  for the Phase 3 verify runner, which must verify and re-render over exactly
  *  the set the main report rendered. */
-export function preparedDetails(artifacts: AuditArtifacts, suppressed: ReadonlySet<string>): Record<string, IssueDetail> {
-  return applySuppression(prepareDetails(artifacts), suppressed);
+export function preparedDetails(
+  artifacts: AuditArtifacts,
+  suppressed: ReadonlySet<string>,
+  checks?: readonly CheckName[],
+): Record<string, IssueDetail> {
+  const details = applySuppression(prepareDetails(artifacts), suppressed);
+  if (!checks) return details;
+  return Object.fromEntries(
+    Object.entries(details).filter(([message]) => matchesChecks(message, categorize(message), checks)),
+  );
+}
+
+/** Sections and finding groups a report renders; empty ⇒ the full report. */
+export interface ReportSelection {
+  sections?: Section[];
+  checks?: CheckName[];
 }
 
 /** Drop HTML tags from analyzer details so the markdown stays clean. */
@@ -1312,14 +1331,18 @@ export function buildReportMarkdown(
   verifyView?: VerifyView,
   verifyBanner?: string,
   noScore = false,
+  selection: ReportSelection = {},
 ): string {
   const isNextjs = detectNextjs(artifacts);
   const sourceMapping = artifacts.repoAnalysis?.sourceMapping ?? null;
   // One details map drives both the summary and the sections so suppression and
   // ranking stay identical across them.
-  const details = preparedDetails(artifacts, suppressed);
+  const details = preparedDetails(artifacts, suppressed, selection.checks);
   const buckets = bucketDetails(details);
-  mergeAnomalies(buckets, anomalies);
+  mergeAnomalies(
+    buckets,
+    anomalies.filter((a) => matchesChecks(a.title, a.section, selection.checks)),
+  );
   // Score-impact model: ties every category section and finding to the score it
   // moves. Built from the same prepared details the sections render, so the
   // annotations and the findings can never disagree. With --no-score we leave it
@@ -1351,7 +1374,7 @@ export function buildReportMarkdown(
   if (verifyBanner) parts.push(verifyBanner);
   parts.push(buildPurpose(artifacts, noScore));
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
-  for (const sec of SECTION_ORDER) {
+  for (const sec of selection.sections ?? SECTION_ORDER) {
     parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView, screenshots, embedded, probes, siteFacts));
   }
   return parts.filter(Boolean).join('\n');
@@ -1379,11 +1402,11 @@ async function prepareNarratives(
 
   // Generate prose over the same suppressed set the report will render, so the
   // narrative never references a finding that was dropped.
-  const buckets = bucketDetails(preparedDetails(artifacts, suppressed));
+  const buckets = bucketDetails(preparedDetails(artifacts, suppressed, options.checks));
   const cacheDir = path.join(artifacts.runDir, 'cache', 'llm-narrative');
 
   const out: Partial<Record<Section, string | null>> = {};
-  const sectionsWithItems = SECTION_ORDER.filter((section) => buckets[section].length > 0);
+  const sectionsWithItems = (options.sections ?? SECTION_ORDER).filter((section) => buckets[section].length > 0);
   const progress = new PhaseProgress('Section narratives (LLM)', sectionsWithItems.length);
   const calls = sectionsWithItems.map(async (section) => {
     const items = buckets[section];
@@ -2685,6 +2708,10 @@ export interface Phase2State {
   anomalies: Anomaly[];
   /** Whether the main report was rendered without scores (--no-score). */
   noScore: boolean;
+  /** Rendered sections in order; absent ⇒ every section in default order. */
+  sections?: Section[];
+  /** Check groups the findings were filtered to; absent ⇒ no filter. */
+  checks?: CheckName[];
 }
 
 /** Persist the {@link Phase2State} boundary artifact next to the report. */
@@ -2694,6 +2721,7 @@ function writePhase2State(
   narratives: Partial<Record<Section, string | null>>,
   anomalies: Anomaly[],
   noScore: boolean,
+  selection: ReportSelection,
 ): void {
   const state: Phase2State = {
     version: 1,
@@ -2702,6 +2730,8 @@ function writePhase2State(
     narratives,
     anomalies,
     noScore,
+    ...(selection.sections && { sections: selection.sections }),
+    ...(selection.checks && { checks: selection.checks }),
   };
   fs.writeFileSync(path.join(runDir, 'phase2-state.json'), JSON.stringify(state, null, 2));
 }
@@ -2738,7 +2768,17 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   // the report and the persisted Phase 2→3 state, so the verified report and
   // the live verify pass operate on the same consolidated set.
   const anomalies = consolidateAnomalies(rawAnomalies);
-  const markdown = buildReportMarkdown(artifacts, narratives, anomalies, suppressed, undefined, undefined, options.noScore === true);
+  const selection: ReportSelection = { sections: options.sections, checks: options.checks };
+  const markdown = buildReportMarkdown(
+    artifacts,
+    narratives,
+    anomalies,
+    suppressed,
+    undefined,
+    undefined,
+    options.noScore === true,
+    selection,
+  );
 
   const mdPath = path.join(runDir, 'audit-report.md');
   fs.writeFileSync(mdPath, markdown);
@@ -2747,7 +2787,7 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   // later standalone re-verify) re-renders the verified report identically.
   // Best-effort: a failed state write must not fail the report itself.
   try {
-    writePhase2State(runDir, suppressed, narratives, anomalies, options.noScore === true);
+    writePhase2State(runDir, suppressed, narratives, anomalies, options.noScore === true, selection);
   } catch (e: unknown) {
     console.warn('⚠️  Could not write phase2-state.json:', (e as Error).message);
   }

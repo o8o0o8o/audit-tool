@@ -3,6 +3,8 @@
  * Shared interfaces used across all modules
  */
 
+import type { PresetName } from './presets';
+
 // ─── Severity & Issues ───────────────────────────────────────────────────────
 
 export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low';
@@ -1364,7 +1366,9 @@ export interface AuditConfig {
   saveHtml?: boolean;
   screenshots?: boolean;
   concurrency?: number;
-  preset?: 'quick' | 'standard' | 'deep';
+  preset?: PresetName;
+  sections?: string[];
+  checks?: string[];
   network?: string;
   cpu?: string;
   watch?: number;
@@ -1645,7 +1649,11 @@ export interface ParsedArgs {
   help: boolean;
   open: boolean;
   verbose: boolean;
-  preset: 'quick' | 'standard' | 'deep' | null;
+  preset: PresetName | null;
+  /** `--sections=<csv>` for `--preset=custom` (validated by `resolvePreset`). */
+  sections: string[];
+  /** `--checks=<csv>` for `--preset=custom` (validated by `resolvePreset`). */
+  checks: string[];
   sites: string | null;
   slack: string | null;
   watch: number | null;
@@ -1667,6 +1675,8 @@ export interface ParsedArgs {
   /** Comma-separated competitor URLs or a path to a file (one URL per line). Optional — LLM discovers when omitted. */
   competitors: string | null;
   warnings: string[];
+  /** Fatal argument errors (e.g. unknown preset); the CLI exits non-zero when non-empty. */
+  errors: string[];
 }
 
 // ─── SEOData Options ────────────────────────────────────────────────────────

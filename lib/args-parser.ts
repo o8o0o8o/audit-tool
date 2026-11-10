@@ -4,6 +4,7 @@
  */
 
 import type { ParsedArgs } from './types';
+import { isPresetName, parseCsvList, unknownPresetMessage } from './presets';
 import * as os from 'os';
 
 /**
@@ -70,7 +71,9 @@ function parseArgs(args: string[]): ParsedArgs {
     help: false, // Show help text
     open: false, // Auto-open HTML report in browser
     verbose: false, // Verbose output (per-URL logging)
-    preset: null, // Audit preset: quick, standard, deep
+    preset: null, // Audit preset: quick, standard, deep, sales, marketing, seo, custom
+    sections: [] as string[], // --sections for --preset=custom
+    checks: [] as string[], // --checks for --preset=custom
     sites: null, // File with list of URLs for batch audit
     slack: null, // Slack webhook URL for notifications
     watch: null, // Watch mode interval in minutes
@@ -91,6 +94,7 @@ function parseArgs(args: string[]): ParsedArgs {
     contentResearch: false, // Phase 4 — competitive content research + content plan (opt-in)
     competitors: null, // Competitor URLs (CSV or file path); optional — LLM discovers when omitted
     warnings: [] as string[], // Collect validation warnings
+    errors: [] as string[], // Fatal argument errors
   };
 
   for (const arg of args) {
@@ -104,11 +108,15 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.verbose = true;
     } else if (arg.startsWith('--preset=')) {
       const preset = arg.substring('--preset='.length).toLowerCase();
-      if (['quick', 'standard', 'deep'].includes(preset)) {
-        parsed.preset = preset as ParsedArgs['preset'];
+      if (isPresetName(preset)) {
+        parsed.preset = preset;
       } else {
-        parsed.warnings.push(`Unknown preset "${preset}". Use: quick, standard, or deep.`);
+        parsed.errors.push(unknownPresetMessage(preset));
       }
+    } else if (arg.startsWith('--sections=')) {
+      parsed.sections = parseCsvList(arg.substring('--sections='.length));
+    } else if (arg.startsWith('--checks=')) {
+      parsed.checks = parseCsvList(arg.substring('--checks='.length));
     } else if (arg.startsWith('--ci=')) {
       const val = parseInt(arg.substring('--ci='.length), 10);
       parsed.ci = isNaN(val) ? 70 : Math.max(0, Math.min(100, val));

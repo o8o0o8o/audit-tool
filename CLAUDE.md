@@ -210,6 +210,7 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 - `--competitors=<csv|file>` - competitor hosts for `--content-research` (optional; LLM discovers when omitted; also `competitors: []` in `.seoauditrc`)
 - `--phase2` / `--no-phase2` - curated PDF report (on by default)
 - `--no-score` - strip scores from the report
+- `--preset=<name>` - `quick|standard|deep` (crawl speed) or role presets `sales|marketing|seo|custom` that also select report sections (in order) and finding groups; `--sections=<csv>` / `--checks=<csv>` build a `custom` one. Defined in `lib/presets.ts`; each preset, its data and rationale are in [`docs/audit-presets.md`](docs/audit-presets.md)
 - `--evidence` / `--no-evidence` / `--evidence-cap=<n>` - per-page evidence capture
 
 ### lib/constants.ts

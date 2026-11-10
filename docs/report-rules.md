@@ -80,6 +80,31 @@ than expected, check its category first. Notably, these are **SEO**, not the
 `technical` catch-all: thin/insufficient content, E-E-A-T / author / YMYL
 signals, and crawl-budget waste.
 
+### Presets: section selection and check filtering
+
+A role or custom preset (`--preset=sales|marketing|seo|custom`, see
+`lib/presets.ts`) narrows what a report shows; it never changes how a finding
+is ranked, categorized or de-duplicated.
+
+- **Sections.** `resolvePreset` returns `phase2Sections` and `htmlSections`.
+  `buildReportMarkdown` renders only those Phase 2 sections, in the preset's
+  order (not `SECTION_ORDER`); `generateHTML` renders only those HTML sections,
+  nav links and tabs, in the preset's order, with the config block last. The
+  cover, purpose and summary always render.
+- **Checks.** A finding belongs to its `categorize()` section plus any keyword
+  family in `findingCheckGroups` (`security`, `content`, `cta`, `technology`,
+  `analytics`). With `--checks`, `preparedDetails` keeps only findings in a
+  selected group, before section routing — so the summary, sections, LLM
+  narratives and the HTML issue lists all agree. AI-discovered anomalies are
+  filtered the same way.
+- **Phase 3.** `phase2-state.json` stores `sections` and `checks`;
+  `runVerifyPhase` applies both, so the verified and refuted reports never
+  bring back a filtered finding. A state file without them renders the full
+  report, unfiltered.
+- **No preset** (or `quick`/`standard`/`deep`) renders byte-identical output to
+  the pre-preset report — guarded by the golden files in
+  `tests/fixtures/report-fixture/golden/`.
+
 ## 5. De-duplication
 
 The same underlying issue is sometimes reported two ways — a per-page analyzer

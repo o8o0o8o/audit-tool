@@ -146,6 +146,61 @@ h1 {
   font-weight: 500;
 }
 
+.form-options[hidden] {
+  display: none;
+}
+
+.form-presets {
+  border: 1px solid var(--color-grey-200);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 0 0 24px;
+  min-width: 0;
+}
+
+.form-presets legend {
+  padding: 0 8px;
+  font-weight: 500;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.preset-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.preset-choice input {
+  accent-color: var(--color-accent);
+  width: 18px;
+  height: 18px;
+}
+
+.preset-summary {
+  margin: 8px 0 0;
+}
+
+.form-subhead {
+  margin: 12px 0 4px;
+  font-weight: 500;
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0 16px;
+}
+
+.section-grid[hidden] {
+  display: none;
+}
+
 .form-check {
   display: flex;
   align-items: center;

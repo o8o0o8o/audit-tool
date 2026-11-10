@@ -22,6 +22,7 @@ import { generateBadgeSVG } from './lib/utils/badge-generator';
 
 // Import SEOData from extracted module (avoids circular dependency)
 import { SEOData } from './lib/seo-data';
+import { PresetError, applyPresetRunOptions, resolvePreset, type ResolvedPreset } from './lib/presets';
 
 // Graceful Ctrl+C handler - save progress before exiting
 let _seoInstance: SEOData | null = null;
@@ -307,18 +308,29 @@ async function audit() {
       args.warnings.forEach((warning) => console.warn(`⚠️  ${warning}`));
     }
 
-    // Apply presets
-    if (args.preset === 'quick') {
-      if (!args.concurrencyExplicit) args.concurrency = 10;
-      args.limit ??= 50;
-      args.perf = false;
-      console.log('Quick preset: 50 pages max, no perf metrics, concurrency 10');
-    } else if (args.preset === 'deep') {
-      if (!args.concurrencyExplicit) args.concurrency = 3;
-      args.perf = true;
-      args.saveHtml = true;
-      console.log('Deep preset: all pages, perf enabled, HTML snapshots, concurrency 3');
+    if (args.errors.length > 0) {
+      args.errors.forEach((error) => console.error(`❌ ${error}`));
+      process.exit(1);
     }
+
+    let resolvedPreset: ResolvedPreset;
+    try {
+      const presetName = args.preset ?? config.preset ?? null;
+      // Config sections/checks only apply when the preset in effect also comes
+      // from config, or when that preset is `custom` (CLI --preset=sales must
+      // not inherit a config's custom section list and then fail validation).
+      const useConfigLists = args.preset == null || presetName === 'custom';
+      const sections =
+        args.sections.length > 0 ? args.sections : useConfigLists ? (config.sections ?? []) : [];
+      const checks = args.checks.length > 0 ? args.checks : useConfigLists ? (config.checks ?? []) : [];
+      resolvedPreset = resolvePreset(presetName, { sections, checks });
+    } catch (e: unknown) {
+      if (!(e instanceof PresetError)) throw e;
+      console.error(`❌ ${e.message}`);
+      process.exit(1);
+    }
+    const presetSummary = applyPresetRunOptions(args, resolvedPreset);
+    if (presetSummary) console.log(presetSummary);
 
     // Apply config to concurrency only if not explicitly set via CLI
     if (!args.concurrencyExplicit && config.crawl?.concurrency) {
@@ -538,7 +550,10 @@ async function audit() {
 
     // Generate HTML report in the same directory as the JSON file
     const htmlOutputPath = seo.fileManager.getHtmlFilePath();
-    generateHTML(seo.file, seo.domainName!, htmlOutputPath);
+    generateHTML(seo.file, seo.domainName!, htmlOutputPath, undefined, {
+      sections: resolvedPreset.htmlSections,
+      checks: resolvedPreset.checks,
+    });
 
     // Phase 2 — curated markdown + PDF report. Opt-out via --no-phase2.
     let phase2Succeeded = false;
@@ -558,6 +573,8 @@ async function audit() {
           llmFindings: args.llmFindings === true,
           llmVerify: args.llmVerify === true,
           noScore: args.noScore === true,
+          sections: resolvedPreset.phase2Sections,
+          checks: resolvedPreset.checks,
           verbose: args.verbose === true,
         });
         console.log(`📄 Curated report: ${pdfPath}`);

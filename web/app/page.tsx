@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { estimateAuditDuration, formatEstimate, type AuditEstimate } from '../lib/audit-options';
 
@@ -37,7 +37,26 @@ export default function DispatchPage() {
   const [preset, setPreset] = useState<string>('full');
   const isCustom = preset === 'custom';
   const summary = PRESETS.find((p) => p.value === preset)?.summary;
-  const [estimate, setEstimate] = useState<AuditEstimate | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [estimate, setEstimate] = useState<AuditEstimate | null>(() =>
+    estimateAuditDuration({
+      url: '',
+      preset: 'full',
+      sections: [],
+      perf: false,
+      llm: false,
+      verify: false,
+      contentResearch: false,
+      concurrency: 5,
+      limit: null,
+      evidenceCap: 10,
+    }),
+  );
+
+  // The preset radio is controlled, so recompute after React commits the new preset.
+  useEffect(() => {
+    if (formRef.current) refreshEstimate(formRef.current);
+  }, [preset]);
 
   function refreshEstimate(formEl: HTMLFormElement) {
     const form = new FormData(formEl);
@@ -100,6 +119,7 @@ export default function DispatchPage() {
     <main>
       <h1>Run an audit</h1>
       <form
+        ref={formRef}
         className="card"
         onSubmit={onSubmit}
         onChange={(e) => refreshEstimate(e.currentTarget)}
@@ -170,11 +190,9 @@ export default function DispatchPage() {
           <button type="submit" className="btn" disabled={submitting}>
             {submitting ? 'Dispatching…' : 'Start audit'}
           </button>
-          {estimate && (
-            <span className="muted estimate" data-testid="audit-estimate">
-              {formatEstimate(estimate)}
-            </span>
-          )}
+          <span className="muted estimate" data-testid="audit-estimate">
+            {estimate ? formatEstimate(estimate) : 'Pick a section to see an estimate'}
+          </span>
         </div>
       </form>
       {error && (

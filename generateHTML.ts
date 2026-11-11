@@ -86,7 +86,6 @@ const DEFAULT_TAB_ORDER: HtmlSectionId[] = [
   'pages-table',
 ];
 const DEFAULT_BODY_ORDER: HtmlSectionId[] = [
-  'history',
   'executive-summary',
   'issues-detail',
   'performance',
@@ -94,6 +93,7 @@ const DEFAULT_BODY_ORDER: HtmlSectionId[] = [
   'technology-stack',
   'source-code',
   'content-insights',
+  'history',
   'pages-table',
 ];
 

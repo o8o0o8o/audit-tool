@@ -40,7 +40,7 @@ SEO  >  Performance  >  UX  >  Privacy/Security  >  Accessibility  >  Technical
 - Defined by `SECTION_ORDER` → `SECTION_RANK` in `lib/phase2/phase2-runner.ts`.
 - `privacy` maps to the **Security** score (GDPR/cookie gaps are what the
   security score penalises).
-- This order leads in **every** ranked list — the per-section bodies *and* the
+- This order leads in **every** ranked list — the per-section bodies _and_ the
   cross-section summary lists (Top Priority / Quick Wins / Long-term). A
   widespread low-priority finding (e.g. a CSS-level accessibility issue on every
   page) must never outrank a higher-priority SEO/security finding.
@@ -57,7 +57,7 @@ items). Keys, in order:
 4. **Stable message/issue text** (`localeCompare`) — the final tiebreaker.
 
 Never rank a report list by raw occurrence `count`. Count-only ranking surfaces
-whatever is most *widespread* rather than most *important*. Occurrence count
+whatever is most _widespread_ rather than most _important_. Occurrence count
 only decides the **"systemic"** label on a finding, never its position.
 
 ## 3. Severity moderation
@@ -89,7 +89,8 @@ is ranked, categorized or de-duplicated.
 - **Sections.** `resolvePreset` returns `phase2Sections` and `htmlSections`.
   `buildReportMarkdown` renders only those Phase 2 sections, in the preset's
   order (not `SECTION_ORDER`); `generateHTML` renders only those HTML sections,
-  nav links and tabs, in the preset's order, with the config block last. The
+  nav links and tabs, in the preset's order, with the config block just before
+  the pages table (last when the preset has no pages table). The
   cover, purpose and summary always render.
 - **Checks.** A finding belongs to its `categorize()` section plus any keyword
   family in `findingCheckGroups` (`security`, `content`, `cta`, `technology`,
@@ -105,6 +106,15 @@ is ranked, categorized or de-duplicated.
   the pre-preset report — guarded by the golden files in
   `tests/fixtures/report-fixture/golden/`.
 
+### HTML report layout
+
+- With no preset, the history section sits after the main sections, just before
+  the config block and pages table. Before a second audit exists it is one
+  `.history-note` line, with no score cards.
+- The HTML issues table (main and comparison) shows the first 10 issues after
+  the severity/impact sort; the rest are hidden behind a "Show all (N)" toggle.
+  A severity filter shows every issue of that severity; print shows all rows.
+
 ## 5. De-duplication
 
 The same underlying issue is sometimes reported two ways — a per-page analyzer
@@ -115,8 +125,8 @@ appears twice across summary sub-sections.
 
 **Redirect sources are not distinct pages.** A requested URL that redirected
 (e.g. the trailing-slash twin `/x` → `/x/`, or an old path → new path) is
-followed to its destination, so the stored `PageInfo` holds the *destination's*
-title/description/content keyed under the *requested* URL. Site-wide validators
+followed to its destination, so the stored `PageInfo` holds the _destination's_
+title/description/content keyed under the _requested_ URL. Site-wide validators
 that compare pages across the crawl (`duplicate-checker`, `content-similarity-analyzer`)
 must skip pages with `hasRedirects`, or the destination's own title/content
 registers as a "duplicate"/"near-duplicate" of itself — the classic
@@ -126,13 +136,13 @@ redirect finding.
 **Tier-twin findings (one metric, two severity bands) must not exist.** A
 per-page analyzer measuring a single quantity must emit **one** message string
 regardless of which threshold band the page falls in — the band it crossed goes
-in the *detail*, never the title. Splitting into two tier-named titles (the old
+in the _detail_, never the title. Splitting into two tier-named titles (the old
 `Large DOM size` warning-band finding vs `Excessive DOM size` failure-band
 finding in `dom-complexity-analyzer.ts`) reads as two redundant findings for one
 problem, because site-wide aggregation surfaces both bands' page populations at
 once. For the same reason the message's severity must be **fixed**, not derived
 per page from the band: `ErrorAggregator.addError` keys by message and keeps the
-*first-seen* severity, so a per-page-varying severity would make the finding's
+_first-seen_ severity, so a per-page-varying severity would make the finding's
 severity depend on the non-deterministic crawl-completion order (a §6 violation).
 Collapsed the same way (one message, fixed **MEDIUM** severity, band in the
 detail): **URL length** — `URL is too long` (the `URL is longer than
@@ -146,7 +156,7 @@ downstream identity maps — `fix-recommendations-extended.ts`, `seo-catalog.ts`
 `lib/phase3/live-verifier.ts` matcher(s) + `lib/phase2/benchmarks.ts` regex onto
 the surviving canonical, or the fix/benchmark/verification silently drops.
 
-This is distinct from the deliberate *per-page vs site-wide* twins above (e.g.
+This is distinct from the deliberate _per-page vs site-wide_ twins above (e.g.
 `Large web font payload` / `Excessive web font payload`), which describe
 different scopes and are reconciled by `DEDUP_GROUPS` — not two bands of the same
 per-page measurement.
@@ -180,24 +190,24 @@ order of `analysis.details` keys and of each finding's `examples` array — is
    `compareExamplesWorstFirst`, so the shown sample leads with the most severe
    pages rather than an alphabetical slice. The comparator's lexicographic
    tiebreak makes the order — and thus the shown sample — the same every run.
-3. **Example *retention* is worst-first and deterministic.**
+3. **Example _retention_ is worst-first and deterministic.**
    `ErrorAggregator.addError` keeps the **worst** examples (highest embedded
    metric, same comparator) once it hits `MAX_EXAMPLES_PER_ISSUE` (100), not the
    first-arriving or alphabetically-smallest ones — so even findings on >100
    pages retain the most severe sample (same memory bound). Metric-less bare-URL
    examples tie at `-Infinity` and fall back to the lexicographic tiebreak.
 
-### What is *not* deterministic (by nature)
+### What is _not_ deterministic (by nature)
 
 - **Live performance metrics** (TTFB, LCP, CLS, …) depend on the network and
-  machine running the crawl. The *findings and ranking* derived from them are
+  machine running the crawl. The _findings and ranking_ derived from them are
   stable given the same measurements, but the raw numbers will differ.
 - **Optional LLM passes** (the `--llm` flag: narrative, findings, repo, revalidation)
   are model-driven and not bit-reproducible. They are opt-in; the default
   template-driven report is deterministic. Results are disk-cached per audit so
-  re-runs of the *same* audit are stable.
+  re-runs of the _same_ audit are stable.
 - **The live `--verify` pass** (default; `lib/phase3/live-verifier.ts`) re-fetches
-  each finding's first example from the *live* site, so its verdicts reflect the
+  each finding's first example from the _live_ site, so its verdicts reflect the
   site's current state at verification time, not the crawl-time snapshot — it is
   non-deterministic by design and timestamped in the report banner. It writes a
   SEPARATE `audit-report.verified.{md,pdf}` and never touches the deterministic

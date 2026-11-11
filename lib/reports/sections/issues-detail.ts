@@ -15,12 +15,18 @@ import type { ReportSectionData, AnalysisDetail, FixRecommendation, ComparisonDa
 
 /** Shared inline script for issue table filtering/expanding (used in both main and comparison reports) */
 function getIssueTableScript() {
-  return `<script>
-    function filterIssueSev(sev, btn) {
-      document.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      document.querySelectorAll('.issues-table-row').forEach(function(r) {
-        var show = sev === 'all' || r.dataset.severity === sev;
+  return `<style>
+    @media print {
+      .issues-table-row[data-overflow="1"] { display: table-row !important; }
+      .issues-show-all { display: none !important; }
+    }
+    </style>
+    <script>
+    function applyIssueRows(section) {
+      var sev = section.dataset.sev || 'all';
+      var expanded = section.dataset.expanded === '1';
+      section.querySelectorAll('.issues-table-row').forEach(function(r) {
+        var show = sev === 'all' ? (expanded || r.dataset.overflow !== '1') : r.dataset.severity === sev;
         r.style.display = show ? '' : 'none';
         var detail = r.nextElementSibling;
         if (detail && detail.classList.contains('issue-detail-row')) {
@@ -28,6 +34,23 @@ function getIssueTableScript() {
           r.querySelector('.row-chevron').textContent = '▸';
         }
       });
+      var more = section.querySelector('.issues-show-all');
+      if (more) {
+        more.style.display = sev === 'all' ? '' : 'none';
+        more.textContent = expanded ? 'Show less' : more.dataset.label;
+      }
+    }
+    function filterIssueSev(sev, btn) {
+      var section = btn.closest('.issues-section');
+      section.querySelectorAll('.sev-pill').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      section.dataset.sev = sev;
+      applyIssueRows(section);
+    }
+    function toggleIssuesShowAll(btn) {
+      var section = btn.closest('.issues-section');
+      section.dataset.expanded = section.dataset.expanded === '1' ? '0' : '1';
+      applyIssueRows(section);
     }
     function toggleIssueDetail(idx) {
       var row = document.getElementById('issue-detail-' + idx);
@@ -38,6 +61,19 @@ function getIssueTableScript() {
       if (chevron) chevron.textContent = showing ? '▸' : '▾';
     }
     </script>`;
+}
+
+/** Issues shown before the "Show all" toggle; the rest are the lowest-severity ones after the sort. */
+const ISSUES_VISIBLE = 10;
+
+function overflowAttrs(idx: number) {
+  return idx >= ISSUES_VISIBLE ? ' data-overflow="1"' : '';
+}
+
+function renderShowAllButton(total: number) {
+  if (total <= ISSUES_VISIBLE) return '';
+  const label = `Show all (${total})`;
+  return `<button type="button" class="issues-show-all sev-pill" data-label="${label}" onclick="toggleIssuesShowAll(this)" style="margin-top:12px;">${label}</button>`;
 }
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
@@ -164,6 +200,7 @@ function getIssuesDetail(data: ReportSectionData) {
           ${issues.map((issue, i) => renderIssueRow(issue, i)).join('')}
         </tbody>
       </table>
+      ${renderShowAllButton(issues.length)}
     </div>
 
     ${getIssueTableScript()}
@@ -189,14 +226,14 @@ function renderIssueRow(issue: IssueEntry, idx: number) {
   const examples = detail.examples ?? [];
 
   return `
-    <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
+    <tr class="issues-table-row" data-severity="${sev}"${overflowAttrs(idx)} onclick="toggleIssueDetail(${idx})" style="cursor:pointer;${idx >= ISSUES_VISIBLE ? 'display:none;' : ''}">
       <td style="text-align:center;color:var(--color-text-disabled);font-size:var(--font-size-xs);"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
       <td style="font-weight:var(--font-weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:var(--amber-100);color:var(--color-warning-text);padding:1px 6px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);vertical-align:middle;">QUICK WIN</span>' : ''}</td>
       <td style="text-align:right;font-variant-numeric:tabular-nums;">${count}</td>
       <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? ScoreCalculator.effortLevel(fix.effort) : '—'}</td>
     </tr>
-    <tr class="issue-detail-row" id="issue-detail-${idx}" style="display:none;">
+    <tr class="issue-detail-row" id="issue-detail-${idx}"${overflowAttrs(idx)} style="display:none;">
       <td colspan="5" style="padding:0;">
         ${renderIssueDetail(key, detail, fix, examples, count, idx)}
       </td>
@@ -376,6 +413,7 @@ function getComparisonIssuesDetail(jsonData: Record<string, unknown>, comparison
           ${issues.map((issue, i) => renderComparisonIssueRow(issue, i)).join('')}
         </tbody>
       </table>
+      ${renderShowAllButton(issues.length)}
     </div>
 
     ${getIssueTableScript()}
@@ -403,7 +441,7 @@ function renderComparisonIssueRow(issue: ComparisonIssueEntry, idx: number) {
           })();
 
   return `
-    <tr class="issues-table-row" data-severity="${sev}" onclick="toggleIssueDetail(${idx})" style="cursor:pointer;">
+    <tr class="issues-table-row" data-severity="${sev}"${overflowAttrs(idx)} onclick="toggleIssueDetail(${idx})" style="cursor:pointer;${idx >= ISSUES_VISIBLE ? 'display:none;' : ''}">
       <td style="text-align:center;color:var(--color-text-disabled);font-size:var(--font-size-xs);"><span class="row-chevron" id="issue-chevron-${idx}">▸</span></td>
       <td><span class="issue-sev-pill" style="background:${styles.bg};color:${styles.text};">${sev}</span></td>
       <td style="font-weight:var(--font-weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;" title="${escapeHtml(key)}">${escapeHtml(key)}${isQuickWin ? ' <span style="background:var(--amber-100);color:var(--color-warning-text);padding:1px 6px;border-radius:var(--radius-sm);font-size:var(--font-size-2xs);font-weight:var(--font-weight-semibold);vertical-align:middle;">QUICK WIN</span>' : ''}</td>
@@ -412,7 +450,7 @@ function renderComparisonIssueRow(issue: ComparisonIssueEntry, idx: number) {
       <td style="text-align:center;">${statusBadge}</td>
       <td style="text-align:right;font-size:var(--font-size-xs);color:var(--color-text-muted);">${fix?.effort ? ScoreCalculator.effortLevel(fix.effort) : '—'}</td>
     </tr>
-    <tr class="issue-detail-row" id="issue-detail-${idx}" style="display:none;">
+    <tr class="issue-detail-row" id="issue-detail-${idx}"${overflowAttrs(idx)} style="display:none;">
       <td colspan="7" style="padding:0;">
         ${renderIssueDetail(key, detail, fix, examples, originCount, idx)}
       </td>

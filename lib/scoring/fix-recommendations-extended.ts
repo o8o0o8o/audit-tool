@@ -2155,4 +2155,43 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     fix: 'A very high link count per page dilutes the link equity each link passes and makes the page harder to crawl and read. Trim navigation/footer link dumps, paginate long link lists, and keep links focused on the page\'s primary intent.',
     resources: [{ text: 'Crawl budget', url: 'https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget' }],
   },
+
+  // ─── Visual ───────────────────────────────────────────────────────────────
+  'Broken images detected': {
+    effort: '30 minutes',
+    fix: 'Some <img> elements loaded but decoded to nothing. Check each listed src for a wrong path, a deleted asset or a non-image response, then fix the URL or remove the element.',
+    resources: [{ text: 'Image best practices', url: 'https://developers.google.com/search/docs/appearance/google-images' }],
+  },
+  'Failed image or media requests': {
+    effort: '30 minutes',
+    fix: 'Image, video or audio requests returned 4xx/5xx. Restore or re-upload the missing assets, or update the references to valid URLs.',
+  },
+  'Images upscaled beyond natural resolution': {
+    effort: '1 hour',
+    fix: 'These images render wider than their pixel size supports and look blurry. Export them at least at display width × device pixel ratio, or serve a srcset with 2× candidates.',
+    example: '<img src="hero-800.jpg" srcset="hero-800.jpg 800w, hero-1600.jpg 1600w" sizes="100vw" alt="...">',
+    resources: [{ text: 'Responsive images', url: 'https://web.dev/articles/serve-responsive-images' }],
+  },
+  'CSS background images upscaled beyond natural resolution': {
+    effort: '1 hour',
+    fix: 'Background images are stretched past their pixel size. Use a higher-resolution source, or image-set() to serve 2× variants.',
+    example: 'background-image: image-set("bg.jpg" 1x, "bg@2x.jpg" 2x);',
+  },
+  'Unrendered template tokens in page text': {
+    effort: '1 hour',
+    fix: 'Raw template output ({{ }}, undefined, NaN, [object Object]) is visible to users. Fix the data binding or add fallbacks so missing values render as empty or a sensible default.',
+  },
+  'Placeholder text (lorem ipsum) on page': {
+    effort: '30 minutes',
+    fix: 'Replace lorem ipsum with real copy, or unpublish the page until its content is ready.',
+  },
+  'Garbled characters (mojibake) in page text': {
+    effort: '1 hour',
+    fix: 'Text was decoded with the wrong character set. Serve UTF-8 end to end: database, templates, the Content-Type header and <meta charset="utf-8">.',
+    example: '<meta charset="utf-8">',
+  },
+  'Text clipped by its container': {
+    effort: '30 minutes',
+    fix: 'Text overflows a box with overflow hidden and gets cut off. Let the container grow, allow wrapping, or use text-overflow: ellipsis deliberately.',
+  },
 };

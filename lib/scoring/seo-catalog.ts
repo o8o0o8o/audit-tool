@@ -37,6 +37,15 @@ export function severityToTier(severity: SeverityLevel | string | undefined): Is
  * "general error" string passed to saveError()).
  */
 export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
+  // ─── Visual ───────────────────────────────────────────────────────────────
+  'Broken images detected': { tier: 'error', category: 'technical' },
+  'Failed image or media requests': { tier: 'warning', category: 'technical' },
+  'Images upscaled beyond natural resolution': { tier: 'notice', category: 'performance' },
+  'CSS background images upscaled beyond natural resolution': { tier: 'notice', category: 'performance' },
+  'Unrendered template tokens in page text': { tier: 'error', category: 'technical' },
+  'Placeholder text (lorem ipsum) on page': { tier: 'warning', category: 'technical' },
+  'Garbled characters (mojibake) in page text': { tier: 'warning', category: 'technical' },
+  'Text clipped by its container': { tier: 'notice', category: 'technical' },
   // ─── SEO: On-page ─────────────────────────────────────────────────────────
   'Some pages have missing or empty title': { tier: 'error', category: 'seo' },
   'Some pages have missing or empty meta description': { tier: 'warning', category: 'seo' },

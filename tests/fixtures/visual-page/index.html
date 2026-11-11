@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Visual checks fixture page for the audit tool</title>
+    <meta name="description" content="Fixture page with a broken image, an upscaled image and an unrendered template token, used to check the visual analyzers in a live crawl." />
+  </head>
+  <body>
+    <h1>Visual checks fixture</h1>
+    <p>Hello {{ user.name }}</p>
+    <img src="/missing.png" alt="Missing image" width="200" height="200" />
+    <img src="/small.png" alt="Small image shown large" width="400" height="400" />
+  </body>
+</html>

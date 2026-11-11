@@ -40,6 +40,64 @@ export function parseSrcset(raw: string): SrcsetCandidate[] {
   return out;
 }
 
+/** Natural pixels below this share of display × DPR count as visibly upscaled. */
+const UPSCALE_TOLERANCE = 0.8;
+const BACKGROUND_SCAN_CAP = 30;
+const BACKGROUND_DECODE_TIMEOUT_MS = 2000;
+const BACKGROUND_TOTAL_BUDGET_MS = 3000;
+
+export interface UpscaleImageInput {
+  src: string | null;
+  srcset: string;
+  naturalWidth: number;
+  displayWidth: number;
+}
+
+export interface BackgroundImageInput {
+  url: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  elementWidth: number;
+  elementHeight: number;
+  backgroundSize: string;
+  backgroundRepeat: string;
+}
+
+const isVectorOrInline = (src: string) => /^data:/i.test(src) || /\.svg(?:[?#]|$)/i.test(src);
+
+const isUpscaled = (natural: number, rendered: number, dpr: number) =>
+  natural > 0 && rendered > 0 && natural < rendered * dpr * UPSCALE_TOLERANCE;
+
+/** True when an `<img>` without srcset is drawn wider than its natural resolution supports. */
+export function classifyUpscaledImage(img: UpscaleImageInput, dpr: number): boolean {
+  if (!img.src || img.srcset || isVectorOrInline(img.src)) return false;
+  return isUpscaled(img.naturalWidth, img.displayWidth, dpr);
+}
+
+/** Rendered width of a background image, or null when the size cannot be resolved. */
+function renderedBackgroundWidth(bg: BackgroundImageInput): number | null {
+  const { naturalWidth: nw, naturalHeight: nh, elementWidth: ew, elementHeight: eh } = bg;
+  const size = bg.backgroundSize.trim().toLowerCase();
+  if (size === 'cover') return nw * Math.max(ew / nw, eh / nh);
+  if (size === 'contain') return nw * Math.min(ew / nw, eh / nh);
+  const first = size.split(/\s+/)[0] ?? 'auto';
+  if (first === 'auto' || first === '') return nw;
+  const px = /^([\d.]+)px$/.exec(first);
+  if (px) return parseFloat(px[1]);
+  const pct = /^([\d.]+)%$/.exec(first);
+  if (pct) return (ew * parseFloat(pct[1])) / 100;
+  return null;
+}
+
+/** True when a non-repeating CSS background is stretched beyond its natural resolution. */
+export function classifyBackgroundUpscale(bg: BackgroundImageInput, dpr: number): boolean {
+  if (isVectorOrInline(bg.url)) return false;
+  if (!/^no-repeat(?:\s+no-repeat)?$/.test(bg.backgroundRepeat.trim())) return false;
+  if (bg.naturalWidth <= 0 || bg.naturalHeight <= 0 || bg.elementWidth <= 0 || bg.elementHeight <= 0) return false;
+  const rendered = renderedBackgroundWidth(bg);
+  return rendered !== null && isUpscaled(bg.naturalWidth, rendered, dpr);
+}
+
 class ImageOptimizationAnalyzer {
   static async analyzeImageOptimization(chromePage: ChromePage, requests: Record<string, RequestEntry>, url: string) {
     const imageAnalysis = {
@@ -90,6 +148,10 @@ class ImageOptimizationAnalyzer {
     });
 
     imageAnalysis.totalImages = imageElements.length;
+
+    const upscaledImages = imageElements.filter((img) => classifyUpscaledImage(img, devicePixelRatio));
+    const backgrounds = await ImageOptimizationAnalyzer.collectBackgrounds(chromePage);
+    const upscaledBackgrounds = backgrounds.filter((bg) => classifyBackgroundUpscale(bg, devicePixelRatio));
 
     for (const img of imageElements) {
       // Check alt attribute
@@ -242,6 +304,30 @@ class ImageOptimizationAnalyzer {
       });
     }
 
+    if (upscaledImages.length > 0) {
+      const examples = upscaledImages
+        .slice(0, 3)
+        .map((i) => `${i.naturalWidth}px natural shown at ${Math.round(i.displayWidth)}px`)
+        .join(', ');
+      imageAnalysis.issues.push({
+        severity: SEVERITY.MEDIUM,
+        message: `Images upscaled beyond natural resolution`,
+        detail: `<a href="${url}">${url}</a>: ${upscaledImages.length} image(s) without srcset are displayed wider than their natural resolution supports at ${devicePixelRatio}× DPR, so they look blurry. Examples: ${examples}`,
+      });
+    }
+
+    if (upscaledBackgrounds.length > 0) {
+      const examples = upscaledBackgrounds
+        .slice(0, 3)
+        .map((b) => `${b.naturalWidth}px natural in a ${Math.round(b.elementWidth)}px element`)
+        .join(', ');
+      imageAnalysis.issues.push({
+        severity: SEVERITY.LOW,
+        message: `CSS background images upscaled beyond natural resolution`,
+        detail: `<a href="${url}">${url}</a>: ${upscaledBackgrounds.length} background image(s) are stretched beyond their natural resolution at ${devicePixelRatio}× DPR. Examples: ${examples}`,
+      });
+    }
+
     // Generate summary issues
     if (imageAnalysis.totalImages >= THRESHOLDS.LAZY_LOAD_THRESHOLD && imageAnalysis.withLazyLoading === 0) {
       imageAnalysis.issues.push({
@@ -280,6 +366,56 @@ class ImageOptimizationAnalyzer {
     }
 
     return imageAnalysis;
+  }
+
+  /**
+   * Decodes CSS background images in-page to learn their natural size. Capped and
+   * time-boxed so it stays well inside the analyzer timeout; returns what decoded in time.
+   */
+  private static async collectBackgrounds(chromePage: ChromePage): Promise<BackgroundImageInput[]> {
+    return chromePage.evaluate(
+      async ({ cap, perImageMs, totalMs }) => {
+        const targets: { url: string; el: Element; size: string; repeat: string }[] = [];
+        for (const el of Array.from(document.querySelectorAll('body *'))) {
+          if (targets.length >= cap) break;
+          const style = getComputedStyle(el);
+          const match = /url\(["']?([^"')]+)["']?\)/.exec(style.backgroundImage);
+          if (!match) continue;
+          targets.push({ url: match[1], el, size: style.backgroundSize, repeat: style.backgroundRepeat });
+        }
+        const decoded: BackgroundImageInput[] = [];
+        const decodeOne = (t: (typeof targets)[number]) =>
+          new Promise<void>((resolve) => {
+            const image = new Image();
+            const timer = setTimeout(resolve, perImageMs);
+            image.onload = () => {
+              clearTimeout(timer);
+              const rect = t.el.getBoundingClientRect();
+              decoded.push({
+                url: image.src,
+                naturalWidth: image.naturalWidth,
+                naturalHeight: image.naturalHeight,
+                elementWidth: rect.width,
+                elementHeight: rect.height,
+                backgroundSize: t.size,
+                backgroundRepeat: t.repeat,
+              });
+              resolve();
+            };
+            image.onerror = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+            image.src = t.url;
+          });
+        await Promise.race([
+          Promise.all(targets.map(decodeOne)),
+          new Promise((resolve) => setTimeout(resolve, totalMs)),
+        ]);
+        return decoded.slice();
+      },
+      { cap: BACKGROUND_SCAN_CAP, perImageMs: BACKGROUND_DECODE_TIMEOUT_MS, totalMs: BACKGROUND_TOTAL_BUDGET_MS },
+    );
   }
 }
 

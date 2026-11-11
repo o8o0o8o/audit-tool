@@ -9,7 +9,14 @@ import { buildReportMarkdown, preparedDetails } from '../lib/phase2/phase2-runne
 import type { AuditArtifacts } from '../lib/phase2/types';
 import { loadPhase2State } from '../lib/phase3/verify-runner';
 import { goldenDir, renderNoPresetHtml, renderNoPresetMarkdown } from './fixtures/report-fixture/make-golden';
-import { PRESET_NAMES, PresetError, ROLE_DEFINITIONS, applyPresetRunOptions, resolvePreset } from '../lib/presets';
+import {
+  PRESET_NAMES,
+  PresetError,
+  ROLE_DEFINITIONS,
+  applyPresetRunOptions,
+  findingCheckGroups,
+  resolvePreset,
+} from '../lib/presets';
 
 void describe('parseArgs --preset', () => {
   for (const name of ['quick', 'standard', 'deep', 'sales', 'marketing', 'seo', 'custom']) {
@@ -215,5 +222,36 @@ void describe('preset report rendering', () => {
     const old = loadPhase2State(dir);
     assert.equal(old?.sections, undefined);
     assert.equal(old?.checks, undefined);
+  });
+});
+
+void describe('visual family', () => {
+  const visualMessages = [
+    'Broken images detected',
+    'Failed image or media requests',
+    'Images upscaled beyond natural resolution',
+    'CSS background images upscaled beyond natural resolution',
+    'Unrendered template tokens in page text',
+    'Placeholder text (lorem ipsum) on page',
+    'Garbled characters (mojibake) in page text',
+    'Text clipped by its container',
+  ];
+  const otherMessages = [
+    'Some images load smaller srcset candidates than display target',
+    'Some images download larger srcset candidates than they need',
+    'Placeholder used instead of label',
+    'Broken internal links',
+  ];
+
+  void it('is a valid --checks value and is in the seo and marketing presets only', () => {
+    assert.deepEqual(resolvePreset('custom', { checks: ['visual'] }).checks, ['visual']);
+    assert.equal(resolvePreset('seo').checks, undefined, 'seo keeps every check group, visual included');
+    assert.ok(ROLE_DEFINITIONS.marketing.checks?.includes('visual'));
+    assert.ok(!ROLE_DEFINITIONS.sales.checks?.includes('visual'));
+  });
+
+  void it('maps the visual messages to visual and leaves existing messages alone', () => {
+    for (const m of visualMessages) assert.ok(findingCheckGroups(m, 'technical').includes('visual'), m);
+    for (const m of otherMessages) assert.ok(!findingCheckGroups(m, 'technical').includes('visual'), m);
   });
 });

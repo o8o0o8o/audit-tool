@@ -189,3 +189,79 @@ export function toCliArgs(inputs: WorkflowInputs): string[] {
   if (inputs.evidence_cap) args.push(`--evidence-cap=${inputs.evidence_cap}`);
   return args;
 }
+
+/** Page count assumed when no limit is set; the real crawl size is unknown until the sitemap is read. */
+export const DEFAULT_ASSUMED_PAGES = 100;
+
+export interface EstimateInput {
+  url: string;
+  preset: string | null;
+  sections: string[];
+  perf: boolean;
+  llm: boolean;
+  verify: boolean;
+  contentResearch: boolean;
+  concurrency: string | number | null;
+  limit: string | number | null;
+  evidenceCap: string | number | null;
+}
+
+export interface AuditEstimate {
+  minutes: number;
+  pages: number;
+  assumedPages: boolean;
+}
+
+// Rough heuristics in seconds; there is no run history to calibrate against.
+const SETUP_SECONDS = 30;
+const REPORT_SECONDS = 60;
+const BATCH_SECONDS = 12;
+const PERF_BATCH_FACTOR = 1.5;
+const EVIDENCE_SECONDS = 8;
+const PSI_SECONDS = 20;
+const VISION_SECONDS = 15;
+const VERIFY_FIXED_SECONDS = 60;
+const VERIFY_PER_PAGE_SECONDS = 1;
+const LLM_SECONDS = 120;
+const CONTENT_RESEARCH_SECONDS = 5 * 40 * 3;
+const FULL_REPORT_SECONDS = 60;
+
+function toPositiveInt(raw: string | number | null, fallback: number): number | null {
+  if (raw === null || raw === '') return fallback;
+  const value = Math.floor(Number(raw));
+  return Number.isFinite(value) && value >= 1 ? value : null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Returns `null` when no meaningful estimate exists yet (no valid URL, or the form would be rejected). */
+export function estimateAuditDuration(input: EstimateInput): AuditEstimate | null {
+  const errors: string[] = [];
+  parseUrl(input.url, errors);
+  if (errors.length > 0) return null;
+  if (input.preset === 'custom' && input.sections.length === 0) return null;
+
+  const concurrency = clamp(toPositiveInt(input.concurrency, CONCURRENCY_DEFAULT) ?? CONCURRENCY_DEFAULT, CONCURRENCY_MIN, CONCURRENCY_MAX);
+  const limit = toPositiveInt(input.limit, 0);
+  const assumedPages = !limit;
+  const pages = assumedPages ? DEFAULT_ASSUMED_PAGES : clamp(limit, 1, LIMIT_MAX);
+  const evidenceCap = clamp(toPositiveInt(input.evidenceCap, EVIDENCE_CAP_DEFAULT) ?? EVIDENCE_CAP_DEFAULT, EVIDENCE_CAP_MIN, EVIDENCE_CAP_MAX);
+  const samples = Math.min(evidenceCap, pages);
+
+  let seconds = SETUP_SECONDS + REPORT_SECONDS;
+  seconds += Math.ceil(pages / concurrency) * BATCH_SECONDS * (input.perf ? PERF_BATCH_FACTOR : 1);
+  seconds += evidenceCap * EVIDENCE_SECONDS;
+  if (input.perf) seconds += samples * PSI_SECONDS;
+  if (input.llm) seconds += LLM_SECONDS + samples * VISION_SECONDS;
+  if (input.verify) seconds += VERIFY_FIXED_SECONDS + pages * VERIFY_PER_PAGE_SECONDS;
+  if (input.contentResearch) seconds += CONTENT_RESEARCH_SECONDS;
+  if (!input.preset || input.preset === 'full' || input.preset === 'seo' || input.preset === 'custom') seconds += FULL_REPORT_SECONDS;
+
+  return { minutes: Math.max(1, Math.ceil(seconds / 60)), pages, assumedPages };
+}
+
+export function formatEstimate(estimate: AuditEstimate): string {
+  return estimate.assumedPages ? `~${estimate.minutes} min (≈${estimate.pages} pages assumed)` : `~${estimate.minutes} min`;
+}

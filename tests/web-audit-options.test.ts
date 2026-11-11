@@ -5,6 +5,8 @@ import { ROLE_PRESETS, REPORT_SECTIONS } from '../lib/presets';
 import {
   WEB_PRESETS,
   WEB_REPORT_SECTIONS,
+  estimateAuditDuration,
+  type EstimateInput,
   isValidRunId,
   newRunId,
   parseAuditRequest,
@@ -138,5 +140,68 @@ void describe('web audit options', () => {
       assert.strictEqual(parseAuditRequest({ url }).ok, false, url);
     }
     assert.strictEqual(parseAuditRequest({ url: 'http://[2606:4700::1111]' }).ok, true);
+  });
+});
+
+void describe('estimateAuditDuration', () => {
+  const base: EstimateInput = {
+    url: 'https://example.com',
+    preset: null,
+    sections: [],
+    perf: false,
+    llm: false,
+    verify: false,
+    contentResearch: false,
+    concurrency: 5,
+    limit: null,
+    evidenceCap: 10,
+  };
+  const minutes = (over: Partial<EstimateInput>): number => {
+    const est = estimateAuditDuration({ ...base, ...over });
+    assert.ok(est);
+    return est.minutes;
+  };
+
+  void it('returns null without a usable url', () => {
+    for (const url of ['', 'https://', 'exa', 'ftp://example.com']) assert.strictEqual(estimateAuditDuration({ ...base, url }), null);
+  });
+
+  void it('returns null for a custom preset with no sections', () => {
+    assert.strictEqual(estimateAuditDuration({ ...base, preset: 'custom', sections: [] }), null);
+  });
+
+  void it('raises the estimate for options that add work', () => {
+    const b = minutes({});
+    assert.ok(minutes({ perf: true }) > b);
+    assert.ok(minutes({ verify: true }) > b);
+    assert.ok(minutes({ llm: true }) > b);
+    assert.ok(minutes({ contentResearch: true }) > b);
+    assert.ok(minutes({ evidenceCap: 50 }) > b);
+    assert.ok(minutes({ limit: 1000 }) > b);
+    assert.ok(minutes({ perf: true, llm: true, verify: true, contentResearch: true }) > minutes({ perf: true }));
+  });
+
+  void it('lowers the estimate with higher concurrency', () => {
+    assert.ok(minutes({ concurrency: 10, limit: 1000 }) < minutes({ concurrency: 5, limit: 1000 }));
+  });
+
+  void it('gives deeper presets a larger estimate', () => {
+    const custom = { preset: 'custom', sections: ['seo'] };
+    for (const shallow of ['sales', 'marketing']) {
+      assert.ok(minutes({}) > minutes({ preset: shallow }));
+      assert.ok(minutes(custom) > minutes({ preset: shallow }));
+    }
+  });
+
+  void it('flags assumed pages when no limit is set', () => {
+    assert.strictEqual(estimateAuditDuration(base)?.assumedPages, true);
+    assert.strictEqual(estimateAuditDuration({ ...base, limit: 50 })?.assumedPages, false);
+  });
+
+  void it('applies concurrency defaults and clamping', () => {
+    assert.deepStrictEqual(estimateAuditDuration({ ...base, concurrency: '' }), estimateAuditDuration({ ...base, concurrency: 5 }));
+    assert.deepStrictEqual(estimateAuditDuration({ ...base, concurrency: 99, limit: 1000 }), estimateAuditDuration({ ...base, concurrency: 20, limit: 1000 }));
+    const small = estimateAuditDuration({ ...base, limit: 2, concurrency: 5 });
+    assert.ok(small && Number.isFinite(small.minutes) && small.minutes > 0);
   });
 });

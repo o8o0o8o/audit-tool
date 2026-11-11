@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from 'react';
 
+import { estimateAuditDuration, formatEstimate, type AuditEstimate } from '../lib/audit-options';
+
 const PRESETS = [
   { value: 'full', label: 'Full audit', summary: 'Every report section, using the options you would get with no preset.' },
   { value: 'sales', label: 'Sales', summary: 'Short executive summary, technology stack, CTAs/conversion and top issues.' },
@@ -35,6 +37,30 @@ export default function DispatchPage() {
   const [preset, setPreset] = useState<string>('full');
   const isCustom = preset === 'custom';
   const summary = PRESETS.find((p) => p.value === preset)?.summary;
+  const [estimate, setEstimate] = useState<AuditEstimate | null>(null);
+
+  function refreshEstimate(formEl: HTMLFormElement) {
+    const form = new FormData(formEl);
+    const formPreset = String(form.get('preset') ?? 'full');
+    // Switching to Custom fires this before the section checkboxes render;
+    // they mount all checked (defaultChecked), so count every section then.
+    const hasSectionInputs = formEl.querySelector('input[name="sections"]') !== null;
+    const sections = hasSectionInputs ? form.getAll('sections').map(String) : SECTIONS.map((s) => s.value);
+    setEstimate(
+      estimateAuditDuration({
+        url: String(form.get('url') ?? ''),
+        preset: formPreset,
+        sections: formPreset === 'custom' ? sections : [],
+        perf: form.get('perf') === 'on',
+        llm: form.get('llm') === 'on',
+        verify: form.get('verify') === 'on',
+        contentResearch: form.get('contentResearch') === 'on',
+        concurrency: String(form.get('concurrency') ?? ''),
+        limit: String(form.get('limit') ?? ''),
+        evidenceCap: String(form.get('evidenceCap') ?? ''),
+      }),
+    );
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +99,12 @@ export default function DispatchPage() {
   return (
     <main>
       <h1>Run an audit</h1>
-      <form className="card" onSubmit={onSubmit}>
+      <form
+        className="card"
+        onSubmit={onSubmit}
+        onChange={(e) => refreshEstimate(e.currentTarget)}
+        onInput={(e) => refreshEstimate(e.currentTarget)}
+      >
         <label className="form-field">
           Website URL
           <input name="url" type="url" required placeholder="https://example.com" className="form-input" />
@@ -135,9 +166,16 @@ export default function DispatchPage() {
           Evidence cap (1–100)
           <input name="evidenceCap" type="number" min={1} max={100} defaultValue={10} className="form-input" />
         </label>
-        <button type="submit" className="btn" disabled={submitting}>
-          {submitting ? 'Dispatching…' : 'Start audit'}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="btn" disabled={submitting}>
+            {submitting ? 'Dispatching…' : 'Start audit'}
+          </button>
+          {estimate && (
+            <span className="muted estimate" data-testid="audit-estimate">
+              {formatEstimate(estimate)}
+            </span>
+          )}
+        </div>
       </form>
       {error && (
         <p role="alert" className="error">

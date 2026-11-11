@@ -1,5 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { computePageCounts } from '../lib/utils/page-counts';
+import { handlePageError, reconcileRetrySuccess } from '../lib/crawler/resilience';
+import type { CrawlResults } from '../lib/crawler/crawler-types';
+import { renderPageCountStats } from '../generateHTML';
 
 import { ResponseHeaderAnalyzer } from '../lib/analyzers/seo/response-header-analyzer';
 import { LanguageDetectionAnalyzer } from '../lib/analyzers/content/language-detection-analyzer';
@@ -8071,5 +8075,134 @@ void describe('computeTotalPagesProcessed — success rate must never exceed 100
   void it('includes failed pages in the denominator too', () => {
     const total = computeTotalPagesProcessed({ totalWithoutError: 30, totalWithError: 8 });
     assert.strictEqual(total, 38);
+  });
+});
+
+function makeCrawlResults(): CrawlResults {
+  return {
+    pageData: {
+      pages: {},
+      processedPages: new Set<string>(),
+      totalWithoutError: 0,
+      totalWithError: 0,
+      byError: {},
+      attempts: {},
+    },
+  } as unknown as CrawlResults;
+}
+
+function failOnce(results: CrawlResults, url: string): void {
+  const origLog = console.log;
+  console.log = () => {};
+  try {
+    handlePageError(
+      new Error('net::ERR_TIMED_OUT timeout'),
+      url,
+      results,
+      false,
+      () => {},
+      (u) => {
+        results.pageData.attempts[u] = (results.pageData.attempts[u] || 0) + 1;
+      },
+      () => {},
+    );
+  } finally {
+    console.log = origLog;
+  }
+}
+
+void describe('page counts', () => {
+  void it('counts a URL that fails twice and then succeeds only once, then not at all', () => {
+    const results = makeCrawlResults();
+    failOnce(results, 'https://a.test/x');
+    failOnce(results, 'https://a.test/x');
+    assert.strictEqual(results.pageData.totalWithError, 1);
+    assert.deepStrictEqual(results.pageData.byError.timeout, ['https://a.test/x']);
+    assert.deepStrictEqual(results.pageData.byError.crashed, ['https://a.test/x']);
+
+    results.pageData.pages['https://a.test/x'] = { url: 'https://a.test/x', status: 200 } as never;
+    reconcileRetrySuccess(results, 'https://a.test/x');
+    assert.strictEqual(results.pageData.totalWithError, 0);
+    assert.deepStrictEqual(results.pageData.byError.timeout, []);
+    assert.strictEqual(results.pageData.byError.total_timeout, 0);
+    assert.strictEqual(results.pageData.byError.totalCrashed, 0);
+
+    const c = computePageCounts(results.pageData.pages, results.pageData.byError);
+    assert.deepStrictEqual(c, { crawled: 1, successful: 1, withErrors: 0, failedToLoad: 0 });
+  });
+
+  void it('counts a failure whose earlier attempt bypassed handlePageError (outer timeout)', () => {
+    const results = makeCrawlResults();
+    // Outer catch in crawler-engine bumps attempts without recording a failure.
+    results.pageData.attempts['https://a.test/y'] = 1;
+    failOnce(results, 'https://a.test/y');
+    assert.strictEqual(results.pageData.totalWithError, 1);
+    assert.deepStrictEqual(results.pageData.byError.timeout, ['https://a.test/y']);
+    const c = computePageCounts(results.pageData.pages, results.pageData.byError);
+    assert.strictEqual(c.failedToLoad, 1);
+  });
+
+  void it('reconciles a restored-inflated state with duplicate URLs', () => {
+    const results = makeCrawlResults();
+    results.pageData.totalWithError = 3;
+    results.pageData.attempts['https://a.test/y'] = 2;
+    results.pageData.byError = {
+      timeout: ['https://a.test/y', 'https://a.test/y'],
+      total_timeout: 2,
+      crashed: ['https://a.test/y', 'https://a.test/y', 'https://a.test/z'],
+      totalCrashed: 3,
+    };
+    failOnce(results, 'https://a.test/y');
+    assert.strictEqual(results.pageData.totalWithError, 3, 'restored attempt must not re-count');
+    reconcileRetrySuccess(results, 'https://a.test/y');
+    assert.deepStrictEqual(results.pageData.byError.timeout, []);
+    assert.deepStrictEqual(results.pageData.byError.crashed, ['https://a.test/z']);
+    assert.strictEqual(results.pageData.byError.totalCrashed, 1);
+  });
+
+  void it('derives counts from per-URL data, ignoring inflated counters and status-code keys', () => {
+    const pages = {
+      a: { status: 200 },
+      b: { statusCode: 200 },
+      c: { status: 404 },
+      d: {},
+    };
+    const byError = {
+      timeout: ['x', 'x', 'c'],
+      crashed: ['x', 'y'],
+      totalCrashed: 99,
+      '404': ['c'],
+      total404: 1,
+    };
+    const c = computePageCounts(pages, byError);
+    assert.deepStrictEqual(c, { crawled: 4, successful: 2, withErrors: 2, failedToLoad: 2 });
+    assert.strictEqual(c.successful + c.withErrors, c.crawled);
+  });
+
+  void it('handles legacy pageData without byError', () => {
+    const c = computePageCounts({ a: { status: 200 }, b: { status: 500 } }, undefined);
+    assert.deepStrictEqual(c, { crawled: 2, successful: 1, withErrors: 1, failedToLoad: 0 });
+  });
+});
+
+void describe('page counts header', () => {
+  const statValue = (html: string, label: string): number | null => {
+    const m = new RegExp(`${label}:</span>\\s*<span[^>]*>(\\d+)<`).exec(html);
+    return m ? Number(m[1]) : null;
+  };
+
+  void it('shows Failed to load and sums Successful + With Errors to Pages Crawled', () => {
+    const html = renderPageCountStats(
+      computePageCounts({ a: { status: 200 }, b: { status: 404 }, c: {} }, { timeout: ['z', 'z'] }),
+    );
+    assert.strictEqual(statValue(html, 'Pages Crawled'), 3);
+    assert.strictEqual((statValue(html, 'Successful') ?? 0) + (statValue(html, 'With Errors') ?? 0), 3);
+    assert.strictEqual(statValue(html, 'Failed to load'), 1);
+  });
+
+  void it('omits Failed to load when nothing failed', () => {
+    const html = renderPageCountStats(computePageCounts({ a: { status: 200 } }, {}));
+    assert.ok(!html.includes('Failed to load'));
+    assert.strictEqual(statValue(html, 'Successful'), 1);
   });
 });

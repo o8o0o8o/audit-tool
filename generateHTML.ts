@@ -8,6 +8,7 @@ import { sanitizeDomainName } from './validators';
 
 // Import report modules
 import { ReportDataProcessor } from './lib/reports/data-processor';
+import { computePageCounts, type PageCounts } from './lib/utils/page-counts';
 import { escapeHtml } from './lib/reports/html-utils';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
 import { categorize } from './lib/phase2/categorize';
@@ -112,6 +113,21 @@ function filterFindingsByChecks(jsonData: Record<string, unknown>, checks: reado
   }
 }
 
+
+/** Header stats: Successful + With Errors always sum to Pages Crawled; load failures are listed apart. */
+export function renderPageCountStats(counts: PageCounts): string {
+  const stat = (label: string, value: number, color?: string) => `<div class="stat">
+                      <span class="stat-label">${label}:</span>
+                      <span class="stat-value"${color ? ` style="color: var(${color});"` : ''}>${value}</span>
+                  </div>`;
+  return [
+    stat('Pages Crawled', counts.crawled),
+    stat('Successful', counts.successful, '--color-success'),
+    stat('With Errors', counts.withErrors, '--color-error'),
+    ...(counts.failedToLoad > 0 ? [stat('Failed to load', counts.failedToLoad, '--color-warning')] : []),
+  ].join('\n                  ');
+}
+
 function generateHTML(
   file: string,
   domainName: string,
@@ -167,6 +183,12 @@ function generateHTML(
 
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
   if (selection.checks) filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
+
+  const rawPageData = pageData as { pages?: Record<string, unknown>; byError?: Record<string, unknown> };
+  const crawlCounts = computePageCounts(
+    rawPageData.pages as Parameters<typeof computePageCounts>[0],
+    rawPageData.byError ?? {},
+  );
 
   const pagesWithMetrics = pages.filter((p) => p.TTFB !== undefined);
 
@@ -270,18 +292,7 @@ function generateHTML(
               <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
               ${(timing as Record<string, unknown>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, unknown>).elapsedTimeFormatted as string)}</p>` : ''}
               <div class="stats">
-                  <div class="stat">
-                      <span class="stat-label">Pages Crawled:</span>
-                      <span class="stat-value">${pages.length}</span>
-                  </div>
-                  <div class="stat">
-                      <span class="stat-label">Successful:</span>
-                      <span class="stat-value" style="color: var(--color-success);">${pageData.totalWithoutError || 0}</span>
-                  </div>
-                  <div class="stat">
-                      <span class="stat-label">With Errors:</span>
-                      <span class="stat-value" style="color: var(--color-error);">${pageData.totalWithError || 0}</span>
-                  </div>
+                  ${renderPageCountStats(crawlCounts)}
                   ${
                     (jsonData.sitemaps?.total ?? 0) > pages.length
                       ? `

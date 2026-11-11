@@ -58,6 +58,8 @@ import { InternationalSEOAnalyzer } from '../analyzers/international/internation
 import { SocialMediaAnalyzer } from '../analyzers/social/social-media-analyzer';
 import { AnalyticsTrackingAnalyzer } from '../analyzers/analytics/analytics-tracking-analyzer';
 import { SecurityAnalyzer } from '../analyzers/security/security-analyzer';
+import { BrokenMediaAnalyzer } from '../analyzers/visual/broken-media-analyzer';
+import { TextIntegrityAnalyzer } from '../analyzers/visual/text-integrity-analyzer';
 import { CookieConsentAnalyzer } from '../analyzers/security/cookie-consent-analyzer';
 import { MixedContentAnalyzer } from '../analyzers/security/mixed-content-analyzer';
 
@@ -225,6 +227,9 @@ export async function runAnalyzers(
     { issues: [], warnings: [], info: {} }, // infoDisclosureResult
     { issues: [], warnings: [], info: {} }, // openRedirectResult
     { issues: [], warnings: [], info: {} }, // spellingResult
+    // Visual
+    { issues: [] }, // brokenMediaResult
+    { issues: [] }, // textIntegrityResult
   ];
 
   const browserAnalyzersSettled = await withTimeout(
@@ -309,6 +314,10 @@ export async function runAnalyzers(
       InformationDisclosureAnalyzer.analyze(pageData, parsedPage, url),
       OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
       SpellingGrammarAnalyzer.analyze(chromePage, url),
+
+      // Visual
+      BrokenMediaAnalyzer.analyze(chromePage, url, requests),
+      TextIntegrityAnalyzer.analyze(chromePage, url),
     ]),
     analyzerTimeout,
     `Analyzer timeout for ${url}`,
@@ -360,6 +369,8 @@ export async function runAnalyzers(
     infoDisclosureResult,
     openRedirectResult,
     spellingResult,
+    brokenMediaResult,
+    textIntegrityResult,
   ] = browserAnalyzers as AnalyzerResult[];
 
   // Apply analyzer results to pageData with typed assignments
@@ -428,6 +439,8 @@ export async function runAnalyzers(
   ).info;
   pageData.openRedirectData = (openRedirectResult as AnalyzerResult & { info: typeof pageData.openRedirectData }).info;
   pageData.spellingData = (spellingResult as AnalyzerResult & { info: typeof pageData.spellingData }).info;
+  pageData.brokenMediaData = brokenMediaResult as unknown as typeof pageData.brokenMediaData;
+  pageData.textIntegrityData = textIntegrityResult as unknown as typeof pageData.textIntegrityData;
 
   // Report issues from Group 1
   [
@@ -469,6 +482,8 @@ export async function runAnalyzers(
     infoDisclosureResult,
     openRedirectResult,
     spellingResult,
+    brokenMediaResult,
+    textIntegrityResult,
   ].forEach((result) => reportIssues(result as AnalyzerResult, reportIssue, url));
 
   // ============================================================

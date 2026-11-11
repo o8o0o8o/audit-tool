@@ -4,6 +4,8 @@
  */
 
 import type { PresetName } from './presets';
+import type { BrokenMediaData } from './analyzers/visual/broken-media-analyzer';
+import type { TextIntegrityData } from './analyzers/visual/text-integrity-analyzer';
 
 // ─── Severity & Issues ───────────────────────────────────────────────────────
 
@@ -193,6 +195,8 @@ export interface PageInfo {
   fontData?: Record<string, unknown>;
   compressionData?: CompressionData;
   imageOptimization?: ImageOptimizationData;
+  brokenMediaData?: BrokenMediaData;
+  textIntegrityData?: TextIntegrityData;
   consoleAnalysis?: ConsoleAnalysisData;
   formData?: FormAccessibilityData;
   resourceOptimization?: ResourceOptimizationData;

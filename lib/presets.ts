@@ -40,6 +40,7 @@ export const CHECK_NAMES = [
   'cta',
   'technology',
   'analytics',
+  'visual',
 ] as const;
 export type CheckName = (typeof CHECK_NAMES)[number];
 
@@ -93,7 +94,7 @@ export const ROLE_DEFINITIONS: Record<Exclude<RolePreset, 'custom'>, RoleDefinit
   },
   marketing: {
     sections: ['executive-summary', 'top-issues', 'seo', 'content-insights', 'cta', 'ux', 'performance', 'privacy'],
-    checks: ['seo', 'content', 'ux', 'cta', 'performance', 'privacy', 'analytics'],
+    checks: ['seo', 'content', 'ux', 'cta', 'performance', 'privacy', 'analytics', 'visual'],
     runOptions: {},
   },
   seo: {
@@ -231,6 +232,10 @@ const CHECK_KEYWORDS: ReadonlyArray<[CheckName, RegExp]> = [
     /\b(framework|cms|technology|tech stack|x-powered-by|server header|wordpress|next\.?js|react|shopify)\b/i,
   ],
   ['analytics', /\b(analytics|ga4|gtm|tag manager|tracking|pixel)\b/i],
+  [
+    'visual',
+    /\b(broken image|failed image|upscaled|template token|placeholder text|lorem|mojibake|garbled|clipped)/i,
+  ],
 ];
 
 /** Check groups a finding belongs to: its report section plus any keyword-matched families. */

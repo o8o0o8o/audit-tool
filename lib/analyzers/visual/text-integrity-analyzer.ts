@@ -1,0 +1,181 @@
+import { SEVERITY } from '../../constants';
+import type { ChromePage, Issue } from '../../types';
+
+export interface ClipMetrics {
+  overflowX: string;
+  overflowY: string;
+  textOverflow: string;
+  lineClamp: string;
+  scrollWidth: number;
+  clientWidth: number;
+  scrollHeight: number;
+  clientHeight: number;
+  /** Computed `clip` (e.g. `rect(0px, 0px, 0px, 0px)`), `auto` when unset. */
+  clip?: string;
+  /** Computed `clip-path`, `none` when unset. */
+  clipPath?: string;
+}
+
+export interface ClippedSample {
+  tag: string;
+  text: string;
+  metrics: ClipMetrics;
+}
+
+export interface TextIntegrityData {
+  templateTokens: string[];
+  placeholderText: boolean;
+  mojibake: string[];
+  clippedText: string[];
+  issues: Issue[];
+}
+
+const CLIP_TOLERANCE_PX = 5;
+/** Boxes this small are the visually-hidden (`.sr-only`) pattern, not a layout that cut text off. */
+const VISUALLY_HIDDEN_MAX_PX = 2;
+const REPLACEMENT_CHAR_MIN = 3;
+const SAMPLE_LIMIT = 5;
+
+const CURLY_TOKEN = /\{\{[^{}]{0,80}\}\}/g;
+const OBJECT_TOKEN = /\[object Object\]/g;
+const BARE_VALUE = /^(?:undefined|NaN)$/;
+const VALUE_SLOT_BEFORE = /(?:[:=]\s*|[$€£¥]\s*|\d\s*)\b(undefined|NaN)\b/g;
+const VALUE_SLOT_AFTER = /\b(undefined|NaN)\b(?=\s*(?:%|px\b|[$€£¥]|\d))/g;
+const LOREM = /\blorem ipsum\b/i;
+// UTF-8 bytes decoded as Latin-1/CP1252: a lead byte (Ã/Â) followed by a continuation byte, or the â€ prefix of curly quotes/dashes.
+const MOJIBAKE_PAIR = /[ÃÂ][\u0080-¿]|â€/g;
+const REPLACEMENT_CHAR = /�/g;
+
+/** Unrendered template output in one visible text node; prose mentions of `undefined`/`NaN` are not flagged. */
+export function findTemplateTokens(text: string): string[] {
+  const found = new Set<string>();
+  for (const m of text.match(CURLY_TOKEN) ?? []) found.add(m);
+  for (const m of text.match(OBJECT_TOKEN) ?? []) found.add(m);
+  const trimmed = text.trim();
+  if (BARE_VALUE.test(trimmed)) found.add(trimmed);
+  for (const re of [VALUE_SLOT_BEFORE, VALUE_SLOT_AFTER]) {
+    for (const m of text.matchAll(re)) found.add(m[1]!);
+  }
+  return [...found];
+}
+
+export function hasPlaceholderText(text: string): boolean {
+  return LOREM.test(text);
+}
+
+/** Mis-decoded UTF-8 sequences in the page text; `�` counts only when it recurs. */
+export function findMojibake(text: string): string[] {
+  const found = new Set(text.match(MOJIBAKE_PAIR) ?? []);
+  if ((text.match(REPLACEMENT_CHAR) ?? []).length >= REPLACEMENT_CHAR_MIN) found.add('�');
+  return [...found];
+}
+
+/** Text cut off by an `overflow: hidden|clip` box with no ellipsis or line-clamp signalling the truncation. */
+export function isClippedText(m: ClipMetrics): boolean {
+  if (m.textOverflow === 'ellipsis') return false;
+  if (m.lineClamp && m.lineClamp !== 'none') return false;
+  // Deliberately hidden text (.sr-only / .visually-hidden): clipped away or shrunk to a ~1px box.
+  if (m.clip && m.clip !== 'auto') return false;
+  if (m.clipPath && m.clipPath !== 'none') return false;
+  if (m.clientWidth <= VISUALLY_HIDDEN_MAX_PX || m.clientHeight <= VISUALLY_HIDDEN_MAX_PX) return false;
+  const hides = (v: string) => v === 'hidden' || v === 'clip';
+  const clippedX = hides(m.overflowX) && m.scrollWidth > m.clientWidth + CLIP_TOLERANCE_PX;
+  const clippedY = hides(m.overflowY) && m.scrollHeight > m.clientHeight + CLIP_TOLERANCE_PX;
+  return clippedX || clippedY;
+}
+
+function sampleList(items: string[]): string {
+  const shown = items.slice(0, SAMPLE_LIMIT).map((s) => `"${s}"`).join(', ');
+  return items.length > SAMPLE_LIMIT ? `${shown} (+${items.length - SAMPLE_LIMIT} more)` : shown;
+}
+
+class TextIntegrityAnalyzer {
+  static async analyze(chromePage: ChromePage, url: string): Promise<TextIntegrityData> {
+    const snapshot = await chromePage.evaluate(() => {
+      const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'CODE', 'PRE', 'KBD', 'SAMP', 'TEXTAREA']);
+      const texts: string[] = [];
+      const clipCandidates = new Set<Element>();
+      const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const value = node.nodeValue ?? '';
+        if (!value.trim()) continue;
+        let skip = false;
+        for (let el = node.parentElement; el; el = el.parentElement) {
+          if (SKIP.has(el.tagName)) {
+            skip = true;
+            break;
+          }
+        }
+        if (skip) continue;
+        const parent = node.parentElement;
+        if (!parent) continue;
+        const rect = parent.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        texts.push(value);
+        if (clipCandidates.size < 500) clipCandidates.add(parent);
+      }
+      const clipped = Array.from(clipCandidates).map((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent ?? '').trim().slice(0, 60),
+          metrics: {
+            overflowX: cs.overflowX,
+            overflowY: cs.overflowY,
+            textOverflow: cs.textOverflow,
+            lineClamp: cs.getPropertyValue('-webkit-line-clamp') || cs.getPropertyValue('line-clamp'),
+            scrollWidth: el.scrollWidth,
+            clientWidth: el.clientWidth,
+            scrollHeight: el.scrollHeight,
+            clientHeight: el.clientHeight,
+            clip: cs.clip,
+            clipPath: cs.clipPath,
+          },
+        };
+      });
+      return { texts, clipped };
+    });
+
+    const templateTokens = [...new Set(snapshot.texts.flatMap(findTemplateTokens))];
+    const placeholderText = snapshot.texts.some(hasPlaceholderText);
+    const mojibake = findMojibake(snapshot.texts.join('\n'));
+    const clippedText = snapshot.clipped
+      .filter((c: ClippedSample) => isClippedText(c.metrics))
+      .map((c: ClippedSample) => `<${c.tag}> ${c.text}`);
+    const link = `<a href="${url}">${url}</a>`;
+    const issues: Issue[] = [];
+
+    if (templateTokens.length > 0) {
+      issues.push({
+        severity: SEVERITY.HIGH,
+        message: 'Unrendered template tokens in page text',
+        detail: `${link} shows raw template output: ${sampleList(templateTokens)}`,
+      });
+    }
+    if (placeholderText) {
+      issues.push({
+        severity: SEVERITY.MEDIUM,
+        message: 'Placeholder text (lorem ipsum) on page',
+        detail: `${link} contains lorem ipsum placeholder copy`,
+      });
+    }
+    if (mojibake.length > 0) {
+      issues.push({
+        severity: SEVERITY.MEDIUM,
+        message: 'Garbled characters (mojibake) in page text',
+        detail: `${link} shows mis-decoded characters: ${sampleList(mojibake)}`,
+      });
+    }
+    if (clippedText.length > 0) {
+      issues.push({
+        severity: SEVERITY.LOW,
+        message: 'Text clipped by its container',
+        detail: `${link} has ${clippedText.length} element(s) whose text is cut off without an ellipsis: ${sampleList(clippedText)}`,
+      });
+    }
+
+    return { templateTokens, placeholderText, mojibake, clippedText, issues };
+  }
+}
+
+export { TextIntegrityAnalyzer };

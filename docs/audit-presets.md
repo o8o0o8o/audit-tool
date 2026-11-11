@@ -31,14 +31,14 @@ The role mapping comes from research into what each audience uses an audit for (
 ### `marketing`
 
 - **Sections, in order:** executive summary → top issues → SEO → content insights → CTAs/conversion → UX → performance → privacy.
-- **Checks:** seo, content, ux, cta, performance, privacy, analytics.
+- **Checks:** seo, content, ux, cta, performance, privacy, analytics, `visual`.
 - **Run options:** none — your own flags (`--perf`, `--limit`, …) apply.
 - **Why:** Marketers own traffic and conversion. They need conversion tracking (GA4/GTM, forms, phone/mail clicks), CTA placement, social/Open Graph tags, content quality and freshness, and consent/privacy, because tracking without consent is a marketing liability. SEO is included at the level that affects visibility. Low-level technical, accessibility and source-code findings are dropped.
 
 ### `seo` (SEO specialist)
 
 - **Sections, in order:** executive summary → top issues → SEO → technical → performance → accessibility → content insights → charts → pages table.
-- **Checks:** all (no finding filter).
+- **Checks:** all (no finding filter), so `visual` (broken images/media, upscaled images, template tokens, mojibake, clipped text) is included.
 - **Run options:** none — your own flags (`--perf`, `--limit`, …) apply.
 - **Why:** An SEO specialist needs the full technical depth: indexability, canonicals, hreflang, sitemaps, crawl budget, Core Web Vitals, and the per-page table to work through. SEO and technical findings come first. Add `--verify` and `--evidence` for a fully fact-checked report.
 
@@ -50,7 +50,9 @@ Valid sections (`REPORT_SECTIONS`):
 `executive-summary`, `technology-stack`, `cta`, `top-issues`, `performance`, `seo`, `privacy`, `accessibility`, `ux`, `technical`, `charts`, `content-insights`, `pages`, `source-code`, `history`.
 
 Valid checks (`CHECK_NAMES`):
-`performance`, `seo`, `accessibility`, `security`, `privacy`, `ux`, `technical`, `content`, `cta`, `technology`, `analytics`.
+`performance`, `seo`, `accessibility`, `security`, `privacy`, `ux`, `technical`, `content`, `cta`, `technology`, `analytics`, `visual`.
+
+`visual` covers broken images and failed image/media requests, images and CSS backgrounds upscaled beyond their natural resolution, unrendered template tokens, lorem ipsum, mojibake and clipped text. It is in the `marketing` and `seo` presets, not in `sales`.
 
 A finding belongs to its report section's group plus every group whose keywords match its message (`findingCheckGroups`). For example, a missing-GA4 finding in UX also belongs to `analytics`. A finding is kept when any of its groups is selected.
 

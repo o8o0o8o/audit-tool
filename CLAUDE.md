@@ -195,7 +195,7 @@ Input validation and security:
 ### Performance
 
 - **caching-analyzer.ts**: CDN detection, cache headers, Service Worker
-- **image-optimization-analyzer.ts**: Image format, size, lazy loading
+- **image-optimization-analyzer.ts**: Image format, size, lazy loading, upscaled `<img>` without srcset and upscaled CSS background images
 - **resource-optimization-analyzer.ts**: Render-blocking resources, minification
 
 ### Security
@@ -220,6 +220,13 @@ Input validation and security:
 - **link-structure-analyzer.ts**: Internal link patterns
 - **social-media-validator.ts**: Social meta tag consistency
 - **structured-data-validator.ts**: Schema markup consistency
+
+### Visual (`visual` check family)
+
+- **broken-media-analyzer.ts**: Broken `<img>` (loaded with naturalWidth 0) and failed 4xx/5xx image/media requests
+- **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`), lorem ipsum, mojibake, clipped text
+
+Spike notes on screenshot diffing and an LLM vision pass: `docs/visual-checks-spike.md`.
 
 ### Social
 
@@ -398,6 +405,13 @@ audit-results/
 - Self-referential hreflang missing
 - Bidirectional hreflang reciprocity violations
 - Duplicate hreflang assignments within a language group
+
+### Visual Issues
+
+- Broken images detected (HIGH); failed image or media requests (MEDIUM)
+- Images / CSS background images upscaled beyond natural resolution (LOW/MEDIUM)
+- Unrendered template tokens in page text (HIGH); placeholder text (lorem ipsum) (MEDIUM)
+- Garbled characters (mojibake) in page text (MEDIUM); text clipped by its container (LOW)
 
 ### Privacy Issues
 

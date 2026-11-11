@@ -3,6 +3,7 @@
  * Handles loading and processing audit data for HTML reports
  */
 
+import { isConfidentLanguageMismatch } from '../utils/language-confidence';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FileManager } from '../storage/file-manager';
@@ -517,7 +518,7 @@ function extractSummary(jsonData: Record<string, unknown>): Record<string, unkno
  * Shared between executive-summary (report) and historyManager (snapshots).
  */
 function extractPageInsights(pages: PageInfo[]) {
-  const langMismatches = pages.filter((p) => p.languageDetection?.match === false).length;
+  const langMismatches = pages.filter((p) => isConfidentLanguageMismatch(p.languageDetection)).length;
   const brokenOutbound = pages.reduce((s, p) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0);
   const similarPages = pages.filter(
     (p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,

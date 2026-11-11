@@ -1,3 +1,4 @@
+import { confidentLanguage } from './lib/utils/language-confidence';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReportDataProcessor } from './lib/reports/data-processor';
@@ -139,8 +140,12 @@ function generatePagesCSV(jsonData: AuditJsonData) {
         data.missingMetaTags?.length ?? 0,
         data.resourceOptimization?.renderBlocking?.totalBlocking ?? '',
         (data.status ?? 0) >= 400 || (data.statusCode ?? 0) >= 400 ? 'Yes' : 'No',
-        data.languageDetection?.detectedLanguage ?? '',
-        data.languageDetection?.match != null ? (data.languageDetection.match ? 'Yes' : 'No') : '',
+        confidentLanguage(data.languageDetection) ?? '',
+        confidentLanguage(data.languageDetection) && data.languageDetection?.match != null
+          ? data.languageDetection.match
+            ? 'Yes'
+            : 'No'
+          : '',
         data.internalPageRank != null ? data.internalPageRank.toFixed(6) : '',
         data.ctaData?.summary?.total ?? '',
         data.ctaData?.summary?.aboveFoldCount ?? '',
@@ -311,7 +316,7 @@ function generateAllCSVs(jsonFile: string, domainName: string) {
   console.log(`   You can now open these files in Excel, Google Sheets, or any CSV tool.\n`);
 }
 
-export { generateAllCSVs, escapeCSV };
+export { generateAllCSVs, generatePagesCSV, escapeCSV };
 // CLI entry point
 if (require.main === module) {
   const args = process.argv.slice(2);

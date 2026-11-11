@@ -3,6 +3,7 @@
  * Displays the detailed pages data table with all metrics
  */
 
+import { confidentLanguage } from '../../utils/language-confidence';
 import { THRESHOLDS, METRIC_INFO } from '../metrics-metadata';
 import {
   escapeHtml,
@@ -971,8 +972,9 @@ function getContentQualityCells(page: PageInfo, noScore = false) {
 function getNewInsightCells(page: PageInfo) {
   // Language
   const lang = page.languageDetection;
-  const langDisplay = lang?.detectedLanguage?.toUpperCase() ?? '—';
-  const langMatch = lang?.match;
+  const confidentLang = confidentLanguage(lang);
+  const langDisplay = confidentLang?.toUpperCase() ?? '—';
+  const langMatch = confidentLang ? lang?.match : null;
   const langColor =
     langMatch === false
       ? 'var(--color-error)'
@@ -1119,7 +1121,7 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
 
   // New insights
   const lang = p.languageDetection;
-  const langDisplay = lang?.detectedLanguage?.toUpperCase() ?? '—';
+  const langDisplay = confidentLanguage(lang)?.toUpperCase() ?? '—';
   const pr = p.internalPageRank;
   const prDisplay = pr != null ? (pr * 100).toFixed(1) : '—';
   const ctaCount = p.ctaData?.summary?.total ?? null;
@@ -1524,4 +1526,4 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
   `;
 }
 
-export { getPagesTable };
+export { getPagesTable, getNewInsightCells };

@@ -126,6 +126,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CRUX_API_KEY: ${{ secrets.CRUX_API_KEY }}
+          AUDIT_PROGRESS_FILE: ${{ runner.temp }}/audit-progress.json
         # Mirrors toCliArgs() in web/lib/audit-options.ts.
         run: |
           args=("--origin=$AUDIT_URL")
@@ -138,7 +139,16 @@ jobs:
           [ -n "$IN_CONCURRENCY" ] && args+=("--concurrency=$IN_CONCURRENCY")
           [ -n "$IN_LIMIT" ] && args+=("--limit=$IN_LIMIT")
           [ -n "$IN_EVIDENCE_CAP" ] && args+=("--evidence-cap=$IN_EVIDENCE_CAP")
-          npx tsx start.ts "${args[@]}"
+          # Best-effort: progress plumbing must never block the audit.
+          source web/scripts/vercel-blob-env.sh || echo "::warning::Blob credentials unavailable; live progress disabled"
+          # Publish live page progress every ~20s while the audit runs.
+          ( while sleep 20; do node web/scripts/upload-results.mjs --progress || true; done ) &
+          progress_loop=$!
+          rc=0
+          npx tsx start.ts "${args[@]}" || rc=$?
+          kill "$progress_loop" 2>/dev/null || true
+          node web/scripts/upload-results.mjs --progress || true
+          exit "$rc"
 
       - name: Upload results to Blob
         if: always()

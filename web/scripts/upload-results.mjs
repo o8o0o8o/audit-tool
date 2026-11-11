@@ -2,6 +2,7 @@
 // Uploads an audit run folder to Vercel Blob under audits/<RUN_ID>/ and writes audits/<RUN_ID>/status.json.
 //
 // Usage: node web/scripts/upload-results.mjs --status=running|succeeded|failed|cancelled [--results=<audit-results dir>]
+//        node web/scripts/upload-results.mjs --progress   (uploads $AUDIT_PROGRESS_FILE to audits/<RUN_ID>/progress.json)
 // Env: RUN_ID, AUDIT_URL, AUDIT_OPTIONS (JSON), AUDIT_STARTED_AT (ISO), BLOB_READ_WRITE_TOKEN or
 //      BLOB_STORE_ID + VERCEL_OIDC_TOKEN (see vercel-blob-env.sh),
 //      GITHUB_SERVER_URL / GITHUB_REPOSITORY / GITHUB_RUN_ID (for the Actions run link).
@@ -52,11 +53,37 @@ async function findRunFolder(resultsDir, startedAtMs) {
 
 const blobOptions = { access: 'public', addRandomSuffix: false, allowOverwrite: true };
 
+/** Best-effort: a missing file or failed upload is logged, never fails the job. */
+async function uploadProgress(runId) {
+  const file = process.env.AUDIT_PROGRESS_FILE;
+  if (!file) return;
+  let body;
+  try {
+    body = await readFile(file, 'utf8');
+    JSON.parse(body);
+  } catch {
+    return;
+  }
+  try {
+    await put(`audits/${runId}/progress.json`, body, {
+      ...blobOptions,
+      contentType: 'application/json',
+      cacheControlMaxAge: 0,
+    });
+  } catch (err) {
+    console.error(`progress upload failed: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
 async function main() {
   const runId = process.env.RUN_ID ?? '';
   if (!RUN_ID_PATTERN.test(runId)) {
     console.error('RUN_ID is missing or invalid; refusing to upload.');
     process.exit(1);
+  }
+  if (process.argv.includes('--progress')) {
+    await uploadProgress(runId);
+    return;
   }
   let status = arg('status', 'succeeded');
   if (!STATUSES.has(status)) {

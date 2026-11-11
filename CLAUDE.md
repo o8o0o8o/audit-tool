@@ -346,6 +346,10 @@ npx playwright install
 npx tsx start.ts --origin=<website-url> [--perf] [--save-html] [--screenshots] [--proceed] [--concurrency=<number>]
 ```
 
+### Web app live progress
+
+When `AUDIT_PROGRESS_FILE` is set, `ProgressReporter` (`lib/utils/progress-reporter.ts`) writes `{processed,total,phase,updatedAt}` there (throttled, atomic). `.github/workflows/audit.yml` uploads it every ~20s via `web/scripts/upload-results.mjs --progress` to `audits/<runId>/progress.json`; `GET /api/runs/<runId>` merges it as `progress`, and the home page (`web/app/page.tsx`, helpers in `web/lib/audit-progress.ts`) shows a blocking progress overlay, then embeds the finished report. See `web/README.md`.
+
 ### Report theme preview
 
 The HTML report uses the FocusReactive brand theme (dark, `#00E56D` accent, Inter) from `lib/reports/sections/design-tokens.ts`; `yarn run preview:report` renders `tests/fixtures/report-fixture/` into `web/public/report/index.html` (gitignored).

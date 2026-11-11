@@ -3,6 +3,17 @@
  * Provides real-time progress feedback during crawling
  */
 
+import { renameSync, writeFileSync } from 'node:fs';
+
+const PROGRESS_FILE_INTERVAL_MS = 2000;
+
+export interface AuditProgressFile {
+  processed: number;
+  total: number;
+  phase: 'pages' | 'discovered';
+  updatedAt: string;
+}
+
 class ProgressReporter {
   #total;
   #processed;
@@ -19,6 +30,8 @@ class ProgressReporter {
   #originalConsoleError;
   #lastLine;
   #onResize;
+  #progressFile: string | undefined;
+  #lastProgressWrite = 0;
 
   /**
    * Create a ProgressReporter
@@ -49,6 +62,8 @@ class ProgressReporter {
     this.#originalConsoleLog = null;
     this.#originalConsoleError = null;
     this.#lastLine = '';
+    this.#progressFile = process.env.AUDIT_PROGRESS_FILE || undefined;
+    this.#writeProgressFile(true);
 
     // Intercept console.log and console.error in TTY non-verbose mode so other code
     // doesn't break the in-place progress line
@@ -93,6 +108,7 @@ class ProgressReporter {
     this.#processed++;
     this.#succeeded++;
     this.#maybeLog(url, 'success', duration);
+    this.#writeProgressFile();
   }
 
   /**
@@ -104,6 +120,7 @@ class ProgressReporter {
     this.#processed++;
     this.#failed++;
     this.#maybeLog(url, 'fail', null, reason);
+    this.#writeProgressFile();
   }
 
   /**
@@ -112,6 +129,7 @@ class ProgressReporter {
    */
   skip(_url: string) {
     this.#skipped++;
+    this.#writeProgressFile();
   }
 
   /**
@@ -120,6 +138,31 @@ class ProgressReporter {
    */
   updateTotal(newTotal: number) {
     this.#total = newTotal;
+    this.#writeProgressFile();
+  }
+
+  /**
+   * Write `{processed,total,phase,updatedAt}` to $AUDIT_PROGRESS_FILE (throttled, atomic).
+   * Progress publishing must never break the crawl, so write errors are ignored.
+   */
+  #writeProgressFile(force = false) {
+    if (!this.#progressFile) return;
+    const now = Date.now();
+    if (!force && now - this.#lastProgressWrite < PROGRESS_FILE_INTERVAL_MS) return;
+    this.#lastProgressWrite = now;
+    const doc: AuditProgressFile = {
+      processed: this.#processed + this.#skipped,
+      total: this.#total,
+      phase: this.#colorScheme === 'discovered' ? 'discovered' : 'pages',
+      updatedAt: new Date(now).toISOString(),
+    };
+    const tmp = `${this.#progressFile}.${process.pid}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify(doc));
+      renameSync(tmp, this.#progressFile);
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -167,6 +210,7 @@ class ProgressReporter {
    * Print final summary
    */
   printSummary() {
+    this.#writeProgressFile(true);
     // Restore original console.log before printing summary
     this.#restoreConsoleLog();
 

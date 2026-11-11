@@ -553,6 +553,7 @@ async function audit() {
     generateHTML(seo.file, seo.domainName!, htmlOutputPath, undefined, {
       sections: resolvedPreset.htmlSections,
       checks: resolvedPreset.checks,
+      preset: resolvedPreset.preset ?? undefined,
     });
 
     // Phase 2 — curated markdown + PDF report. Opt-out via --no-phase2.
@@ -575,6 +576,7 @@ async function audit() {
           noScore: args.noScore === true,
           sections: resolvedPreset.phase2Sections,
           checks: resolvedPreset.checks,
+          preset: resolvedPreset.preset ?? undefined,
           verbose: args.verbose === true,
         });
         console.log(`📄 Curated report: ${pdfPath}`);

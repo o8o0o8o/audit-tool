@@ -11,7 +11,7 @@ import { ReportDataProcessor } from './lib/reports/data-processor';
 import { escapeHtml } from './lib/reports/html-utils';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
 import { categorize } from './lib/phase2/categorize';
-import { matchesChecks, type CheckName, type HtmlSectionId } from './lib/presets';
+import { auditTypeLabel, matchesChecks, type CheckName, type HtmlSectionId } from './lib/presets';
 
 // Import section generators
 import {
@@ -39,6 +39,8 @@ export interface HtmlReportSelection {
   sections?: HtmlSectionId[];
   /** Check groups whose findings are kept; `undefined` ⇒ no finding filter. */
   checks?: CheckName[];
+  /** Preset the audit ran with; shown as the audit type. `undefined` ⇒ "Full audit". */
+  preset?: string;
 }
 
 const NAV_LINKS: Partial<Record<HtmlSectionId, string>> = {
@@ -234,7 +236,7 @@ function generateHTML(
   <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${isComparison ? `SEO Comparison: ${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : `SEO Audit Report - ${escapeHtml(safeDomainName)}`}</title>
+      <title>${isComparison ? `Comparison: ${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : `Audit report - ${escapeHtml(safeDomainName)}`}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -259,10 +261,11 @@ function generateHTML(
           <header>
               <div class="fr-header-bar">
                   <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
-                  <span class="fr-header-tag">SEO Audit</span>
+                  <span class="fr-header-tag">Audit</span>
               </div>
               ${jsonData.branding?.logo ? `<img src="${escapeHtml(jsonData.branding.logo)}" alt="Logo" style="max-height:40px;margin-bottom:10px;">` : ''}
-              <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}${isComparison ? 'SEO Comparison Report' : 'SEO Audit Report'}</h1>
+              <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}${isComparison ? 'SEO Comparison Report' : 'Audit report'}</h1>
+              <p class="subtitle">Audit type: ${escapeHtml(auditTypeLabel(selection.preset))}</p>
               <p class="subtitle">${isComparison ? `${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : escapeHtml(safeDomainName)}</p>
               <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
               ${(timing as Record<string, unknown>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, unknown>).elapsedTimeFormatted as string)}</p>` : ''}
@@ -414,7 +417,7 @@ function generateHTML(
               <div class="fr-footer-inner">
                   <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
                   <div class="fr-footer-meta">
-                      <p>SEO Audit Tool v${pkg.version} - Generated ${new Date().toISOString()}</p>
+                      <p>Audit Tool v${pkg.version} - Generated ${new Date().toISOString()}</p>
                       <p>Node.js ${process.version} | Playwright | ${pages.length} pages analyzed</p>
                   </div>
                   <div class="fr-footer-actions">

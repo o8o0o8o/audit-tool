@@ -247,3 +247,18 @@ export function matchesChecks(message: string, section: Section, checks: readonl
   if (!checks) return true;
   return findingCheckGroups(message, section).some((g) => checks.includes(g));
 }
+
+const AUDIT_TYPE_LABELS: Record<PresetName, string> = {
+  quick: 'Quick',
+  standard: 'Standard',
+  deep: 'Deep',
+  sales: 'Sales',
+  marketing: 'Marketing',
+  seo: 'SEO',
+  custom: 'Custom',
+};
+
+/** Human label for the audit type a report was run with; no preset ⇒ "Full audit". */
+export function auditTypeLabel(preset?: string | null): string {
+  return preset && isPresetName(preset) ? AUDIT_TYPE_LABELS[preset] : 'Full audit';
+}

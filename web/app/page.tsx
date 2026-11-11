@@ -72,7 +72,7 @@ export default function DispatchPage() {
 
   return (
     <main>
-      <h1>Run an SEO audit</h1>
+      <h1>Run an audit</h1>
       <form className="card" onSubmit={onSubmit}>
         <label className="form-field">
           Website URL

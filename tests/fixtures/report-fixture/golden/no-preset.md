@@ -1,5 +1,7 @@
 # Website Technical Audit
 
+**Audit type:** Full audit
+
 ## fixture.example
 
 **Generated:** 2026-01-01  

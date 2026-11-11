@@ -1746,7 +1746,7 @@ function getScripts(data: ReportSectionData) {
       // Copy score summary to clipboard
       function copyScoreSummary() {
           var summary = ${safeJsonStringify(chartData.summary)};
-          var text = 'SEO Audit: ${domainName}\\n' +
+          var text = 'Audit report: ${domainName}\\n' +
               'Score: ' + (summary.overallScore || 0) + '/100\\n' +
               'Issues: ' + (summary.totalIssues || 0) + ' (' +
               (summary.criticalCount || 0) + ' critical, ' +
@@ -1769,7 +1769,7 @@ function getScripts(data: ReportSectionData) {
       function exportMarkdown() {
           var summary = ${safeJsonStringify(chartData.summary)};
           var lines = [];
-          lines.push('# SEO Audit Report - ${domainName}');
+          lines.push('# Audit report - ${domainName}');
           lines.push('');
           lines.push('Generated: ' + new Date().toLocaleString());
           lines.push('');
@@ -2989,7 +2989,7 @@ function getScripts(data: ReportSectionData) {
           var critical = issues[1] ? issues[1].textContent.trim() : '0';
           var high = issues[2] ? issues[2].textContent.trim() : '0';
 
-          var text = 'SEO Audit Report: ' + domainText + '\\n' +
+          var text = 'Audit report: ' + domainText + '\\n' +
               'Score: ' + scoreVal + '/100\\n' +
               'Issues: ' + totalIssues + ' total (' + critical + ' critical, ' + high + ' high)\\n' +
               'Generated: ' + new Date().toLocaleDateString();
@@ -3002,7 +3002,7 @@ function getScripts(data: ReportSectionData) {
 
           // Also try native share API on mobile
           if (navigator.share) {
-              navigator.share({ title: 'SEO Audit - ' + domainText, text: text }).catch(function() {});
+              navigator.share({ title: 'Audit report - ' + domainText, text: text }).catch(function() {});
           }
       };
 

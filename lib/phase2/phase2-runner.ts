@@ -24,7 +24,7 @@ import { nextjsOverrideFor, isNextjsAudit } from '../scoring/nextjs-recommendati
 import type { FixRecommendation } from '../types';
 import { normalizeMessage as _normalizeMessage, normalizeMessageForLookup } from '../utils/finding-id';
 import { categorize, type Section } from './categorize';
-import { matchesChecks, type CheckName } from '../presets';
+import { auditTypeLabel, matchesChecks, type CheckName } from '../presets';
 import { benchmarkFor } from './benchmarks';
 import { mergeNumericVariants } from '../scoring/merge-variants';
 import { consolidateFindings, findingGroupKey } from './consolidate';
@@ -69,6 +69,8 @@ export interface Phase2Options {
   sections?: Section[];
   /** Check groups whose findings are kept; `undefined` ⇒ no finding filter. */
   checks?: CheckName[];
+  /** Preset the audit ran with; shown as the audit type. */
+  preset?: string;
   /** Surface API/cache errors. */
   verbose?: boolean;
 }
@@ -414,6 +416,8 @@ export function preparedDetails(
 export interface ReportSelection {
   sections?: Section[];
   checks?: CheckName[];
+  /** Preset the audit ran with; `undefined` ⇒ "Full audit". */
+  preset?: string;
 }
 
 /** Drop HTML tags from analyzer details so the markdown stays clean. */
@@ -683,7 +687,7 @@ function mergeAnomalies(buckets: Record<Section, Array<[string, IssueDetail]>>, 
 
 // ─── Section builders ───────────────────────────────────────────────────────
 
-function buildCover(artifacts: AuditArtifacts): string {
+function buildCover(artifacts: AuditArtifacts, preset?: string): string {
   const { manifest, metadata } = artifacts;
   const date = new Date(manifest.created).toISOString().slice(0, 10);
   const sitemapCount = metadata.sitemaps?.total;
@@ -691,6 +695,8 @@ function buildCover(artifacts: AuditArtifacts): string {
   const err = manifest.progress.totalWithError;
   const lines: string[] = [];
   lines.push(`# Website Technical Audit`);
+  lines.push('');
+  lines.push(`**Audit type:** ${auditTypeLabel(preset)}`);
   lines.push('');
   lines.push(`## ${manifest.domain}`);
   lines.push('');
@@ -1364,7 +1370,7 @@ export function buildReportMarkdown(
     siteFacts = null;
   }
   const parts: string[] = [];
-  parts.push(buildCover(artifacts));
+  parts.push(buildCover(artifacts, selection.preset));
   // Degenerate-crawl guard: when nothing was successfully analyzed, the findings
   // and scores below are artifacts. Warn before anything else so the report is
   // never mistaken for a valid audit (empty string for a healthy crawl).
@@ -2712,6 +2718,8 @@ export interface Phase2State {
   sections?: Section[];
   /** Check groups the findings were filtered to; absent ⇒ no filter. */
   checks?: CheckName[];
+  /** Preset the audit ran with; absent ⇒ "Full audit". */
+  preset?: string;
 }
 
 /** Persist the {@link Phase2State} boundary artifact next to the report. */
@@ -2732,6 +2740,7 @@ function writePhase2State(
     noScore,
     ...(selection.sections && { sections: selection.sections }),
     ...(selection.checks && { checks: selection.checks }),
+    ...(selection.preset && { preset: selection.preset }),
   };
   fs.writeFileSync(path.join(runDir, 'phase2-state.json'), JSON.stringify(state, null, 2));
 }
@@ -2768,7 +2777,7 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   // the report and the persisted Phase 2→3 state, so the verified report and
   // the live verify pass operate on the same consolidated set.
   const anomalies = consolidateAnomalies(rawAnomalies);
-  const selection: ReportSelection = { sections: options.sections, checks: options.checks };
+  const selection: ReportSelection = { sections: options.sections, checks: options.checks, preset: options.preset };
   const markdown = buildReportMarkdown(
     artifacts,
     narratives,

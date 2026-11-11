@@ -248,7 +248,7 @@ The LLM passes additionally rely on the `claude` CLI being on `PATH` when no API
 
 ## Web dispatcher (Vercel)
 
-`web/` is a small Next.js app that starts audits from a browser and shows their reports. Audits can't run inside Vercel functions (Playwright, long runtimes), so the page dispatches `.github/workflows/audit.yml` through the GitHub API; the workflow runs `npx tsx start.ts`, then uploads the run folder to Vercel Blob under `audits/<run_id>/` together with a `status.json` the page reads.
+`web/` is a small Next.js app that starts audits from a browser and shows their reports. Audits can't run inside Vercel functions (Playwright, long runtimes), so the page dispatches `.github/workflows/audit.yml` through the GitHub API; the workflow runs `npx tsx start.ts`, uploading `audits/<run_id>/progress.json` to Vercel Blob about every 20s while it runs, then uploads the run folder under `audits/<run_id>/` together with a `status.json` the page reads. While the audit runs, the page stays on `/` behind a live progress overlay, then embeds the finished report (see `web/README.md`).
 
 **Vercel project**
 

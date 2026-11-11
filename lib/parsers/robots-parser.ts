@@ -7,6 +7,7 @@
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { formatBytes, readResponseTextCapped } from '../utils';
 import { fetchTextViaBrowser } from '../crawler/browser-fetch';
+import { describeBlockedResponse, fetchWithRetryAfter } from '../utils/blocked-fetch';
 
 /** True when the text contains at least one robots.txt directive (vs. an HTML challenge page). */
 function looksLikeRobots(text: string): boolean {
@@ -96,7 +97,10 @@ class RobotsParser {
       console.log('Analyzing robots.txt...');
 
       const startTime = Date.now();
-      const robotsResponse = await fetch(origin + '/robots.txt');
+      const robotsResponse = await fetchWithRetryAfter(() => fetch(origin + '/robots.txt'), {
+        onRetry: (attempt, waitMs) =>
+          console.warn(`robots.txt returned HTTP 429 — retry ${attempt} in ${Math.round(waitMs / 1000)}s`),
+      });
       result.metadata.responseTime = Date.now() - startTime;
       result.metadata.statusCode = robotsResponse.status;
       result.metadata.contentType = robotsResponse.headers.get('content-type');
@@ -105,6 +109,12 @@ class RobotsParser {
       let effectiveStatus = robotsResponse.status;
       let robotsContent =
         robotsResponse.status === 200 ? await readResponseTextCapped(robotsResponse, THRESHOLDS.MAX_ROBOTS_FETCH) : '';
+      if (robotsResponse.status !== 200) {
+        const bodyHead = await readResponseTextCapped(robotsResponse, 1024).catch(() => '');
+        console.warn(
+          `robots.txt fetch: ${describeBlockedResponse(robotsResponse.status, robotsResponse.headers, bodyHead, origin + '/robots.txt')}`,
+        );
+      }
 
       // A plain fetch can be blocked by bot protection (e.g. a 429 + JS challenge
       // page) — retry through a real browser, which can clear the challenge, before

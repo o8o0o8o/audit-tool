@@ -7,6 +7,7 @@ import { parse, type HTMLElement } from 'node-html-parser';
 import { SEVERITY, THRESHOLDS } from '../constants';
 import { fetchWithTimeout, readResponseTextCapped } from '../utils';
 import { fetchTextViaBrowser } from '../crawler/browser-fetch';
+import { describeBlockedResponse, fetchWithRetryAfter } from '../utils/blocked-fetch';
 import { isFetchAllowed } from '../../validators';
 
 /** Origin hostname for the SSRF same-host allowance, or undefined. */
@@ -59,8 +60,14 @@ function resolveSitemapUrl(raw: string, referencedFrom: string): ResolvedSitemap
  * body in place of XML). Returns the best text obtained; the caller validates it.
  */
 async function fetchSitemapText(url: string): Promise<{ status: number; text: string }> {
-  const response = await fetchWithTimeout(url, THRESHOLDS.FETCH_TIMEOUT);
+  const response = await fetchWithRetryAfter(() => fetchWithTimeout(url, THRESHOLDS.FETCH_TIMEOUT), {
+    onRetry: (attempt, waitMs) =>
+      console.warn(`Sitemap ${url} returned HTTP 429 — retry ${attempt} in ${Math.round(waitMs / 1000)}s`),
+  });
   const text = await readResponseTextCapped(response, THRESHOLDS.MAX_SITEMAP_FETCH);
+  if (!response.ok) {
+    console.warn(`Sitemap fetch: ${describeBlockedResponse(response.status, response.headers, text, url)}`);
+  }
   if (response.ok && looksLikeSitemap(text)) {
     return { status: response.status, text };
   }

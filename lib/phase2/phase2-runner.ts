@@ -40,6 +40,8 @@ import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
 import { isClaudeCliAvailable } from './claude-cli';
 import { PhaseProgress, timedStep } from '../utils/phase-progress';
+import { computePageCounts, type PageCounts } from '../utils/page-counts';
+import { loadAllPages } from '../phase3/finding-verifier';
 import type {
   AnalysisData,
   AuditArtifacts,
@@ -687,12 +689,33 @@ function mergeAnomalies(buckets: Record<Section, Array<[string, IssueDetail]>>, 
 
 // ─── Section builders ───────────────────────────────────────────────────────
 
+const pageCountsCache = new WeakMap<AuditArtifacts, PageCounts>();
+
+/**
+ * Page counts from the stored page records. Fixtures/runs with no `pages/`
+ * on disk fall back to the manifest counters.
+ */
+function crawlCounts(artifacts: AuditArtifacts): PageCounts {
+  const cached = pageCountsCache.get(artifacts);
+  if (cached) return cached;
+  const progress = artifacts.manifest.progress;
+  const index = loadAllPages(artifacts.runDir);
+  const pages = Object.fromEntries(index.all().map((p, i) => [p.url ?? `#${i}`, p]));
+  let counts = computePageCounts(pages, progress.byError ?? {});
+  if (index.size === 0) {
+    const ok = progress.totalWithoutError ?? 0;
+    const err = progress.totalWithError ?? 0;
+    counts = { crawled: ok + err, successful: ok, withErrors: err, failedToLoad: 0 };
+  }
+  pageCountsCache.set(artifacts, counts);
+  return counts;
+}
+
 function buildCover(artifacts: AuditArtifacts, preset?: string): string {
   const { manifest, metadata } = artifacts;
   const date = new Date(manifest.created).toISOString().slice(0, 10);
   const sitemapCount = metadata.sitemaps?.total;
-  const ok = manifest.progress.totalWithoutError;
-  const err = manifest.progress.totalWithError;
+  const counts = crawlCounts(artifacts);
   const lines: string[] = [];
   lines.push(`# Website Technical Audit`);
   lines.push('');
@@ -703,6 +726,8 @@ function buildCover(artifacts: AuditArtifacts, preset?: string): string {
   lines.push(`**Generated:** ${date}  `);
   // Avoid the confusing "354 of 314" framing — crawled count includes pages
   // discovered outside the sitemap. Report each number plainly.
+  const ok = counts.successful;
+  const err = counts.withErrors + counts.failedToLoad;
   const crawledLine = err > 0 ? `${ok} crawled, ${err} errored` : `${ok} crawled`;
   const sitemapLine = sitemapCount ? ` (sitemap listed ${sitemapCount})` : '';
   lines.push(`**Pages:** ${crawledLine}${sitemapLine}  `);
@@ -720,9 +745,9 @@ function buildCover(artifacts: AuditArtifacts, preset?: string): string {
  * mistaken for a valid audit. Returns '' for a healthy crawl (>0 analyzed).
  */
 function buildDegenerateCrawlBanner(artifacts: AuditArtifacts): string {
-  const ok = artifacts.manifest.progress.totalWithoutError ?? 0;
-  const err = artifacts.manifest.progress.totalWithError ?? 0;
-  if (ok > 0) return '';
+  const counts = crawlCounts(artifacts);
+  if (counts.successful > 0) return '';
+  const err = counts.withErrors + counts.failedToLoad;
   const errLine = err > 0 ? ` All ${err} attempted page(s) returned errors (e.g. 4xx/5xx) or failed to load.` : '';
   return [
     `> **⚠️ Crawl produced no analyzable pages.**${errLine} The findings and category scores below are derived from an empty / error-only dataset and are **not a reliable audit**: per-page findings (e.g. "thin content", "missing canonical") are artifacts of the error responses, and categories with no measured signal default to a perfect score. Investigate what makes these URLs unreachable — a sitemap pointing at dead URLs, an auth/geo wall, or bot blocking — and re-run.`,
@@ -773,7 +798,7 @@ function buildPurpose(artifacts: AuditArtifacts, noScore = false): string {
   const axeCaptured = evidence ? Object.values(evidence).filter((e) => e.files.includes('axe.json')).length : 0;
 
   const stats: string[] = [];
-  stats.push(`- **Pages crawled:** ${artifacts.manifest.progress.totalWithoutError}`);
+  stats.push(`- **Pages crawled:** ${crawlCounts(artifacts).successful}`);
   if (artifacts.metadata.sitemaps?.total) {
     stats.push(`- **Sitemap entries:** ${artifacts.metadata.sitemaps.total}`);
   }

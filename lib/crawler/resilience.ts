@@ -167,10 +167,27 @@ export async function withTimeout<T>(
   }
 }
 
+/** The byError categories `handlePageError` writes URL arrays under. */
+export const FAILURE_CATEGORIES = [
+  'timeout',
+  'dns_error',
+  'connection_error',
+  'ssl_error',
+  'redirect_error',
+  'navigation_error',
+  'crashed',
+] as const;
+
+export type FailureCategory = (typeof FAILURE_CATEGORIES)[number];
+
+function failureCountKey(category: FailureCategory): string {
+  return category === 'crashed' ? 'totalCrashed' : `total_${category}`;
+}
+
 /**
  * Categorize error type for better debugging and reporting
  */
-export function categorizeError(error: Error): string {
+export function categorizeError(error: Error): FailureCategory {
   const message = (error.message || '').toLowerCase();
   const name = (error.name || '').toLowerCase();
 
@@ -274,18 +291,49 @@ export function handlePageError(
     console.log(`\x1b[31m✗\x1b[0m ${url} - ${friendlyMessage}`);
   }
 
-  results.pageData.totalWithError += 1;
+  // A retried URL is counted once, on its first recorded failure. Membership in
+  // the failure arrays (not `attempts`) decides it: the crawler's outer catch
+  // bumps `attempts` without recording a failure here.
+  const alreadyRecorded = FAILURE_CATEGORIES.some((category) => {
+    const list = results.pageData.byError[category];
+    return Array.isArray(list) && list.includes(url);
+  });
+  if (!alreadyRecorded) {
+    results.pageData.totalWithError += 1;
 
-  const byError = results.pageData.byError;
+    const byError = results.pageData.byError;
+    trackByErrorCategory(byError, errorType, failureCountKey(errorType), url);
 
-  // Track by specific error type
-  trackByErrorCategory(byError, errorType, `total_${errorType}`, url);
-
-  // Also track in legacy "crashed" category for backwards compatibility
-  if (errorType !== 'crashed') {
-    trackByErrorCategory(byError, 'crashed', 'totalCrashed', url);
+    // Also track in legacy "crashed" category for backwards compatibility
+    if (errorType !== 'crashed') {
+      trackByErrorCategory(byError, 'crashed', 'totalCrashed', url);
+    }
   }
 
   saveAttempt(url);
   checkAttempts(url);
+}
+
+/**
+ * Undo the failure bookkeeping for a URL whose retry succeeded: removes every
+ * occurrence of it from the failure arrays (restored checkpoints may hold
+ * duplicates) and decrements `totalWithError` once.
+ */
+export function reconcileRetrySuccess(results: CrawlResults, url: string): void {
+  const byError = results.pageData.byError;
+  let wasFailed = false;
+  for (const category of FAILURE_CATEGORIES) {
+    const list = byError[category];
+    if (!Array.isArray(list)) continue;
+    const kept = list.filter((u) => u !== url);
+    const removed = list.length - kept.length;
+    if (removed === 0) continue;
+    wasFailed = true;
+    byError[category] = kept;
+    const countKey = failureCountKey(category);
+    byError[countKey] = Math.max(0, ((byError[countKey] as number) || 0) - removed);
+  }
+  if (wasFailed) {
+    results.pageData.totalWithError = Math.max(0, results.pageData.totalWithError - 1);
+  }
 }

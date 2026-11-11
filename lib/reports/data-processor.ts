@@ -11,6 +11,7 @@ import { PageSegmentAnalyzer } from '../analyzers/site-wide/page-segment-analyze
 import { PageMatcher } from '../comparison/page-matcher';
 import { populateIncomingLinksCount } from '../crawler/page-data-builder';
 import type { PageInfo, PageData, AnalysisDetail, FailedBatch, ComparisonData } from '../types';
+import { computePageCounts } from '../utils/page-counts';
 
 class ReportDataProcessor {
   /**
@@ -157,7 +158,7 @@ class ReportDataProcessor {
         processedPages: manifest.progress.processedPages,
         totalWithoutError: manifest.progress.totalWithoutError,
         totalWithError: manifest.progress.totalWithError,
-        byError: manifest.progress.byError,
+        byError: manifest.progress.byError ?? {},
         incomingLinks,
       },
       analysis: {
@@ -382,7 +383,7 @@ class ReportDataProcessor {
     const jsonData = this.loadAuditData(file, domainName);
     const historyData = this.loadHistory(domainName);
 
-    const pageData = (jsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0 }) as PageData & {
+    const pageData = (jsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0, byError: {} }) as PageData & {
       incomingLinks?: Record<string, string[]>;
     };
     const pages: PageInfo[] = Object.values(pageData.pages ?? {});
@@ -400,6 +401,7 @@ class ReportDataProcessor {
       analysis,
       metrics: this.aggregateMetrics(pages),
       pageCounts: this.countPages(pages),
+      crawlCounts: computePageCounts(pageData.pages, pageData.byError ?? {}),
       topIssues: this.getTopIssues(analysis.details as Record<string, AnalysisDetail> | undefined),
       trendData: historyData?.trendData ?? null,
       previousAudit: historyData?.previousAudit ?? null,
@@ -432,6 +434,7 @@ class ReportDataProcessor {
       pages: {},
       totalWithoutError: 0,
       totalWithError: 0,
+      byError: {},
     }) as PageData & {
       incomingLinks?: Record<string, string[]>;
     };

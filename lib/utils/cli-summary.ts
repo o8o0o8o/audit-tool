@@ -7,6 +7,7 @@ import type { AnalysisDetail, PageInfo, AuditSummary } from '../types';
 import { getLetterGrade, estimateScoreAfterFixes, truncateText } from '../utils';
 import { SCORING } from '../constants';
 import { LLM_CATEGORY_ORDER, type LlmUsageSnapshot } from './llm-usage-tracker';
+import { computePageCounts } from './page-counts';
 
 /** Human labels for the LLM cost categories shown in the summary. */
 const LLM_CATEGORY_LABELS: Record<string, string> = {
@@ -164,9 +165,10 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   const lowCount = summary.lowCount ?? 0;
   const totalIssues = summary.totalIssues ?? 0;
 
-  const totalPages = pageData.total ?? Object.keys(pageData.pages ?? {}).length;
-  const successPages = pageData.totalWithoutError ?? 0;
-  const failedPages = pageData.totalWithError ?? 0;
+  const counts = computePageCounts(pageData.pages, pageData.byError ?? {});
+  const totalPages = counts.crawled;
+  const successPages = counts.successful;
+  const failedPages = counts.withErrors + counts.failedToLoad;
   const successRate = totalPages > 0 ? ((successPages / totalPages) * 100).toFixed(1) : 0;
 
   const overallScore = summary.overallScore ?? 0;
@@ -421,7 +423,7 @@ function getTopQuickWins(analysis: AuditResultsExtended['analysis'], count: numb
 function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlPath: string) {
   const summary = results.analysis?.summary ?? {};
   const pageData = results.pageData ?? {};
-  const totalPages = pageData.total ?? Object.keys(pageData.pages ?? {}).length;
+  const counts = computePageCounts(pageData.pages, pageData.byError ?? {});
 
   const score = summary.overallScore ?? 0;
   const grade = getLetterGrade(score);
@@ -432,9 +434,9 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
     grade,
     categoryScores: summary.categoryScores ?? {},
     pages: {
-      total: totalPages,
-      successful: pageData.totalWithoutError ?? 0,
-      failed: pageData.totalWithError ?? 0,
+      total: counts.crawled,
+      successful: counts.successful,
+      failed: counts.withErrors + counts.failedToLoad,
     },
     issues: {
       total: summary.totalIssues ?? 0,

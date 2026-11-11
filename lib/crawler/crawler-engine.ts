@@ -68,6 +68,7 @@ import {
   withTimeout,
   categorizeError,
   handlePageError,
+  reconcileRetrySuccess,
 } from './resilience';
 import {
   processTitle,
@@ -923,6 +924,7 @@ class CrawlerEngine {
               // failedPages already tracked by #crawlSinglePage
             } else {
               console.log(`   ✓ Retry succeeded: ${url} (${(duration / 1000).toFixed(1)}s)`);
+              reconcileRetrySuccess(results, url);
               // Remove from failedPages
               const idx = failedPages.indexOf(url);
               if (idx !== -1) failedPages.splice(idx, 1);

@@ -6,7 +6,7 @@
 import crypto from 'crypto';
 import * as fs from 'fs';
 import * as zlib from 'zlib';
-import { THRESHOLDS, SEVERITY } from './constants';
+import { THRESHOLDS, SEVERITY, SCORING } from './constants';
 import type { UrlAnalysis } from './types';
 // Import core URL validation from validators.js for consistency
 import { validateURL as coreValidateURL } from '../validators';
@@ -619,20 +619,41 @@ function parseJsonLdSchemas(parsedPage: { querySelectorAll(selector: string): { 
 }
 
 /**
- * Calculate predicted score after fixing all critical+high issues.
- * Returns null if no improvement is possible.
+ * Overall score: weighted mean of category scores blended with the worst category,
+ * so one failing category drags the overall down. A missing category counts as 0.
+ */
+function blendOverallScore(
+  categoryScores: Record<string, number | undefined>,
+  categoryWeights: Record<string, number> = SCORING.CATEGORY_WEIGHTS,
+): number {
+  let weightedMean = 0;
+  const values: number[] = [];
+  for (const [category, weight] of Object.entries(categoryWeights)) {
+    const value = categoryScores[category] || 0;
+    weightedMean += value * weight;
+    values.push(value);
+  }
+  const worst = values.length ? Math.min(...values) : weightedMean;
+  const w = SCORING.OVERALL_MEAN_WEIGHT;
+  const blended = weightedMean * w + worst * (1 - w);
+  return Math.round(Math.max(0, Math.min(100, blended)));
+}
+
+/**
+ * Predicted overall score after fixing critical + high issues: each measured category
+ * recovers FIX_RECOVERY_RATIO of its headroom, then the same blend as the overall score
+ * is applied. Unmeasured categories get no fix credit. Returns null if no improvement.
  */
 function estimateScoreAfterFixes(
   overallScore: number,
   categoryScores: Record<string, number>,
   categoryWeights: Record<string, number>,
 ): number | null {
-  let potentialGain = 0;
-  for (const [cat, w] of Object.entries(categoryWeights)) {
-    const headroom = 100 - (categoryScores[cat] || 100);
-    potentialGain += headroom * FIX_RECOVERY_RATIO * w;
+  const fixed: Record<string, number> = {};
+  for (const [cat, score] of Object.entries(categoryScores)) {
+    if (typeof score === 'number') fixed[cat] = score + (100 - score) * FIX_RECOVERY_RATIO;
   }
-  const predicted = Math.min(100, Math.round(overallScore + potentialGain));
+  const predicted = blendOverallScore(fixed, categoryWeights);
   return predicted > overallScore ? predicted : null;
 }
 
@@ -1243,6 +1264,7 @@ export {
   getHeader,
   parseJsonLdSchemas,
   estimateScoreAfterFixes,
+  blendOverallScore,
   formatUrlList,
   shortenUrl,
   escapeHtml,

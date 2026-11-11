@@ -921,6 +921,45 @@
     .whitespace-pre-wrap { white-space: pre-wrap; }
     .overflow-hidden { overflow: hidden; }
   
+          
+          .score-rules {
+              margin-top: var(--space-6);
+              padding: var(--space-4) var(--space-5);
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-md);
+              text-align: left;
+              font-size: var(--font-size-sm);
+          }
+          .score-rules summary {
+              cursor: pointer;
+              font-weight: var(--font-weight-semibold);
+          }
+          .score-rules-body p {
+              margin-top: var(--space-3);
+              line-height: 1.5;
+          }
+          .score-rules-table {
+              width: 100%;
+              margin-top: var(--space-3);
+              border-collapse: collapse;
+          }
+          .score-rules-table th,
+          .score-rules-table td {
+              padding: var(--space-2);
+              border-bottom: 1px solid var(--color-border-default);
+              text-align: left;
+              vertical-align: top;
+          }
+          .score-rules-link {
+              color: inherit;
+              opacity: 0.7;
+              text-decoration: none;
+              font-size: 0.85em;
+          }
+          .score-rules-link:hover {
+              opacity: 1;
+          }
+  
           * {
               margin: 0;
               padding: 0;
@@ -3995,7 +4034,7 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
           
     <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid var(--purple-500); color: var(--color-text-primary); padding: 20px; border-radius: var(--radius-lg); text-align: center;">
-      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 10px;">Current Score</div>
+      <div style="font-size: var(--font-size-base); opacity: 0.9; margin-bottom: 10px;">Current Score <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a></div>
       <div style="font-size: 32px; font-weight: var(--font-weight-bold);">0</div>
       <div style="font-size: var(--font-size-xs); opacity: 0.9;">Out of 100</div>
     </div>
@@ -4049,34 +4088,54 @@
         <div class="summary-card">
           <div class="summary-card-value">10</div>
           <div class="summary-card-label">Total Issues</div>
+          <div class="summary-card-hint">distinct kinds of issue, not pages</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--red-200);">0</div>
           <div class="summary-card-label">Critical</div>
-          
+          <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--orange-200);">0</div>
           <div class="summary-card-label">High</div>
-          
+          <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--amber-200);">0</div>
           <div class="summary-card-label">Medium</div>
+          <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--blue-200);">0</div>
           <div class="summary-card-label">Low</div>
+          <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value">0%</div>
           <div class="summary-card-label">Pass Rate</div>
+          <div class="summary-card-hint">share of crawled pages that loaded without errors</div>
         </div>
       </div>
 
       
 
       
+
+      
+    <details class="score-rules" id="score-rules">
+      <summary>How is this score calculated?</summary>
+      <div class="score-rules-body">
+        <p>Overall = 55% × weighted category mean + 45% × worst category score, so one failing category can&#039;t be averaged away.</p>
+        <table class="score-rules-table">
+          <thead><tr><th>Category</th><th>Weight</th><th>How it is scored</th></tr></thead>
+          <tbody><tr><td><strong>SEO</strong></td><td>30%</td><td>Share of crawled pages with no Error-tier SEO issue (URL-pass): (pages without errors ÷ pages crawled) × 100. Warnings and notices are reported but not scored.</td></tr><tr><td><strong>Performance</strong></td><td>25%</td><td>Per page, each Core Web Vital is scored 0–100 on a Lighthouse log-normal curve (top-decile value → 90, median → 50) and the metrics are blended by weight: LCP 25%, TBT 30%, CLS 25%, FCP 10%, TTFB 10%. The category is the mean across pages; without performance metrics it falls back to URL-pass on performance issues.</td></tr><tr><td><strong>Technical</strong></td><td>20%</td><td>Share of crawled pages with no Error-tier technical issue (URL-pass): (pages without errors ÷ pages crawled) × 100.</td></tr><tr><td><strong>Accessibility</strong></td><td>15%</td><td>Mean of the per-page accessibility scores (axe-style deductions per violation; 100 − 10 per violation when only a count is known).</td></tr><tr><td><strong>Security</strong></td><td>10%</td><td>Mean of the per-page security scores (Mozilla Observatory-style deductions for missing headers, HTTPS, cookie flags).</td></tr></tbody>
+        </table>
+        <p><strong>Grades:</strong> A+ 95–100 · A 90–94 · B 80–89 · C 70–79 · D 60–69 · F 0–59</p>
+        <p>Pass Rate = pages loaded without an error ÷ pages crawled. Issue counts are distinct kinds of issue, not affected pages.</p>
+        <p>Estimated score after fixes = the overall formula above applied after each measured category recovers 60% of its headroom to 100; unmeasured categories get no credit.</p>
+        <p>Per-page Security, Cache, A11y and Content columns are each analyzer&#039;s own 0–100 check score for that page; they are shown for diagnosis and are separate from the weighted category blend.</p>
+      </div>
+    </details>
 
       
     </div>
@@ -4550,10 +4609,12 @@
             Links w/o Text
             <span class="threshold">0</span>
         </th>
-        <th class="sortable" data-type="number" title="Presence of security headers (CSP, X-Frame-Options, HSTS). Protects against common attacks.">
-            Security Score
-            <span class="threshold">≥ 70</span>
-        </th>
+        
+    <th class="sortable" data-type="number" title="Presence of security headers (CSP, X-Frame-Options, HSTS). Protects against common attacks.">
+      Security Score <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>
+      <span class="threshold">≥ 70</span>
+    </th>
+  
         <th class="sortable" data-type="number" title="Missing HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, HSTS).">
             Missing Headers
             <span class="threshold">0</span>
@@ -4577,10 +4638,12 @@
             Inline Scripts
             <span class="threshold">≤ 5</span>
         </th>
-        <th class="sortable" data-type="number" title="Overall caching effectiveness score based on CDN usage, cache headers, and Service Worker presence.">
-            Cache Score
-            <span class="threshold">≥ 70</span>
-        </th>
+        
+    <th class="sortable" data-type="number" title="Overall caching effectiveness score based on CDN usage, cache headers, and Service Worker presence.">
+      Cache Score <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>
+      <span class="threshold">≥ 70</span>
+    </th>
+  
         <th class="sortable" data-type="text" title="Whether a Content Delivery Network is detected. CDNs improve global load times and reduce server load.">
             CDN
             <span class="threshold">Yes</span>
@@ -4639,8 +4702,7 @@
         </th>
         
     <th class="sortable" data-type="number" title="Overall accessibility compliance score. Based on WCAG 2.1 guidelines. Higher is better (0-100).">
-      A11y Score
-      
+      A11y Score <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>
       <span class="threshold">≥ 70</span>
     </th>
   
@@ -4665,8 +4727,7 @@
   
         
     <th class="sortable" data-type="number" title="Combined score based on word count, text ratio, structure, and readability. Higher is better (0-100).">
-      Content Score
-      
+      Content Score <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>
       <span class="threshold">≥ 70</span>
     </th>
   
@@ -7104,7 +7165,7 @@
       // Copy score summary to clipboard
       function copyScoreSummary() {
           var summary = {"criticalCount":0,"highCount":0,"mediumCount":0,"lowCount":0,"overallScore":0,"totalIssues":10,"passRate":0,"categoryScores":{},"quickWins":[]};
-          var text = 'SEO Audit: fixture.example\n' +
+          var text = 'Audit report: fixture.example\n' +
               'Score: ' + (summary.overallScore || 0) + '/100\n' +
               'Issues: ' + (summary.totalIssues || 0) + ' (' +
               (summary.criticalCount || 0) + ' critical, ' +
@@ -7127,7 +7188,7 @@
       function exportMarkdown() {
           var summary = {"criticalCount":0,"highCount":0,"mediumCount":0,"lowCount":0,"overallScore":0,"totalIssues":10,"passRate":0,"categoryScores":{},"quickWins":[]};
           var lines = [];
-          lines.push('# SEO Audit Report - fixture.example');
+          lines.push('# Audit report - fixture.example');
           lines.push('');
           lines.push('Generated: ' + new Date().toLocaleString());
           lines.push('');
@@ -8347,8 +8408,8 @@
           var critical = issues[1] ? issues[1].textContent.trim() : '0';
           var high = issues[2] ? issues[2].textContent.trim() : '0';
 
-          var text = 'SEO Audit Report: ' + domainText + '\n' +
-              'Score: ' + scoreVal + '/100\n' +
+          var text = 'Audit report: ' + domainText + '\n' +
+              (score ? 'Score: ' + scoreVal + '/100\n' : '') +
               'Issues: ' + totalIssues + ' total (' + critical + ' critical, ' + high + ' high)\n' +
               'Generated: ' + new Date().toLocaleDateString();
 
@@ -8360,7 +8421,7 @@
 
           // Also try native share API on mobile
           if (navigator.share) {
-              navigator.share({ title: 'SEO Audit - ' + domainText, text: text }).catch(function() {});
+              navigator.share({ title: 'Audit report - ' + domainText, text: text }).catch(function() {});
           }
       };
 

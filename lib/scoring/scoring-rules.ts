@@ -65,8 +65,8 @@ export function getScoringRules(): ScoringRules {
     worstWeightPct,
     overall: `Overall = ${meanWeightPct}% × weighted category mean + ${worstWeightPct}% × worst category score, so one failing category can't be averaged away.`,
     grades,
-    passRate: 'Pass rate = pages loaded without an error ÷ pages crawled.',
-    estimate: `Estimated score after fixes = overall + Σ (category weight × ${pct(FIX_RECOVERY_RATIO)}% of that category's headroom to 100).`,
+    passRate: 'Pass Rate = pages loaded without an error ÷ pages crawled. Issue counts are distinct kinds of issue, not affected pages.',
+    estimate: `Estimated score after fixes = the overall formula above applied after each measured category recovers ${pct(FIX_RECOVERY_RATIO)}% of its headroom to 100; unmeasured categories get no credit.`,
     perPageNote:
       "Per-page Security, Cache, A11y and Content columns are each analyzer's own 0–100 check score for that page; they are shown for diagnosis and are separate from the weighted category blend.",
   };

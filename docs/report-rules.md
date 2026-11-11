@@ -224,6 +224,15 @@ explanation cannot drift from the maths:
   table and the overall blend.
 - `generateComparison.ts` embeds the same block.
 
+The "estimated score after fixes" uses the same blend as the overall score
+(`blendOverallScore` in `lib/utils.ts`): each measured category recovers
+`FIX_RECOVERY_RATIO` of its headroom to 100, then the mean/worst blend is
+applied; a category with no score gets no credit. The executive summary's
+"Pass Rate" card is the share of crawled pages that loaded without an
+error, and "Total Issues" / severity cards count distinct kinds of issue, not
+pages. With `--checks` (or a role preset), these counts and scores are
+recalculated from the filtered findings.
+
 `--no-score` removes every score and the rules text from both the HTML report
 and the Phase 2 report. The CSV export is unaffected. Covered by
 `tests/scoring-rules.test.ts`.

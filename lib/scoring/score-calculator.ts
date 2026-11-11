@@ -16,7 +16,7 @@
  */
 
 import { SCORING } from '../constants';
-import { stripIssueSeverity, compareExamplesWorstFirst } from '../utils';
+import { stripIssueSeverity, compareExamplesWorstFirst, blendOverallScore } from '../utils';
 import { EXTENDED_FIX_RECOMMENDATIONS } from './fix-recommendations-extended';
 import { logNormalScore, urlPassScore, mean } from './methodologies';
 import { classifyIssue, type IssueTier, type IssueCategory } from './seo-catalog';
@@ -84,19 +84,7 @@ class ScoreCalculator {
     _pages: Record<string, PageInfo>,
     categoryScores: CategoryScores,
   ): number {
-    let weightedMean = 0;
-    const values: number[] = [];
-    for (const [category, weight] of Object.entries(SCORING.CATEGORY_WEIGHTS)) {
-      const value = categoryScores[category as keyof CategoryScores] || 0;
-      weightedMean += value * weight;
-      values.push(value);
-    }
-    // Blend the weighted mean with the worst category so a single failing
-    // category drags the overall down instead of being averaged away.
-    const worst = values.length ? Math.min(...values) : weightedMean;
-    const w = SCORING.OVERALL_MEAN_WEIGHT;
-    const blended = weightedMean * w + worst * (1 - w);
-    return Math.round(Math.max(0, Math.min(100, blended)));
+    return blendOverallScore({ ...categoryScores });
   }
 
   static calculateCategoryScores(

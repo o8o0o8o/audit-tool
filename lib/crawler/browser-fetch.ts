@@ -14,6 +14,7 @@
 
 import { chromium } from 'playwright';
 import { DEFAULT_USER_AGENT, THRESHOLDS } from '../constants';
+import { describeBlockedResponse, pickFinalMainFrameStatus, type MainFrameResponse } from '../utils/blocked-fetch';
 
 export interface BrowserFetchResult {
   status: number;
@@ -37,6 +38,14 @@ export async function fetchTextViaBrowser(url: string, maxBytes: number): Promis
     browser = await chromium.launch();
     const context = await browser.newContext({ userAgent: DEFAULT_USER_AGENT });
     const page = await context.newPage();
+    const mainFrameResponses: MainFrameResponse[] = [];
+    page.on('response', (res) => {
+      const code = res.status();
+      if (code >= 300 && code < 400) return;
+      if (res.frame() === page.mainFrame() && res.request().isNavigationRequest()) {
+        mainFrameResponses.push({ status: code, headers: res.headers() });
+      }
+    });
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: THRESHOLDS.PAGE_TIMEOUT });
     // Let any anti-bot challenge JS resolve and redirect to the real content.
     await page.waitForLoadState('networkidle', { timeout: THRESHOLDS.PAGE_TIMEOUT }).catch(() => undefined);
@@ -49,7 +58,11 @@ export async function fetchTextViaBrowser(url: string, maxBytes: number): Promis
       return document.body ? document.body.innerText : document.documentElement.outerHTML;
     });
 
-    return { status: response?.status() ?? 0, text: text.length > maxBytes ? text.slice(0, maxBytes) : text };
+    const status = pickFinalMainFrameStatus(mainFrameResponses) ?? response?.status() ?? 0;
+    if (status !== 200) {
+      console.warn(`Browser fetch: ${describeBlockedResponse(status, response?.headers() ?? null, text, url)}`);
+    }
+    return { status, text: text.length > maxBytes ? text.slice(0, maxBytes) : text };
   } finally {
     if (browser) await browser.close().catch(() => undefined);
   }

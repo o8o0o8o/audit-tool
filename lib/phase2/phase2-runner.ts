@@ -11,6 +11,7 @@
  * intentionally honest and brief rather than chatty.
  */
 
+import { crawlerBlockedMessage, detectCrawlerBlocked } from '../utils/blocked-fetch';
 import { scoringRulesMarkdown } from '../scoring/scoring-rules';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -756,6 +757,17 @@ function buildDegenerateCrawlBanner(artifacts: AuditArtifacts): string {
   ].join('\n');
 }
 
+/** Banner when every page fetch was refused (429/403/challenge) — the report then covers only those pages. */
+export function buildCrawlerBlockedBanner(artifacts: Pick<AuditArtifacts, 'manifest'>): string {
+  const progress = artifacts.manifest.progress;
+  const blocked = detectCrawlerBlocked({ byError: progress.byError, totalWithoutError: progress.totalWithoutError });
+  if (!blocked.blocked) return '';
+  return [
+    `> **⚠️ Site blocked the crawler.** ${crawlerBlockedMessage(blocked.pages)} Allow-list the audit's IP or user agent and re-run.`,
+    '',
+  ].join('\n');
+}
+
 function buildPurpose(artifacts: AuditArtifacts, noScore = false): string {
   const lines: string[] = [
     '## Purpose of the Audit',
@@ -1403,6 +1415,7 @@ export function buildReportMarkdown(
   // and scores below are artifacts. Warn before anything else so the report is
   // never mistaken for a valid audit (empty string for a healthy crawl).
   parts.push(buildDegenerateCrawlBanner(artifacts));
+  parts.push(buildCrawlerBlockedBanner(artifacts));
   // Verification banner (only on the `--verify` report) sits right under the
   // cover so the reader knows these findings were re-checked.
   if (verifyBanner) parts.push(verifyBanner);

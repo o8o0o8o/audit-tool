@@ -226,6 +226,13 @@ export const THRESHOLDS = {
   CLS_COLLECTION_TIME: 2000,
   FETCH_TIMEOUT: 10000,
   SITEMAP_LIMIT: 50000,
+
+  // 429 back-off: honour Retry-After, clamped, a bounded number of times.
+  RETRY_AFTER_MAX_MS: 30000,
+  RETRY_AFTER_MAX_RETRIES: 2,
+  RETRY_AFTER_DEFAULT_MS: 5000,
+  // How long to wait for a JS bot challenge to navigate on to the real page.
+  CHALLENGE_SETTLE_MS: 15000,
 } as const;
 
 /**

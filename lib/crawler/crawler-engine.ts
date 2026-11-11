@@ -42,6 +42,14 @@ import { ProgressReporter } from '../utils/progress-reporter';
 import { VitalsCollector } from './vitals-collector';
 import { CrUXAPI } from './crux-api';
 import { isFetchAllowed } from '../../validators';
+import {
+  challengeErrorKey,
+  describeBlockedResponse,
+  fetchWithRetryAfter,
+  isChallengeResponse,
+  pickFinalMainFrameStatus,
+  type MainFrameResponse,
+} from '../utils/blocked-fetch';
 
 /** Hostname for the SSRF same-host allowance; '' if unparseable. */
 function hostFromUrl(urlString: string): string | undefined {
@@ -50,6 +58,25 @@ function hostFromUrl(urlString: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** The seed page is the origin root; only it gets the Retry-After back-off. */
+function isSeedUrl(url: string, origin: string): boolean {
+  try {
+    const u = new URL(url);
+    const o = new URL(origin);
+    return u.host === o.host && (u.pathname === '/' || u.pathname === '') && !u.search;
+  } catch {
+    return false;
+  }
+}
+
+/** Page budget: a seed page may wait out Retry-After back-offs, any page may wait for a challenge to clear. */
+function pageBudgetMs(url: string, origin: string): number {
+  const retryBudget = isSeedUrl(url, origin)
+    ? THRESHOLDS.RETRY_AFTER_MAX_RETRIES * (THRESHOLDS.RETRY_AFTER_MAX_MS + THRESHOLDS.PAGE_TIMEOUT)
+    : 0;
+  return THRESHOLDS.PAGE_TIMEOUT + THRESHOLDS.CHALLENGE_SETTLE_MS + retryBudget;
 }
 
 /** Resource types whose body we're willing to buffer (text-ish, bounded) when a
@@ -96,6 +123,8 @@ class CrawlerEngine {
   #backoffState: Map<string, BackoffState>;
   /** Decides which URLs get full evidence capture (screenshots, HAR). Cap defaults to 10; the constructor overrides with options.evidenceCap when supplied. */
   #sampler: RepresentativeSampler = new RepresentativeSampler();
+  /** URLs whose final main-frame response was still a bot challenge. */
+  #challengedUrls = new Set<string>();
 
   /** URLs the sampler authorised for evidence capture. Read after crawl completes. */
   getSampledUrls(): string[] {
@@ -396,8 +425,18 @@ class CrawlerEngine {
       );
     };
 
+    const mainFrameResponses: MainFrameResponse[] = [];
+    const mainFrameHandler = (res: PlaywrightResponse) => {
+      const code = res.status();
+      if (code >= 300 && code < 400) return;
+      if (res.frame() === page.mainFrame() && res.request().isNavigationRequest()) {
+        mainFrameResponses.push({ status: code, headers: res.headers() });
+      }
+    };
+
     page.on('request', requestHandler);
     page.on('response', responseHandler);
+    page.on('response', mainFrameHandler);
     page.on('requestfinished', requestFinishedHandler);
 
     let response: PlaywrightResponse | null | undefined,
@@ -450,12 +489,35 @@ class CrawlerEngine {
       }
 
       // Navigate to the page with explicit timeout
-      response = await page.goto(url, {
-        waitUntil: 'load',
-        timeout: THRESHOLDS.PAGE_TIMEOUT,
-      });
+      const navigate = async () => {
+        mainFrameResponses.length = 0;
+        const res = await page.goto(url, { waitUntil: 'load', timeout: THRESHOLDS.PAGE_TIMEOUT });
+        return { status: res?.status() ?? 0, headers: res?.headers() ?? {}, res };
+      };
+      const navigation = isSeedUrl(url, this.#options.origin)
+        ? await fetchWithRetryAfter(navigate, {
+            onRetry: (attempt, waitMs) =>
+              console.warn(`Seed page ${url} returned HTTP 429 — retry ${attempt} in ${Math.round(waitMs / 1000)}s`),
+          })
+        : await navigate();
+      response = navigation.res;
 
-      status = response?.status();
+      const firstMain = mainFrameResponses[0];
+      if (firstMain && isChallengeResponse(firstMain.status, firstMain.headers) && mainFrameResponses.length === 1) {
+        await page
+          .waitForNavigation({ waitUntil: 'load', timeout: THRESHOLDS.CHALLENGE_SETTLE_MS })
+          .catch(() => undefined);
+      }
+      status = pickFinalMainFrameStatus(mainFrameResponses) ?? response?.status();
+
+      if (status !== 200) {
+        const lastMain = mainFrameResponses[mainFrameResponses.length - 1];
+        if (lastMain && isChallengeResponse(lastMain.status, lastMain.headers)) this.#challengedUrls.add(url);
+        const bodyHead = (await response?.text().catch(() => '')) ?? '';
+        console.warn(
+          `Page fetch: ${describeBlockedResponse(status, lastMain?.headers ?? response?.headers() ?? null, bodyHead.slice(0, 1024), url)}`,
+        );
+      }
 
       // First-load viewport screenshot — taken before vitals settle, auto-
       // scroll, and lazy hydration, so post-load layout shifts (fonts, ads,
@@ -525,6 +587,7 @@ class CrawlerEngine {
       // Remove event listeners to prevent memory leaks - always runs even on error
       page.off('request', requestHandler);
       page.off('response', responseHandler);
+      page.off('response', mainFrameHandler);
       page.off('requestfinished', requestFinishedHandler);
     }
 
@@ -1110,7 +1173,7 @@ class CrawlerEngine {
             );
             return null;
           }),
-        THRESHOLDS.PAGE_TIMEOUT,
+        pageBudgetMs(url, this.#options.origin),
         'Core Web Vitals test failed. Page failed to load ' + url,
       );
 
@@ -1324,7 +1387,8 @@ class CrawlerEngine {
     if (status !== 200) {
       results.pageData.totalWithError += 1;
 
-      const statusKey = String(status ?? 'unknown');
+      const statusKey =
+        status !== undefined && this.#challengedUrls.has(url) ? challengeErrorKey(status) : String(status ?? 'unknown');
       if (!results.pageData.byError[statusKey]) {
         results.pageData.byError[statusKey] = [];
         results.pageData.byError[`total${statusKey}`] = 0;

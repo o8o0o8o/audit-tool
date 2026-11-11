@@ -4,6 +4,7 @@
  * Supports dual-origin comparison mode
  */
 
+import { crawlerBlockedMessage, detectCrawlerBlocked, type CrawlerBlockedInput } from '../../utils/blocked-fetch';
 import { CATEGORY_CONFIG } from '../metrics-metadata';
 import { formatDeltaBadge, extractComparisonLabels, getDeltaCssColor } from '../comparison-helpers';
 import { getScoreColor, getScoreClass } from '../html-utils';
@@ -77,6 +78,7 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
     : '';
 
   const crawlAbortedBanner = getCrawlAbortedBanner(jsonData);
+  const crawlerBlockedBanner = getCrawlerBlockedBanner(jsonData);
 
   const categoryHealthHtml =
     !noScore && Object.keys(categoryScores).length > 0
@@ -92,7 +94,7 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
     <div class="executive-summary">
       <h2>📊 Executive Summary</h2>
 
-      ${crawlAbortedBanner}
+      ${crawlAbortedBanner}${crawlerBlockedBanner}
 
       ${
         noScore
@@ -482,6 +484,17 @@ function getCrawlAbortedBanner(jsonData: Record<string, unknown>): string {
   return `
     <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: var(--color-error-border);">
       ${abortBlock}${truncatedBlock}
+    </div>
+  `;
+}
+
+function getCrawlerBlockedBanner(jsonData: Record<string, unknown>): string {
+  const blocked = detectCrawlerBlocked(jsonData.pageData as CrawlerBlockedInput | undefined);
+  if (!blocked.blocked) return '';
+  return `
+    <div style="background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(220, 38, 38, 0.5); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin: var(--space-4) 0; color: var(--color-error-border);">
+      <div style="font-weight: var(--font-weight-bold); font-size: var(--font-size-base); margin-bottom: var(--space-1);">⚠️ Site blocked the crawler</div>
+      <div style="font-size: var(--font-size-sm); opacity: 0.95;">${escapeHtml(crawlerBlockedMessage(blocked.pages))} Allow-list the audit's IP or user agent and re-run.</div>
     </div>
   `;
 }

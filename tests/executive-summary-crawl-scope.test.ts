@@ -4,7 +4,12 @@ import assert from 'node:assert';
 import { getExecutiveSummary } from '../lib/reports/sections/executive-summary';
 import type { ReportSectionData, PageInfo } from '../lib/types';
 
-function summaryData(opts: { pagesCrawled: number; sitemapTotal: number | null }): ReportSectionData {
+function summaryData(opts: {
+  pagesCrawled: number;
+  sitemapTotal: number | null;
+  byError?: Record<string, unknown>;
+  totalWithoutError?: number;
+}): ReportSectionData {
   const pages: PageInfo[] = Array.from(
     { length: opts.pagesCrawled },
     (_, i) => ({ url: `https://e.com/${i}` }) as PageInfo,
@@ -29,7 +34,10 @@ function summaryData(opts: { pagesCrawled: number; sitemapTotal: number | null }
           lowCount: 0,
         },
       },
-      pageData: { pages: Object.fromEntries(pages.map((p) => [p.url, p])) },
+      pageData: {
+        pages: Object.fromEntries(pages.map((p) => [p.url, p])),
+        ...(opts.byError ? { byError: opts.byError, totalWithoutError: opts.totalWithoutError ?? 0 } : {}),
+      },
       ...(opts.sitemapTotal !== null ? { sitemaps: { 'sitemap.xml': { total: opts.sitemapTotal } } } : {}),
     },
     pages,
@@ -59,5 +67,27 @@ void describe('getExecutiveSummary: "Site Health" only claims what was actually 
     const html = getExecutiveSummary(summaryData({ pagesCrawled: 10, sitemapTotal: 84 }));
     assert.doesNotMatch(html, /Site Health/);
     assert.match(html, /Based on 10 of 84 pages found on this site/);
+  });
+});
+
+void describe('getExecutiveSummary: blocked-crawler note', () => {
+  void it('says the site blocked the crawler when every page fetch got 429/403', () => {
+    const html = getExecutiveSummary(
+      summaryData({ pagesCrawled: 1, sitemapTotal: null, byError: { '429': ['https://e.com/0'] } }),
+    );
+    assert.match(html, /Site blocked the crawler/);
+    assert.match(html, /covers only 1 page\b/);
+  });
+
+  void it('shows no blocked note on a partial block', () => {
+    const html = getExecutiveSummary(
+      summaryData({ pagesCrawled: 4, sitemapTotal: 4, byError: { '429': ['https://e.com/0'] }, totalWithoutError: 3 }),
+    );
+    assert.doesNotMatch(html, /blocked the crawler/);
+  });
+
+  void it('shows no blocked note on a normal crawl', () => {
+    const html = getExecutiveSummary(summaryData({ pagesCrawled: 10, sitemapTotal: 10 }));
+    assert.doesNotMatch(html, /blocked the crawler/);
   });
 });

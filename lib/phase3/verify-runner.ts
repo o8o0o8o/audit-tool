@@ -68,6 +68,8 @@ export interface VerifyPhaseOptions {
   verbose?: boolean;
   /** Override the persisted render setting (defaults to what Phase 2 used). */
   noScore?: boolean;
+  /** Override the persisted audit type (defaults to the preset Phase 2 used). */
+  preset?: string;
 }
 
 /**
@@ -135,7 +137,7 @@ export async function runVerifyPhase(runDir: string, options: VerifyPhaseOptions
     anomalies: (persisted?.anomalies ?? []) as Anomaly[],
     suppressed: new Set(persisted?.suppressed ?? []),
     noScore: options.noScore ?? persisted?.noScore ?? false,
-    selection: { sections: persisted?.sections, checks: persisted?.checks },
+    selection: { sections: persisted?.sections, checks: persisted?.checks, preset: options.preset ?? persisted?.preset },
     verbose: options.verbose === true,
   };
 

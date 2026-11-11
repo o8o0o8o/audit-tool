@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata = {
-  title: 'SEO Audit Dispatcher',
-  description: 'Dispatch SEO audits to GitHub Actions and view their reports',
+  title: 'Audit Dispatcher',
+  description: 'Dispatch audits to GitHub Actions and view their reports',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

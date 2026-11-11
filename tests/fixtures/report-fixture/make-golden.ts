@@ -8,8 +8,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { generateHTML } from '../../../generateHTML';
-import { buildReportMarkdown } from '../../../lib/phase2/phase2-runner';
+import { generateHTML, type HtmlReportSelection } from '../../../generateHTML';
+import { buildReportMarkdown, type ReportSelection } from '../../../lib/phase2/phase2-runner';
 import type { AuditArtifacts } from '../../../lib/phase2/types';
 
 const fixtureDir = __dirname;
@@ -23,7 +23,7 @@ export function normalise(text: string): string {
     .replace(/(id="reportTimestamp">)[^<]*(<\/time>)/g, '$1<LOCAL>$2');
 }
 
-export function renderNoPresetMarkdown(): string {
+export function renderNoPresetMarkdown(selection: ReportSelection = {}): string {
   const audit = JSON.parse(fs.readFileSync(auditFile, 'utf8')) as Record<string, unknown>;
   const pageData = audit.pageData as { processedPages?: string[] } & Record<string, unknown>;
   const artifacts = {
@@ -41,12 +41,12 @@ export function renderNoPresetMarkdown(): string {
     metadata: { robots: audit.robots, sitemaps: audit.sitemaps, timing: audit.timing },
     repoAnalysis: null,
   } as unknown as AuditArtifacts;
-  return normalise(buildReportMarkdown(artifacts));
+  return normalise(buildReportMarkdown(artifacts, {}, [], new Set(), undefined, undefined, false, selection));
 }
 
-export function renderNoPresetHtml(): string {
+export function renderNoPresetHtml(selection: HtmlReportSelection = {}): string {
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'golden-')), 'index.html');
-  generateHTML(auditFile, 'fixture.example', out);
+  generateHTML(auditFile, 'fixture.example', out, undefined, selection);
   return normalise(fs.readFileSync(out, 'utf8'));
 }
 

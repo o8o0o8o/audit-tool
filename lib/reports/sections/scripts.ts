@@ -3,6 +3,7 @@
  * Provides interactive functionality: sorting, modals, charts, CSV export
  */
 
+import { confidentLanguage } from '../../utils/language-confidence';
 import { extractDetails, extractSummary } from '../data-processor';
 import type { PageInfo, ReportSectionData, AnalysisDetail } from '../../types';
 
@@ -149,7 +150,7 @@ function calculateChartData(jsonData: Record<string, unknown>) {
   // Pre-calculate language distribution
   const languageDist: Record<string, number> = {};
   pagesArray.forEach((page: PageInfo) => {
-    const lang = page.languageDetection?.detectedLanguage;
+    const lang = confidentLanguage(page.languageDetection);
     if (lang) {
       languageDist[lang] = (languageDist[lang] || 0) + 1;
     }
@@ -3260,4 +3261,4 @@ ${noScore ? '' : `        'Security Score': {
   `;
 }
 
-export { getScripts };
+export { getScripts, calculateChartData };

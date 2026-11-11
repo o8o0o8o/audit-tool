@@ -558,3 +558,6 @@ export function normalizeTextForComparison(text: string): string {
 
   return normalized;
 }
+
+/** Language detections at or below this confidence are treated as "undetermined". */
+export const LANGUAGE_DETECTION_MIN_CONFIDENCE = 0.5;

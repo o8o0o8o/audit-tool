@@ -6,7 +6,17 @@ import type { CrawlResults } from '../lib/crawler/crawler-types';
 import { renderPageCountStats } from '../generateHTML';
 
 import { ResponseHeaderAnalyzer } from '../lib/analyzers/seo/response-header-analyzer';
-import { LanguageDetectionAnalyzer } from '../lib/analyzers/content/language-detection-analyzer';
+import {
+  LanguageDetectionAnalyzer,
+  LANGUAGE_PROFILES,
+  LANGUAGE_DETECTION_MIN_TEXT_LENGTH,
+  scoreProfile,
+} from '../lib/analyzers/content/language-detection-analyzer';
+import { parse } from 'node-html-parser';
+import { calculateChartData } from '../lib/reports/sections/scripts';
+import { getNewInsightCells } from '../lib/reports/sections/pages-table';
+import { extractPageInsights } from '../lib/reports/data-processor';
+import { generatePagesCSV } from '../generateCSV';
 import { ContentSimilarityAnalyzer } from '../lib/analyzers/site-wide/content-similarity-analyzer';
 import { KeywordCannibalisationAnalyzer } from '../lib/analyzers/site-wide/keyword-cannibalisation-analyzer';
 import { InternalPageRankAnalyzer } from '../lib/analyzers/site-wide/internal-pagerank-analyzer';
@@ -236,6 +246,126 @@ void describe('LanguageDetectionAnalyzer', () => {
 
   void it('exports analyzeSiteWide method', () => {
     assert.strictEqual(typeof LanguageDetectionAnalyzer.analyzeSiteWide, 'function');
+  });
+
+  const runLang = (text: string) =>
+    LanguageDetectionAnalyzer.analyzeLanguage(
+      { evaluate: async () => text } as unknown as Parameters<typeof LanguageDetectionAnalyzer.analyzeLanguage>[0],
+      parse('<html lang="en"><body></body></html>') as unknown as Parameters<
+        typeof LanguageDetectionAnalyzer.analyzeLanguage
+      >[1],
+      'https://example.com/',
+      {} as PageInfo,
+    );
+  const ENGLISH =
+    'The company has been working with the team on the development of the new product for the market. ' +
+    'It is important that the information and the documentation are there for the customers, and that the ' +
+    'support of the platform is with them throughout the process of integration and the operation of the service.';
+  const FRENCH =
+    'Les entreprises de la région sont les premières à proposer des solutions pour les clients et pour le ' +
+    'développement de la communauté. Nous avons une équipe qui travaille dans le respect des valeurs de la ' +
+    'société et des partenaires, avec une attention particulière pour la qualité des services et des produits.';
+
+  void it('analyzeLanguage: profiles have only 3-char trigrams', () => {
+    for (const [lang, profile] of Object.entries(LANGUAGE_PROFILES)) {
+      assert.ok(profile.length >= 10, `${lang} has only ${profile.length} trigrams`);
+      for (const tri of profile) assert.strictEqual([...tri].length, 3, `${lang}: ${tri}`);
+      assert.strictEqual(new Set(profile).size, profile.length, `${lang} has duplicates`);
+    }
+  });
+
+  void it('analyzeLanguage: Japanese text with kanji is detected as ja, not zh', async () => {
+    const JAPANESE =
+      '私たちの会社では、新しい製品の開発について説明しています。このサービスは日本の企業のために作られたもので、' +
+      'お客様が安心して利用できるようにしています。詳しい情報については、こちらのページをご覧ください。' +
+      '私たちは品質を大切にしており、すべての製品は厳しい検査を受けています。ご質問がありましたら、お気軽にお問い合わせください。' +
+      'また、今後もより良いサービスを提供するために努力してまいります。どうぞよろしくお願いいたします。' +
+      '当社の製品は多くの国で使われており、世界中のお客様から高い評価をいただいています。これからも新しい技術を取り入れながら、' +
+      'より便利なサービスを作っていきたいと考えています。ご意見やご要望がございましたら、ぜひお聞かせください。';
+    const res = await runLang(JAPANESE);
+    assert.strictEqual(res.info.detectedLanguage, 'ja');
+  });
+
+  void it('analyzeLanguage: score normalised by profile size', () => {
+    const textProfile = LANGUAGE_PROFILES.en;
+    for (const profile of Object.values(LANGUAGE_PROFILES)) {
+      const score = scoreProfile(textProfile, profile);
+      assert.ok(score >= 0 && score <= 1, `score ${score}`);
+    }
+    assert.strictEqual(scoreProfile(textProfile, LANGUAGE_PROFILES.en), 0);
+  });
+
+  void it('analyzeLanguage: min text length', async () => {
+    const short = await runLang(ENGLISH.padEnd(LANGUAGE_DETECTION_MIN_TEXT_LENGTH, ' x').slice(0, LANGUAGE_DETECTION_MIN_TEXT_LENGTH - 1));
+    assert.strictEqual(short.info.detectedLanguage, null);
+    const long = await runLang(ENGLISH);
+    assert.strictEqual(long.info.detectedLanguage, 'en');
+    assert.strictEqual(long.info.match, true);
+  });
+
+  void it('analyzeLanguage: null on low confidence', async () => {
+    const mixed = 'xq zv kw '.repeat(30);
+    const result = await runLang(mixed);
+    assert.strictEqual(result.info.detectedLanguage, null);
+    assert.strictEqual(result.info.match, null);
+    assert.ok(result.info.detectedConfidence <= 0.5);
+    assert.strictEqual(result.issues.length, 0);
+  });
+
+  void it('analyzeLanguage: confident French', async () => {
+    const result = await runLang(FRENCH);
+    assert.strictEqual(result.info.detectedLanguage, 'fr');
+    assert.strictEqual(result.info.match, false);
+    assert.strictEqual(result.issues.length, 1);
+  });
+
+  void it('analyzeLanguage: site-wide excludes undetermined pages', () => {
+    const ld = (detectedLanguage: string | null, detectedConfidence: number, match: boolean | null) => ({
+      languageDetection: { detectedLanguage, detectedConfidence, match, htmlLang: 'en' },
+    });
+    const pages = {
+      a: { url: 'a', ...ld('en', 0.9, true) },
+      b: { url: 'b', ...ld('it', 0.3, false) },
+      c: { url: 'c', ...ld(null, 0.2, null) },
+      d: { url: 'd', ...ld('fr', 0.8, false) },
+    } as unknown as Record<string, PageInfo>;
+    const result = LanguageDetectionAnalyzer.analyzeSiteWide(pages);
+    assert.deepStrictEqual(result.detectedLanguages, { en: 1, fr: 1 });
+    assert.strictEqual(result.undetermined, 2);
+    assert.strictEqual(result.issues.length, 1);
+  });
+
+  void it('analyzeLanguage: focusreactive single-language en', async () => {
+    const FOCUSREACTIVE =
+      'We help companies build fast websites with headless CMS and modern frameworks. Our team works with ' +
+      'the leading platforms and delivers projects that improve performance, search visibility and the ' +
+      'experience of the people who use them. Talk to our experts about your next project and the results it can bring.';
+    const analyze = (html: string, headers: Record<string, string>) =>
+      LanguageDetectionAnalyzer.analyzeLanguage(
+        { evaluate: async () => FOCUSREACTIVE } as unknown as Parameters<typeof LanguageDetectionAnalyzer.analyzeLanguage>[0],
+        parse(html) as unknown as Parameters<typeof LanguageDetectionAnalyzer.analyzeLanguage>[1],
+        'https://focusreactive.com/',
+        { responseHeaders: headers } as unknown as PageInfo,
+      );
+
+    for (const result of [
+      await analyze('<html lang="en"><body></body></html>', {}),
+      await analyze('<html><body></body></html>', { 'content-language': 'en' }),
+    ]) {
+      assert.strictEqual(result.info.detectedLanguage, 'en');
+      assert.strictEqual(result.info.declaredLanguage, 'en');
+      assert.strictEqual(result.info.match, true);
+      assert.ok(!result.issues.some((i) => /does not match/.test(i.message ?? '')));
+    }
+
+    const site = LanguageDetectionAnalyzer.analyzeSiteWide({
+      'https://focusreactive.com/': {
+        url: 'https://focusreactive.com/',
+        languageDetection: (await analyze('<html lang="en"><body></body></html>', {})).info,
+      },
+    } as unknown as Record<string, PageInfo>);
+    assert.deepStrictEqual(site.detectedLanguages, { en: 1 });
+    assert.strictEqual(site.issues.length, 0);
   });
 
   void it('site-wide detects language mismatches', () => {
@@ -808,7 +938,7 @@ void describe('CLI Summary', () => {
       },
       pageData: {
         pages: {
-          'https://example.com/': { languageDetection: { match: false } },
+          'https://example.com/': { languageDetection: { match: false, detectedConfidence: 0.8 } },
           'https://example.com/about': { outboundLinkHealth: { broken: [{ url: 'http://dead.link' }] } },
         },
         totalWithoutError: 2,
@@ -836,14 +966,14 @@ void describe('HistoryManager - insights', () => {
       pageData: {
         pages: {
           'https://example.com/': {
-            languageDetection: { match: false },
+            languageDetection: { match: false, detectedConfidence: 0.8 },
             outboundLinkHealth: { broken: [{ url: 'http://dead.link' }] },
             codeCoverage: { js: { ratio: 45 }, css: { ratio: 30 } },
             contentSimilarity: { similarPages: ['https://example.com/b'] },
             ctaData: { summary: { total: 0 } },
           },
           'https://example.com/b': {
-            languageDetection: { match: true },
+            languageDetection: { match: true, detectedConfidence: 0.8 },
             ctaData: { summary: { total: 2 } },
           },
         },
@@ -8204,5 +8334,74 @@ void describe('page counts header', () => {
     const html = renderPageCountStats(computePageCounts({ a: { status: 200 } }, {}));
     assert.ok(!html.includes('Failed to load'));
     assert.strictEqual(statValue(html, 'Successful'), 1);
+  });
+});
+
+// ============================================================
+// Language confidence threshold in report consumers
+// ============================================================
+void describe('language confidence', () => {
+  const page = (url: string, detectedLanguage: string | null, detectedConfidence: number, match: boolean | null) =>
+    ({
+      url,
+      languageDetection: {
+        detectedLanguage,
+        detectedConfidence,
+        match,
+        declaredLanguage: 'en',
+        htmlLang: 'en',
+        contentLanguageHeader: null,
+        topCandidates: [],
+      },
+    }) as unknown as PageInfo;
+  const weak = page('https://example.com/weak', 'it', 0.3, false);
+  const strong = page('https://example.com/strong', 'fr', 0.8, false);
+  const jsonFor = (pages: PageInfo[]) => ({
+    pageData: { pages: Object.fromEntries(pages.map((p) => [p.url, p])), totalWithoutError: pages.length, totalWithError: 0 },
+    analysis: { summary: {} },
+  });
+
+  void it('language confidence: content-insights getContentInsights', () => {
+    const render = (pages: PageInfo[]) =>
+      getContentInsights({ jsonData: jsonFor(pages) } as unknown as Parameters<typeof getContentInsights>[0]);
+    assert.ok(!render([weak]).includes('Language mismatches'));
+    assert.ok(render([weak, strong]).includes('Language mismatches'));
+  });
+
+  void it('language confidence: scripts chart data', () => {
+    const chart = calculateChartData(jsonFor([weak, strong]) as unknown as Record<string, unknown>);
+    assert.deepStrictEqual(chart.languageDist, { fr: 1 });
+  });
+
+  void it('language confidence: data-processor', () => {
+    assert.strictEqual(extractPageInsights([weak]).languageMismatches, 0);
+    assert.strictEqual(extractPageInsights([weak, strong]).languageMismatches, 1);
+  });
+
+  void it('language confidence: cli-summary', () => {
+    const json = getJsonSummary(
+      jsonFor([weak, strong]) as unknown as Parameters<typeof getJsonSummary>[0],
+      'example.com',
+      '/tmp/report.html',
+    );
+    assert.strictEqual(json.insights?.languageMismatches, 1);
+  });
+
+  void it('language confidence: pages-table', () => {
+    assert.ok(!getNewInsightCells(weak).includes('>IT<'));
+    assert.ok(getNewInsightCells(weak).includes('—'));
+    assert.ok(getNewInsightCells(strong).includes('FR'));
+    assert.ok(getNewInsightCells(page('https://example.com/n', null, 0, null)).includes('—'));
+  });
+
+  void it('language confidence: generateCSV row', () => {
+    const csv = (p: PageInfo) => {
+      const [header, row] = generatePagesCSV(jsonFor([p]) as unknown as Parameters<typeof generatePagesCSV>[0]).split('\n');
+      const idx = header.split(',').indexOf('Detected Language');
+      return row.split(',').slice(idx, idx + 2);
+    };
+    assert.deepStrictEqual(csv(weak), ['', '']);
+    assert.deepStrictEqual(csv(page('https://example.com/n', null, 0, null)), ['', '']);
+    assert.deepStrictEqual(csv(strong), ['fr', 'No']);
   });
 });

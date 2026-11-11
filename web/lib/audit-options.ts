@@ -236,11 +236,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Returns `null` when no meaningful estimate exists yet (no valid URL, or the form would be rejected). */
+/**
+ * Returns `null` only when the form would be rejected (custom preset with no sections).
+ * The URL does not change the duration, so an empty or partial URL still gets an estimate.
+ */
 export function estimateAuditDuration(input: EstimateInput): AuditEstimate | null {
-  const errors: string[] = [];
-  parseUrl(input.url, errors);
-  if (errors.length > 0) return null;
   if (input.preset === 'custom' && input.sections.length === 0) return null;
 
   const concurrency = clamp(toPositiveInt(input.concurrency, CONCURRENCY_DEFAULT) ?? CONCURRENCY_DEFAULT, CONCURRENCY_MIN, CONCURRENCY_MAX);
@@ -252,7 +252,7 @@ export function estimateAuditDuration(input: EstimateInput): AuditEstimate | nul
 
   let seconds = SETUP_SECONDS + REPORT_SECONDS;
   seconds += Math.ceil(pages / concurrency) * BATCH_SECONDS * (input.perf ? PERF_BATCH_FACTOR : 1);
-  seconds += evidenceCap * EVIDENCE_SECONDS;
+  seconds += samples * EVIDENCE_SECONDS;
   if (input.perf) seconds += samples * PSI_SECONDS;
   if (input.llm) seconds += LLM_SECONDS + samples * VISION_SECONDS;
   if (input.verify) seconds += VERIFY_FIXED_SECONDS + pages * VERIFY_PER_PAGE_SECONDS;

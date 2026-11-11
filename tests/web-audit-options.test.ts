@@ -162,8 +162,12 @@ void describe('estimateAuditDuration', () => {
     return est.minutes;
   };
 
-  void it('returns null without a usable url', () => {
-    for (const url of ['', 'https://', 'exa', 'ftp://example.com']) assert.strictEqual(estimateAuditDuration({ ...base, url }), null);
+  void it('estimates without a usable url', () => {
+    for (const url of ['', 'https://', 'exa', 'ftp://example.com']) assert.deepStrictEqual(estimateAuditDuration({ ...base, url }), estimateAuditDuration(base));
+  });
+
+  void it('caps evidence time by the page count', () => {
+    assert.deepStrictEqual(estimateAuditDuration({ ...base, limit: 2, evidenceCap: 100 }), estimateAuditDuration({ ...base, limit: 2, evidenceCap: 2 }));
   });
 
   void it('returns null for a custom preset with no sections', () => {

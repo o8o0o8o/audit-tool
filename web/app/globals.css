@@ -273,3 +273,14 @@ h1 {
 .link-accent {
   color: var(--color-accent);
 }
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.estimate {
+  font-size: 0.9rem;
+}

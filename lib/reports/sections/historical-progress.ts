@@ -35,27 +35,7 @@ function getHistoricalProgress(data: ReportSectionData) {
 
   // Show first audit message if no previous audit
   if (!previousAudit || !trendData || auditCount < 2) {
-    return `
-      <div class="charts-section">
-        <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Historical Progress</h2>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-          ${noScore ? '' : getInfoCard(`Current Score ${SCORE_RULES_LINK}`, currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
-          ${getInfoCard('Total Issues', currentIssues, 'var(--color-warning)', 'var(--amber-600)', 'Found in this audit')}
-          ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
-        </div>
-        <div style="padding: 30px; background: linear-gradient(135deg, var(--color-info-bg) 0%, var(--color-info-bg) 100%); border-radius: var(--radius-xl); text-align: center; border: 2px dashed #3b82f6;">
-          <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
-          <h3 style="color: var(--blue-800); margin-bottom: 10px;">This is your first audit!</h3>
-          <p style="color: var(--blue-800); max-width: 500px; margin: 0 auto; line-height: 1.6;">
-            Run another audit later to see trends and compare progress over time.
-            Historical charts will appear after your second audit.
-          </p>
-          <p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-top: 15px;">
-            💡 Tip: Schedule regular audits (weekly/monthly) to track SEO improvements
-          </p>
-        </div>
-      </div>
-    `;
+    return '<p class="history-note">Trends appear after your second audit.</p>';
   }
 
   const scoreDelta = currentScore - previousAudit.summary.overallScore;

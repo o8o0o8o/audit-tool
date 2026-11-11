@@ -18,7 +18,8 @@
     "format": "prettier --write '**/*.{ts,json,md}'",
     "format:check": "prettier --check '**/*.{ts,json,md}'",
     "test": "tsx --test 'tests/**/*.test.ts'",
-    "preview:report": "tsx scripts/preview-report.ts"
+    "preview:report": "tsx scripts/preview-report.ts",
+    "preview:many-issues": "tsx scripts/preview-many-issues.ts"
   },
   "author": "Sergey Labut",
   "license": "ISC",

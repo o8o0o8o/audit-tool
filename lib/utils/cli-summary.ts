@@ -3,6 +3,7 @@
  * Prints a formatted summary of audit results to the console
  */
 
+import { isConfidentLanguageMismatch } from './language-confidence';
 import type { AnalysisDetail, PageInfo, AuditSummary } from '../types';
 import { getLetterGrade, estimateScoreAfterFixes, truncateText } from '../utils';
 import { SCORING } from '../constants';
@@ -452,7 +453,7 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
       const pArr = Object.values(pageData.pages ?? {}) as PageInfo[];
       if (pArr.length === 0) return undefined;
       return {
-        languageMismatches: pArr.filter((p) => p.languageDetection?.match === false).length,
+        languageMismatches: pArr.filter((p) => isConfidentLanguageMismatch(p.languageDetection)).length,
         brokenOutboundLinks: pArr.reduce((s: number, p) => s + (p.outboundLinkHealth?.broken?.length ?? 0), 0),
         nearDuplicatePages: pArr.filter(
           (p) => ((p.contentSimilarity?.similarPages as unknown[] | undefined)?.length ?? 0) > 0,
@@ -470,7 +471,7 @@ function getInsightLines(pagesArray: PageInfo[]) {
   if (pagesArray.length === 0) return lines;
 
   // Language mismatches
-  const langMismatches = pagesArray.filter((p) => p.languageDetection?.match === false).length;
+  const langMismatches = pagesArray.filter((p) => isConfidentLanguageMismatch(p.languageDetection)).length;
   if (langMismatches > 0) {
     lines.push(`${C.ORANGE}⚡${C.RESET} ${langMismatches} page(s) with language mismatch`);
   }

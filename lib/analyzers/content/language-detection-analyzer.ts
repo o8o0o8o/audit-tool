@@ -4,13 +4,14 @@
  * and compares it with the declared html lang attribute and Content-Language header.
  */
 
-import { SEVERITY } from '../../constants';
+import { SEVERITY, LANGUAGE_DETECTION_MIN_CONFIDENCE } from '../../constants';
 import { getTopEntries, shortenUrl } from '../../utils';
+import { confidentLanguage, isConfidentLanguageMismatch } from '../../utils/language-confidence';
 import type { Issue, ChromePage, ParsedPage, PageInfo } from '../../types';
 
 // Trigram language profiles - top trigrams for common languages
 // Based on frequency analysis of large text corpora
-const LANGUAGE_PROFILES = {
+const RAW_LANGUAGE_PROFILES: Record<string, string[]> = {
   en: [
     ' th',
     'the',
@@ -438,45 +439,59 @@ const LANGUAGE_PROFILES = {
     'ого',
   ],
   ja: [
-    'の ',
-    'に ',
-    'は ',
-    'て ',
-    'た ',
-    'を ',
-    'で ',
-    'と ',
-    'が ',
-    'し ',
-    'い ',
-    'ます',
-    'する',
-    'から',
-    'です',
-    'って',
-    'ない',
-    'れた',
-    'した',
-    'こと',
-    'ある',
-    'れる',
+    'ます。',
+    'います',
+    'ていま',
+    'です。',
+    'ました',
+    'してい',
+    'します',
     'ている',
-    'ない',
-    'もの',
-    'にな',
-    'よう',
-    'その',
-    'には',
-    'ない',
-    'くの',
-    'いう',
-    'った',
-    'るこ',
-    'てい',
-    'ので',
-    'つの',
+    'ださい',
+    'くださ',
+    'ており',
+    'につい',
+    'ついて',
+    'ために',
+    'ように',
+    'ること',
+    'ことが',
+    'ことを',
+    'という',
+    'として',
+    'ありま',
+    'ります',
+    'でした',
+    'ません',
+    'されて',
+    'される',
+    'された',
+    'いたし',
+    'したら',
+    'ではな',
+    'である',
+    'によっ',
+    'よって',
+    'ような',
+    'なって',
+    'れてい',
+    'のです',
+    'んです',
   ],
   zh: [
+    '的一个',
+    '是一个',
+    '我们的',
+    '他们的',
+    '的时候',
+    '有一个',
+    '中国的',
+    '在中国',
+    '可以在',
+    '就是一',
+    '这个人',
+    '不是一',
+    '也是一',
     '的 ',
     '了 ',
     '是 ',
@@ -509,6 +524,32 @@ const LANGUAGE_PROFILES = {
     '个 ',
   ],
 };
+
+/** Shorter texts do not carry enough trigrams for a reliable guess. */
+export const LANGUAGE_DETECTION_MIN_TEXT_LENGTH = 200;
+
+/** Deduplicated profiles holding only true trigrams (text trigrams are always 3 chars). */
+export const LANGUAGE_PROFILES: Record<string, string[]> = Object.fromEntries(
+  Object.entries(RAW_LANGUAGE_PROFILES).map(([lang, profile]) => [
+    lang,
+    [...new Set(profile.filter((tri) => [...tri].length === 3))],
+  ]),
+);
+
+/**
+ * Out-of-place distance of a text profile from a language profile, normalised to [0, 1]
+ * by the language profile's size so short and long profiles compete fairly. 0 is a perfect match.
+ */
+export function scoreProfile(textProfile: string[], profile: string[]): number {
+  if (profile.length === 0) return 1;
+  const maxPenalty = Math.max(textProfile.length, profile.length);
+  let distance = 0;
+  profile.forEach((tri, rank) => {
+    const textRank = textProfile.indexOf(tri);
+    distance += textRank === -1 ? maxPenalty : Math.min(maxPenalty, Math.abs(rank - textRank));
+  });
+  return distance / (profile.length * maxPenalty);
+}
 
 class LanguageDetectionAnalyzer {
   /**
@@ -561,7 +602,7 @@ class LanguageDetectionAnalyzer {
 
       info.match = declaredPrimary === detectedPrimary;
 
-      if (!info.match && detection.confidence > 0.5) {
+      if (!info.match) {
         issues.push({
           message: 'Detected content language does not match declared language',
           detail: `<a href="${url}">${url}</a>: Content appears to be "${detection.language}" (${Math.round(detection.confidence * 100)}% confidence) but declared as "${declaredLang}". This can cause search engines to misclassify the page.`,
@@ -589,7 +630,7 @@ class LanguageDetectionAnalyzer {
    * @private
    */
   static #detectLanguage(text: string) {
-    if (!text || text.length < 50) {
+    if (!text || text.length < LANGUAGE_DETECTION_MIN_TEXT_LENGTH) {
       return { language: null, confidence: 0, topCandidates: [] };
     }
 
@@ -605,22 +646,9 @@ class LanguageDetectionAnalyzer {
     const textProfile = getTopEntries(Object.entries(textTrigrams) as [string, number][], 200)
       .map(([tri]) => tri);
 
-    // Compare against each language profile
-    // Use a fixed penalty so shorter profiles (e.g. zh with 30 trigrams) don't get
-    // an unfair advantage over longer ones (e.g. en with 55 trigrams).
-    const MISS_PENALTY = 100;
     const scores: Record<string, number> = {};
     for (const [lang, profile] of Object.entries(LANGUAGE_PROFILES)) {
-      let distance = 0;
-      for (let i = 0; i < textProfile.length; i++) {
-        const profileIdx = profile.indexOf(textProfile[i]);
-        if (profileIdx === -1) {
-          distance += MISS_PENALTY;
-        } else {
-          distance += Math.abs(i - profileIdx);
-        }
-      }
-      scores[lang] = distance;
+      scores[lang] = scoreProfile(textProfile, profile);
     }
 
     // Sort by lowest distance (best match)
@@ -628,21 +656,22 @@ class LanguageDetectionAnalyzer {
     const topCandidates = sorted.slice(0, 3).map(([lang, score]) => ({
       language: lang,
       score,
-      confidence: Math.max(0, 1 - score / (textProfile.length * Object.keys(LANGUAGE_PROFILES).length)),
+      confidence: Math.round((1 - score) * 100) / 100,
     }));
 
     const best = topCandidates[0];
     const secondBest = topCandidates[1];
 
-    // Confidence: how much better is the best match vs second best
+    // Margin over the runner-up: 1 once the runner-up is twice as distant, 0.5 when it is a third farther.
     let confidence = 0;
-    if (best && secondBest && (secondBest.score as number) > 0) {
-      confidence = Math.min(1, ((secondBest.score as number) - (best.score as number)) / (secondBest.score as number));
+    if (best && secondBest && secondBest.score > 0) {
+      confidence = Math.min(1, (2 * (secondBest.score - best.score)) / secondBest.score);
     }
 
+    const rounded = Math.round(confidence * 100) / 100;
     return {
-      language: best?.language || null,
-      confidence: Math.round(confidence * 100) / 100,
+      language: best && rounded > LANGUAGE_DETECTION_MIN_CONFIDENCE ? best.language : null,
+      confidence: rounded,
       topCandidates,
     };
   }
@@ -660,19 +689,23 @@ class LanguageDetectionAnalyzer {
     const langMismatches: string[] = [];
     const missingLangAttr: string[] = [];
     const detectedLanguages: Record<string, number> = {};
+    let undetermined = 0;
 
     for (const page of pages) {
       const langData = page.languageDetection;
       if (!langData) continue;
 
-      if (langData.detectedLanguage) {
-        detectedLanguages[langData.detectedLanguage] = (detectedLanguages[langData.detectedLanguage] || 0) + 1;
-      }
-      if (langData.match === false && langData.detectedConfidence > 0.5) {
-        langMismatches.push(page.url);
-      }
       if (!langData.htmlLang) {
         missingLangAttr.push(page.url);
+      }
+      const lang = confidentLanguage(langData);
+      if (!lang) {
+        undetermined++;
+        continue;
+      }
+      detectedLanguages[lang] = (detectedLanguages[lang] || 0) + 1;
+      if (isConfidentLanguageMismatch(langData)) {
+        langMismatches.push(page.url);
       }
     }
 
@@ -695,7 +728,7 @@ class LanguageDetectionAnalyzer {
       });
     }
 
-    return { issues, warnings };
+    return { issues, warnings, detectedLanguages, undetermined };
   }
 }
 

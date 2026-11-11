@@ -11,6 +11,7 @@
  * - Word count by section
  */
 
+import { confidentLanguage, isConfidentLanguageMismatch } from '../../utils/language-confidence';
 import { escapeHtml } from '../html-utils';
 import { extractComparisonLabels, formatPercentDelta } from '../comparison-helpers';
 import { calcPercent, formatBytes } from '../../utils';
@@ -437,20 +438,23 @@ function getContentSimilaritySection(pages: PageInfo[]) {
 }
 
 function getLanguageSection(pages: PageInfo[]) {
-  const withLang = pages.filter((p) => p.languageDetection?.detectedLanguage);
+  const withLang = pages.filter((p) => confidentLanguage(p.languageDetection));
   if (withLang.length === 0) return '';
 
   const langCounts: Record<string, number> = {};
   let mismatches = 0;
-  let missingLang = 0;
+  // Missing lang attribute is a page fact, not a detector guess — count it over
+  // every page with a detection, whatever the confidence.
+  const missingLang = pages.filter(
+    (p) => p.languageDetection?.detectedLanguage && !p.languageDetection.htmlLang,
+  ).length;
 
   for (const page of withLang) {
     const detection = page.languageDetection;
-    if (!detection?.detectedLanguage) continue;
-    const lang = detection.detectedLanguage;
+    const lang = confidentLanguage(detection);
+    if (!detection || !lang) continue;
     langCounts[lang] = (langCounts[lang] ?? 0) + 1;
-    if (detection.match === false) mismatches++;
-    if (!detection.htmlLang) missingLang++;
+    if (isConfidentLanguageMismatch(detection)) mismatches++;
   }
 
   const langBars = Object.entries(langCounts)

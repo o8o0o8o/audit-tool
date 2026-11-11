@@ -44,15 +44,50 @@ interface MetadataData {
   isMultiLang: boolean;
   timing: Record<string, unknown>;
   cruxData?: unknown;
+  visual?: boolean;
 }
 
-interface ProgressResults {
+/** The checkpoint's `visual` setting; a legacy checkpoint without the field never ran the visual analyzers. */
+export function checkpointVisual(metadata: { visual?: unknown } | null | undefined): boolean {
+  return metadata?.visual === true;
+}
+
+/**
+ * On `--proceed` the checkpoint's `visual` wins so every crawled page shares one
+ * setting; a differing CLI/config value is reported and ignored.
+ */
+export function resolveResumeVisual(
+  requested: boolean,
+  checkpoint: boolean,
+): { visual: boolean; warning: string | null } {
+  if (requested === checkpoint) return { visual: checkpoint, warning: null };
+  return {
+    visual: checkpoint,
+    warning: `--visual is ${requested ? 'on' : 'off'} but the resumed audit ran with it ${checkpoint ? 'on' : 'off'}; keeping ${checkpoint ? 'on' : 'off'} so every page is checked the same way.`,
+  };
+}
+
+/** The checkpoint `metadata.json` payload; records `visual` so `--proceed` resumes with the same setting. */
+export function buildCheckpointMetadata(results: ProgressResults) {
+  return {
+    robots: results.robots,
+    sitemaps: results.sitemaps,
+    isMultiLang: results.isMultiLang,
+    timing: results.timing,
+    cruxData: results.cruxData ?? null,
+    crawlProfile: results.crawlProfile ?? null,
+    visual: results.visual === true,
+  };
+}
+
+export interface ProgressResults {
   robots: Record<string, unknown>;
   sitemaps: Record<string, unknown> & { total?: number };
   isMultiLang?: boolean;
   timing?: Record<string, unknown>;
   cruxData?: unknown;
   crawlProfile?: CrawlProfile | null;
+  visual?: boolean;
   pageData: {
     pages: Record<string, PageInfo>;
     processedPages: Set<string> | string[];
@@ -184,6 +219,7 @@ class ProgressManager {
       sitemaps: metadataTyped.sitemaps,
       isMultiLang: metadataTyped.isMultiLang,
       timing: metadataTyped.timing,
+      visual: checkpointVisual(metadataTyped),
       pageData: {
         pages,
         processedPages: processedPagesSet,
@@ -510,15 +546,7 @@ class ProgressManager {
     }
 
     // Write metadata
-    const metadata = {
-      robots: results.robots,
-      sitemaps: results.sitemaps,
-      isMultiLang: results.isMultiLang,
-      timing: results.timing,
-      cruxData: results.cruxData ?? null,
-      crawlProfile: results.crawlProfile ?? null,
-    };
-    this.fileManager.writeMetadata(metadata);
+    this.fileManager.writeMetadata(buildCheckpointMetadata(results));
 
     // Write analysis
     const analysisData = {

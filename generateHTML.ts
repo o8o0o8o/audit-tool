@@ -9,10 +9,11 @@ import { sanitizeDomainName } from './validators';
 
 // Import report modules
 import { ReportDataProcessor } from './lib/reports/data-processor';
+import { FileManager } from './lib/storage/file-manager';
 import { computePageCounts, type PageCounts } from './lib/utils/page-counts';
 import { escapeHtml } from './lib/reports/html-utils';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
-import { categorize } from './lib/phase2/categorize';
+import { categorize, VISUAL_FINDING_MESSAGES } from './lib/phase2/categorize';
 import { auditTypeLabel, matchesChecks, type CheckName, type HtmlSectionId } from './lib/presets';
 
 // Import section generators
@@ -96,6 +97,16 @@ const DEFAULT_BODY_ORDER: HtmlSectionId[] = [
   'history',
   'pages-table',
 ];
+
+/** Whether the run's visual analyzers ran — `visual` in the run's metadata (absent ⇒ false). */
+function readVisualFlag(file: string): boolean {
+  try {
+    const metadata = FileManager.readJsonFile(path.join(path.dirname(file), 'metadata.json.gz')) as { visual?: unknown } | null;
+    return metadata?.visual === true;
+  } catch {
+    return false;
+  }
+}
 
 function filterFindingsByChecks(jsonData: Record<string, unknown>, checks: readonly CheckName[]): void {
   const analysis = jsonData.analysis as
@@ -206,6 +217,11 @@ function generateHTML(
   }
 
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
+  if (!isComparison && !loadError) {
+    // A checks filter that excludes UX findings leaves the visual check out of this report entirely.
+    const visualInReport = !selection.checks || matchesChecks(VISUAL_FINDING_MESSAGES[0], 'ux', selection.checks);
+    (jsonData as Record<string, unknown>).visual = visualInReport && readVisualFlag(file);
+  }
   if (selection.checks && !loadError) {
     filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
     recalculateSummary(jsonData as Record<string, unknown>, pageData as PageData);

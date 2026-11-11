@@ -94,7 +94,7 @@ async function main(): Promise<void> {
   });
   try {
     await waitForServer(server);
-    const code = await run(process.execPath, ['--import', 'tsx', 'start.ts', `--origin=${origin}`, '--no-phase2']);
+    const code = await run(process.execPath, ['--import', 'tsx', 'start.ts', `--origin=${origin}`, '--visual', '--no-phase2']);
     if (code !== 0) throw new Error(`crawl exited ${code}`);
 
     const runDir = findRunDir(since);

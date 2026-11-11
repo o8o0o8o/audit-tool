@@ -25,7 +25,7 @@ import { classifyIssue, isCataloguedErrorTier } from '../scoring/seo-catalog';
 import { nextjsOverrideFor, isNextjsAudit } from '../scoring/nextjs-recommendations';
 import type { FixRecommendation } from '../types';
 import { normalizeMessage as _normalizeMessage, normalizeMessageForLookup } from '../utils/finding-id';
-import { categorize, type Section } from './categorize';
+import { VISUAL_FINDING_MESSAGES, categorize, isVisualFinding, type Section } from './categorize';
 import { auditTypeLabel, matchesChecks, type CheckName } from '../presets';
 import { benchmarkFor } from './benchmarks';
 import { mergeNumericVariants } from '../scoring/merge-variants';
@@ -1423,8 +1423,27 @@ export function buildReportMarkdown(
   parts.push(buildSummary(artifacts, details, suppressed, isNextjs));
   for (const sec of selection.sections ?? SECTION_ORDER) {
     parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView, screenshots, embedded, probes, siteFacts));
+    if (sec === 'ux') parts.push(buildVisualNote(artifacts, buckets.ux.length > 0, selection.checks));
   }
   return parts.filter(Boolean).join('\n');
+}
+
+export const NO_UI_ISSUES_NOTE = '**No UI issues found.** The visual check (`--visual`) found no broken images or media, unrendered template text, placeholder copy, garbled characters or clipped text.';
+
+/**
+ * Empty-state note for the UX section: shown only when the crawl ran the visual
+ * analyzers, the active checks keep them, and none of them raised a finding.
+ */
+function buildVisualNote(
+  artifacts: AuditArtifacts,
+  uxRendered: boolean,
+  checks?: readonly CheckName[],
+): string {
+  if (artifacts.metadata.visual !== true) return '';
+  if (checks && !matchesChecks(VISUAL_FINDING_MESSAGES[0], 'ux', checks)) return '';
+  // Raw details, not the suppressed set: a deduped visual finding still means the page had UI issues.
+  if (Object.keys(artifacts.analysis.details ?? {}).some(isVisualFinding)) return '';
+  return uxRendered ? `${NO_UI_ISSUES_NOTE}\n` : `## ${SECTION_TITLES.ux}\n\n${NO_UI_ISSUES_NOTE}\n`;
 }
 
 /**

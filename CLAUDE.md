@@ -103,6 +103,7 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 - `--content-research` - Phase 4 competitive content research (opt-in; see Phase 4 below)
 - `--competitors=<csv|file>` - competitor hosts for `--content-research` (optional; LLM discovers when omitted; also `competitors: []` in `.seoauditrc`)
 - `--phase2` / `--no-phase2` - curated PDF report (on by default)
+- `--visual` - run the visual (UI defect) analyzers: broken images/media, template tokens, lorem ipsum, mojibake, clipped text (opt-in)
 - `--no-score` - strip scores and the scoring-rules explanation from the HTML report and the Phase 2 report (CSV export unchanged); with scores on, every score links to the generated `#score-rules` block (`lib/scoring/scoring-rules.ts`)
 - `--preset=<name>` - `quick|standard|deep` (crawl speed) or role presets `sales|marketing|seo|custom` that also select report sections (in order) and finding groups; `--sections=<csv>` / `--checks=<csv>` build a `custom` one. Defined in `lib/presets.ts`; each preset, its data and rationale are in [`docs/audit-presets.md`](docs/audit-presets.md)
 - `--evidence` / `--no-evidence` / `--evidence-cap=<n>` - per-page evidence capture
@@ -222,6 +223,8 @@ Input validation and security:
 - **structured-data-validator.ts**: Schema markup consistency
 
 ### Visual (`visual` check family)
+
+Opt-in via `--visual` (or `visual: true` in `.seoauditrc`; `--no-visual` overrides). Findings route to the UX section; Phase 3 never refutes them. The run's metadata records `visual` (a `--proceed` resume keeps the checkpoint's value), and a clean run shows "No UI issues found" in the HTML and Phase 2 reports.
 
 - **broken-media-analyzer.ts**: Broken `<img>` (loaded with naturalWidth 0) and failed 4xx/5xx image/media requests
 - **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`), lorem ipsum, mojibake, clipped text

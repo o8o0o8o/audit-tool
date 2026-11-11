@@ -9,7 +9,14 @@ import { getOpenCommand, getHostname } from './lib/utils';
 
 // Import modularized components
 import { parseArgs, calculateSafeConcurrency } from './lib/args-parser';
-import { loadConfig, generateSampleConfig, applyConfigToConstants, getConfigSummary } from './lib/config-loader';
+import {
+  loadConfig,
+  generateSampleConfig,
+  applyConfigToConstants,
+  getConfigSummary,
+  resolveVisual,
+  batchSiteOptions,
+} from './lib/config-loader';
 import * as constants from './lib/constants';
 import { printAuditSummary, getJsonSummary, type AuditResultsExtended } from './lib/utils/cli-summary';
 import { validateArguments, validateURL, validateRepoPath, isFetchAllowed } from './validators';
@@ -163,13 +170,11 @@ async function audit() {
       console.log(`\nBatch audit: ${urls.length} sites\n`);
       const results = [];
       const noScore = args.noScore === true;
+      const siteOptions = batchSiteOptions(args);
       for (let i = 0; i < urls.length; i++) {
         console.log(`\n[${i + 1}/${urls.length}] Auditing: ${urls[i]}\n`);
         try {
-          const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, {
-            verbose: args.verbose,
-            limit: args.limit ?? 20, // Default limit for batch mode
-          });
+          const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, siteOptions);
           await batchSeo.audit();
 
           const score = batchSeo.data.analysis?.summary?.overallScore ?? 0;
@@ -223,6 +228,7 @@ async function audit() {
         console.log(`  Thresholds: ${Object.keys(config.thresholds ?? {}).length} defined`);
         console.log(`  Crawl concurrency: ${config.crawl?.concurrency ?? 5}`);
         console.log(`  Query param mode: ${config.queryParams?.mode ?? 'strip_tracking'}`);
+        console.log(`  Visual checks: ${config.visual === true ? 'on' : 'off'}`);
         process.exit(0);
       } catch (e: unknown) {
         console.error(`Config validation failed: ${(e as Error).message}`);
@@ -366,6 +372,7 @@ async function audit() {
       `🔄 Concurrency: ${args.concurrency} pages at a time (safe max: ${sysInfo.maxSafe} based on ${sysInfo.reason})`,
     );
     if (args.perf) console.log(`📊 Performance metrics: enabled`);
+    if (resolveVisual(args.visual, config)) console.log(`🖼️  Visual (UI defect) checks: enabled`);
     if (args.limit) console.log(`🔢 Page limit: ${args.limit}`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
 
@@ -434,6 +441,7 @@ async function audit() {
       cruxApiKey: config.apiKeys?.crux ?? null,
       evidence: args.evidence,
       evidenceCap: args.evidenceCap,
+      visual: resolveVisual(args.visual, config),
     });
     _seoInstance = seo;
 

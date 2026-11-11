@@ -36,6 +36,7 @@ import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
 import { withTimeout } from '../crawler/resilience';
 import { isFetchAllowed } from '../../validators';
 import { PhaseProgress } from '../utils/phase-progress';
+import { isVisualFinding } from '../phase2/categorize';
 
 // SSRF guard for the standalone --verify re-fetch: the report's example URLs are
 // re-fetched live, so a private/internal host parsed out of an old report must
@@ -1376,6 +1377,14 @@ const TOO_MANY_FONTS_BAR = 4;
 
 // Ordered: more specific kinds first (the first match wins).
 const CHECKERS: LiveChecker[] = [
+  {
+    // A rendered-page defect (broken image, clipped text…) can't be re-observed
+    // from a plain fetch, so it must never be refuted.
+    kind: 'visual',
+    match: isVisualFinding,
+    noFetch: true,
+    check: () => unverifiable('rendered-page defect — not re-checkable live'),
+  },
   {
     kind: 'paginated-canonical',
     match: (t) => /paginat/.test(t) && /canonical/.test(t),

@@ -124,7 +124,26 @@ const RULES: Array<{ section: Section; patterns: RegExp[] }> = [
   },
 ];
 
+/** Issue messages raised by the `--visual` analyzers (broken media, text integrity). */
+export const VISUAL_FINDING_MESSAGES = [
+  'Broken images detected',
+  'Failed image or media requests',
+  'Unrendered template tokens in page text',
+  'Placeholder text (lorem ipsum) on page',
+  'Garbled characters (mojibake) in page text',
+  'Text clipped by its container',
+] as const;
+
+const VISUAL_FINDING_SET: ReadonlySet<string> = new Set(VISUAL_FINDING_MESSAGES.map((m) => m.toLowerCase()));
+
+/** True for a finding raised by the `--visual` analyzers. Tolerates HTML tags and casing. */
+export function isVisualFinding(message: string): boolean {
+  return VISUAL_FINDING_SET.has(message.replace(/<[^>]*>/g, '').trim().toLowerCase());
+}
+
 export function categorize(message: string): Section {
+  // Visual findings say "image", so they must win over the Performance image rule.
+  if (isVisualFinding(message)) return 'ux';
   // Strip embedded URLs first so a cited example URL ("… — https://site/page")
   // can't trip keyword rules via its scheme/host (e.g. `/HTTPS|TLS|SSL/` matching
   // the `https://` of the link rather than the finding's actual subject).

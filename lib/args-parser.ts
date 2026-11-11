@@ -88,6 +88,7 @@ function parseArgs(args: string[]): ParsedArgs {
     llmRepo: false, // Reason over the source repo (find more / confirm / fix) atop --repo
     llmVerify: false, // Revalidate findings + drop confirmed duplicates/false positives before the final report
     verify: false, // Phase 3 verification — re-check each finding's first example (live by default; crawl data with SEO_AUDIT_VERIFY_OFFLINE=1), emit a separate verified report
+    visual: null as boolean | null, // --visual / --no-visual; null defers to `.seoauditrc` (default off)
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
@@ -147,6 +148,10 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.llmFindings = true;
       parsed.llmRepo = true;
       parsed.llmVerify = true;
+    } else if (arg === '--visual') {
+      parsed.visual = true;
+    } else if (arg === '--no-visual') {
+      parsed.visual = false;
     } else if (arg === '--no-score') {
       parsed.noScore = true;
     } else if (arg === '--score') {
@@ -281,3 +286,10 @@ function parseArgs(args: string[]): ParsedArgs {
 }
 
 export { parseArgs, calculateSafeConcurrency };
+
+/** Child-process flags that carry an explicit `--visual` / `--no-visual` choice across a `start.ts` restart. */
+export function visualChildArgs(visual: boolean | null | undefined): string[] {
+  if (visual === true) return ['--visual'];
+  if (visual === false) return ['--no-visual'];
+  return [];
+}

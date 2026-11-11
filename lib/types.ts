@@ -1673,6 +1673,8 @@ export interface ParsedArgs {
   llmRepo: boolean;
   llmVerify: boolean;
   verify: boolean;
+  /** `--visual` / `--no-visual`; `null` ⇒ take `visual` from `.seoauditrc` (default off). */
+  visual: boolean | null;
   noScore: boolean;
   evidence: boolean;
   evidenceCap: number;
@@ -1699,6 +1701,8 @@ export interface SEODataOptions {
   evidence?: boolean;
   /** Cap on representative-page samples (default 10). */
   evidenceCap?: number;
+  /** Run the visual (UI defect) analyzers. On `--proceed` the checkpoint's value wins. */
+  visual?: boolean;
 }
 
 // ─── History Types ──────────────────────────────────────────────────────────
@@ -1865,6 +1869,8 @@ export interface CrawlerEngineOptions {
   evidenceDir?: string;
   /** Max number of representative-page samples (default 10). */
   evidenceCap?: number;
+  /** Run the visual (UI defect) analyzers. */
+  visual?: boolean;
 }
 
 export interface CrawlerCallbacks {

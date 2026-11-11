@@ -14,7 +14,7 @@ import { sanitizeDomainName } from '../validators';
 import { FileManager } from './storage/file-manager';
 import { ScoreCalculator } from './scoring/score-calculator';
 import { ErrorAggregator, isDefectivePageOwnerFinding } from './utils/error-aggregator';
-import { ProgressManager } from './orchestrators/progress-manager';
+import { ProgressManager, resolveResumeVisual } from './orchestrators/progress-manager';
 import { AuditOrchestrator } from './orchestrators/audit-orchestrator';
 import { CrawlerEngine } from './crawler/crawler-engine';
 import { RobotsParser } from './parsers/robots-parser';
@@ -43,6 +43,7 @@ class SEOData {
   #screenshots: boolean;
   #evidence: boolean;
   #evidenceCap: number;
+  #visual: boolean;
 
   origin: string | null;
   domainName: string | null;
@@ -84,6 +85,7 @@ class SEOData {
     this.#screenshots = options.screenshots ?? false;
     this.#evidence = options.evidence ?? true;
     this.#evidenceCap = options.evidenceCap ?? 10;
+    this.#visual = options.visual ?? false;
 
     // Initialize incoming links tracking (Map<target, Set<source>>)
     this.#incomingLinksTracking = new Map();
@@ -103,6 +105,7 @@ class SEOData {
       robots: { sitemaps: [], 'user-agent': {} },
       sitemaps: { urls: {}, total: 0 },
       isMultiLang: false,
+      visual: this.#visual,
       pageData: {
         pages: {},
         processedPages: new Set(),
@@ -186,6 +189,7 @@ class SEOData {
         cruxApiKey: this.#cruxApiKey,
         evidenceDir: this.#evidence ? path.join(this.resultsDir, 'evidence') : undefined,
         evidenceCap: this.#evidenceCap,
+        visual: this.#visual,
       },
       {
         saveError: this.saveError.bind(this),
@@ -310,6 +314,12 @@ class SEOData {
 
       this.#errorAggregator = restored.errorAggregator;
       this.#incomingLinksTracking = restored.incomingLinksTracking;
+
+      const { visual, warning } = resolveResumeVisual(this.#visual, restored.results.visual);
+      if (warning) console.warn(`  ⚠️  ${warning}`);
+      this.#visual = visual;
+      this.#results.visual = visual;
+      if (this.#crawlerEngine) this.#crawlerEngine.visual = visual;
     } catch (error: unknown) {
       const err = error as Error;
       console.error(`\n❌ ERROR restoring progress:`, err.message);

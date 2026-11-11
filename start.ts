@@ -22,7 +22,7 @@ if (fs.existsSync(envFile)) {
 import { spawn } from 'child_process';
 import * as zlib from 'zlib';
 import type { ParsedArgs } from './lib/types';
-import { parseArgs } from './lib/args-parser';
+import { parseArgs, visualChildArgs } from './lib/args-parser';
 import { validateURL, sanitizeDomainName } from './validators';
 import { printHelp, interactiveMode } from './lib/cli-interactive';
 import { FileManager } from './lib/storage/file-manager';
@@ -155,6 +155,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.llmNarrative || args.llmFindings || args.llmRepo || args.llmVerify) childArgs.push('--llm');
     if (args.verify) childArgs.push('--verify');
     if (args.noScore) childArgs.push('--no-score');
+    childArgs.push(...visualChildArgs(args.visual));
     if (args.evidence === false) childArgs.push('--no-evidence');
     if (args.evidenceCap && args.evidenceCap !== 10) childArgs.push(`--evidence-cap=${args.evidenceCap}`);
     // Phase 4 — competitive content research runs inside the child too.

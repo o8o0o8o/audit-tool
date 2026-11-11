@@ -47,6 +47,10 @@ function getCrawlScope(
   return { crawled: pages.length, total: total > 0 ? total : null };
 }
 
+const ISSUE_TYPES_HINT = 'distinct kinds of issue, not pages';
+const SEVERITY_HINT = 'kinds of issue';
+const PAGES_OK_HINT = 'share of crawled pages that loaded without errors';
+
 /** Single-origin executive summary (original behavior) */
 function getSingleExecutiveSummary(data: ReportSectionData) {
   const { jsonData, pages } = data;
@@ -107,28 +111,32 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
         <div class="summary-card">
           <div class="summary-card-value">${summary.totalIssues ?? 0}</div>
           <div class="summary-card-label">Total Issues</div>
+          <div class="summary-card-hint">${ISSUE_TYPES_HINT}</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--red-200);">${summary.criticalCount ?? 0}</div>
           <div class="summary-card-label">Critical</div>
-          ${((summary.criticalCount as number) ?? 0) > 0 ? '<div class="summary-card-hint">Fix immediately</div>' : ''}
+          ${((summary.criticalCount as number) ?? 0) > 0 ? `<div class="summary-card-hint">${SEVERITY_HINT} · fix immediately</div>` : `<div class="summary-card-hint">${SEVERITY_HINT}</div>`}
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--orange-200);">${summary.highCount ?? 0}</div>
           <div class="summary-card-label">High</div>
-          ${((summary.highCount as number) ?? 0) > 0 ? '<div class="summary-card-hint">Fix this week</div>' : ''}
+          ${((summary.highCount as number) ?? 0) > 0 ? `<div class="summary-card-hint">${SEVERITY_HINT} · fix this week</div>` : `<div class="summary-card-hint">${SEVERITY_HINT}</div>`}
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--amber-200);">${summary.mediumCount ?? 0}</div>
           <div class="summary-card-label">Medium</div>
+          <div class="summary-card-hint">${SEVERITY_HINT}</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value" style="color: var(--blue-200);">${summary.lowCount ?? 0}</div>
           <div class="summary-card-label">Low</div>
+          <div class="summary-card-hint">${SEVERITY_HINT}</div>
         </div>
         <div class="summary-card">
           <div class="summary-card-value">${summary.passRate ?? 0}%</div>
           <div class="summary-card-label">Pass Rate</div>
+          <div class="summary-card-hint">${PAGES_OK_HINT}</div>
         </div>
       </div>
 
@@ -197,12 +205,12 @@ function getComparisonExecutiveSummary(
 
       <!-- Dual issue counts -->
       <div class="summary-grid">
-        ${getDualSummaryCard('Total Issues', (originSummary.totalIssues as number) ?? 0, (compareSummary.totalIssues as number) ?? 0, originLabel, compareLabel, '', true)}
+        ${getDualSummaryCard('Total Issues', (originSummary.totalIssues as number) ?? 0, (compareSummary.totalIssues as number) ?? 0, originLabel, compareLabel, '', true, '', ISSUE_TYPES_HINT)}
         ${getDualSummaryCard('Critical', (originSummary.criticalCount as number) ?? 0, (compareSummary.criticalCount as number) ?? 0, originLabel, compareLabel, 'var(--red-200)', true)}
         ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, 'var(--orange-200)', true)}
         ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, 'var(--amber-200)', true)}
         ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, 'var(--blue-200)', true)}
-        ${getDualSummaryCard('Pass Rate', (originSummary.passRate as number) || 0, (compareSummary.passRate as number) || 0, originLabel, compareLabel, '', false, '%')}
+        ${getDualSummaryCard('Pass Rate', (originSummary.passRate as number) || 0, (compareSummary.passRate as number) || 0, originLabel, compareLabel, '', false, '%', PAGES_OK_HINT)}
       </div>
 
       <!-- Dual category health -->
@@ -234,6 +242,7 @@ function getDualSummaryCard(
   color: string,
   lowerIsBetter: boolean,
   unit = '',
+  hint = SEVERITY_HINT,
 ): string {
   const delta = compareVal - originVal;
   const deltaBadge = formatDeltaBadge(delta, unit, lowerIsBetter);
@@ -252,6 +261,7 @@ function getDualSummaryCard(
         </div>
       </div>
       <div class="summary-card-label">${label}</div>
+      <div class="summary-card-hint">${hint}</div>
     </div>
   `;
 }

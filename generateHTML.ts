@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import pkg from './package.json';
-import type { ReportSectionData } from './lib/types';
+import type { ReportSectionData, PageData, PageInfo, AnalysisDetail } from './lib/types';
+import { ScoreCalculator } from './lib/scoring/score-calculator';
 
 // Import validators for input sanitization
 import { sanitizeDomainName } from './validators';
@@ -116,6 +117,27 @@ function filterFindingsByChecks(jsonData: Record<string, unknown>, checks: reado
 }
 
 
+/** Scores and counts in the saved summary cover every finding; after a checks filter they must be rebuilt. */
+function recalculateSummary(jsonData: Record<string, unknown>, pageData: PageData): void {
+  const analysis = jsonData.analysis as
+    | { details?: Record<string, AnalysisDetail>; bySeverity?: Record<string, string[]>; summary?: unknown }
+    | undefined;
+  if (!analysis?.details) return;
+  const bySeverity: Record<string, string[]> = { ...analysis.bySeverity };
+  for (const severity of ['critical', 'high', 'medium', 'low']) {
+    bySeverity[severity] ??= analysis.bySeverity
+      ? []
+      : Object.entries(analysis.details)
+          .filter(([, d]) => String(d.severity ?? '').toLowerCase() === severity)
+          .map(([message]) => message);
+  }
+  analysis.summary = ScoreCalculator.calculateSummary(
+    { bySeverity, details: analysis.details },
+    pageData,
+    (pageData.pages ?? {}) as Record<string, PageInfo>,
+  );
+}
+
 /** Header stats: Successful + With Errors always sum to Pages Crawled; load failures are listed apart. */
 export function renderPageCountStats(counts: PageCounts): string {
   const stat = (label: string, value: number, color?: string) => `<div class="stat">
@@ -184,7 +206,10 @@ function generateHTML(
   }
 
   const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
-  if (selection.checks) filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
+  if (selection.checks && !loadError) {
+    filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
+    recalculateSummary(jsonData as Record<string, unknown>, pageData as PageData);
+  }
 
   const rawPageData = pageData as { pages?: Record<string, unknown>; byError?: Record<string, unknown> };
   const crawlCounts = computePageCounts(

@@ -4,6 +4,8 @@ import { escapeHtml } from './lib/reports/html-utils';
 import { deltaClass, deltaSymbol, formatMetricDelta, formatDeltaSpan } from './lib/reports/comparison-helpers';
 import { getDesignTokens } from './lib/reports/sections/design-tokens';
 import { getUIComponents } from './lib/reports/sections/ui-components';
+import { scoringRulesHtml } from './lib/scoring/scoring-rules';
+import { getScoreRulesStyles } from './lib/reports/sections/styles';
 import type { InsightsSummary } from './lib/types';
 
 /**
@@ -21,8 +23,24 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
   }
 
   const comparison = manager.compareAudits(oldAudit, newAudit);
+  const htmlContent = buildComparisonHtml(domainName, oldAudit, newAudit, comparison);
 
-  const htmlContent = `
+  const outputFile = `${domainName}_comparison_${oldIndex + 1}_vs_${newIndex + 1}.html`;
+  fs.writeFileSync(outputFile, htmlContent);
+
+  console.log(`\n✅ Comparison report generated: ${outputFile}`);
+  return outputFile;
+}
+
+type HistoryAudit = NonNullable<ReturnType<HistoryManager['getAuditByIndex']>>;
+
+function buildComparisonHtml(
+  domainName: string,
+  oldAudit: HistoryAudit,
+  newAudit: HistoryAudit,
+  comparison: ReturnType<HistoryManager['compareAudits']>,
+): string {
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,6 +53,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
     <style>
         ${getDesignTokens()}
         ${getUIComponents()}
+        ${getScoreRulesStyles()}
         * {
             margin: 0;
             padding: 0;
@@ -305,7 +324,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         })()}
 
         <div class="section">
-            <h2>Overall Score Comparison</h2>
+            <h2>Overall Score Comparison <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a></h2>
             <div class="score-visual">
                 <div class="score-circle old">
                     ${oldAudit.summary.overallScore}
@@ -379,7 +398,7 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
           comparison.categoryDeltas
             ? `
         <div class="section">
-            <h2>Category Scores</h2>
+            <h2>Category Scores <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a></h2>
             <div class="category-comparison">
                 ${Object.entries(comparison.categoryDeltas)
                   .map(([cat, delta]: [string, number]) => {
@@ -405,6 +424,8 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
         `
             : ''
         }
+
+        <div class="section">${scoringRulesHtml()}</div>
 
         ${
           comparison.improvements.length > 0
@@ -602,15 +623,9 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
 </body>
 </html>
   `;
-
-  const outputFile = `${domainName}_comparison_${oldIndex + 1}_vs_${newIndex + 1}.html`;
-  fs.writeFileSync(outputFile, htmlContent);
-
-  console.log(`\n✅ Comparison report generated: ${outputFile}`);
-  return outputFile;
 }
 
-export { generateComparisonHTML };
+export { generateComparisonHTML, buildComparisonHtml };
 // CLI entry point
 if (require.main === module) {
   const args = process.argv.slice(2);

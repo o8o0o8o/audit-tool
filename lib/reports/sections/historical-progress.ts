@@ -9,6 +9,8 @@ import { extractAnalysis, extractSummary } from '../data-processor';
 import { getDeltaCssColor } from '../comparison-helpers';
 import type { ReportSectionData, TrendDataCompat, AuditSnapshot, IssueTrend } from '../../types';
 
+const SCORE_RULES_LINK = '<a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>';
+
 type IssueTrendItem = IssueTrend & { issue: string; priorityScore: number };
 
 /**
@@ -24,6 +26,7 @@ function getHistoricalProgress(data: ReportSectionData) {
   if (data.comparison) return '';
 
   const { jsonData, trendData, previousAudit } = data;
+  const noScore = data.noScore === true;
 
   const summaryObj = extractSummary(jsonData);
   const currentScore = (summaryObj.overallScore ?? 0) as number;
@@ -36,7 +39,7 @@ function getHistoricalProgress(data: ReportSectionData) {
       <div class="charts-section">
         <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Historical Progress</h2>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-          ${getInfoCard('Current Score', currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
+          ${noScore ? '' : getInfoCard(`Current Score ${SCORE_RULES_LINK}`, currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
           ${getInfoCard('Total Issues', currentIssues, 'var(--color-warning)', 'var(--amber-600)', 'Found in this audit')}
           ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
         </div>
@@ -64,21 +67,25 @@ function getHistoricalProgress(data: ReportSectionData) {
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Track your SEO improvements over ${auditCount} audit${auditCount > 1 ? 's' : ''}</p>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-        ${getDeltaCard('Score Change', scoreDelta, scoreDelta >= 0, 'Since last audit')}
+        ${noScore ? '' : getDeltaCard(`Score Change ${SCORE_RULES_LINK}`, scoreDelta, scoreDelta >= 0, 'Since last audit')}
         ${getDeltaCard('Issues Change', issuesDelta, issuesDelta <= 0, 'Since last audit', true)}
         ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
-        ${getInfoCard('Current Score', currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
+        ${noScore ? '' : getInfoCard(`Current Score ${SCORE_RULES_LINK}`, currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
       </div>
 
-      ${getCategoryDeltaCards(jsonData, previousAudit)}
+      ${noScore ? '' : getCategoryDeltaCards(jsonData, previousAudit)}
 
       <div class="charts-grid">
-        <div class="chart-card">
-          <div class="chart-title">Overall Score Trend</div>
+        ${
+          noScore
+            ? ''
+            : `<div class="chart-card">
+          <div class="chart-title">Overall Score Trend ${SCORE_RULES_LINK}</div>
           <div class="chart-container">
             <canvas id="scoreTrendChart"></canvas>
           </div>
-        </div>
+        </div>`
+        }
 
         <div class="chart-card">
           <div class="chart-title">Total Issues Trend</div>
@@ -360,7 +367,7 @@ function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit:
 
   return `
     <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 16px; background: var(--color-bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
-      <div style="width: 100%; text-align: center; font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 8px; font-weight: var(--font-weight-semibold);">Category Changes vs Previous Audit</div>
+      <div style="width: 100%; text-align: center; font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 8px; font-weight: var(--font-weight-semibold);">Category Changes vs Previous Audit ${SCORE_RULES_LINK}</div>
       ${cards.join('')}
     </div>
   `;

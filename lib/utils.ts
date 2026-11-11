@@ -547,13 +547,20 @@ function statPercentile(sortedArr: number[], p: number): number {
 /**
  * Get letter grade from score (0-100)
  */
+/** Minimum score for each letter grade, best first; anything lower is F. */
+const GRADE_BANDS: ReadonlyArray<{ grade: string; min: number }> = [
+  { grade: 'A+', min: 95 },
+  { grade: 'A', min: 90 },
+  { grade: 'B', min: 80 },
+  { grade: 'C', min: 70 },
+  { grade: 'D', min: 60 },
+];
+
+/** Share of each category's headroom (100 − score) assumed recoverable by fixing critical + high issues. */
+const FIX_RECOVERY_RATIO = 0.6;
+
 function getLetterGrade(score: number): string {
-  if (score >= 95) return 'A+';
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B';
-  if (score >= 70) return 'C';
-  if (score >= 60) return 'D';
-  return 'F';
+  return GRADE_BANDS.find((b) => score >= b.min)?.grade ?? 'F';
 }
 
 /**
@@ -623,7 +630,7 @@ function estimateScoreAfterFixes(
   let potentialGain = 0;
   for (const [cat, w] of Object.entries(categoryWeights)) {
     const headroom = 100 - (categoryScores[cat] || 100);
-    potentialGain += headroom * 0.6 * w;
+    potentialGain += headroom * FIX_RECOVERY_RATIO * w;
   }
   const predicted = Math.min(100, Math.round(overallScore + potentialGain));
   return predicted > overallScore ? predicted : null;
@@ -1229,6 +1236,8 @@ export {
   statAvg,
   statPercentile,
   getLetterGrade,
+  GRADE_BANDS,
+  FIX_RECOVERY_RATIO,
   normalizeUrlForComparison,
   basePathForComparison,
   getHeader,

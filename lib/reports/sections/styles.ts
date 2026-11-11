@@ -16,6 +16,7 @@ function getStyles() {
       <style>
           ${getDesignTokens()}
           ${getUIComponents()}
+          ${getScoreRulesStyles()}
           * {
               margin: 0;
               padding: 0;
@@ -2962,4 +2963,47 @@ function getStyles() {
       </style>`;
 }
 
-export { getStyles };
+/** Styles for the expandable "How is this score calculated?" block and its ⓘ links. */
+function getScoreRulesStyles() {
+  return `
+          .score-rules {
+              margin-top: var(--space-6);
+              padding: var(--space-4) var(--space-5);
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-md);
+              text-align: left;
+              font-size: var(--font-size-sm);
+          }
+          .score-rules summary {
+              cursor: pointer;
+              font-weight: var(--font-weight-semibold);
+          }
+          .score-rules-body p {
+              margin-top: var(--space-3);
+              line-height: 1.5;
+          }
+          .score-rules-table {
+              width: 100%;
+              margin-top: var(--space-3);
+              border-collapse: collapse;
+          }
+          .score-rules-table th,
+          .score-rules-table td {
+              padding: var(--space-2);
+              border-bottom: 1px solid var(--color-border-default);
+              text-align: left;
+              vertical-align: top;
+          }
+          .score-rules-link {
+              color: inherit;
+              opacity: 0.7;
+              text-decoration: none;
+              font-size: 0.85em;
+          }
+          .score-rules-link:hover {
+              opacity: 1;
+          }
+  `;
+}
+
+export { getStyles, getScoreRulesStyles };

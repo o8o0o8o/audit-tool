@@ -1526,6 +1526,8 @@ export interface ReportSectionData {
   hasPerformanceMetrics?: boolean;
   domainName?: string;
   comparison?: ComparisonData;
+  /** --no-score: omit every score and the scoring-rules block. */
+  noScore?: boolean;
 }
 
 export interface TopIssue {

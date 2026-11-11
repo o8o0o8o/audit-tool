@@ -207,3 +207,23 @@ order of `analysis.details` keys and of each finding's `examples` array — is
 Determinism is covered by tests in `tests/analyzers.test.ts`
 (`buildReportMarkdown determinism`, `ErrorAggregator example retention
 determinism`).
+
+## 7. Score explanations
+
+Every score the reports show is explained next to it, and the text is generated
+from the same constants the calculator uses (`lib/scoring/scoring-rules.ts`
+reads `SCORING.CATEGORY_WEIGHTS`, `OVERALL_MEAN_WEIGHT`,
+`PERFORMANCE_METRIC_WEIGHTS`, `GRADE_BANDS` and `FIX_RECOVERY_RATIO`), so the
+explanation cannot drift from the maths:
+
+- HTML report: an expandable "How is this score calculated?" block
+  (`#score-rules`) in the executive summary; historical-progress score cards,
+  the score trend chart, category deltas and the per-page Security / Cache /
+  A11y / Content columns link to it with an ⓘ.
+- Phase 2 report: the Methodology section carries a category/weight/method
+  table and the overall blend.
+- `generateComparison.ts` embeds the same block.
+
+`--no-score` removes every score and the rules text from both the HTML report
+and the Phase 2 report. The CSV export is unaffected. Covered by
+`tests/scoring-rules.test.ts`.

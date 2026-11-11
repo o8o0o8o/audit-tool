@@ -162,6 +162,7 @@ async function audit() {
 
       console.log(`\nBatch audit: ${urls.length} sites\n`);
       const results = [];
+      const noScore = args.noScore === true;
       for (let i = 0; i < urls.length; i++) {
         console.log(`\n[${i + 1}/${urls.length}] Auditing: ${urls[i]}\n`);
         try {
@@ -174,11 +175,11 @@ async function audit() {
           const score = batchSeo.data.analysis?.summary?.overallScore ?? 0;
           const issues = batchSeo.data.analysis?.summary?.totalIssues ?? 0;
           results.push({ url: urls[i], score, issues, status: 'ok' });
-          console.log(`  Score: ${score}/100 | Issues: ${issues}`);
+          console.log(noScore ? `  Issues: ${issues}` : `  Score: ${score}/100 | Issues: ${issues}`);
 
           await batchSeo.saveData();
           const batchHtmlPath = batchSeo.fileManager.getHtmlFilePath();
-          generateHTML(batchSeo.file, batchSeo.domainName ?? 'unknown', batchHtmlPath);
+          generateHTML(batchSeo.file, batchSeo.domainName ?? 'unknown', batchHtmlPath, undefined, { noScore });
         } catch (e: unknown) {
           const err = e as Error;
           results.push({ url: urls[i], score: 0, issues: 0, status: `error: ${err.message}` });
@@ -193,9 +194,17 @@ async function audit() {
       results.forEach((r) => {
         const icon =
           r.status === 'ok' ? (r.score >= 70 ? '\x1b[32m\u2713\x1b[0m' : '\x1b[33m!\x1b[0m') : '\x1b[31m\u2717\x1b[0m';
-        console.log(`  ${icon} ${r.url.padEnd(50)} Score: ${String(r.score).padStart(3)} | Issues: ${r.issues}`);
+        console.log(
+          noScore
+            ? `  ${icon} ${r.url.padEnd(50)} Issues: ${r.issues}`
+            : `  ${icon} ${r.url.padEnd(50)} Score: ${String(r.score).padStart(3)} | Issues: ${r.issues}`,
+        );
       });
       console.log('='.repeat(60));
+      if (noScore) {
+        console.log('');
+        process.exit(0);
+      }
       const avgScore =
         Math.round(
           results.filter((r) => r.status === 'ok').reduce((s, r) => s + r.score, 0) /
@@ -554,6 +563,7 @@ async function audit() {
       sections: resolvedPreset.htmlSections,
       checks: resolvedPreset.checks,
       preset: resolvedPreset.preset ?? undefined,
+      noScore: args.noScore === true,
     });
 
     // Phase 2 — curated markdown + PDF report. Opt-out via --no-phase2.

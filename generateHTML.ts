@@ -42,6 +42,8 @@ export interface HtmlReportSelection {
   checks?: CheckName[];
   /** Preset the audit ran with; shown as the audit type. `undefined` ⇒ "Full audit". */
   preset?: string;
+  /** --no-score: omit every score and the scoring-rules block. */
+  noScore?: boolean;
 }
 
 const NAV_LINKS: Partial<Record<HtmlSectionId, string>> = {
@@ -206,6 +208,7 @@ function generateHTML(
     previousAudit: previousAudit as ReportSectionData['previousAudit'],
     hasPerformanceMetrics: pagesWithMetrics.length > 0,
     comparison: (reportData as Record<string, unknown>).comparison as ReportSectionData['comparison'],
+    noScore: selection.noScore === true,
   };
 
   const bodyFragments: Record<HtmlSectionId, () => string> = {

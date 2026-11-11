@@ -10,6 +10,7 @@ import { getScoreColor, getScoreClass } from '../html-utils';
 import { extractSummary, extractPageInsights } from '../data-processor';
 import { getLetterGrade, estimateScoreAfterFixes, escapeHtml } from '../../utils';
 import { SCORING } from '../../constants';
+import { scoringRulesHtml } from '../../scoring/scoring-rules';
 import type { PageInfo, ReportSectionData, CategoryScores, ComparisonData } from '../../types';
 
 /**
@@ -19,7 +20,7 @@ function getExecutiveSummary(data: ReportSectionData) {
   const { jsonData, comparison } = data;
 
   if (comparison) {
-    return getComparisonExecutiveSummary(jsonData, comparison);
+    return getComparisonExecutiveSummary(jsonData, comparison, data.noScore === true);
   }
 
   return getSingleExecutiveSummary(data);
@@ -49,6 +50,7 @@ function getCrawlScope(
 /** Single-origin executive summary (original behavior) */
 function getSingleExecutiveSummary(data: ReportSectionData) {
   const { jsonData, pages } = data;
+  const noScore = data.noScore === true;
   const summary = extractSummary(jsonData);
   const overallScore = (summary.overallScore ?? 0) as number;
   const categoryScores = (summary.categoryScores ?? {}) as Record<string, number>;
@@ -73,7 +75,7 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
   const crawlAbortedBanner = getCrawlAbortedBanner(jsonData);
 
   const categoryHealthHtml =
-    Object.keys(categoryScores).length > 0
+    !noScore && Object.keys(categoryScores).length > 0
       ? `
     <div class="mt-7 border-t" style="border-color: rgba(255,255,255,0.2); padding-top: var(--space-6);">
       <div class="text-center mb-5 text-base opacity-90">Category Health</div>
@@ -88,13 +90,17 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
 
       ${crawlAbortedBanner}
 
-      <div class="summary-score">
+      ${
+        noScore
+          ? ''
+          : `<div class="summary-score">
         <div class="score-circle" style="position: relative;">
           <div class="score-ring" style="--score: ${overallScore}; --color: ${getScoreColor(overallScore)};"></div>
           <div class="score-number ${scoreClass}">${overallScore}</div>
           <div class="score-label">${scoreLabel} (${letterGrade})</div>
         </div>
-      </div>
+      </div>`
+      }
       ${scopeNoteHtml}
 
       <div class="summary-grid">
@@ -126,9 +132,11 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
         </div>
       </div>
 
-      ${getEstimatedScoreAfterFixes(summary, overallScore)}
+      ${noScore ? '' : getEstimatedScoreAfterFixes(summary, overallScore)}
 
       ${categoryHealthHtml}
+
+      ${noScore ? '' : scoringRulesHtml()}
 
       ${getInsightHighlights(jsonData)}
     </div>
@@ -136,7 +144,11 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
 }
 
 /** Dual-origin comparison executive summary */
-function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, comparison: ComparisonData) {
+function getComparisonExecutiveSummary(
+  jsonData: Record<string, unknown>,
+  comparison: ComparisonData,
+  noScore: boolean,
+) {
   const originSummary = extractSummary(jsonData);
   const compareSummary = extractSummary(comparison.compareJsonData);
 
@@ -153,8 +165,10 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
     <div class="executive-summary">
       <h2>📊 Comparison Summary</h2>
 
-      <!-- Dual score display -->
-      <div class="flex justify-center items-center gap-8 flex-wrap" style="margin: var(--space-6) 0;">
+      ${
+        noScore
+          ? ''
+          : `<div class="flex justify-center items-center gap-8 flex-wrap" style="margin: var(--space-6) 0;">
         <div class="text-center">
           <div class="score-circle" style="position: relative;">
             <div class="score-ring" style="--score: ${originScore}; --color: ${getScoreColor(originScore)};"></div>
@@ -178,7 +192,8 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
             <div class="score-label">${compareLabel} (${getLetterGrade(compareScore)})</div>
           </div>
         </div>
-      </div>
+      </div>`
+      }
 
       <!-- Dual issue counts -->
       <div class="summary-grid">
@@ -192,7 +207,7 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
 
       <!-- Dual category health -->
       ${
-        Object.keys(originCategoryScores).length > 0 || Object.keys(compareCategoryScores).length > 0
+        !noScore && (Object.keys(originCategoryScores).length > 0 || Object.keys(compareCategoryScores).length > 0)
           ? `
       <div class="mt-7 border-t" style="border-color: rgba(255,255,255,0.2); padding-top: var(--space-6);">
         <div class="text-center mb-5 text-base opacity-90">Category Health</div>
@@ -201,6 +216,8 @@ function getComparisonExecutiveSummary(jsonData: Record<string, unknown>, compar
       `
           : ''
       }
+
+      ${noScore ? '' : scoringRulesHtml()}
 
       ${getInsightHighlights(jsonData)}
     </div>

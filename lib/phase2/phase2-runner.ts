@@ -11,6 +11,7 @@
  * intentionally honest and brief rather than chatty.
  */
 
+import { scoringRulesMarkdown } from '../scoring/scoring-rules';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
@@ -784,6 +785,8 @@ function buildPurpose(artifacts: AuditArtifacts, noScore = false): string {
   if (!noScore) {
     lines.push(
       'Each category section header shows the current 0–100 score and, where there is room to improve, the score we would expect once that category’s issues are addressed across the site (`current → ~projected`). Because a category’s findings can appear in more than one section, the projection is shown once — on the section that owns the score — while individual findings everywhere carry the rough number of points fixing them recovers in their category (`+~N pts`). These projections are estimates — the `~` is deliberate: SEO and Technical scores are direct functions of the findings, while Performance, Accessibility and Security derive from measured per-page signals (Core Web Vitals, axe-core, security headers), so a per-finding figure approximates resolving the class of problem it represents.',
+      '',
+      scoringRulesMarkdown(),
       '',
     );
   }

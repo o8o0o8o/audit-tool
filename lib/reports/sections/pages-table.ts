@@ -44,6 +44,18 @@ interface CrUXData {
  * @param {string} thresholdText - Text to show as threshold
  * @returns {string} HTML for header cell
  */
+const SCORE_RULES_LINK = '<a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>';
+
+/** Header for a per-page analyzer score column, linked to the scoring-rules block. */
+function getScoreColumnHeader(title: string, name: string, threshold: string) {
+  return `
+    <th class="sortable" data-type="number" title="${escapeHtml(title)}">
+      ${escapeHtml(name)} ${SCORE_RULES_LINK}
+      <span class="threshold">${escapeHtml(threshold)}</span>
+    </th>
+  `;
+}
+
 function getColumnHeader(signalKey: string, displayName: string | null = null, thresholdText: string | null = null) {
   const info = METRIC_INFO[signalKey];
   const name = displayName ?? (info ? info.name : signalKey);
@@ -137,6 +149,7 @@ function getPagesTable(data: ReportSectionData) {
   }
 
   const { pages, hasPerformanceMetrics = false } = data;
+  const noScore = data.noScore === true;
   const cruxData = (data.jsonData?.cruxData ?? null) as CrUXData | null;
   const hasCrux = !!cruxData?.metrics;
 
@@ -176,11 +189,11 @@ function getPagesTable(data: ReportSectionData) {
     <div class="table-container">
         <table id="pagesTable">
             <thead>
-                ${getTableHeader(hasPerformanceMetrics, hasCrux)}
+                ${getTableHeader(hasPerformanceMetrics, hasCrux, noScore)}
                 ${hasCrux && hasPerformanceMetrics && cruxData ? getCrUXBaselineRow(cruxData) : ''}
             </thead>
             <tbody>
-                ${pages.map((page: PageInfo, index: number) => getTableRow(page, index, hasPerformanceMetrics)).join('')}
+                ${pages.map((page: PageInfo, index: number) => getTableRow(page, index, hasPerformanceMetrics, noScore)).join('')}
             </tbody>
         </table>
     </div>
@@ -190,7 +203,7 @@ function getPagesTable(data: ReportSectionData) {
 /**
  * Generate the table header row with descriptions from METRIC_INFO
  */
-function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
+function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false, noScore = false) {
   return `
     <tr>
         <th style="width: 50px; text-align: center;">#</th>
@@ -252,10 +265,7 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
             Links w/o Text
             <span class="threshold">0</span>
         </th>
-        <th class="sortable" data-type="number" title="${escapeHtml(METRIC_INFO.hasSecurityHeaders?.description || 'Security score based on HTTPS, security headers, cookies, and potential vulnerabilities.')}">
-            Security Score
-            <span class="threshold">≥ 70</span>
-        </th>
+        ${noScore ? '' : getScoreColumnHeader(METRIC_INFO.hasSecurityHeaders?.description || 'Security score based on HTTPS, security headers, cookies, and potential vulnerabilities.', 'Security Score', '≥ 70')}
         <th class="sortable" data-type="number" title="Missing HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, HSTS).">
             Missing Headers
             <span class="threshold">0</span>
@@ -273,10 +283,7 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
             Inline Scripts
             <span class="threshold">≤ 5</span>
         </th>
-        <th class="sortable" data-type="number" title="Overall caching effectiveness score based on CDN usage, cache headers, and Service Worker presence.">
-            Cache Score
-            <span class="threshold">≥ 70</span>
-        </th>
+        ${noScore ? '' : getScoreColumnHeader('Overall caching effectiveness score based on CDN usage, cache headers, and Service Worker presence.', 'Cache Score', '≥ 70')}
         <th class="sortable" data-type="text" title="Whether a Content Delivery Network is detected. CDNs improve global load times and reduce server load.">
             CDN
             <span class="threshold">Yes</span>
@@ -309,7 +316,7 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
             Unminified
             <span class="threshold">0</span>
         </th>
-        ${getColumnHeader('accessibilityScore', 'A11y Score', '≥ 70')}
+        ${noScore ? '' : getScoreColumnHeader(METRIC_INFO.accessibilityScore?.description ?? '', 'A11y Score', '≥ 70')}
         <th class="sortable" data-type="text" title="ARIA roles for assistive technology. Invalid roles confuse screen readers and hurt accessibility.">
             ARIA
             <span class="threshold">Valid roles</span>
@@ -323,7 +330,7 @@ function getTableHeader(hasPerformanceMetrics: boolean, hasCrux = false) {
             <span class="threshold">Main/Nav/Header</span>
         </th>
         ${getColumnHeader('hasSkipLink', 'Focus Issues', '0')}
-        ${getColumnHeader('contentScore', 'Content Score', '≥ 70')}
+        ${noScore ? '' : getScoreColumnHeader(METRIC_INFO.contentScore?.description ?? '', 'Content Score', '≥ 70')}
         ${getColumnHeader('wordCount', 'Word Count', '≥ 300')}
         ${getColumnHeader('textToHtmlRatio', 'Text/HTML Ratio', '≥ 25%')}
         ${getColumnHeader('readabilityScore', 'Readability', '50-70')}
@@ -397,7 +404,7 @@ function getPerfCell(page: PageInfo, metric: string, labValue: number | undefine
 /**
  * Generate a single table row for a page
  */
-function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boolean) {
+function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boolean, noScore = false) {
   const titleLength = page.title?.length ?? 0;
   const descLength = page.description?.length ?? 0;
   const titleColor = getTextLengthColor(titleLength, THRESHOLDS.TITLE_MIN, THRESHOLDS.TITLE_MAX);
@@ -573,9 +580,13 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
         <td style="color: ${linksWithoutText === 0 ? 'var(--color-success)' : linksWithoutText <= 3 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${linksWithoutText === 0 ? 'Good: All links have text' : 'Warning: ' + linksWithoutText + ' link(s) without text'}">
             ${linksWithoutText}
         </td>
-        <td style="color: ${securityScore === null ? 'var(--color-text-disabled)' : securityScore >= 70 ? 'var(--color-success)' : securityScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; white-space: pre-line;" title="${securityTooltip}">
+        ${
+          noScore
+            ? ''
+            : `<td style="color: ${securityScore === null ? 'var(--color-text-disabled)' : securityScore >= 70 ? 'var(--color-success)' : securityScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; white-space: pre-line;" title="${securityTooltip}">
             ${securityScore ?? 'N/A'}
-        </td>
+        </td>`
+        }
         <td style="color: ${missingSecHeaders === 0 ? 'var(--color-success)' : missingSecHeaders <= 2 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${missingSecHeaders === 0 ? 'Good: All security headers present' : 'Missing headers: ' + (page.security?.missingHeaders?.join(', ') ?? '')}">
             ${missingSecHeaders}
         </td>
@@ -591,9 +602,13 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
         <td style="color: ${inlineScripts <= 5 ? 'var(--color-success)' : inlineScripts <= 10 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${inlineScripts <= 5 ? 'Good: Minimal inline scripts' : 'Warning: ' + inlineScripts + ' inline scripts (potential XSS risk)'}">
             ${inlineScripts}
         </td>
-        <td style="color: ${cacheScore === null ? 'var(--color-text-disabled)' : cacheScore >= 70 ? 'var(--color-success)' : cacheScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; white-space: pre-line;" title="${cachingTooltip}">
+        ${
+          noScore
+            ? ''
+            : `<td style="color: ${cacheScore === null ? 'var(--color-text-disabled)' : cacheScore >= 70 ? 'var(--color-success)' : cacheScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center; white-space: pre-line;" title="${cachingTooltip}">
             ${cacheScore ?? 'N/A'}
-        </td>
+        </td>`
+        }
         <td style="text-align: center;">
             ${
               hasCDN
@@ -617,8 +632,8 @@ function getTableRow(page: PageInfo, index: number, hasPerformanceMetrics: boole
             }
         </td>
         ${getImageOptimizationCells(page)}
-        ${getAccessibilityCells(page)}
-        ${getContentQualityCells(page)}
+        ${getAccessibilityCells(page, noScore)}
+        ${getContentQualityCells(page, noScore)}
     </tr>
   `;
 }
@@ -819,7 +834,7 @@ function getImageOptimizationCells(page: PageInfo) {
 /**
  * Generate accessibility cells
  */
-function getAccessibilityCells(page: PageInfo) {
+function getAccessibilityCells(page: PageInfo, noScore = false) {
   const a11y: Partial<AccessibilityAnalysis> = page.accessibility ?? {};
 
   const a11yScore: number | string = a11y.a11yScore ?? 'N/A';
@@ -835,9 +850,13 @@ function getAccessibilityCells(page: PageInfo) {
   const positiveTabindex = a11y.keyboard?.positiveTabindex ?? 0;
 
   return `
-    <td style="color: ${typeof a11yScore === 'number' && a11yScore >= 70 ? 'var(--color-success)' : typeof a11yScore === 'number' && a11yScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Accessibility Score: ${a11yScore}/100">
+    ${
+      noScore
+        ? ''
+        : `<td style="color: ${typeof a11yScore === 'number' && a11yScore >= 70 ? 'var(--color-success)' : typeof a11yScore === 'number' && a11yScore >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Accessibility Score: ${a11yScore}/100">
         ${a11yScore}
-    </td>
+    </td>`
+    }
     <td style="text-align: center;">
         ${
           ariaInvalid > 0
@@ -908,7 +927,7 @@ function getSegmentLabel(segment: string) {
 /**
  * Generate content quality cells
  */
-function getContentQualityCells(page: PageInfo) {
+function getContentQualityCells(page: PageInfo, noScore = false) {
   const content: Partial<ContentQualityAnalysis> = page.contentQuality ?? {};
 
   const contentScore: number | string = content.contentScore ?? 'N/A';
@@ -923,9 +942,13 @@ function getContentQualityCells(page: PageInfo) {
     .join(', ');
 
   return `
-    <td style="color: ${contentScoreNum >= 70 ? 'var(--color-success)' : contentScoreNum >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Content Quality Score: ${contentScore}/100">
+    ${
+      noScore
+        ? ''
+        : `<td style="color: ${contentScoreNum >= 70 ? 'var(--color-success)' : contentScoreNum >= 50 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="Content Quality Score: ${contentScore}/100">
         ${contentScore}
-    </td>
+    </td>`
+    }
     <td style="color: ${wordCount >= 600 ? 'var(--color-success)' : wordCount >= 300 ? 'var(--color-warning)' : 'var(--color-error)'}; font-weight: var(--font-weight-semibold); text-align: center;" title="${wordCount} words (min: 300, recommended: 600)">
         ${wordCount}
     </td>
@@ -1179,6 +1202,7 @@ function extractPageValues(p: PageInfo | undefined, incomingLinks: Record<string
 function getComparisonPagesTable(data: ReportSectionData, comparison: ComparisonData) {
   const { originLabel, compareLabel } = extractComparisonLabels(comparison);
   const hasPerf = data.hasPerformanceMetrics;
+  const noScore = data.noScore === true;
 
   // Build lookup maps
   const originPagesMap = (data.pageData?.pages || {}) as Record<string, PageInfo>;
@@ -1293,13 +1317,13 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
       <td style="${td}">${d(ov?.missingMeta, cv?.missingMeta)}</td>
       <td style="${td}">${d(ov?.alternatesCount, cv?.alternatesCount)}</td>
       <td style="${td}">${d(ov?.linksWithoutText, cv?.linksWithoutText)}</td>
-      <td style="${td}">${d(ov?.securityScore, cv?.securityScore)}</td>
+      ${noScore ? '' : `<td style="${td}">${d(ov?.securityScore, cv?.securityScore)}</td>`}
       <td style="${td}">${d(ov?.missingSecHeaders, cv?.missingSecHeaders)}</td>
       <td style="${td}">${d(ov?.insecureCookies, cv?.insecureCookies)}</td>
       <td style="${td}">${d(ov?.mixedContent, cv?.mixedContent)}</td>
       <td style="${td}">${d(ov?.formsWithoutCSRF, cv?.formsWithoutCSRF)}</td>
       <td style="${td}">${d(ov?.inlineScripts, cv?.inlineScripts)}</td>
-      <td style="${td}">${d(ov?.cacheScore, cv?.cacheScore)}</td>
+      ${noScore ? '' : `<td style="${td}">${d(ov?.cacheScore, cv?.cacheScore)}</td>`}
       <td style="${td}">${dSym(ov?.cdn, cv?.cdn)}</td>
       <td style="${td}">${d(ov?.cachedStatic, cv?.cachedStatic)}</td>
       <td style="${td}">${d(ov?.uncachedStatic, cv?.uncachedStatic)}</td>
@@ -1311,12 +1335,12 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
       <td style="${td}">${d(ov?.renderBlocking, cv?.renderBlocking)}</td>
       <td style="${td}">${d(ov?.uncompressed, cv?.uncompressed)}</td>
       <td style="${td}">${d(ov?.unminified, cv?.unminified)}</td>
-      <td style="${td}">${d(ov?.a11yScore, cv?.a11yScore)}</td>
+      ${noScore ? '' : `<td style="${td}">${d(ov?.a11yScore, cv?.a11yScore)}</td>`}
       <td style="${td}">${dSym(ov?.aria, cv?.aria)}</td>
       <td style="${td}">${d(ov?.formLabels, cv?.formLabels)}</td>
       <td style="${td}">${d(ov?.landmarks, cv?.landmarks)}</td>
       <td style="${td}">${d(ov?.focusIssues, cv?.focusIssues)}</td>
-      <td style="${td}">${d(ov?.contentScore, cv?.contentScore)}</td>
+      ${noScore ? '' : `<td style="${td}">${d(ov?.contentScore, cv?.contentScore)}</td>`}
       <td style="${td}">${d(ov?.wordCount, cv?.wordCount)}</td>
       <td style="${td}">${d(ov?.textToHtmlRatio != null ? ov.textToHtmlRatio + '%' : '', cv?.textToHtmlRatio != null ? cv.textToHtmlRatio + '%' : '')}</td>
       <td style="${td}">${d(ov?.readability, cv?.readability)}</td>
@@ -1435,13 +1459,13 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
             <th style="${thStyle}">Miss Meta</th>
             <th style="${thStyle}">Alternates</th>
             <th style="${thStyle}">No Text</th>
-            <th style="${thStyle}">Sec Score</th>
+            ${noScore ? '' : `<th style="${thStyle}">Sec Score ${SCORE_RULES_LINK}</th>`}
             <th style="${thStyle}">Miss Hdrs</th>
             <th style="${thStyle}">Cookies</th>
             <th style="${thStyle}">Mixed</th>
             <th style="${thStyle}">No CSRF</th>
             <th style="${thStyle}">Inline JS</th>
-            <th style="${thStyle}">Cache</th>
+            ${noScore ? '' : `<th style="${thStyle}">Cache ${SCORE_RULES_LINK}</th>`}
             <th style="${thStyle}">CDN</th>
             <th style="${thStyle}">Cached</th>
             <th style="${thStyle}">Uncached</th>
@@ -1453,12 +1477,12 @@ function getComparisonPagesTable(data: ReportSectionData, comparison: Comparison
             <th style="${thStyle}">Blocking</th>
             <th style="${thStyle}">Uncompr</th>
             <th style="${thStyle}">Unmin</th>
-            <th style="${thStyle}">A11y</th>
+            ${noScore ? '' : `<th style="${thStyle}">A11y ${SCORE_RULES_LINK}</th>`}
             <th style="${thStyle}">ARIA</th>
             <th style="${thStyle}">Labels</th>
             <th style="${thStyle}">Landmarks</th>
             <th style="${thStyle}">Focus</th>
-            <th style="${thStyle}">Content</th>
+            ${noScore ? '' : `<th style="${thStyle}">Content ${SCORE_RULES_LINK}</th>`}
             <th style="${thStyle}">Words</th>
             <th style="${thStyle}">Text/HTML</th>
             <th style="${thStyle}">Read</th>

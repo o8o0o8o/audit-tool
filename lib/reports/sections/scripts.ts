@@ -269,16 +269,30 @@ function createPagesExportData(jsonData: Record<string, unknown>) {
  * @param {string} data.domainName - Domain name for file naming
  * @returns {string} HTML script tags with embedded JavaScript
  */
+/** With --no-score, drop overallScore/categoryScores from the embedded summary. */
+function stripScores<T extends { summary: Record<string, unknown> }>(chart: T, noScore: boolean): T {
+  if (!noScore) return chart;
+  const { overallScore: _o, categoryScores: _c, ...rest } = chart.summary;
+  return { ...chart, summary: rest };
+}
+
 function getScripts(data: ReportSectionData) {
-  const { pageData, jsonData, trendData, domainName } = data;
+  const { pageData, jsonData, domainName } = data;
+  const noScore = data.noScore === true;
   const isComparison = !!data.comparison;
 
   // Pre-calculate chart data to avoid embedding full jsonData
-  const chartData = calculateChartData(jsonData);
+  const chartData = stripScores(calculateChartData(jsonData), noScore);
+  // --no-score: no score values may reach the page source either.
+  const trendData =
+    noScore && data.trendData ? { ...data.trendData, scores: [] } : data.trendData;
 
   // Calculate comparison chart data if in comparison mode
   const compareChartData = isComparison
-    ? calculateChartData(data.comparison!.compareJsonData as Record<string, unknown>)
+    ? stripScores(
+        calculateChartData(data.comparison!.compareJsonData as Record<string, unknown>),
+        noScore,
+      )
     : null;
 
   // Create minimal data for CSV exports
@@ -522,7 +536,7 @@ function getScripts(data: ReportSectionData) {
             { text: 'Meta Tag Guide', url: 'https://moz.com/learn/seo/meta-description' }
           ]
         },
-        'Security Score': {
+${noScore ? '' : `        'Security Score': {
           name: 'Security Score',
           description: 'Overall security posture based on headers, HTTPS, cookies, and XSS protection.',
           threshold: '≥ 70/100',
@@ -570,7 +584,7 @@ function getScripts(data: ReportSectionData) {
             { text: 'Writing for SEO', url: 'https://moz.com/learn/seo/on-page-factors' }
           ]
         },
-        'Readability': {
+`}        'Readability': {
           name: 'Flesch Reading Ease',
           description: 'Measures how easy your content is to read (0-100, higher = easier).',
           threshold: '60-70',
@@ -1688,7 +1702,7 @@ function getScripts(data: ReportSectionData) {
               if (isComparison && compareSummaryData) {
                   const rows = [
                       ['Metric', originLabel, compareLabel, 'Delta'],
-                      ['Overall SEO Score', summaryData.overallScore || 0, compareSummaryData.overallScore || 0, (summaryData.overallScore || 0) - (compareSummaryData.overallScore || 0)],
+                      ${noScore ? '' : "['Overall SEO Score', summaryData.overallScore || 0, compareSummaryData.overallScore || 0, (summaryData.overallScore || 0) - (compareSummaryData.overallScore || 0)],"}
                       ['Total Issues', summaryData.totalIssues || 0, compareSummaryData.totalIssues || 0, (summaryData.totalIssues || 0) - (compareSummaryData.totalIssues || 0)],
                       ['Critical Issues', summaryData.criticalCount || 0, compareSummaryData.criticalCount || 0, (summaryData.criticalCount || 0) - (compareSummaryData.criticalCount || 0)],
                       ['High Issues', summaryData.highCount || 0, compareSummaryData.highCount || 0, (summaryData.highCount || 0) - (compareSummaryData.highCount || 0)],
@@ -1709,7 +1723,7 @@ function getScripts(data: ReportSectionData) {
               } else {
                   const rows = [
                       ['Metric', 'Value'],
-                      ['Overall SEO Score', summaryData.overallScore || 0],
+                      ${noScore ? '' : "['Overall SEO Score', summaryData.overallScore || 0],"}
                       ['Total Issues', summaryData.totalIssues || 0],
                       ['Critical Issues', summaryData.criticalCount || 0],
                       ['High Issues', summaryData.highCount || 0],
@@ -1747,7 +1761,7 @@ function getScripts(data: ReportSectionData) {
       function copyScoreSummary() {
           var summary = ${safeJsonStringify(chartData.summary)};
           var text = 'Audit report: ${domainName}\\n' +
-              'Score: ' + (summary.overallScore || 0) + '/100\\n' +
+              ${noScore ? '' : "'Score: ' + (summary.overallScore || 0) + '/100\\n' +"}
               'Issues: ' + (summary.totalIssues || 0) + ' (' +
               (summary.criticalCount || 0) + ' critical, ' +
               (summary.highCount || 0) + ' high)\\n' +
@@ -1773,8 +1787,7 @@ function getScripts(data: ReportSectionData) {
           lines.push('');
           lines.push('Generated: ' + new Date().toLocaleString());
           lines.push('');
-          lines.push('## Score: ' + (summary.overallScore || 0) + '/100');
-          lines.push('');
+          ${noScore ? '' : "lines.push('## Score: ' + (summary.overallScore || 0) + '/100');\n          lines.push('');"}
           if (summary.categoryScores) {
               lines.push('### Category Scores');
               lines.push('| Category | Score |');
@@ -2990,7 +3003,7 @@ function getScripts(data: ReportSectionData) {
           var high = issues[2] ? issues[2].textContent.trim() : '0';
 
           var text = 'Audit report: ' + domainText + '\\n' +
-              'Score: ' + scoreVal + '/100\\n' +
+              (score ? 'Score: ' + scoreVal + '/100\\n' : '') +
               'Issues: ' + totalIssues + ' total (' + critical + ' critical, ' + high + ' high)\\n' +
               'Generated: ' + new Date().toLocaleDateString();
 

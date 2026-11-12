@@ -15,6 +15,7 @@ import {
   applyConfigToConstants,
   getConfigSummary,
   resolveVisual,
+  resolveAgentic,
   batchSiteOptions,
 } from './lib/config-loader';
 import * as constants from './lib/constants';
@@ -373,6 +374,7 @@ async function audit() {
     );
     if (args.perf) console.log(`📊 Performance metrics: enabled`);
     if (resolveVisual(args.visual, config)) console.log(`🖼️  Visual (UI defect) checks: enabled`);
+    if (!resolveAgentic(args.agentic, config)) console.log(`🤖 Agentic browsing checks: disabled`);
     if (args.limit) console.log(`🔢 Page limit: ${args.limit}`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
 
@@ -442,6 +444,7 @@ async function audit() {
       evidence: args.evidence,
       evidenceCap: args.evidenceCap,
       visual: resolveVisual(args.visual, config),
+      agentic: resolveAgentic(args.agentic, config),
     });
     _seoInstance = seo;
 

@@ -12,6 +12,7 @@ import { ReportDataProcessor } from './lib/reports/data-processor';
 import { FileManager } from './lib/storage/file-manager';
 import { computePageCounts, type PageCounts } from './lib/utils/page-counts';
 import { escapeHtml } from './lib/reports/html-utils';
+import { getAgenticBrowsingSection, resolveAgenticState } from './lib/reports/sections/agentic-browsing';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
 import { categorize, VISUAL_FINDING_MESSAGES } from './lib/phase2/categorize';
 import { auditTypeLabel, matchesChecks, type CheckName, type HtmlSectionId } from './lib/presets';
@@ -105,6 +106,16 @@ function readVisualFlag(file: string): boolean {
     return metadata?.visual === true;
   } catch {
     return false;
+  }
+}
+
+/** The run's `agentic` metadata flag; undefined when the metadata is missing or predates the flag. */
+function readAgenticFlag(file: string): boolean | undefined {
+  try {
+    const metadata = FileManager.readJsonFile(path.join(path.dirname(file), 'metadata.json.gz')) as { agentic?: unknown } | null;
+    return typeof metadata?.agentic === 'boolean' ? metadata.agentic : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -252,6 +263,15 @@ function generateHTML(
     noScore: selection.noScore === true,
   };
 
+  const agenticAnalysis = (jsonData as { analysis?: { details?: Record<string, AnalysisDetail>; summary?: { categoryScores?: { agentic?: number } } } }).analysis;
+  const agenticHtml = isComparison || loadError || (selection.checks && !selection.checks.includes('agentic'))
+    ? ''
+    : getAgenticBrowsingSection(
+        resolveAgenticState(readAgenticFlag(file), rawPageData.pages as Record<string, PageInfo> | undefined),
+        agenticAnalysis?.details ?? {},
+        selection.noScore ? undefined : agenticAnalysis?.summary?.categoryScores?.agentic,
+      );
+
   const bodyFragments: Record<HtmlSectionId, () => string> = {
     history: () => getHistoricalProgress(sectionData),
     'executive-summary': () => `<div id="executive-summary">
@@ -259,6 +279,7 @@ function generateHTML(
           </div>`,
     'issues-detail': () => `<div id="issues-detail">
           ${getIssuesDetail(sectionData)}
+          ${agenticHtml}
           </div>`,
     performance: () => `<div id="performance">
           ${getPerformanceStats(sectionData)}

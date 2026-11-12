@@ -15,7 +15,7 @@
  * with severity-based fallback for unknown titles.
  */
 
-import { SCORING } from '../constants';
+import { SCORING, AGENTIC_FINDING_MESSAGES } from '../constants';
 import { stripIssueSeverity, compareExamplesWorstFirst, blendOverallScore } from '../utils';
 import { EXTENDED_FIX_RECOMMENDATIONS } from './fix-recommendations-extended';
 import { logNormalScore, urlPassScore, mean } from './methodologies';
@@ -28,7 +28,62 @@ import type {
   AuditSummary,
   CategoryScores,
   QuickWinFull,
+  AgenticCoverage,
 } from '../types';
+
+type AgenticChecks = Record<string, { passed?: boolean } | undefined>;
+interface AgenticPage {
+  agentic?: { checks?: AgenticChecks; computedHintsUnavailable?: boolean };
+}
+
+/** Weight of the per-page checks in the agentic score; llms.txt (site-level) carries the rest. */
+export const AGENTIC_PER_PAGE_WEIGHT = 0.8;
+
+function agenticPages(pages: Record<string, PageInfo> | undefined): AgenticPage[] {
+  return (Object.values(pages ?? {}) as AgenticPage[]).filter(
+    (p) => typeof p === 'object' && p !== null && typeof p.agentic?.checks === 'object' && p.agentic.checks !== null,
+  );
+}
+
+/** Pages that ran the agentic checks, out of all analyzed pages; null when none did. */
+export function agenticCoverage(pages: Record<string, PageInfo> | undefined): AgenticCoverage | null {
+  const covered = agenticPages(pages);
+  if (covered.length === 0) return null;
+  return {
+    covered: covered.length,
+    total: Object.keys(pages ?? {}).length,
+    hintsLimited: covered.filter((p) => p.agentic?.computedHintsUnavailable === true).length,
+  };
+}
+
+/**
+ * 0.8 × mean per-page pass ratio of the four page checks + 0.2 × llms.txt
+ * (valid 100, invalid 50, missing 0). Null when no page carries agentic data.
+ */
+export function scoreAgentic(
+  pages: Record<string, PageInfo> | undefined,
+  details: Record<string, unknown> | undefined,
+): number | null {
+  const covered = agenticPages(pages);
+  if (covered.length === 0) return null;
+  const ratios = covered.map((p) => {
+    const checks = Object.values(p.agentic?.checks ?? {}).filter((c) => c !== undefined);
+    return checks.length === 0 ? 1 : checks.filter((c) => c?.passed !== false).length / checks.length;
+  });
+  const perPage = (ratios.reduce((a, b) => a + b, 0) / ratios.length) * 100;
+  const messages = Object.keys(details ?? {}).map((m) =>
+    stripIssueSeverity(m)
+      .replace(/<[^>]*>/g, '')
+      .trim(),
+  );
+  const has = (msg: string) => messages.some((m) => m.startsWith(msg));
+  const llms = has(AGENTIC_FINDING_MESSAGES.llmsTxtMissing.message)
+    ? 0
+    : has(AGENTIC_FINDING_MESSAGES.llmsTxtInvalid.message)
+      ? 50
+      : 100;
+  return Math.round(AGENTIC_PER_PAGE_WEIGHT * perPage + (1 - AGENTIC_PER_PAGE_WEIGHT) * llms);
+}
 
 interface EnrichedIssue {
   title: string;
@@ -64,6 +119,7 @@ class ScoreCalculator {
 
     const categoryScores = this.calculateCategoryScores(analysisData, pages);
     const totalPages = pageData.totalWithoutError + pageData.totalWithError;
+    const coverage = agenticCoverage(pages);
 
     return {
       totalIssues: criticalCount + highCount + mediumCount + lowCount,
@@ -75,6 +131,7 @@ class ScoreCalculator {
       overallScore: this.calculateOverallScore(analysisData, pages, categoryScores),
       passRate: totalPages > 0 ? Math.round((pageData.totalWithoutError / totalPages) * 100) : 0,
       quickWins: this.identifyQuickWins(analysisData.details),
+      ...(coverage && { agenticCoverage: coverage }),
     };
   }
 
@@ -95,13 +152,15 @@ class ScoreCalculator {
     const totalPages = Math.max(pageArray.length, 1);
     const issues = enrichIssues(analysisData);
 
-    return {
+    const scores: CategoryScores = {
       seo: roundScore(scoreFromUrlPass(issues, 'seo', totalPages)),
       technical: roundScore(scoreFromUrlPass(issues, 'technical', totalPages)),
       performance: roundScore(scorePerformance(pageArray, issues, totalPages)),
       accessibility: roundScore(scoreAccessibility(pageArray)),
       security: roundScore(scoreSecurity(pageArray)),
     };
+    const agentic = scoreAgentic(pages, analysisData.details);
+    return agentic === null ? scores : { ...scores, agentic };
   }
 
   static identifyQuickWins(issueDetails: Record<string, AnalysisDetail>): QuickWinFull[] {

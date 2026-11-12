@@ -38,7 +38,7 @@ Findings are grouped and ranked by category before anything else. Priority order
 (highest first):
 
 ```
-SEO  >  Performance  >  UX  >  Privacy/Security  >  Accessibility  >  Technical
+SEO  >  Performance  >  UX  >  Privacy/Security  >  Accessibility  >  Agentic Browsing  >  Technical
 ```
 
 - Defined by `SECTION_ORDER` → `SECTION_RANK` in `lib/phase2/phase2-runner.ts`.
@@ -84,6 +84,17 @@ than expected, check its category first. Notably, these are **SEO**, not the
 `technical` catch-all: thin/insufficient content, E-E-A-T / author / YMYL
 signals, and crawl-budget waste.
 
+Agentic-browsing findings (accessible name, unlabeled click target, form label,
+hover-only content, llms.txt) always route to the **Agentic Browsing** section —
+`isAgenticFinding` wins before the keyword rules, so `llms.txt` is no longer
+under SEO and form labels are not under Accessibility. The section appears only
+when the run's `agentic` metadata is not `false` and some page carries agentic
+data; it shows a clean-state note when every page ran the checks with no
+finding, and a coverage note ("Agentic checks ran on N of M pages", "Hover-only
+check limited to inline styles on N pages") otherwise. Its state is persisted in
+`phase2-state.json` (`agentic`) so a Phase 3 re-render shows the same section; an
+older state file without the key renders no Agentic notes.
+
 ### Presets: section selection and check filtering
 
 A role or custom preset (`--preset=sales|marketing|seo|custom`, see
@@ -118,6 +129,10 @@ is ranked, categorized or de-duplicated.
 - The HTML issues table (main and comparison) shows the first 10 issues after
   the severity/impact sort; the rest are hidden behind a "Show all (N)" toggle.
   A severity filter shows every issue of that severity; print shows all rows.
+- The Agentic Browsing block (`lib/reports/sections/agentic-browsing.ts`) sits at
+  the end of the Issues section, with its category score unless `--no-score`.
+  The agentic score is shown beside the other categories but is not part of the
+  overall blend.
 
 ## 5. De-duplication
 

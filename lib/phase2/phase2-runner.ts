@@ -38,6 +38,13 @@ import {
   type ScoredCategory,
 } from './score-impact';
 import { detectAnomalies, type Anomaly } from './llm-anomaly';
+import {
+  AGENTIC_SECTION_TITLE,
+  agenticMarkdownNote,
+  agenticStateFromSummary,
+  type AgenticReportState,
+} from '../reports/sections/agentic-browsing';
+import type { AgenticCoverage } from '../types';
 import { generateSectionAnalysis } from './llm-narrative';
 import { verifyFindings } from './llm-verify';
 import { isClaudeCliAvailable } from './claude-cli';
@@ -86,11 +93,12 @@ const SECTION_TITLES: Record<Section, string> = {
   accessibility: 'Accessibility Audit',
   ux: 'UX / UI Audit',
   technical: 'Common Problems',
+  agentic: AGENTIC_SECTION_TITLE,
 };
 
 // Section order reflects the audit's stated priorities: SEO, Performance and
 // UX first, then the supporting categories.
-const SECTION_ORDER: Section[] = ['seo', 'performance', 'ux', 'privacy', 'accessibility', 'technical'];
+const SECTION_ORDER: Section[] = ['seo', 'performance', 'ux', 'privacy', 'accessibility', 'agentic', 'technical'];
 
 // The scored category each report section represents, for the header
 // `current → projected` annotation. `privacy` maps to Security (GDPR/cookie
@@ -422,6 +430,8 @@ export interface ReportSelection {
   checks?: CheckName[];
   /** Preset the audit ran with; `undefined` ⇒ "Full audit". */
   preset?: string;
+  /** Agentic checks state; `undefined` ⇒ derived from the artifacts, `null` ⇒ disabled. */
+  agentic?: AgenticReportState | null;
 }
 
 /** Drop HTML tags from analyzer details so the markdown stays clean. */
@@ -520,6 +530,7 @@ function bucketDetails(details: Record<string, IssueDetail>): Record<Section, Ar
     accessibility: [],
     ux: [],
     technical: [],
+    agentic: [],
   };
   for (const [message, detail] of Object.entries(details)) {
     out[categorize(message)].push([message, detail]);
@@ -1424,8 +1435,18 @@ export function buildReportMarkdown(
   for (const sec of selection.sections ?? SECTION_ORDER) {
     parts.push(buildSection(sec, buckets[sec], narratives[sec], isNextjs, sourceMapping, impact, verifyView, screenshots, embedded, probes, siteFacts));
     if (sec === 'ux') parts.push(buildVisualNote(artifacts, buckets.ux.length > 0, selection.checks));
+    if (sec === 'agentic' && (!selection.checks || selection.checks.includes('agentic')))
+      parts.push(agenticMarkdownNote(resolveReportAgentic(artifacts, selection), buckets.agentic.length, buckets.agentic.length > 0));
   }
   return parts.filter(Boolean).join('\n');
+}
+
+/** The agentic state the report renders: the caller's (e.g. from phase2-state.json), else the run's own. */
+export function resolveReportAgentic(artifacts: AuditArtifacts, selection: ReportSelection): AgenticReportState | null {
+  if (selection.agentic !== undefined) return selection.agentic;
+  const summary = artifacts.analysis.summary as { agenticCoverage?: AgenticCoverage } | undefined;
+  const metadata = artifacts.metadata as { agentic?: unknown };
+  return agenticStateFromSummary(metadata.agentic, summary?.agenticCoverage, artifacts.manifest.progress?.processedPages?.length ?? 0);
 }
 
 export const NO_UI_ISSUES_NOTE = '**No UI issues found.** The visual check (`--visual`) found no broken images or media, unrendered template text, placeholder copy, garbled characters or clipped text.';
@@ -2780,6 +2801,8 @@ export interface Phase2State {
   checks?: CheckName[];
   /** Preset the audit ran with; absent ⇒ "Full audit". */
   preset?: string;
+  /** Agentic checks state; absent ⇒ (older state file) no Agentic section notes. */
+  agentic?: AgenticReportState | null;
 }
 
 /** Persist the {@link Phase2State} boundary artifact next to the report. */
@@ -2801,6 +2824,7 @@ function writePhase2State(
     ...(selection.sections && { sections: selection.sections }),
     ...(selection.checks && { checks: selection.checks }),
     ...(selection.preset && { preset: selection.preset }),
+    agentic: selection.agentic ?? null,
   };
   fs.writeFileSync(path.join(runDir, 'phase2-state.json'), JSON.stringify(state, null, 2));
 }
@@ -2838,6 +2862,7 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
   // the live verify pass operate on the same consolidated set.
   const anomalies = consolidateAnomalies(rawAnomalies);
   const selection: ReportSelection = { sections: options.sections, checks: options.checks, preset: options.preset };
+  selection.agentic = resolveReportAgentic(artifacts, selection);
   const markdown = buildReportMarkdown(
     artifacts,
     narratives,

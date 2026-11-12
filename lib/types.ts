@@ -1339,6 +1339,16 @@ export interface CategoryScores {
   accessibility: number;
   security: number;
   technical: number;
+  /** Agentic Browsing; shown beside the others but kept out of the overall blend. Absent when no page ran the checks. */
+  agentic?: number;
+}
+
+/** How many analyzed pages carry agentic-browsing data. */
+export interface AgenticCoverage {
+  covered: number;
+  total: number;
+  /** Pages whose computed-style hints were unavailable, so the hover-only check read inline styles only. */
+  hintsLimited: number;
 }
 
 export interface QuickWin {
@@ -1360,6 +1370,8 @@ export interface AuditSummary {
   overallScore: number;
   passRate: number;
   quickWins: QuickWinFull[];
+  /** Present when at least one page ran the agentic checks. */
+  agenticCoverage?: AgenticCoverage;
 }
 
 // ─── Configuration ───────────────────────────────────────────────────────────

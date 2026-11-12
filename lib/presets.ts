@@ -1,4 +1,5 @@
 import type { Section } from './phase2/categorize';
+import { AGENTIC_FINDING_PATTERN } from './analyzers/agentic/agentic-checks';
 
 export const SPEED_PRESETS = ['quick', 'standard', 'deep'] as const;
 export const ROLE_PRESETS = ['sales', 'marketing', 'seo', 'custom'] as const;
@@ -41,6 +42,7 @@ export const CHECK_NAMES = [
   'technology',
   'analytics',
   'visual',
+  'agentic',
 ] as const;
 export type CheckName = (typeof CHECK_NAMES)[number];
 
@@ -94,7 +96,7 @@ export const ROLE_DEFINITIONS: Record<Exclude<RolePreset, 'custom'>, RoleDefinit
   },
   marketing: {
     sections: ['executive-summary', 'top-issues', 'seo', 'content-insights', 'cta', 'ux', 'performance', 'privacy'],
-    checks: ['seo', 'content', 'ux', 'cta', 'performance', 'privacy', 'analytics', 'visual'],
+    checks: ['seo', 'content', 'ux', 'cta', 'performance', 'privacy', 'analytics', 'visual', 'agentic'],
     runOptions: {},
   },
   seo: {
@@ -237,6 +239,7 @@ const CHECK_KEYWORDS: ReadonlyArray<[CheckName, RegExp]> = [
     'visual',
     /\b(broken image|failed image|upscaled|template token|placeholder text|lorem|mojibake|garbled|clipped)/i,
   ],
+  ['agentic', AGENTIC_FINDING_PATTERN],
 ];
 
 /** Check groups a finding belongs to: its report section plus any keyword-matched families. */

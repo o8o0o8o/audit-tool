@@ -43,6 +43,7 @@ import {
   validateAdsTxtLines,
   type TextFileFetch,
 } from '../analyzers/seo/site-text-files-analyzer';
+import { isAgenticFinding } from '../analyzers/agentic/agentic-checks';
 
 // SSRF guard for the standalone --verify re-fetch: the report's example URLs are
 // re-fetched live, so a private/internal host parsed out of an old report must
@@ -1408,6 +1409,14 @@ const CHECKERS: LiveChecker[] = [
     match: isVisualFinding,
     noFetch: true,
     check: () => unverifiable('rendered-page defect — not re-checkable live'),
+  },
+  {
+    // Agentic-browsing findings come from the rendered DOM and computed styles,
+    // which a plain fetch cannot re-observe, so they are never refuted.
+    kind: 'agentic',
+    match: isAgenticFinding,
+    noFetch: true,
+    check: () => unverifiable('agentic-browsing check — not re-checkable live'),
   },
   {
     kind: 'paginated-canonical',

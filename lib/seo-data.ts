@@ -24,6 +24,16 @@ import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { SiteTextFilesAnalyzer } from './analyzers/seo/site-text-files-analyzer';
 import { parse } from 'node-html-parser';
 
+/**
+ * On `--proceed` the checkpoint's pages decide whether agentic checks keep running,
+ * so every page in one audit is checked the same way; an empty checkpoint keeps the requested value.
+ */
+export function resolveResumeAgentic(requested: boolean, pages: Record<string, unknown> | undefined): boolean {
+  const restored = Object.values(pages ?? {});
+  if (restored.length === 0) return requested;
+  return restored.some((page) => typeof page === 'object' && page !== null && 'agentic' in page);
+}
+
 class SEOData {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Results object is intentionally dynamic; analyzers attach arbitrary keys at runtime
   #results: Record<string, any>;
@@ -46,6 +56,7 @@ class SEOData {
   #evidence: boolean;
   #evidenceCap: number;
   #visual: boolean;
+  #agentic: boolean;
 
   origin: string | null;
   domainName: string | null;
@@ -63,7 +74,7 @@ class SEOData {
     saveHtml = false,
     concurrency = 5,
     sitemapFile: string | null = null,
-    options: SEODataOptions = {},
+    options: SEODataOptions & { agentic?: boolean } = {},
   ) {
     this.#sitemapFile = sitemapFile;
 
@@ -88,6 +99,7 @@ class SEOData {
     this.#evidence = options.evidence ?? true;
     this.#evidenceCap = options.evidenceCap ?? 10;
     this.#visual = options.visual ?? false;
+    this.#agentic = options.agentic ?? true;
 
     // Initialize incoming links tracking (Map<target, Set<source>>)
     this.#incomingLinksTracking = new Map();
@@ -108,6 +120,7 @@ class SEOData {
       sitemaps: { urls: {}, total: 0 },
       isMultiLang: false,
       visual: this.#visual,
+      agentic: this.#agentic,
       pageData: {
         pages: {},
         processedPages: new Set(),
@@ -192,6 +205,7 @@ class SEOData {
         evidenceDir: this.#evidence ? path.join(this.resultsDir, 'evidence') : undefined,
         evidenceCap: this.#evidenceCap,
         visual: this.#visual,
+        agentic: this.#agentic,
       },
       {
         saveError: this.saveError.bind(this),
@@ -322,6 +336,10 @@ class SEOData {
       this.#visual = visual;
       this.#results.visual = visual;
       if (this.#crawlerEngine) this.#crawlerEngine.visual = visual;
+      const agentic = resolveResumeAgentic(this.#agentic, restored.results.pageData?.pages);
+      this.#agentic = agentic;
+      this.#results.agentic = agentic;
+      if (this.#crawlerEngine) this.#crawlerEngine.agentic = agentic;
     } catch (error: unknown) {
       const err = error as Error;
       console.error(`\n❌ ERROR restoring progress:`, err.message);
@@ -365,9 +383,11 @@ class SEOData {
     // Check for llms.txt
     try {
       const llmsResult = await AEOAnalyzer.analyzeLlmsTxt(this.origin ?? '');
-      llmsResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
-      llmsResult.warnings.forEach((w) => this.saveError(w.message!, w.detail!, w.severity));
       this.#results.aeo.llmsTxt = llmsResult.info;
+      if (this.#agentic)
+        AuditOrchestrator.reportLlmsTxtFinding(llmsResult.info, this.origin ?? '', (m, d, sev) =>
+          this.saveError(m, d ?? '', sev),
+        );
     } catch (e: unknown) {
       console.log('llms.txt check skipped:', (e as Error).message);
     }

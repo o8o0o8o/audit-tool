@@ -344,10 +344,12 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   accessibility: 'WCAG compliance: ARIA labels, form labels, color contrast, keyboard navigation, and landmarks.',
   security: 'Security posture: HTTPS, security headers, CSP, cookie flags, and XSS prevention.',
   technical: 'Technical implementation: redirects, URL structure, caching, CDN, and Service Worker.',
+  agentic:
+    'Agentic Browsing: accessible names, form labels, click targets, hover-only content and llms.txt. Not part of the overall score.',
 };
 
 /** Ordered list of scoring category keys */
-const CATEGORY_KEYS = ['seo', 'performance', 'accessibility', 'security', 'technical'] as const;
+const CATEGORY_KEYS = ['seo', 'performance', 'accessibility', 'security', 'technical', 'agentic'] as const;
 
 /** Human-readable names for each category */
 const CATEGORY_NAMES: Record<string, string> = {
@@ -356,6 +358,7 @@ const CATEGORY_NAMES: Record<string, string> = {
   accessibility: 'Accessibility',
   security: 'Security',
   technical: 'Technical',
+  agentic: 'Agentic Browsing',
 };
 
 /** Get CSS class for a progress bar based on score */
@@ -367,11 +370,14 @@ function getProgressBarClass(score: number): string {
  * Generate single-origin category progress bars
  */
 function getCategoryBars(categoryScores: Partial<CategoryScores>) {
-  const categories = CATEGORY_KEYS.map((key) => ({
-    key,
-    name: CATEGORY_NAMES[key],
-    score: categoryScores[key] ?? 0,
-  }));
+  // Agentic is optional: a run without it has no bar rather than a false 0.
+  const categories = CATEGORY_KEYS.filter((key) => key !== 'agentic' || categoryScores.agentic !== undefined).map(
+    (key) => ({
+      key,
+      name: CATEGORY_NAMES[key],
+      score: categoryScores[key] ?? 0,
+    }),
+  );
 
   return categories
     .map((cat) => {
@@ -403,7 +409,10 @@ function getDualCategoryBars(
   _originLabel: string,
   _compareLabel: string,
 ) {
-  return CATEGORY_KEYS.map((key) => {
+  const keys = CATEGORY_KEYS.filter(
+    (key) => key !== 'agentic' || (originScores.agentic !== undefined && compareScores.agentic !== undefined),
+  );
+  return keys.map((key) => {
     const name = CATEGORY_NAMES[key];
     const originScore = originScores[key] || 0;
     const compareScore = compareScores[key] || 0;

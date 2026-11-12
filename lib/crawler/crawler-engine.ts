@@ -120,6 +120,7 @@ import type { Issue } from '../types';
 class CrawlerEngine {
   #options: CrawlerInternalOptions;
   #visual: boolean;
+  #agentic: boolean;
   #callbacks: CrawlerCallbacks;
   #failureTracker: FailureTracker;
   #backoffState: Map<string, BackoffState>;
@@ -217,6 +218,7 @@ class CrawlerEngine {
    */
   constructor(
     options: CrawlerEngineOptions & {
+      agentic?: boolean;
       config?: Record<string, unknown>;
       queryParams?: QueryParamConfig;
       cruxApiKey?: string | null;
@@ -302,6 +304,7 @@ class CrawlerEngine {
         },
     };
     this.#visual = options.visual ?? false;
+    this.#agentic = options.agentic ?? true;
     this.#callbacks = callbacks;
 
     // Initialize circuit breaker state
@@ -329,6 +332,15 @@ class CrawlerEngine {
   /** Set before crawling starts; on `--proceed` the checkpoint's value replaces the CLI one. */
   set visual(value: boolean) {
     this.#visual = value;
+  }
+
+  get agentic(): boolean {
+    return this.#agentic;
+  }
+
+  /** Set before crawling starts; on `--proceed` the checkpoint's pages decide. */
+  set agentic(value: boolean) {
+    this.#agentic = value;
   }
 
   /**
@@ -1485,6 +1497,7 @@ class CrawlerEngine {
         this.#reportIssue,
         servedHtml,
         this.#visual,
+        this.#agentic,
       );
     } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page

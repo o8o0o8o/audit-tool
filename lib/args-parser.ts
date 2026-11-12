@@ -3,7 +3,10 @@
  * Centralized argument parsing to avoid duplication
  */
 
-import type { ParsedArgs } from './types';
+import type { ParsedArgs as BaseParsedArgs } from './types';
+
+/** `--agentic` / `--no-agentic`; null defers to `.seoauditrc` (default on). */
+export type ParsedArgs = BaseParsedArgs & { agentic: boolean | null };
 import { isPresetName, parseCsvList, unknownPresetMessage } from './presets';
 import * as os from 'os';
 
@@ -89,6 +92,7 @@ function parseArgs(args: string[]): ParsedArgs {
     llmVerify: false, // Revalidate findings + drop confirmed duplicates/false positives before the final report
     verify: false, // Phase 3 verification — re-check each finding's first example (live by default; crawl data with SEO_AUDIT_VERIFY_OFFLINE=1), emit a separate verified report
     visual: null as boolean | null, // --visual / --no-visual; null defers to `.seoauditrc` (default off)
+    agentic: null,
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
@@ -152,6 +156,10 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.visual = true;
     } else if (arg === '--no-visual') {
       parsed.visual = false;
+    } else if (arg === '--agentic') {
+      parsed.agentic = true;
+    } else if (arg === '--no-agentic') {
+      parsed.agentic = false;
     } else if (arg === '--no-score') {
       parsed.noScore = true;
     } else if (arg === '--score') {
@@ -291,5 +299,12 @@ export { parseArgs, calculateSafeConcurrency };
 export function visualChildArgs(visual: boolean | null | undefined): string[] {
   if (visual === true) return ['--visual'];
   if (visual === false) return ['--no-visual'];
+  return [];
+}
+
+/** Child-process flags that carry an explicit `--agentic` / `--no-agentic` choice across a `start.ts` restart. */
+export function agenticChildArgs(agentic: boolean | null | undefined): string[] {
+  if (agentic === true) return ['--agentic'];
+  if (agentic === false) return ['--no-agentic'];
   return [];
 }

@@ -118,6 +118,7 @@ import { AnchorTextAnalyzer } from '../analyzers/seo/anchor-text-analyzer';
 import { ExternalLinksAnalyzer } from '../analyzers/seo/external-links-analyzer';
 import { CrawlBudgetAnalyzer } from '../analyzers/seo/crawl-budget-analyzer';
 import { AEOAnalyzer } from '../analyzers/seo/aeo-analyzer';
+import { llmsTxtFinding, type LlmsTxtInfo } from '../analyzers/agentic/agentic-checks';
 import { ResponseHeaderAnalyzer } from '../analyzers/seo/response-header-analyzer';
 import { CTADetectorAnalyzer } from '../analyzers/content/cta-detector-analyzer';
 import { LanguageDetectionAnalyzer } from '../analyzers/content/language-detection-analyzer';
@@ -461,6 +462,12 @@ class AuditOrchestrator {
       console.log(`Found ${orphanedPagesCount} orphaned pages (only in sitemap, no incoming links)`);
     }
   }
+  /** Emits the single site-level llms.txt finding (agentic family), if any. */
+  static reportLlmsTxtFinding(info: LlmsTxtInfo | undefined, origin: string, saveError: SaveErrorFn) {
+    const finding = llmsTxtFinding(info, origin);
+    if (finding) saveError(finding.message ?? '', finding.detail, finding.severity);
+  }
+
   /**
    * Run all site-wide validations
    * @param {Object} pageData - Page data object with pages

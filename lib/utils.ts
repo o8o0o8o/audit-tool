@@ -595,7 +595,9 @@ function getHeader(headers: Record<string, string>, key: string): string | undef
  * Parse JSON-LD schemas from a parsed HTML page.
  * Returns an array of parsed schema objects. Invalid JSON-LD blocks are skipped.
  */
-function parseJsonLdSchemas(parsedPage: { querySelectorAll(selector: string): { textContent: string }[] }): Record<string, unknown>[] {
+function parseJsonLdSchemas(parsedPage: {
+  querySelectorAll(selector: string): { textContent: string }[];
+}): Record<string, unknown>[] {
   const schemas: Record<string, unknown>[] = [];
   const scripts = parsedPage.querySelectorAll('script[type="application/ld+json"]');
   for (const script of scripts) {
@@ -689,11 +691,7 @@ function formatUrlList(urls: string[], maxItems?: number): string {
  * Fetch a URL with an automatic timeout using AbortController.
  * Returns the fetch Response. Throws on timeout or network error.
  */
-async function fetchWithTimeout(
-  url: string,
-  timeout: number,
-  options: RequestInit = {},
-): Promise<Response> {
+async function fetchWithTimeout(url: string, timeout: number, options: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
   try {
@@ -740,7 +738,9 @@ async function readResponseTextCapped(response: Response, maxBytes: number): Pro
       /* already released */
     }
   }
-  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf-8').slice(0, maxBytes);
+  return Buffer.concat(chunks.map((c) => Buffer.from(c)))
+    .toString('utf-8')
+    .slice(0, maxBytes);
 }
 
 /**
@@ -887,7 +887,10 @@ function isNonContentPage(url: string): boolean {
  * Detect important page links (about, contact, privacy, terms, etc.)
  * from parsed HTML. Used by E-E-A-T, cookie consent, and analytics analyzers.
  */
-function detectImportantPageLinks(parsedPage: { querySelectorAll(selector: string): { getAttribute(name: string): string | undefined | null; textContent: string }[]; text?: string }) {
+function detectImportantPageLinks(parsedPage: {
+  querySelectorAll(selector: string): { getAttribute(name: string): string | undefined | null; textContent: string }[];
+  text?: string;
+}) {
   const links = parsedPage.querySelectorAll('a');
   const result = {
     hasAboutPage: false,
@@ -942,7 +945,13 @@ function detectImportantPageLinks(parsedPage: { querySelectorAll(selector: strin
  * Detect author information from a parsed HTML page.
  * Checks JSON-LD schemas, meta tags, and common CSS selectors.
  */
-function detectAuthorInfo(parsedPage: { querySelector(selector: string): { getAttribute(name: string): string | undefined | null; textContent: string } | null; querySelectorAll(selector: string): { textContent: string }[]; text?: string }) {
+function detectAuthorInfo(parsedPage: {
+  querySelector(
+    selector: string,
+  ): { getAttribute(name: string): string | undefined | null; textContent: string } | null;
+  querySelectorAll(selector: string): { textContent: string }[];
+  text?: string;
+}) {
   const result: { author: string | null; credentials: string[] } = { author: null, credentials: [] };
 
   // Check schema.org author
@@ -1040,7 +1049,10 @@ function jaccardSimilarity(setA: Set<string>, setB: Set<string>): number {
  * Detect lazy loading implementation from a parsed HTML page.
  * Returns info about native or library-based lazy loading, or null if none found.
  */
-function detectLazyLoading(parsedPage: { querySelectorAll(selector: string): unknown[]; toString(): string }): { type: string; count?: number; pattern?: string } | null {
+function detectLazyLoading(parsedPage: {
+  querySelectorAll(selector: string): unknown[];
+  toString(): string;
+}): { type: string; count?: number; pattern?: string } | null {
   // Check for native lazy loading
   const lazyImages = parsedPage.querySelectorAll('img[loading="lazy"]');
   if (lazyImages.length > 0) {
@@ -1106,7 +1118,10 @@ function getOpenCommand(): string {
 /**
  * Check for server-side rendering indicators in a parsed page.
  */
-function hasSSRIndicators(parsedPage: { querySelector(selector: string): { textContent: string } | null; toString(): string }): boolean {
+function hasSSRIndicators(parsedPage: {
+  querySelector(selector: string): { textContent: string } | null;
+  toString(): string;
+}): boolean {
   const mainContent = parsedPage.querySelector('main, article, .content, #content');
   if (mainContent) {
     const text = mainContent.textContent.trim();

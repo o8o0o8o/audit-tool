@@ -31,7 +31,7 @@ The role mapping comes from research into what each audience uses an audit for (
 ### `marketing`
 
 - **Sections, in order:** executive summary → top issues → SEO → content insights → CTAs/conversion → UX → performance → privacy.
-- **Checks:** seo, content, ux, cta, performance, privacy, analytics, `visual`.
+- **Checks:** seo, content, ux, cta, performance, privacy, analytics, `visual`, `agentic`.
 - **Run options:** none — your own flags (`--perf`, `--limit`, …) apply.
 - **Why:** Marketers own traffic and conversion. They need conversion tracking (GA4/GTM, forms, phone/mail clicks), CTA placement, social/Open Graph tags, content quality and freshness, and consent/privacy, because tracking without consent is a marketing liability. SEO is included at the level that affects visibility. Low-level technical, accessibility and source-code findings are dropped.
 
@@ -50,9 +50,11 @@ Valid sections (`REPORT_SECTIONS`):
 `executive-summary`, `technology-stack`, `cta`, `top-issues`, `performance`, `seo`, `privacy`, `accessibility`, `ux`, `technical`, `charts`, `content-insights`, `pages`, `source-code`, `history`.
 
 Valid checks (`CHECK_NAMES`):
-`performance`, `seo`, `accessibility`, `security`, `privacy`, `ux`, `technical`, `content`, `cta`, `technology`, `analytics`, `visual`.
+`performance`, `seo`, `accessibility`, `security`, `privacy`, `ux`, `technical`, `content`, `cta`, `technology`, `analytics`, `visual`, `agentic`.
 
 The broken-media and text-integrity checks only run with `--visual` (or `visual: true` in `.seoauditrc`); no preset turns them on. Their findings go to the UX section (which the `sales`, `marketing` and `seo` presets render), and a clean run shows a "No UI issues found" note there. The upscaled-image checks always run and stay in Performance. `visual` covers broken images and failed image/media requests, images and CSS backgrounds upscaled beyond their natural resolution, unrendered template tokens, lorem ipsum, mojibake and clipped text. It is in the `marketing` and `seo` presets, not in `sales`.
+
+`agentic` covers the agentic-browsing checks, which run by default (`--no-agentic` or `agentic: false` in `.seoauditrc` turns them off): interactive elements without an accessible name, unlabeled click targets, form inputs without a label, hover-only or JS-only content, and a missing or invalid llms.txt. It is in the `marketing` preset and in `seo` (no check filter), not in `sales`. Phase 3 never refutes these findings.
 
 A finding belongs to its report section's group plus every group whose keywords match its message (`findingCheckGroups`). For example, a missing-GA4 finding in UX also belongs to `analytics`. A finding is kept when any of its groups is selected.
 

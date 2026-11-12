@@ -312,10 +312,17 @@ class HistoryManager {
 
     // Compare category scores
     if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
+      // A category missing on either side (e.g. `agentic` absent from an older
+      // snapshot) yields no delta — never a fake `0 → N` jump.
       const deltas: Record<string, number> = {};
-      (['seo', 'performance', 'accessibility', 'security', 'technical'] as const).forEach((cat) => {
-        const oldScore = oldAudit.summary.categoryScores[cat] ?? 0;
-        const newScore = newAudit.summary.categoryScores[cat] ?? 0;
+      const oldScores = oldAudit.summary.categoryScores as Record<string, number | undefined>;
+      const newScores = newAudit.summary.categoryScores as Record<string, number | undefined>;
+      const cats = new Set([...Object.keys(oldScores), ...Object.keys(newScores)]);
+      cats.forEach((cat) => {
+        const oldScore = oldScores[cat];
+        const newScore = newScores[cat];
+        if (typeof oldScore !== 'number' || typeof newScore !== 'number') return;
+        if (!Number.isFinite(oldScore) || !Number.isFinite(newScore)) return;
         deltas[cat] = newScore - oldScore;
       });
       comparison.categoryDeltas = deltas;

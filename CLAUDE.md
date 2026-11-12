@@ -104,6 +104,7 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 - `--competitors=<csv|file>` - competitor hosts for `--content-research` (optional; LLM discovers when omitted; also `competitors: []` in `.seoauditrc`)
 - `--phase2` / `--no-phase2` - curated PDF report (on by default)
 - `--visual` - run the visual (UI defect) analyzers: broken images/media, template tokens, lorem ipsum, mojibake, clipped text (opt-in)
+- `--no-agentic` - skip the agentic browsing checks (accessible name, click target role, form label, hover-only content, llms.txt); on by default
 - `--no-score` - strip scores and the scoring-rules explanation from the HTML report and the Phase 2 report (CSV export unchanged); with scores on, every score links to the generated `#score-rules` block (`lib/scoring/scoring-rules.ts`)
 - `--preset=<name>` - `quick|standard|deep` (crawl speed) or role presets `sales|marketing|seo|custom` that also select report sections (in order) and finding groups; `--sections=<csv>` / `--checks=<csv>` build a `custom` one. Defined in `lib/presets.ts`; each preset, its data and rationale are in [`docs/audit-presets.md`](docs/audit-presets.md)
 - `--evidence` / `--no-evidence` / `--evidence-cap=<n>` - per-page evidence capture
@@ -232,6 +233,16 @@ Opt-in via `--visual` (or `visual: true` in `.seoauditrc`; `--no-visual` overrid
 - **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`), lorem ipsum, mojibake, clipped text
 
 Spike notes on screenshot diffing and an LLM vision pass: `docs/visual-checks-spike.md`.
+
+### Agentic Browsing (`agentic` check family)
+
+On by default; `--no-agentic` (or `agentic: false` in `.seoauditrc`) turns it off. `lib/analyzers/agentic/` — findings go to the Agentic Browsing section with its own `agentic` score; Phase 3 never refutes them.
+
+- Interactive elements without an accessible name (HIGH)
+- Unlabeled click targets without an interactive role (MEDIUM)
+- Form inputs without a form label (HIGH)
+- Content reachable only via hover-only or JS-only interactions (MEDIUM)
+- llms.txt missing (LOW) or invalid (MEDIUM) — checked once per site, reusing the AEO fetch
 
 ### Social
 

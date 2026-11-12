@@ -37,6 +37,8 @@ interface ConfigRecord {
   checks?: string[];
   /** Run the visual (UI defect) analyzers; CLI `--visual` / `--no-visual` wins. */
   visual?: boolean;
+  /** Run the agentic-browsing checks (default on); CLI `--agentic` / `--no-agentic` wins. */
+  agentic?: boolean;
   analysis?: {
     similarityThreshold?: number;
     jsUnusedThreshold?: number;
@@ -269,6 +271,7 @@ const CONFIG_SCHEMA = {
   sections: { type: 'array', itemType: 'string' },
   checks: { type: 'array', itemType: 'string' },
   visual: { type: 'boolean' },
+  agentic: { type: 'boolean' },
   analysis: {
     type: 'object',
     allowedKeys: [
@@ -321,6 +324,10 @@ function validateConfig(config: ConfigRecord) {
   if (validated.visual !== undefined && typeof validated.visual !== 'boolean') {
     warnings.push(`Invalid visual: ${String(validated.visual)} (must be true or false)`);
     delete validated.visual;
+  }
+  if (validated.agentic !== undefined && typeof validated.agentic !== 'boolean') {
+    warnings.push(`Invalid agentic: ${String(validated.agentic)} (must be true or false)`);
+    delete validated.agentic;
   }
   for (const key of ['sections', 'checks'] as const) {
     const list = validated[key];
@@ -769,6 +776,7 @@ function generateSampleConfig() {
       },
       excludeUrls: ['/admin/*', '/staging/*', '*.pdf'],
       visual: false,
+      agentic: true,
       report: {
         showQuickWins: true,
         maxQuickWins: 10,
@@ -903,8 +911,15 @@ function resolveVisual(cliVisual: boolean | null | undefined, config: { visual?:
   return config.visual === true;
 }
 
+/** Whether the agentic-browsing checks run: an explicit CLI flag wins, then `.seoauditrc`, else on. */
+function resolveAgentic(cliAgentic: boolean | null | undefined, config: { agentic?: unknown }): boolean {
+  if (typeof cliAgentic === 'boolean') return cliAgentic;
+  return config.agentic !== false;
+}
+
 export {
   resolveVisual,
+  resolveAgentic,
   loadConfig,
   applyConfigToConstants,
   shouldExcludeUrl,
@@ -914,10 +929,21 @@ export {
   DEFAULT_CONFIG,
 };
 
-/** Per-site `SEOData` options for a `--sites` batch run; `visual` follows the CLI flag, then `.seoauditrc`. */
+/** Per-site `SEOData` options for a `--sites` batch run; `visual` and `agentic` follow the CLI flag, then `.seoauditrc`. */
 export function batchSiteOptions(
-  args: { verbose?: boolean; limit?: number | null; visual?: boolean | null; config?: string | null },
+  args: {
+    verbose?: boolean;
+    limit?: number | null;
+    visual?: boolean | null;
+    agentic?: boolean | null;
+    config?: string | null;
+  },
   config: Record<string, unknown> = loadConfig(args.config ?? undefined),
-): { verbose?: boolean; limit: number; visual: boolean } {
-  return { verbose: args.verbose, limit: args.limit ?? 20, visual: resolveVisual(args.visual ?? null, config) };
+): { verbose?: boolean; limit: number; visual: boolean; agentic: boolean } {
+  return {
+    verbose: args.verbose,
+    limit: args.limit ?? 20,
+    visual: resolveVisual(args.visual ?? null, config),
+    agentic: resolveAgentic(args.agentic ?? null, config),
+  };
 }

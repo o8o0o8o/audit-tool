@@ -34,6 +34,33 @@ function generateComparisonHTML(domainName: string, oldIndex: number, newIndex: 
 
 type HistoryAudit = NonNullable<ReturnType<HistoryManager['getAuditByIndex']>>;
 
+/**
+ * One card per category present on either snapshot. A side without a score
+ * (e.g. `agentic` on an older snapshot) is `undefined` and renders `n/a`;
+ * `delta` is only set when the comparison computed one for both sides.
+ */
+function categoryComparisonRows(
+  oldAudit: HistoryAudit,
+  newAudit: HistoryAudit,
+  deltas: Record<string, number>,
+): Array<{ cat: string; oldScore?: number; newScore?: number; delta?: number }> {
+  const score = (scores: unknown, cat: string): number | undefined => {
+    const v = (scores as Record<string, unknown> | undefined)?.[cat];
+    return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  };
+  const cats = new Set([
+    ...Object.keys(deltas),
+    ...Object.keys(oldAudit.summary.categoryScores ?? {}),
+    ...Object.keys(newAudit.summary.categoryScores ?? {}),
+  ]);
+  return [...cats].map((cat) => ({
+    cat,
+    oldScore: score(oldAudit.summary.categoryScores, cat),
+    newScore: score(newAudit.summary.categoryScores, cat),
+    delta: deltas[cat],
+  }));
+}
+
 function buildComparisonHtml(
   domainName: string,
   oldAudit: HistoryAudit,
@@ -400,20 +427,18 @@ function buildComparisonHtml(
         <div class="section">
             <h2>Category Scores <a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a></h2>
             <div class="category-comparison">
-                ${Object.entries(comparison.categoryDeltas)
-                  .map(([cat, delta]: [string, number]) => {
-                    const oldScore = (oldAudit.summary.categoryScores as Record<string, number>)[cat] || 0;
-                    const newScore = (newAudit.summary.categoryScores as Record<string, number>)[cat] || 0;
+                ${categoryComparisonRows(oldAudit, newAudit, comparison.categoryDeltas)
+                  .map(({ cat, oldScore, newScore, delta }) => {
                     return `
                         <div class="category-card">
-                            <div class="category-name">${cat}</div>
+                            <div class="category-name">${escapeHtml(cat)}</div>
                             <div class="metric-comparison" style="font-size: 18px;">
-                                <span class="old-value">${oldScore}</span>
+                                <span class="old-value">${oldScore ?? 'n/a'}</span>
                                 <span class="arrow">→</span>
-                                <span class="new-value">${newScore}</span>
+                                <span class="new-value">${newScore ?? 'n/a'}</span>
                             </div>
-                            <div class="delta ${deltaClass(delta)}" style="margin-top: 8px;">
-                                ${deltaSymbol(delta)}${delta}
+                            <div class="delta ${delta === undefined ? 'neutral' : deltaClass(delta)}" style="margin-top: 8px;">
+                                ${delta === undefined ? 'n/a' : `${deltaSymbol(delta)}${delta}`}
                             </div>
                         </div>
                     `;

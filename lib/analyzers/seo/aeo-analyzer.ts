@@ -28,6 +28,25 @@ interface RobotsDataInput {
   userAgents?: Record<string, { allow: string[]; disallow: string[] }>;
 }
 
+export interface LlmsTxtResult {
+  hasLlmsTxt: boolean;
+  hasLlmsFullTxt: boolean;
+  llmsTxtSize: number;
+  llmsTxtValid: boolean;
+  llmsTxtContent: string | null;
+  status: 'valid' | 'invalid' | 'missing' | 'server-error';
+  problems: string[];
+}
+
+/** An llms.txt needs a `# ` title and at least one Markdown link (`[text](url)`); bare URLs do not count. */
+export function validateLlmsTxt(content: string): Pick<LlmsTxtResult, 'llmsTxtValid' | 'status' | 'problems'> {
+  const problems: string[] = [];
+  if (!/^#\s+.+/m.test(content)) problems.push('no # title heading');
+  if (!/\[[^\]]+\]\([^)\s]+\)/.test(content)) problems.push('no Markdown links');
+  const valid = problems.length === 0;
+  return { llmsTxtValid: valid, status: valid ? 'valid' : 'invalid', problems };
+}
+
 // AI crawler user-agents to check in robots.txt
 const AI_CRAWLERS = [
   { name: 'GPTBot', owner: 'OpenAI (ChatGPT)' },
@@ -409,58 +428,33 @@ class AEOAnalyzer {
   static async analyzeLlmsTxt(origin: string) {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
-    const info = {
+    const info: LlmsTxtResult = {
       hasLlmsTxt: false,
       hasLlmsFullTxt: false,
       llmsTxtSize: 0,
       llmsTxtValid: false,
       llmsTxtContent: null,
+      status: 'missing',
+      problems: [],
     };
 
+    let llmsTxtFetched = false;
     try {
       const response = await fetch(`${origin}/llms.txt`, {
         signal: AbortSignal.timeout(10000),
       });
 
+      llmsTxtFetched = true;
       const contentType = response.headers.get('content-type') ?? '';
-      if (response.ok && contentType.includes('text/')) {
+      if (response.status >= 500) {
+        info.status = 'server-error';
+      } else if (response.ok && contentType.includes('text/')) {
         info.hasLlmsTxt = true;
         const content = await response.text();
         info.llmsTxtSize = content.length;
-
-        // Basic validation: should have a title (# heading) and some content
-        const hasTitle = /^#\s+.+/m.test(content);
-        const hasLinks = /https?:\/\//m.test(content);
-        const hasDescription = content.length > 50;
-
-        info.llmsTxtValid = hasTitle && hasDescription;
-
-        if (!hasTitle) {
-          warnings.push({
-            message: 'llms.txt missing title heading',
-            detail: 'The llms.txt file should start with a # heading describing your site/organization.',
-            severity: SEVERITY.LOW,
-          });
-        }
-
-        if (!hasLinks) {
-          warnings.push({
-            message: 'llms.txt has no links',
-            detail: 'llms.txt should contain links to key pages that help LLMs understand your content.',
-            severity: SEVERITY.LOW,
-          });
-        }
-
-        if (content.length < 50) {
-          warnings.push({
-            message: 'llms.txt is very short',
-            detail: `llms.txt is only ${content.length} characters. Include a description, key pages, and optional context for AI models.`,
-            severity: SEVERITY.LOW,
-          });
-        }
+        Object.assign(info, validateLlmsTxt(content));
       }
 
-      // Check for llms-full.txt
       const fullResponse = await fetch(`${origin}/llms-full.txt`, {
         signal: AbortSignal.timeout(10000),
       });
@@ -469,9 +463,11 @@ class AEOAnalyzer {
         info.hasLlmsFullTxt = true;
       }
     } catch {
-      // Network error or timeout - not critical
+      // Network error or timeout. If llms.txt itself never answered, its absence is unproven.
+      if (!llmsTxtFetched) info.status = 'server-error';
     }
 
+    // llms.txt findings are reported by the agentic browsing family, not as AEO issues.
     return { issues, warnings, info };
   }
 

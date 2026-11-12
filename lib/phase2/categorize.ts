@@ -27,6 +27,16 @@ const PRECEDENCE: Array<{ section: Section; patterns: RegExp[] }> = [
       /\bunhandled\s+(promise\s+)?rejection/i,
       /security\.txt/i,
       /\b(?:app-)?ads\.txt/i,
+      /^(?:SPF |No SPF record|Multiple SPF records|DMARC |No DMARC record|Multiple DMARC records|No DKIM key|MTA-STS |No MTA-STS|No TLS-RPT|No CAA record)/i,
+      /^(?:Git repository exposed|Subversion metadata exposed|\.env file exposed|\.DS_Store file exposed|\.htpasswd file exposed|Backup or database dump|phpinfo\(\) page exposed|Directory listing enabled|Dangling CNAME)/i,
+      /^Outdated JavaScript library with known vulnerabilities/i,
+    ],
+  },
+  {
+    section: 'seo',
+    patterns: [
+      /^Invalid element in HTML head/i,
+      /^Missing pages (?:return|redirect)/i,
     ],
   },
 ];

@@ -10,6 +10,7 @@ import { ErrorAggregator } from '../utils/error-aggregator';
 import type { PageInfo, CrawlProfile } from '../types';
 import { formatBytes } from '../utils';
 import type { FileManager } from '../storage/file-manager';
+import type { SiteChecksData } from '../analyzers/site-checks/site-checks-types';
 
 interface BatchInfo {
   file: string;
@@ -77,6 +78,7 @@ export function buildCheckpointMetadata(results: ProgressResults) {
     cruxData: results.cruxData ?? null,
     crawlProfile: results.crawlProfile ?? null,
     visual: results.visual === true,
+    siteChecks: results.siteChecks ?? null,
   };
 }
 
@@ -88,6 +90,7 @@ export interface ProgressResults {
   cruxData?: unknown;
   crawlProfile?: CrawlProfile | null;
   visual?: boolean;
+  siteChecks?: SiteChecksData | null;
   pageData: {
     pages: Record<string, PageInfo>;
     processedPages: Set<string> | string[];

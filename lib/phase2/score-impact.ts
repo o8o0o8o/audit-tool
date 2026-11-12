@@ -64,6 +64,13 @@ export function categoryLabel(c: ScoredCategory): string {
  */
 const RULES: Array<{ category: ScoredCategory; patterns: RegExp[] }> = [
   {
+    category: 'seo',
+    patterns: [
+      /^Invalid element in HTML head/i,
+      /^Missing pages (?:return|redirect)/i,
+    ],
+  },
+  {
     category: 'technical',
     patterns: [
       /\b(console|JS|JavaScript)\s+errors?\b/i,
@@ -78,6 +85,9 @@ const RULES: Array<{ category: ScoredCategory; patterns: RegExp[] }> = [
     category: 'security',
     patterns: [
       /security\.txt/i,
+      /^(?:SPF |No SPF record|Multiple SPF records|DMARC |No DMARC record|Multiple DMARC records|No DKIM key|MTA-STS |No MTA-STS|No TLS-RPT|No CAA record)/i,
+      /^(?:Git repository exposed|Subversion metadata exposed|\.env file exposed|\.DS_Store file exposed|\.htpasswd file exposed|Backup or database dump|phpinfo\(\) page exposed|Directory listing enabled|Dangling CNAME)/i,
+      /^Outdated JavaScript library with known vulnerabilities/i,
       /security header|Content-Security-Policy|\bCSP\b|X-Frame|X-XSS|X-Content-Type/i,
       /\bHSTS\b|Strict-Transport|Permissions-Policy|Referrer-Policy/i,
       /cross-origin (isolation|opener|embedder)|\bCOOP\b|\bCOEP\b/i,

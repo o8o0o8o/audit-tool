@@ -44,6 +44,7 @@ import {
   type TextFileFetch,
 } from '../analyzers/seo/site-text-files-analyzer';
 import { isAgenticFinding } from '../analyzers/agentic/agentic-checks';
+import { isPageCheckFinding, isSiteCheckFinding } from '../analyzers/site-checks/site-checks-types';
 
 // SSRF guard for the standalone --verify re-fetch: the report's example URLs are
 // re-fetched live, so a private/internal host parsed out of an old report must
@@ -1409,6 +1410,15 @@ const CHECKERS: LiveChecker[] = [
     match: isVisualFinding,
     noFetch: true,
     check: () => unverifiable('rendered-page defect — not re-checkable live'),
+  },
+  {
+    // Domain & Exposure findings come from DNS, one-off probes or the rendered
+    // page (globals, dataLayer, unload handlers); a page re-fetch cannot
+    // re-observe them, so they are never refuted.
+    kind: 'domain-exposure',
+    match: (t) => isSiteCheckFinding(t) || isPageCheckFinding(t),
+    noFetch: true,
+    check: () => unverifiable('domain & exposure check — not re-checkable from a page fetch'),
   },
   {
     // Agentic-browsing findings come from the rendered DOM and computed styles,

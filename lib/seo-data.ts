@@ -22,6 +22,7 @@ import { SitemapParser } from './parsers/sitemap-parser';
 import { probeSitemapMedia } from './orchestrators/sitemap-media-probe';
 import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { SiteTextFilesAnalyzer } from './analyzers/seo/site-text-files-analyzer';
+import { runSiteProbes } from './analyzers/site-checks/site-probes';
 import { parse } from 'node-html-parser';
 
 /**
@@ -647,6 +648,19 @@ class SEOData {
       this.#results.sitemaps?.urls ?? {},
       this.#results.siteTextFiles,
     );
+
+    // Site-level Domain & Exposure checks: email/DNS, exposed files, missing-page
+    // status, dangling CNAMEs. After the crawl so a WAF block can't affect it.
+    console.log('Running domain & exposure checks...');
+    try {
+      this.#results.siteChecks = await runSiteProbes(
+        this.origin ?? '',
+        this.#results.pageData.pages,
+        this.saveError.bind(this),
+      );
+    } catch (e: unknown) {
+      console.log('Domain & exposure checks skipped:', (e as Error).message);
+    }
 
     // Defective/non-real pages (broken-pagination tails + soft 404s) are phantom
     // pages whose fix is to remove/repair the page — not to add canonicals/alt/

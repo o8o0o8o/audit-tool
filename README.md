@@ -130,7 +130,9 @@ audit-results/
 
 **Accessibility.** axe-core 4.x scan on every sampled page + hand-rolled heuristics: ARIA, color contrast, focus states, form labels, semantic landmarks, keyboard navigation, touch targets.
 
-**Security.** HTTPS, CSP, X-Frame-Options, HSTS, mixed content, SRI, cookies, permissions-policy.
+**Security.** HTTPS, CSP, X-Frame-Options, HSTS, mixed content, SRI, cookies, permissions-policy, vulnerable front-end libraries (jQuery, Bootstrap, AngularJS, Lodash…).
+
+**Domain & Exposure.** Email authentication (SPF, DMARC, DKIM, MTA-STS, TLS-RPT), CAA, exposed `.git` / `.env` / backups / directory listings, missing-page status (soft 404 probe), dangling CNAMEs (subdomain takeover), invalid `<head>` elements hiding canonical/hreflang, back/forward-cache blockers and Google Consent Mode v2 — shown as a status table in the HTML report.
 
 **UX / UI.** Responsive layout, mobile viewport, form accessibility, CTA detection.
 

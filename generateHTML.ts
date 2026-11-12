@@ -13,6 +13,8 @@ import { FileManager } from './lib/storage/file-manager';
 import { computePageCounts, type PageCounts } from './lib/utils/page-counts';
 import { escapeHtml } from './lib/reports/html-utils';
 import { getAgenticBrowsingSection, resolveAgenticState } from './lib/reports/sections/agentic-browsing';
+import { getDomainExposureSection } from './lib/reports/sections/domain-exposure';
+import type { SiteChecksData } from './lib/analyzers/site-checks/site-checks-types';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
 import { categorize, VISUAL_FINDING_MESSAGES } from './lib/phase2/categorize';
 import { auditTypeLabel, matchesChecks, type CheckName, type HtmlSectionId } from './lib/presets';
@@ -122,6 +124,15 @@ function readAgenticFlag(file: string): boolean | undefined {
     return typeof metadata?.agentic === 'boolean' ? metadata.agentic : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function readSiteChecks(file: string): SiteChecksData | null {
+  try {
+    const metadata = FileManager.readJsonFile(path.join(path.dirname(file), 'metadata.json.gz')) as { siteChecks?: SiteChecksData } | null;
+    return metadata?.siteChecks ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -279,6 +290,10 @@ function generateHTML(
         selection.noScore ? undefined : agenticAnalysis?.summary?.categoryScores?.agentic,
       );
 
+  const domainExposureHtml = isComparison || loadError
+    ? ''
+    : getDomainExposureSection(readSiteChecks(file), agenticAnalysis?.details ?? {});
+
   const bodyFragments: Record<HtmlSectionId, () => string> = {
     history: () => getHistoricalProgress(sectionData),
     'executive-summary': () => `<div id="executive-summary">
@@ -286,7 +301,7 @@ function generateHTML(
           </div>`,
     'issues-detail': () => `<div id="issues-detail">
           ${getIssuesDetail(sectionData)}
-          ${agenticHtml}
+          ${agenticHtml}${domainExposureHtml}
           </div>`,
     'ui-issues': () => getUiIssues(sectionData),
     performance: () => `<div id="performance">

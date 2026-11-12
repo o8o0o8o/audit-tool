@@ -96,6 +96,10 @@ import { InterstitialAnalyzer } from '../analyzers/seo/interstitial-analyzer';
 import { AdDensityAnalyzer } from '../analyzers/seo/ad-density-analyzer';
 import { SpellingGrammarAnalyzer } from '../analyzers/content/spelling-grammar-analyzer';
 import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
+import { HeadIntegrityAnalyzer } from '../analyzers/seo/head-integrity-analyzer';
+import { BfcacheAnalyzer } from '../analyzers/performance/bfcache-analyzer';
+import { JsLibraryAnalyzer } from '../analyzers/security/js-library-analyzer';
+import { ConsentModeAnalyzer } from '../analyzers/analytics/consent-mode-analyzer';
 
 // Re-export ConsoleErrorAnalyzer for use by crawler-engine's #basicTest
 export { ConsoleErrorAnalyzer };
@@ -659,6 +663,20 @@ export async function runAnalyzers(
     const jsRenderResult = JavaScriptRenderingAnalyzer.analyze(pageData, url);
     pageData.jsRenderingData = jsRenderResult.info;
     reportIssues(jsRenderResult, reportIssue, url);
+  }
+
+  // Head integrity (served HTML), bfcache, vulnerable JS libraries, Consent Mode v2
+  reportIssues(HeadIntegrityAnalyzer.analyze(servedHtml), reportIssue, url);
+  const scriptUrls = Object.entries(requests)
+    .filter(([, r]) => r.resourceType === 'script')
+    .map(([u]) => u);
+  const pageChecks = await Promise.allSettled([
+    withTimeout(BfcacheAnalyzer.analyze(chromePage, pageData.responseHeaders ?? {}), analyzerTimeout, `bfcache timeout for ${url}`),
+    withTimeout(JsLibraryAnalyzer.analyze(chromePage, scriptUrls), analyzerTimeout, `JS library timeout for ${url}`),
+    withTimeout(ConsentModeAnalyzer.analyze(chromePage, Object.keys(requests)), analyzerTimeout, `Consent Mode timeout for ${url}`),
+  ]);
+  for (const settled of pageChecks) {
+    if (settled.status === 'fulfilled') reportIssues(settled.value as AnalyzerResult, reportIssue, url);
   }
 
   // Code coverage analysis (requires perf flag, uses Coverage API started before navigation)

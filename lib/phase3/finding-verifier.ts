@@ -33,6 +33,7 @@ import type { IssueDetail } from '../phase2/types';
 import { compareExamplesWorstFirst } from '../utils';
 import { THRESHOLDS } from '../constants';
 import { isVisualFinding } from '../phase2/categorize';
+import { isPageCheckFinding, isSiteCheckFinding } from '../analyzers/site-checks/site-checks-types';
 
 export type Verdict = 'confirmed' | 'refuted' | 'unchecked';
 
@@ -1110,6 +1111,8 @@ export function firstExample(detail: IssueDetail): string | undefined {
 export function verifyFinding(message: string, detail: IssueDetail, pages: PageIndex, site?: SiteData): VerificationResult {
   if (detail.aiDiscovered) return unchecked('ai-discovered', 'AI-discovered finding — not deterministically verifiable');
   if (isVisualFinding(message)) return unchecked('visual', 'rendered-page defect — not re-checkable from crawl data');
+  if (isSiteCheckFinding(message) || isPageCheckFinding(message))
+    return unchecked('domain-exposure', 'domain & exposure check — not re-checkable from crawl data');
   const example = firstExample(detail);
   if (!example) return unchecked('none', 'finding has no example to verify');
 

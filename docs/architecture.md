@@ -41,15 +41,18 @@ audit-tool/
 │   │   │   ├── favicon-manifest-validator.ts  # Site-wide favicon + web manifest fetch checks (async dataValidator)
 │   │   │   ├── image-optimization-analyzer.ts  # Image optimization
 │   │   │   └── resource-optimization-analyzer.ts  # Render-blocking
-│   │   │   # …and more (16 performance analyzers total)
+│   │   │   # …and more (17 performance analyzers total, incl. bfcache-analyzer.ts)
 │   │   ├── repo/                            # Source-code analysis backing --repo (7 files)
 │   │   ├── security/
 │   │   │   └── security-analyzer.ts         # HTTPS, security headers
-│   │   │   # …and more (10 security analyzers total)
+│   │   │   # …and more (11 security analyzers total, incl. js-library-analyzer.ts — vulnerable front-end libraries)
+│   │   ├── site-checks/                     # Domain & Exposure, run once post-crawl (site-probes.ts): email/DNS auth + CAA,
+│   │   │                                    #   exposed files, missing-page probe, dangling CNAMEs → metadata.siteChecks
 │   │   ├── seo/
 │   │   │   ├── advanced-schema-validator.ts # Detailed schema validation (FAQ, Product, etc.)
 │   │   │   ├── aeo-analyzer.ts              # AI Search Readiness (AEO), llms.txt, AI crawlers
 │   │   │   ├── site-text-files-analyzer.ts  # security.txt (RFC 9116) + ads.txt / app-ads.txt, fetched once pre-crawl
+│   │   │   ├── head-integrity-analyzer.ts  # served-HTML head closed early by an invalid element (canonical/hreflang pushed to body)
 │   │   │   ├── crawlability-analyzer.ts     # Robots.txt analysis
 │   │   │   ├── eeat-analyzer.ts             # E-E-A-T signals (author, trust, expertise)
 │   │   │   ├── heading-analyzer.ts          # H1-H6 structure

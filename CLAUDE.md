@@ -245,6 +245,17 @@ On by default; `--no-agentic` (or `agentic: false` in `.seoauditrc`) turns it of
 - Content reachable only via hover-only or JS-only interactions (MEDIUM)
 - llms.txt missing (LOW) or invalid (MEDIUM) — checked once per site, reusing the AEO fetch
 
+### Domain & Exposure (`lib/analyzers/site-checks/`)
+
+Site-level checks run once after the crawl (`site-probes.ts`, called from `SEOData` after site-wide validation, so a WAF that blocks the probes cannot affect the crawl). Results go to `metadata.json.gz` as `siteChecks` and render as the **Domain & Exposure** block (status table + findings) in the HTML report's Issues tab (`lib/reports/sections/domain-exposure.ts`). Phase 3 never refutes these findings. DNS checks are skipped for IP / local origins.
+
+- **email-dns-analyzer.ts**: SPF, DMARC (falls back to the org domain), DKIM at common selectors, MTA-STS + policy file, TLS-RPT, CAA
+- **exposed-files-probe.ts**: `.git`, `.svn`, `.env`, `.DS_Store`, `.htpasswd`, backups / SQL dumps, `phpinfo.php`, directory listings; every hit confirmed by body magic/syntax; stops after repeated 403/429
+- **not-found-probe.ts**: requests a random missing URL; flags 200, 3xx and 5xx instead of 404/410
+- **subdomain-takeover.ts**: dangling CNAMEs (origin + same-site link hosts) to GitHub Pages, Heroku, S3, Azure, Shopify, … via NXDOMAIN or the service's "unclaimed" page
+
+Per-page checks reported in the same block: **head-integrity-analyzer.ts** (served HTML; invalid element in the head that pushes canonical/hreflang/robots into the body), **bfcache-analyzer.ts** (`Cache-Control: no-store`, `unload` handlers counted by an init script), **js-library-analyzer.ts** (curated Retire.js-style advisories for jQuery, jQuery UI, Bootstrap, AngularJS, Lodash, Underscore, Moment, Handlebars, DOMPurify, Vue 2), **consent-mode-analyzer.ts** (Google tags without Consent Mode, or without the v2 `ad_user_data` / `ad_personalization` signals).
+
 ### Social
 
 - **social-media-analyzer.ts**: Open Graph tags, Twitter cards
@@ -437,6 +448,21 @@ audit-results/
 - security.txt: missing (LOW); no `Contact` (MEDIUM); `Expires` missing, unparseable or past (MEDIUM); `Expires` more than a year ahead (LOW); not `text/plain` (LOW); only at legacy `/security.txt` (LOW). PGP cleartext-signed files are unwrapped (signature not verified)
 - ads.txt / app-ads.txt: invalid record lines (LOW); missing ads.txt (MEDIUM) only when a crawled page has a detected ad network (decided post-crawl; refetched on resume from an older checkpoint)
 - An HTML / soft-404 response or a redirect to another host (apex ↔ `www.` counts as same host) counts as a missing file; network errors give no finding
+
+### Domain & Exposure Issues
+
+- SPF: missing (MEDIUM); multiple records, `+all`, more than 10 DNS lookups (HIGH); `?all` (MEDIUM); `ptr` (LOW)
+- DMARC: missing or no valid `p=` (MEDIUM); multiple records (HIGH); `p=none` or no `rua` (LOW)
+- Only with MX records: no DKIM key at common selectors, no MTA-STS, no TLS-RPT (LOW); MTA-STS policy file missing/invalid (MEDIUM)
+- No CAA record (LOW)
+- Exposed `.git` or `.env` (CRITICAL); `.svn`, `.htpasswd`, backups / dumps (HIGH); `phpinfo()`, directory listing (MEDIUM); `.DS_Store` (LOW)
+- Missing pages return 200 or 5xx (MEDIUM) or redirect (LOW)
+- Dangling CNAME, possible subdomain takeover (HIGH)
+- Invalid element in the HTML head hides canonical/hreflang/robots (HIGH), other SEO tags (MEDIUM), or closes it early (LOW)
+- Not bfcache-eligible: `no-store` or `unload` handler (LOW)
+- Outdated JavaScript library with known vulnerabilities (MEDIUM/LOW by advisory)
+- Google tags without Consent Mode, or Consent Mode v2 signals missing (MEDIUM)
+DNS lookup failures, network errors and blocked probes give no finding (the check shows "Not checked").
 
 ### Favicon / Manifest Issues
 

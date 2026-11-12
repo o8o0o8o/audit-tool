@@ -111,6 +111,7 @@ import {
   populateIncomingLinksCount,
   extractHeadLinks,
 } from './page-data-builder';
+import { installUnloadCounter } from '../analyzers/performance/bfcache-analyzer';
 import { runAnalyzers, ConsoleErrorAnalyzer, CodeCoverageAnalyzer } from './analyzer-runner';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
 import { RepresentativeSampler } from './representative-sampler';
@@ -720,6 +721,8 @@ class CrawlerEngine {
           (globalThis as unknown as Record<string, unknown>).__name = (target: unknown, _value: unknown) => target;
         }
       });
+      // Count window `unload` listeners for the bfcache check (must run before page scripts).
+      await context.addInitScript(installUnloadCounter);
 
       const alternatesErrors: Issue[] = [];
       const uniqueTitles = new Map<string, string>();

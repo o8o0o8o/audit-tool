@@ -213,6 +213,7 @@ Input validation and security:
 - **image-analyzer.ts**: Alt text and image metadata
 - **indexability-analyzer.ts**: Canonical, noindex, nofollow
 - **structured-data-analyzer.ts**: Schema.org markup validation
+- **advanced-schema-validator.ts** + **schema-vocabulary.ts**: Per-type structure checks (FAQ, Breadcrumb, Product offers, Event dates, …) and schema.org vocabulary checks: unknown `@type` (MEDIUM), `@context` not schema.org (MEDIUM), unknown property or property outside its type's domain (LOW), with typo suggestions. Vocabulary is `lib/data/schema-org-vocab.json`; regenerate with `npx tsx scripts/build-schema-vocab.ts`
 - **site-text-files-analyzer.ts**: security.txt (RFC 9116) and ads.txt / app-ads.txt checks, fetched once before the crawl
 
 ### Site-Wide Validators

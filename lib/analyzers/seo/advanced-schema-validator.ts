@@ -5,6 +5,7 @@
 
 import { SEVERITY } from '../../constants';
 import type { Issue, PageInfo } from '../../types';
+import { validateSchemaVocabulary, type VocabFinding } from './schema-vocabulary';
 
 interface SchemaValidationResult {
   issues: Issue[];
@@ -57,6 +58,40 @@ function validateSchemaFields(
   return { issues, warnings };
 }
 
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Map a vocabulary finding to a report issue. Messages are stable so findings group across pages. */
+function vocabFindingToIssue(f: VocabFinding, url: string): Issue {
+  const page = `<a href="${url}">${url}</a>`;
+  const hint = f.suggestion ? ` (did you mean "${esc(f.suggestion)}"?)` : '';
+  switch (f.kind) {
+    case 'bad-context':
+      return {
+        message: 'JSON-LD @context does not reference schema.org',
+        detail: `${page} - Set "@context": "https://schema.org" so search engines read the markup as schema.org`,
+        severity: SEVERITY.MEDIUM,
+      };
+    case 'unknown-type':
+      return {
+        message: 'Unknown schema.org type in structured data',
+        detail: `${page} - "@type": "${esc(f.type ?? '')}" is not a schema.org type${hint}; search engines ignore this node`,
+        severity: SEVERITY.MEDIUM,
+      };
+    case 'unknown-property':
+      return {
+        message: 'Unknown schema.org property in structured data',
+        detail: `${page} - ${esc(f.type ?? '')} has property "${esc(f.property ?? '')}", which is not in schema.org${hint}`,
+        severity: SEVERITY.LOW,
+      };
+    case 'property-not-for-type':
+      return {
+        message: 'Schema property used on a type that does not support it',
+        detail: `${page} - "${esc(f.property ?? '')}" is not a valid property of ${esc(f.type ?? '')} in schema.org`,
+        severity: SEVERITY.LOW,
+      };
+  }
+}
+
 class AdvancedSchemaValidator {
   /**
    * Validate schema markup on a page
@@ -83,6 +118,13 @@ class AdvancedSchemaValidator {
       if (!type || !schema) continue;
 
       schemaData.types.push(type);
+
+      // schema.org vocabulary: unknown types/properties, wrong domain, bad @context
+      const contextValue = schema['@context'] ?? schemaInfo.context;
+      for (const f of validateSchemaVocabulary(schema, contextValue)) {
+        const issue = vocabFindingToIssue(f, url);
+        (issue.severity === SEVERITY.LOW ? warnings : issues).push(issue);
+      }
 
       // Validate based on schema type
       const validator = this.getValidator(type);
@@ -135,7 +177,9 @@ class AdvancedSchemaValidator {
    */
   static validateArticle(schema: SchemaObject, url: string) {
     const { issues, warnings } = validateSchemaFields(
-      schema, 'Article', url,
+      schema,
+      'Article',
+      url,
       ['headline', 'author', 'datePublished'],
       ['dateModified', 'image', 'publisher', 'description'],
     );
@@ -445,7 +489,9 @@ class AdvancedSchemaValidator {
    */
   static validateLocalBusiness(schema: SchemaObject, _url: string) {
     const { issues, warnings } = validateSchemaFields(
-      schema, 'LocalBusiness', _url,
+      schema,
+      'LocalBusiness',
+      _url,
       ['name', 'address'],
       ['telephone', 'openingHours', 'geo', 'image', 'priceRange'],
     );
@@ -524,7 +570,9 @@ class AdvancedSchemaValidator {
    */
   static validatePerson(schema: SchemaObject, _url: string) {
     const { issues, warnings } = validateSchemaFields(
-      schema, 'Person', _url,
+      schema,
+      'Person',
+      _url,
       ['name'],
       ['image', 'jobTitle', 'worksFor', 'sameAs'],
     );
@@ -570,11 +618,7 @@ class AdvancedSchemaValidator {
    * Validate Event schema
    */
   static validateEvent(schema: SchemaObject, _url: string) {
-    const { issues, warnings } = validateSchemaFields(
-      schema, 'Event', _url,
-      ['name', 'startDate', 'location'],
-      [],
-    );
+    const { issues, warnings } = validateSchemaFields(schema, 'Event', _url, ['name', 'startDate', 'location'], []);
 
     // Validate date
     if (schema.startDate) {
@@ -610,7 +654,9 @@ class AdvancedSchemaValidator {
    */
   static validateRecipe(schema: SchemaObject, _url: string) {
     const { issues, warnings } = validateSchemaFields(
-      schema, 'Recipe', _url,
+      schema,
+      'Recipe',
+      _url,
       ['name', 'image'],
       ['recipeIngredient', 'recipeInstructions', 'prepTime', 'cookTime', 'nutrition'],
     );
@@ -623,7 +669,9 @@ class AdvancedSchemaValidator {
    */
   static validateVideo(schema: SchemaObject, _url: string) {
     const { issues, warnings } = validateSchemaFields(
-      schema, 'VideoObject', _url,
+      schema,
+      'VideoObject',
+      _url,
       ['name', 'description', 'thumbnailUrl', 'uploadDate'],
       [],
     );

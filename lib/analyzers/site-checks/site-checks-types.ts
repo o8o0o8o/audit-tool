@@ -30,11 +30,19 @@ export interface SiteProbeResult {
 
 /** Every finding the site-level probes can emit (message prefixes, matched without HTML). */
 export const SITE_CHECK_FINDING_PATTERN =
-  /^(?:SPF |No SPF record|Multiple SPF records|DMARC |No DMARC record|Multiple DMARC records|No DKIM key|MTA-STS |No MTA-STS|No TLS-RPT|No CAA record|Git repository exposed|Subversion metadata exposed|\.env file exposed|\.DS_Store file exposed|\.htpasswd file exposed|Backup or database dump publicly downloadable|phpinfo\(\) page exposed|Directory listing enabled|Missing pages return HTTP|Missing pages redirect|Dangling CNAME)/i;
+  /^(?:SPF |No SPF record|Multiple SPF records|DMARC |No DMARC record|Multiple DMARC records|No DKIM key|MTA-STS |No MTA-STS|No TLS-RPT|No CAA record|Git repository exposed|Subversion metadata exposed|\.env file exposed|\.DS_Store file exposed|\.htpasswd file exposed|Backup or database dump publicly downloadable|phpinfo\(\) page exposed|Directory listing enabled|Missing pages return HTTP|Missing pages redirect|Dangling CNAME|.+ leaked in public JavaScript|Google API key in public JavaScript|Firebase Realtime Database|Cloud storage bucket allows|CORS reflects|Script loaded from a domain that no longer resolves|WordPress plugin with known|Staging or development host|Googlebot is served different|Requests with a Googlebot user agent|AI crawlers blocked by firewall|Homepage redirects by browser language|Trackers still run after consent|Session replay runs on pages)/i;
 
 /** Per-page findings added together with the site-level probes. */
 export const PAGE_CHECK_FINDING_PATTERN =
   /^(?:Invalid element in HTML head|Page not eligible for back\/forward cache|unload event handler blocks back\/forward cache|Outdated JavaScript library with known vulnerabilities|Google tags run without Consent Mode|Google Consent Mode v2 signals missing)/i;
+
+/** Post-crawl crawl-graph findings (canonical/hreflang targets, facets, calendars, lastmod, CTAs, schema phone). */
+export const GRAPH_CHECK_FINDING_PATTERN =
+  /^(?:Canonical loop between pages|Canonical chain \(|Canonical points to an? (?:redirecting URL|error page|noindex page)|Hreflang alternate points to|Faceted navigation creates|Calendar URL space|Large date-archive URL series|Sitemap lastmod|CTA link (?:points|redirects)|Structured data telephone not shown)/i;
+
+/** Per-page render / delivery findings: routed normally, never refuted by Phase 3. */
+export const RENDER_CHECK_FINDING_PATTERN =
+  /^(?:Server and rendered HTML disagree|Most page text is hidden|Content loads only after scrolling|Low color contrast in dark mode|Form submits (?:over insecure HTTP|data to a third-party domain)|CAPTCHA failed to load|Product schema price not shown|Assets are served through redirects|Long-cached assets without cache-busting|Same JavaScript library loaded more than once|CDN does not cache HTML pages|Cookie banner causes layout shift)/i;
 
 /** Strips HTML, markdown backticks/emphasis and leading punctuation before matching. */
 const plain = (m: string) =>
@@ -50,6 +58,20 @@ export function isSiteCheckFinding(message: string): boolean {
 
 export function isPageCheckFinding(message: string): boolean {
   return PAGE_CHECK_FINDING_PATTERN.test(plain(message));
+}
+
+export function isGraphCheckFinding(message: string): boolean {
+  return GRAPH_CHECK_FINDING_PATTERN.test(plain(message));
+}
+
+/** Findings from these checks come from probes, DNS or whole-crawl data; Phase 3 never refutes them. */
+export function isNeverRefuteCheckFinding(message: string): boolean {
+  return (
+    isSiteCheckFinding(message) ||
+    isPageCheckFinding(message) ||
+    isGraphCheckFinding(message) ||
+    RENDER_CHECK_FINDING_PATTERN.test(plain(message))
+  );
 }
 
 /** Hostname with one leading `www.` removed, lower-cased. */

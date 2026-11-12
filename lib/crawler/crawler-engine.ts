@@ -381,7 +381,12 @@ class CrawlerEngine {
         resourceType: request.resourceType(),
         method: request.method(),
         startTime: Date.now(),
+        count: (requests[request.url()]?.count ?? 0) + 1,
       };
+    };
+    const requestFailedHandler = (request: PlaywrightRequest) => {
+      const entry = requests[request.url()];
+      if (entry) entry.failed = true;
     };
 
     const responseHandler = async (response: PlaywrightResponse) => {
@@ -415,6 +420,7 @@ class CrawlerEngine {
       requests[response.url()] = {
         ...requests[resUrl],
         status: response.status(),
+        headers: response.headers(),
         endTime: now,
         duration: requests[resUrl]?.startTime ? now - requests[resUrl].startTime : 0,
         size,
@@ -463,6 +469,7 @@ class CrawlerEngine {
     page.on('response', responseHandler);
     page.on('response', mainFrameHandler);
     page.on('requestfinished', requestFinishedHandler);
+    page.on('requestfailed', requestFailedHandler);
 
     let response: PlaywrightResponse | null | undefined,
       status: number | undefined,
@@ -614,6 +621,7 @@ class CrawlerEngine {
       page.off('response', responseHandler);
       page.off('response', mainFrameHandler);
       page.off('requestfinished', requestFinishedHandler);
+      page.off('requestfailed', requestFailedHandler);
     }
 
     // Resolve any in-flight request.sizes() lookups so totalResponseSize is
@@ -1501,6 +1509,7 @@ class CrawlerEngine {
         servedHtml,
         this.#visual,
         this.#agentic,
+        clsEntries as CLSEntry[] | undefined,
       );
     } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page

@@ -254,7 +254,18 @@ Site-level checks run once after the crawl (`site-probes.ts`, called from `SEODa
 - **not-found-probe.ts**: requests a random missing URL; flags 200, 3xx and 5xx instead of 404/410
 - **subdomain-takeover.ts**: dangling CNAMEs (origin + same-site link hosts) to GitHub Pages, Heroku, S3, Azure, Shopify, … via NXDOMAIN or the service's "unclaimed" page
 
+Second wave (same runner, same never-refute rule):
+
+- **Security probes**: `js-secrets-scanner.ts` (leaked keys in same-site JS bundles, masked; open Firebase RTDB), `open-bucket-probe.ts` (S3/GCS/Azure listing), `cors-probe.ts` (origin reflection + credentials on same-site XHR/fetch URLs), `abandoned-script-domains.ts` (third-party script/iframe domains with no NS records), `wordpress-plugins.ts` (readme `Stable tag`; vulnerabilities only with `WPSCAN_API_TOKEN`), `staging-hosts.ts` (crt.sh CT logs → reachable/indexable staging, dev, test… hosts)
+- **Behaviour**: `bot-parity-probe.ts` (Googlebot vs browser SEO tags; spoofed-Googlebot / AI-crawler firewall blocks vs robots.txt), `locale-redirect-probe.ts` (homepage redirect by Accept-Language), `consent-reject-test.ts` (headless Chromium clicks the CMP "Reject" button and reports trackers/cookies that still fire; Consent Mode denied pings are allowed), `session-replay-sensitive.ts`
+- **Crawl graph** (`lib/analyzers/site-wide/crawl-graph-checks.ts`): canonical loops/chains, canonical or hreflang to redirect/error/noindex/canonicalised URLs, faceted URL explosion, calendar URL traps, untrustworthy sitemap `lastmod`, CTA links to broken/login pages, JSON-LD telephone not shown on the page
+- Crawl-time inputs come from `crawl-hints.ts` (`pageData.siteHints`: capped script/asset/API URLs, third-party hosts, CTA anchors, replay vendors), because the request map and anchor texts are slimmed at checkpoint
+
 Per-page checks reported in the same block: **head-integrity-analyzer.ts** (served HTML; invalid element in the head that pushes canonical/hreflang/robots into the body), **bfcache-analyzer.ts** (`Cache-Control: no-store`, `unload` handlers counted by an init script), **js-library-analyzer.ts** (curated Retire.js-style advisories for jQuery, jQuery UI, Bootstrap, AngularJS, Lodash, Underscore, Moment, Handlebars, DOMPurify, Vue 2), **consent-mode-analyzer.ts** (Google tags without Consent Mode, or without the v2 `ad_user_data` / `ad_personalization` signals).
+
+### Render & Delivery (per page, `analyzer-runner.ts`)
+
+`hydration-mismatch-analyzer.ts` (served vs rendered title/description/canonical/robots/H1), `hidden-content-analyzer.ts`, `scroll-loaded-content-analyzer.ts`, `dark-mode-contrast-analyzer.ts`, `form-health-analyzer.ts` (insecure/third-party form actions, CAPTCHA failed to load), `price-consistency-analyzer.ts` (Product schema price vs visible text), `asset-delivery-analyzer.ts` (asset redirects, long-cached assets without cache-busting, duplicate libraries, CDN not caching HTML — site-level), `cls-attribution.ts` (cookie banner layout shift). Dark-mode and scroll checks mutate the page and run last. `JavaScriptRenderingAnalyzer` now runs (raw = served HTML, rendered = post-JS DOM). Request entries carry `headers`, `count` and `failed`.
 
 ### Social
 

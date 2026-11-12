@@ -44,7 +44,7 @@ import {
   type TextFileFetch,
 } from '../analyzers/seo/site-text-files-analyzer';
 import { isAgenticFinding } from '../analyzers/agentic/agentic-checks';
-import { isPageCheckFinding, isSiteCheckFinding } from '../analyzers/site-checks/site-checks-types';
+import { isNeverRefuteCheckFinding } from '../analyzers/site-checks/site-checks-types';
 
 // SSRF guard for the standalone --verify re-fetch: the report's example URLs are
 // re-fetched live, so a private/internal host parsed out of an old report must
@@ -1416,7 +1416,7 @@ const CHECKERS: LiveChecker[] = [
     // page (globals, dataLayer, unload handlers); a page re-fetch cannot
     // re-observe them, so they are never refuted.
     kind: 'domain-exposure',
-    match: (t) => isSiteCheckFinding(t) || isPageCheckFinding(t),
+    match: isNeverRefuteCheckFinding,
     noFetch: true,
     check: () => unverifiable('domain & exposure check — not re-checkable from a page fetch'),
   },

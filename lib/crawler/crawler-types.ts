@@ -71,6 +71,12 @@ export interface RequestInfo {
   endTime?: number;
   duration?: number;
   size?: number | null;
+  /** Response headers (lower-cased names); dropped when pages are checkpointed. */
+  headers?: Record<string, string>;
+  /** Times this URL was requested on the page. */
+  count?: number;
+  /** Request failed at the network level (DNS, blocked, aborted). */
+  failed?: boolean;
 }
 
 export interface RedirectEntry {

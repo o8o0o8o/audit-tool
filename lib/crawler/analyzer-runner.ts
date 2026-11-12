@@ -96,6 +96,16 @@ import { InterstitialAnalyzer } from '../analyzers/seo/interstitial-analyzer';
 import { AdDensityAnalyzer } from '../analyzers/seo/ad-density-analyzer';
 import { SpellingGrammarAnalyzer } from '../analyzers/content/spelling-grammar-analyzer';
 import { OutboundLinkChecker } from '../analyzers/content/outbound-link-checker';
+import type { CLSEntry } from './vitals-collector';
+import { HydrationMismatchAnalyzer } from '../analyzers/seo/hydration-mismatch-analyzer';
+import { HiddenContentAnalyzer } from '../analyzers/seo/hidden-content-analyzer';
+import { ScrollLoadedContentAnalyzer } from '../analyzers/seo/scroll-loaded-content-analyzer';
+import { DarkModeContrastAnalyzer } from '../analyzers/accessibility/dark-mode-contrast-analyzer';
+import { FormHealthAnalyzer } from '../analyzers/content/form-health-analyzer';
+import { PriceConsistencyAnalyzer } from '../analyzers/seo/price-consistency-analyzer';
+import { AssetDeliveryAnalyzer } from '../analyzers/performance/asset-delivery-analyzer';
+import { ClsAttributionAnalyzer } from '../analyzers/performance/cls-attribution';
+import { capturePageHints } from '../analyzers/site-checks/crawl-hints';
 import { HeadIntegrityAnalyzer } from '../analyzers/seo/head-integrity-analyzer';
 import { BfcacheAnalyzer } from '../analyzers/performance/bfcache-analyzer';
 import { JsLibraryAnalyzer } from '../analyzers/security/js-library-analyzer';
@@ -172,6 +182,7 @@ export async function runAnalyzers(
   servedHtml?: string,
   visual = false,
   agentic = true,
+  clsEntries?: CLSEntry[],
 ): Promise<void> {
   const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
   // Cast requests for analyzer compatibility (analyzers use broader parameter types)
@@ -659,10 +670,26 @@ export async function runAnalyzers(
   }
 
   // JavaScript rendering analysis (only if raw HTML available)
-  if (pageData.rawHtml) {
-    const jsRenderResult = JavaScriptRenderingAnalyzer.analyze(pageData, url);
+  // Raw = served (pre-JS) HTML, rendered = post-JS DOM. Passed on a copy so
+  // neither large string is persisted on pageData / in checkpoints.
+  if (servedHtml && pageContent) {
+    const jsRenderResult = JavaScriptRenderingAnalyzer.analyze(
+      { ...pageData, rawHtml: servedHtml, renderedHtml: pageContent },
+      url,
+    );
     pageData.jsRenderingData = jsRenderResult.info;
     reportIssues(jsRenderResult, reportIssue, url);
+  }
+
+  // Crawl-time hints for the post-crawl site checks (+ structured-data phone check)
+  try {
+    reportIssues(
+      { issues: await capturePageHints(chromePage, parsedPage, url, pageData, requests) } as AnalyzerResult,
+      reportIssue,
+      url,
+    );
+  } catch {
+    /* hints are best-effort */
   }
 
   // Head integrity (served HTML), bfcache, vulnerable JS libraries, Consent Mode v2
@@ -679,6 +706,15 @@ export async function runAnalyzers(
     if (settled.status === 'fulfilled') reportIssues(settled.value as AnalyzerResult, reportIssue, url);
   }
 
+  // Render / delivery checks. Order matters: the CLS attribution and price check
+  // read the page as loaded; dark-mode contrast switches the color scheme and
+  // scroll-loaded content scrolls the page, so those two run last, one at a time.
+  reportIssues(HydrationMismatchAnalyzer.analyze(servedHtml, pageContent, url), reportIssue, url);
+  reportIssues(FormHealthAnalyzer.analyze(pageContent, url, requests), reportIssue, url);
+  const docHeaders = requests[pageData.finalUrl ?? url]?.headers ?? requests[url]?.headers;
+  const assetResult = AssetDeliveryAnalyzer.analyze(requests, url, docHeaders);
+  pageData.cdnCache = assetResult.info?.cdnCache;
+  reportIssues(assetResult, reportIssue, url);
   // Code coverage analysis (requires perf flag, uses Coverage API started before navigation)
   if (options.perf) {
     try {
@@ -691,6 +727,28 @@ export async function runAnalyzers(
       reportIssues(coverageResult, reportIssue, url);
     } catch {
       pageData.codeCoverage = null;
+    }
+  }
+
+  const runLast: Array<[string, () => Promise<AnalyzerResult>]> = [
+    ['CLS attribution', () => ClsAttributionAnalyzer.analyze(chromePage, clsEntries) as Promise<AnalyzerResult>],
+    [
+      'price consistency',
+      async () =>
+        PriceConsistencyAnalyzer.analyze(
+          pageContent,
+          await chromePage.evaluate(() => document.body?.innerText ?? ''),
+        ) as AnalyzerResult,
+    ],
+    ['hidden content', () => HiddenContentAnalyzer.analyze(chromePage) as Promise<AnalyzerResult>],
+    ['dark-mode contrast', () => DarkModeContrastAnalyzer.analyze(chromePage) as Promise<AnalyzerResult>],
+    ['scroll-loaded content', () => ScrollLoadedContentAnalyzer.analyze(chromePage) as Promise<AnalyzerResult>],
+  ];
+  for (const [name, run] of runLast) {
+    try {
+      reportIssues(await withTimeout(run(), analyzerTimeout, `${name} timeout for ${url}`), reportIssue, url);
+    } catch {
+      /* best-effort */
     }
   }
 

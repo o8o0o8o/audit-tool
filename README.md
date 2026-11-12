@@ -132,7 +132,7 @@ audit-results/
 
 **Security.** HTTPS, CSP, X-Frame-Options, HSTS, mixed content, SRI, cookies, permissions-policy, vulnerable front-end libraries (jQuery, Bootstrap, AngularJS, Lodash…).
 
-**Domain & Exposure.** Email authentication (SPF, DMARC, DKIM, MTA-STS, TLS-RPT), CAA, exposed `.git` / `.env` / backups / directory listings, missing-page status (soft 404 probe), dangling CNAMEs (subdomain takeover), invalid `<head>` elements hiding canonical/hreflang, back/forward-cache blockers and Google Consent Mode v2 — shown as a status table in the HTML report.
+**Domain & Exposure.** Email authentication (SPF, DMARC, DKIM, MTA-STS, TLS-RPT), CAA, exposed `.git` / `.env` / backups / directory listings, missing-page status (soft 404 probe), dangling CNAMEs (subdomain takeover), leaked secrets in JS bundles, open cloud buckets and Firebase databases, CORS reflection, abandoned script domains, vulnerable WordPress plugins (with `WPSCAN_API_TOKEN`), indexable staging hosts, Googlebot/AI-crawler parity, language redirects, a consent "Reject" test, invalid `<head>` elements hiding canonical/hreflang, back/forward-cache blockers and Google Consent Mode v2 — shown as a status table in the HTML report.
 
 **UX / UI.** Responsive layout, mobile viewport, form accessibility, CTA detection.
 

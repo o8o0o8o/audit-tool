@@ -657,6 +657,11 @@ class SEOData {
         this.origin ?? '',
         this.#results.pageData.pages,
         this.saveError.bind(this),
+        {
+          robotsUserAgents: this.#results.robots?.['user-agent'],
+          sitemapUrls: this.#results.sitemaps?.urls ?? {},
+          discoveredUrls: Object.keys(this.#results.pageData.incomingLinks ?? {}),
+        },
       );
     } catch (e: unknown) {
       console.log('Domain & exposure checks skipped:', (e as Error).message);

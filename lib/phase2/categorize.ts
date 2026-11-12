@@ -30,6 +30,14 @@ const PRECEDENCE: Array<{ section: Section; patterns: RegExp[] }> = [
       /^(?:SPF |No SPF record|Multiple SPF records|DMARC |No DMARC record|Multiple DMARC records|No DKIM key|MTA-STS |No MTA-STS|No TLS-RPT|No CAA record)/i,
       /^(?:Git repository exposed|Subversion metadata exposed|\.env file exposed|\.DS_Store file exposed|\.htpasswd file exposed|Backup or database dump|phpinfo\(\) page exposed|Directory listing enabled|Dangling CNAME)/i,
       /^Outdated JavaScript library with known vulnerabilities/i,
+      /^(?:Form submits (?:over insecure HTTP|data to a third-party domain))/i,
+      /(?: leaked in public JavaScript|^Google API key in public JavaScript|^Firebase Realtime Database|^Cloud storage bucket allows|^CORS reflects|^Script loaded from a domain that no longer resolves|^WordPress plugin with known|^Staging or development host)/i,
+    ],
+  },
+  {
+    section: 'performance',
+    patterns: [
+      /^(?:Cookie banner causes layout shift|Assets are served through redirects|Long-cached assets without cache-busting|Same JavaScript library loaded more than once|CDN does not cache HTML pages)/i,
     ],
   },
   {
@@ -37,6 +45,9 @@ const PRECEDENCE: Array<{ section: Section; patterns: RegExp[] }> = [
     patterns: [
       /^Invalid element in HTML head/i,
       /^Missing pages (?:return|redirect)/i,
+      /^(?:Server and rendered HTML disagree|Most page text is hidden|Content loads only after scrolling|Product schema price not shown)/i,
+      /^(?:Googlebot is served different|Requests with a Googlebot user agent|AI crawlers blocked by firewall|Homepage redirects by browser language)/i,
+      /^(?:Canonical loop|Canonical chain \(|Canonical points to|Hreflang alternate points to|Faceted navigation creates|Calendar URL space|Large date-archive URL series|Sitemap lastmod|CTA link (?:points|redirects)|Structured data telephone)/i,
     ],
   },
 ];
@@ -92,7 +103,7 @@ const RULES: Array<{ section: Section; patterns: RegExp[] }> = [
   },
   {
     section: 'privacy',
-    patterns: [/cookie/i, /consent/i, /privacy|GDPR|CCPA/i, /tracking/i],
+    patterns: [/cookie/i, /consent/i, /privacy|GDPR|CCPA/i, /tracking/i, /session replay/i],
   },
   {
     section: 'accessibility',

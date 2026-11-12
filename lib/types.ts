@@ -3,6 +3,8 @@
  * Shared interfaces used across all modules
  */
 
+import type { SiteHints } from './analyzers/site-checks/crawl-hints';
+
 import type { PresetName } from './presets';
 import type { BrokenMediaData } from './analyzers/visual/broken-media-analyzer';
 import type { TextIntegrityData } from './analyzers/visual/text-integrity-analyzer';
@@ -259,6 +261,11 @@ export interface PageInfo {
 
   // Raw HTML content (temporary, stripped during optimization)
   rawHtml?: string;
+
+  /** Capped crawl-time facts for the post-crawl site checks (see site-checks/crawl-hints.ts). */
+  siteHints?: SiteHints;
+  /** CDN cache state of the HTML document (asset-delivery-analyzer). */
+  cdnCache?: 'hit' | 'miss' | 'none';
 }
 
 export interface PageData {

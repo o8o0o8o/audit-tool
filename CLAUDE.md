@@ -395,6 +395,8 @@ audit-results/
 - Incorrect origin
 - Exceeds 50,000 URLs
 - Missing in robots.txt
+- Sitemap image/video/news extension errors: `<image:image>` without `<image:loc>`, more than 1000 images per URL, video missing thumbnail/title/description/content-or-player or with a duration outside 1–28800 s, news missing name/language/publication date/title, media URLs that are not absolute, and extension tags without an `xmlns` declaration (LOW)
+- Sitemap image/video URLs that fail to load (main audit only; up to 50 URLs, 5 at a time; redirects followed; 401/403/429 counted as blocked, not failed)
 
 ### Pagination / Crawl-Budget Issues
 

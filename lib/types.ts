@@ -311,6 +311,35 @@ export interface SitemapUrl {
   changefreq?: string;
   priority?: string;
   alternates?: AlternateLink[];
+  imageCount?: number;
+  videoCount?: number;
+  hasNews?: boolean;
+}
+
+export interface SitemapImage {
+  loc?: string;
+}
+
+export interface SitemapVideo {
+  thumbnailLoc?: string;
+  title?: string;
+  description?: string;
+  contentLoc?: string;
+  playerLoc?: string;
+  duration?: string;
+}
+
+export interface SitemapNews {
+  name?: string;
+  language?: string;
+  publicationDate?: string;
+  title?: string;
+}
+
+/** Absolute http(s) media URLs found in one sitemap entry — kept in memory only, never persisted. */
+export interface SitemapMediaTargets {
+  images: string[];
+  videos: string[];
 }
 
 export interface AlternateLink {

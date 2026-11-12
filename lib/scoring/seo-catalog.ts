@@ -72,6 +72,22 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   // Same spec violation on a single <url><loc> — narrower blast radius (one
   // sitemap's worth of URLs, not a whole index tree) — warning tier.
   'Sitemap contains non-absolute <loc> URLs': { tier: 'warning', category: 'seo' },
+  // Sitemap image/video/news extensions: offline checks in the parser, load probe in the main audit.
+  'Sitemap image entries missing <image:loc>': { tier: 'warning', category: 'seo' },
+  'Sitemap URLs exceed 1000 images': { tier: 'warning', category: 'seo' },
+  'Sitemap video entries missing <video:thumbnail_loc>': { tier: 'warning', category: 'seo' },
+  'Sitemap video entries missing <video:title>': { tier: 'warning', category: 'seo' },
+  'Sitemap video entries missing <video:description>': { tier: 'warning', category: 'seo' },
+  'Sitemap video entries missing <video:content_loc> and <video:player_loc>': { tier: 'warning', category: 'seo' },
+  'Sitemap video entries have an invalid <video:duration>': { tier: 'notice', category: 'seo' },
+  'Sitemap news entries missing <news:name>': { tier: 'warning', category: 'seo' },
+  'Sitemap news entries missing <news:language>': { tier: 'warning', category: 'seo' },
+  'Sitemap news entries missing <news:publication_date>': { tier: 'warning', category: 'seo' },
+  'Sitemap news entries missing <news:title>': { tier: 'warning', category: 'seo' },
+  'Sitemap media URLs are not absolute': { tier: 'warning', category: 'seo' },
+  'Sitemap uses image/video/news tags without declaring the namespace': { tier: 'notice', category: 'seo' },
+  'Sitemap image URLs fail to load': { tier: 'warning', category: 'seo' },
+  'Sitemap video URLs fail to load': { tier: 'warning', category: 'seo' },
   'Some pages have redirect chains or loops': { tier: 'error', category: 'seo' },
   'Soft 404 detected': { tier: 'error', category: 'seo' },
   'Pages blocked via X-Robots-Tag header': { tier: 'error', category: 'seo' },

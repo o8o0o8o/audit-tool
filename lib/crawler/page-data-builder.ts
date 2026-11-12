@@ -36,6 +36,51 @@ import { escapeHtml } from '../reports/html-utils';
 import type { ChromePage } from '../types';
 import type { CLSEntry } from './vitals-collector';
 import { collectVisualOverlays } from './visual-overlay-collector';
+import type { HTMLElement as ParsedElement } from 'node-html-parser';
+
+const ICON_RELS = new Set(['icon', 'shortcut icon', 'apple-touch-icon', 'apple-touch-icon-precomposed', 'mask-icon']);
+
+function resolveHeadHref(href: string | undefined, pageUrl: string): string | undefined {
+  if (!href?.trim()) return undefined;
+  try {
+    return new URL(href.trim(), pageUrl).href;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Fill manifest, icons, appleTouchIcon and themeColor from the parsed HTML head.
+ * Runs before the analyzers because PWAAnalyzer reads these fields. `data:` icons
+ * are kept so the page still counts as having an icon; the validator never fetches them.
+ */
+export function extractHeadLinks(parsedPage: ParsedElement, pageUrl: string, pageData: PageInfo): void {
+  const icons: NonNullable<PageInfo['icons']> = [];
+  for (const link of parsedPage.querySelectorAll('link[rel][href]')) {
+    const rel = (link.getAttribute('rel') ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+    const href = resolveHeadHref(link.getAttribute('href'), pageUrl);
+    if (!href) continue;
+    if (rel === 'manifest') {
+      if (!pageData.manifest && /^https?:/.test(href)) pageData.manifest = href;
+      continue;
+    }
+    if (!ICON_RELS.has(rel)) continue;
+    icons.push({
+      href,
+      sizes: link.getAttribute('sizes') ?? undefined,
+      type: link.getAttribute('type') ?? undefined,
+      rel,
+    });
+    if (rel.startsWith('apple-touch-icon') && !pageData.appleTouchIcon && /^https?:/.test(href)) {
+      pageData.appleTouchIcon = href;
+    }
+  }
+  // Always set (even empty): an absent field marks a page restored from a
+  // checkpoint written before head links were captured.
+  pageData.icons = icons;
+  const themeColor = parsedPage.querySelector('meta[name="theme-color"]')?.getAttribute('content')?.trim();
+  if (themeColor) pageData.themeColor = themeColor;
+}
 
 /**
  * Render a URL for display inside a finding's prose WITHOUT its scheme, so it

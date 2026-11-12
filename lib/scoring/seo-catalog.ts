@@ -46,6 +46,14 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   'Placeholder text (lorem ipsum) on page': { tier: 'warning', category: 'technical' },
   'Garbled characters (mojibake) in page text': { tier: 'warning', category: 'technical' },
   'Text clipped by its container': { tier: 'notice', category: 'technical' },
+  // ─── Favicon / Web manifest ─────────────────────────────────────────────
+  'Favicon missing': { tier: 'warning', category: 'technical' },
+  'Favicon returns error status': { tier: 'warning', category: 'technical' },
+  'Favicon is not an image': { tier: 'warning', category: 'technical' },
+  'Favicon smaller than 48px': { tier: 'notice', category: 'technical' },
+  'Web manifest failed to load': { tier: 'warning', category: 'technical' },
+  'Invalid manifest JSON': { tier: 'warning', category: 'technical' },
+  'Manifest icon returns 404': { tier: 'warning', category: 'technical' },
   // ─── SEO: On-page ─────────────────────────────────────────────────────────
   'Some pages have missing or empty title': { tier: 'error', category: 'seo' },
   'Some pages have missing or empty meta description': { tier: 'warning', category: 'seo' },

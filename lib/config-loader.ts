@@ -35,6 +35,8 @@ interface ConfigRecord {
   sections?: string[];
   /** Finding groups for `preset: "custom"`. */
   checks?: string[];
+  /** Run the visual (UI defect) analyzers; CLI `--visual` / `--no-visual` wins. */
+  visual?: boolean;
   analysis?: {
     similarityThreshold?: number;
     jsUnusedThreshold?: number;
@@ -266,6 +268,7 @@ const CONFIG_SCHEMA = {
   preset: { type: 'string' },
   sections: { type: 'array', itemType: 'string' },
   checks: { type: 'array', itemType: 'string' },
+  visual: { type: 'boolean' },
   analysis: {
     type: 'object',
     allowedKeys: [
@@ -314,6 +317,10 @@ function validateConfig(config: ConfigRecord) {
   if (validated.preset !== undefined && typeof validated.preset !== 'string') {
     warnings.push(`Invalid preset: ${String(validated.preset)} (must be a string)`);
     delete validated.preset;
+  }
+  if (validated.visual !== undefined && typeof validated.visual !== 'boolean') {
+    warnings.push(`Invalid visual: ${String(validated.visual)} (must be true or false)`);
+    delete validated.visual;
   }
   for (const key of ['sections', 'checks'] as const) {
     const list = validated[key];
@@ -761,6 +768,7 @@ function generateSampleConfig() {
         outboundTimeout: 5000, // Timeout for external link checks (ms)
       },
       excludeUrls: ['/admin/*', '/staging/*', '*.pdf'],
+      visual: false,
       report: {
         showQuickWins: true,
         maxQuickWins: 10,
@@ -889,7 +897,14 @@ function validateConfigFile(configPath: string | null) {
   return result;
 }
 
+/** Whether the visual analyzers run: an explicit CLI flag wins, then `.seoauditrc`, else off. */
+function resolveVisual(cliVisual: boolean | null | undefined, config: { visual?: unknown }): boolean {
+  if (typeof cliVisual === 'boolean') return cliVisual;
+  return config.visual === true;
+}
+
 export {
+  resolveVisual,
   loadConfig,
   applyConfigToConstants,
   shouldExcludeUrl,
@@ -898,3 +913,11 @@ export {
   validateConfigFile,
   DEFAULT_CONFIG,
 };
+
+/** Per-site `SEOData` options for a `--sites` batch run; `visual` follows the CLI flag, then `.seoauditrc`. */
+export function batchSiteOptions(
+  args: { verbose?: boolean; limit?: number | null; visual?: boolean | null; config?: string | null },
+  config: Record<string, unknown> = loadConfig(args.config ?? undefined),
+): { verbose?: boolean; limit: number; visual: boolean } {
+  return { verbose: args.verbose, limit: args.limit ?? 20, visual: resolveVisual(args.visual ?? null, config) };
+}

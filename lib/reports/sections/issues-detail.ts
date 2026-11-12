@@ -11,7 +11,17 @@ import { mergeNumericVariants } from '../../scoring/merge-variants';
 import { nextjsOverrideFor, isNextjsAudit } from '../../scoring/nextjs-recommendations';
 import { ScoreCalculator } from '../../scoring/score-calculator';
 import { extractComparisonLabels } from '../comparison-helpers';
+import { isVisualFinding } from '../../phase2/categorize';
 import type { ReportSectionData, AnalysisDetail, FixRecommendation, ComparisonData } from '../../types';
+
+export const NO_UI_ISSUES_TEXT = 'No UI issues found';
+
+/** Empty-state note shown when the `--visual` check ran and raised nothing, so a clean result reads as checked. */
+export function getVisualNote(jsonData: Record<string, unknown>, messages: Iterable<string>): string {
+  if (jsonData.visual !== true) return '';
+  for (const m of messages) if (isVisualFinding(m)) return '';
+  return `<div class="visual-check-note" style="border:1px solid var(--color-success);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:16px;font-size:var(--font-size-sm);"><strong>${NO_UI_ISSUES_TEXT}.</strong> The visual check (<code>--visual</code>) found no broken images or media, unrendered template text, placeholder copy, garbled characters or clipped text.</div>`;
+}
 
 /** Shared inline script for issue table filtering/expanding (used in both main and comparison reports) */
 function getIssueTableScript() {
@@ -153,7 +163,8 @@ function getIssuesDetail(data: ReportSectionData) {
     });
   }
 
-  if (issues.length === 0) return '';
+  const visualNote = getVisualNote(jsonData, Object.keys(details));
+  if (issues.length === 0) return visualNote;
 
   // Sort: severity first, then impact score descending
   issues.sort((a, b) => {
@@ -177,7 +188,7 @@ function getIssuesDetail(data: ReportSectionData) {
         </div>
       </div>
 
-      ${counts.critical > 0 ? `<div style="background:var(--color-error-bg);border:1px solid var(--color-error-border);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:16px;font-size:var(--font-size-sm);color:var(--color-error-text);"><strong>${counts.critical} critical issue${counts.critical > 1 ? 's' : ''}</strong> require immediate attention.</div>` : ''}
+      ${visualNote}${counts.critical > 0 ? `<div style="background:var(--color-error-bg);border:1px solid var(--color-error-border);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:16px;font-size:var(--font-size-sm);color:var(--color-error-text);"><strong>${counts.critical} critical issue${counts.critical > 1 ? 's' : ''}</strong> require immediate attention.</div>` : ''}
 
       <table class="issues-table" style="table-layout:fixed;width:100%;">
         <colgroup>

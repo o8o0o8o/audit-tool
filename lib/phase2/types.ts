@@ -76,6 +76,8 @@ export interface MetadataData {
   isMultiLang?: boolean;
   timing?: Record<string, number>;
   cruxData?: unknown;
+  /** True when the crawl ran the `--visual` analyzers on every page. */
+  visual?: boolean;
 }
 
 export interface AuditArtifacts {

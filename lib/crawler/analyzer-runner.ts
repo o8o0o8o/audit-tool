@@ -163,6 +163,7 @@ export async function runAnalyzers(
   options: CrawlerInternalOptions,
   reportIssue: ReportIssueFn,
   servedHtml?: string,
+  visual = false,
 ): Promise<void> {
   const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
   // Cast requests for analyzer compatibility (analyzers use broader parameter types)
@@ -315,9 +316,9 @@ export async function runAnalyzers(
       OpenRedirectAnalyzer.analyze(pageData, parsedPage, url),
       SpellingGrammarAnalyzer.analyze(chromePage, url),
 
-      // Visual
-      BrokenMediaAnalyzer.analyze(chromePage, url, requests),
-      TextIntegrityAnalyzer.analyze(chromePage, url),
+      // Visual — opt-in via --visual
+      visual ? BrokenMediaAnalyzer.analyze(chromePage, url, requests) : Promise.resolve({ issues: [] }),
+      visual ? TextIntegrityAnalyzer.analyze(chromePage, url) : Promise.resolve({ issues: [] }),
     ]),
     analyzerTimeout,
     `Analyzer timeout for ${url}`,
@@ -439,8 +440,10 @@ export async function runAnalyzers(
   ).info;
   pageData.openRedirectData = (openRedirectResult as AnalyzerResult & { info: typeof pageData.openRedirectData }).info;
   pageData.spellingData = (spellingResult as AnalyzerResult & { info: typeof pageData.spellingData }).info;
-  pageData.brokenMediaData = brokenMediaResult as unknown as typeof pageData.brokenMediaData;
-  pageData.textIntegrityData = textIntegrityResult as unknown as typeof pageData.textIntegrityData;
+  if (visual) {
+    pageData.brokenMediaData = brokenMediaResult as unknown as typeof pageData.brokenMediaData;
+    pageData.textIntegrityData = textIntegrityResult as unknown as typeof pageData.textIntegrityData;
+  }
 
   // Report issues from Group 1
   [

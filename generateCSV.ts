@@ -316,7 +316,7 @@ function generateAllCSVs(jsonFile: string, domainName: string) {
   console.log(`   You can now open these files in Excel, Google Sheets, or any CSV tool.\n`);
 }
 
-export { generateAllCSVs, generatePagesCSV, escapeCSV };
+export { generateAllCSVs, generatePagesCSV, generateIssuesCSV, escapeCSV };
 // CLI entry point
 if (require.main === module) {
   const args = process.argv.slice(2);

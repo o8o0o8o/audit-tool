@@ -105,6 +105,7 @@ export const ROLE_DEFINITIONS: Record<Exclude<RolePreset, 'custom'>, RoleDefinit
       'technical',
       'performance',
       'accessibility',
+      'ux',
       'content-insights',
       'charts',
       'pages',

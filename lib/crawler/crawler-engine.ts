@@ -118,6 +118,7 @@ import type { Issue } from '../types';
 
 class CrawlerEngine {
   #options: CrawlerInternalOptions;
+  #visual: boolean;
   #callbacks: CrawlerCallbacks;
   #failureTracker: FailureTracker;
   #backoffState: Map<string, BackoffState>;
@@ -299,6 +300,7 @@ class CrawlerEngine {
           ],
         },
     };
+    this.#visual = options.visual ?? false;
     this.#callbacks = callbacks;
 
     // Initialize circuit breaker state
@@ -317,6 +319,15 @@ class CrawlerEngine {
     if (typeof options.evidenceCap === 'number' && options.evidenceCap > 0) {
       this.#sampler = new RepresentativeSampler(options.evidenceCap);
     }
+  }
+
+  get visual(): boolean {
+    return this.#visual;
+  }
+
+  /** Set before crawling starts; on `--proceed` the checkpoint's value replaces the CLI one. */
+  set visual(value: boolean) {
+    this.#visual = value;
   }
 
   /**
@@ -1471,6 +1482,7 @@ class CrawlerEngine {
         this.#options,
         this.#reportIssue,
         servedHtml,
+        this.#visual,
       );
     } catch (analyzerError: unknown) {
       // Log the error but don't fail the entire page

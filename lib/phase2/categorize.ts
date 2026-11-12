@@ -23,6 +23,8 @@ const PRECEDENCE: Array<{ section: Section; patterns: RegExp[] }> = [
       /uncaught\s+(exception|error)/i,
       /runtime\s+error/i,
       /\bunhandled\s+(promise\s+)?rejection/i,
+      /security\.txt/i,
+      /\b(?:app-)?ads\.txt/i,
     ],
   },
 ];

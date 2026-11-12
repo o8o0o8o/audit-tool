@@ -123,7 +123,7 @@ audit-results/
 
 **Performance.** Core Web Vitals (LCP / CLS / INP / FCP / TTFB) lab + field, render-blocking resources, font strategy (woff/woff2, font-display, preload coverage), image optimization (srcset correctness, DPR-aware sizing, format), JS/CSS coverage with critical-CSS recommendation, third-party payload, caching.
 
-**SEO.** Meta tags, headings, canonicals, hreflang reciprocity (Google's "must list itself" + fully-qualified URL rules), structured data, sitemap quality (404s, 3xx redirects, `changefreq=always`+`priority=1.0` abuse, trailing-slash duplicates), internal linking, PageRank, broken outbound links, AI search readiness (llms.txt, GPTBot/ClaudeBot rules).
+**SEO.** Meta tags, headings, canonicals, hreflang reciprocity (Google's "must list itself" + fully-qualified URL rules), structured data, sitemap quality (404s, 3xx redirects, `changefreq=always`+`priority=1.0` abuse, trailing-slash duplicates), internal linking, PageRank, broken outbound links, AI search readiness (llms.txt, GPTBot/ClaudeBot rules), security.txt (RFC 9116: Contact, Expires, location, content type) and ads.txt / app-ads.txt syntax (missing ads.txt flagged only when ad networks are detected).
 
 **Privacy / GDPR.** Consent banner detection, tracking scripts before consent, cookie lifespan (>365 days), third-party cookies without consent, privacy policy presence.
 

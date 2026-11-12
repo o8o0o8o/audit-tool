@@ -1908,3 +1908,17 @@ export interface CrawlerCallbacks {
   checkAttempts: (url: string) => void;
   saveAttempt: (url: string) => void;
 }
+
+/** Fetch outcome for a site-level text file (security.txt, ads.txt, app-ads.txt). */
+export interface SiteTextFileInfo {
+  /** true = served, false = absent, undefined = network error (state unknown) */
+  found: boolean | undefined;
+  url?: string;
+  invalidLines?: number;
+}
+
+export interface SiteTextFilesData {
+  securityTxt?: SiteTextFileInfo;
+  adsTxt?: SiteTextFileInfo;
+  appAdsTxt?: SiteTextFileInfo;
+}

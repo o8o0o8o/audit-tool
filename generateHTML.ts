@@ -23,6 +23,7 @@ import {
   getScripts,
   getExecutiveSummary,
   getIssuesDetail,
+  getUiIssues,
   getPerformanceStats,
   getHistoricalProgress,
   getChartsSection,
@@ -53,6 +54,7 @@ const NAV_LINKS: Partial<Record<HtmlSectionId, string>> = {
   'executive-summary':
     '<a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>',
   'issues-detail': '<a href="#issues-detail" title="Issues">📋<span class="nav-label">Issues</span></a>',
+  'ui-issues': '<a href="#ui-issues" title="UI Issues">🖼️<span class="nav-label">UI</span></a>',
   performance: '<a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>',
   charts: '<a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>',
   'content-insights':
@@ -63,6 +65,7 @@ const NAV_LINKS: Partial<Record<HtmlSectionId, string>> = {
 const TAB_LABELS: Partial<Record<HtmlSectionId, string>> = {
   'executive-summary': 'Summary',
   'issues-detail': 'Issues',
+  'ui-issues': 'UI Issues',
   performance: 'Performance',
   charts: 'Charts',
   'content-insights': 'Insights',
@@ -73,6 +76,7 @@ const TAB_LABELS: Partial<Record<HtmlSectionId, string>> = {
 const DEFAULT_NAV_ORDER: HtmlSectionId[] = [
   'executive-summary',
   'issues-detail',
+  'ui-issues',
   'performance',
   'charts',
   'content-insights',
@@ -81,6 +85,7 @@ const DEFAULT_NAV_ORDER: HtmlSectionId[] = [
 const DEFAULT_TAB_ORDER: HtmlSectionId[] = [
   'executive-summary',
   'issues-detail',
+  'ui-issues',
   'performance',
   'charts',
   'content-insights',
@@ -90,6 +95,7 @@ const DEFAULT_TAB_ORDER: HtmlSectionId[] = [
 const DEFAULT_BODY_ORDER: HtmlSectionId[] = [
   'executive-summary',
   'issues-detail',
+  'ui-issues',
   'performance',
   'charts',
   'technology-stack',
@@ -261,6 +267,7 @@ function generateHTML(
     hasPerformanceMetrics: pagesWithMetrics.length > 0,
     comparison: (reportData as Record<string, unknown>).comparison as ReportSectionData['comparison'],
     noScore: selection.noScore === true,
+    runDir: path.dirname(file),
   };
 
   const agenticAnalysis = (jsonData as { analysis?: { details?: Record<string, AnalysisDetail>; summary?: { categoryScores?: { agentic?: number } } } }).analysis;
@@ -281,6 +288,7 @@ function generateHTML(
           ${getIssuesDetail(sectionData)}
           ${agenticHtml}
           </div>`,
+    'ui-issues': () => getUiIssues(sectionData),
     performance: () => `<div id="performance">
           ${getPerformanceStats(sectionData)}
           </div>`,
@@ -299,7 +307,10 @@ function generateHTML(
           </div>`,
   };
   const chosen = selection.sections;
-  const inOrder = (defaults: HtmlSectionId[]) => (chosen ? chosen.filter((id) => defaults.includes(id)) : defaults);
+  // The UI Issues section exists only when the visual check ran and is in this report.
+  const hidden = new Set<HtmlSectionId>(jsonData.visual === true ? [] : ['ui-issues']);
+  const inOrder = (defaults: HtmlSectionId[]) =>
+    (chosen ? chosen.filter((id) => defaults.includes(id)) : defaults).filter((id) => !hidden.has(id));
   const navLinks = inOrder(DEFAULT_NAV_ORDER)
     .map((id) => NAV_LINKS[id])
     .join('\n          ');

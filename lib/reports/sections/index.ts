@@ -17,6 +17,7 @@ import { getPagesTable } from './pages-table';
 import { getTechnologyStack } from './technology-stack';
 import { getSourceCodeAnalysis } from './source-code-analysis';
 import { getContentInsights } from './content-insights';
+import { getUiIssues } from './ui-issues';
 
 export {
   getDesignTokens,
@@ -25,6 +26,7 @@ export {
   getScripts,
   getExecutiveSummary,
   getIssuesDetail,
+  getUiIssues,
   getPerformanceStats,
   getHistoricalProgress,
   getChartsSection,

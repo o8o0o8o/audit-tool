@@ -227,7 +227,7 @@ Input validation and security:
 
 ### Visual (`visual` check family)
 
-Opt-in via `--visual` (or `visual: true` in `.seoauditrc`; `--no-visual` overrides). Findings route to the UX section; Phase 3 never refutes them. The run's metadata records `visual` (a `--proceed` resume keeps the checkpoint's value), and a clean run shows "No UI issues found" in the HTML and Phase 2 reports.
+Opt-in via `--visual` (or `visual: true` in `.seoauditrc`; `--no-visual` overrides). Findings route to the UX section; Phase 3 never refutes them. The run's metadata records `visual` (a `--proceed` resume keeps the checkpoint's value), and a clean run shows "No UI issues found" in the HTML and Phase 2 reports. The HTML report has a dedicated **UI Issues** section with crawl-time screenshots of each defect and highlight boxes (`lib/crawler/visual-shot-capture.ts`, `lib/reports/sections/ui-issues.ts`; needs evidence on).
 
 - **broken-media-analyzer.ts**: Broken `<img>` (loaded with naturalWidth 0) and failed 4xx/5xx image/media requests
 - **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`), lorem ipsum, mojibake, clipped text

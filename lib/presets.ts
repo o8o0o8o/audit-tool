@@ -49,6 +49,7 @@ export type CheckName = (typeof CHECK_NAMES)[number];
 export type HtmlSectionId =
   | 'executive-summary'
   | 'issues-detail'
+  | 'ui-issues'
   | 'performance'
   | 'charts'
   | 'content-insights'
@@ -66,7 +67,7 @@ const SECTION_TARGETS: Record<ReportSection, { html?: HtmlSectionId; phase2?: Se
   seo: { phase2: 'seo' },
   privacy: { phase2: 'privacy' },
   accessibility: { phase2: 'accessibility' },
-  ux: { phase2: 'ux' },
+  ux: { html: 'ui-issues', phase2: 'ux' },
   technical: { phase2: 'technical' },
   charts: { html: 'charts' },
   'content-insights': { html: 'content-insights' },

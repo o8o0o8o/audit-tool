@@ -195,7 +195,7 @@ void describe('text integrity', async () => {
   void it('analyze emits each finding with the right severity', async () => {
     const page = {
       evaluate: async () => ({
-        texts: ['Hello {{ name }}', 'Lorem ipsum dolor', 'CafÃ©'],
+        texts: [{ value: 'Hello {{ name }}' }, { value: 'Lorem ipsum dolor' }, { value: 'CafÃ©' }],
         clipped: [{ tag: 'p', text: 'Long text', metrics: clip() }],
       }),
     } as unknown as ChromePage;

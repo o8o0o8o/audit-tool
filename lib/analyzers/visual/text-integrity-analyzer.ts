@@ -1,5 +1,6 @@
 import { SEVERITY } from '../../constants';
 import type { ChromePage, Issue } from '../../types';
+import { type DocRect, type VisualHighlight, capHighlights } from './visual-highlights';
 
 export interface ClipMetrics {
   overflowX: string;
@@ -20,6 +21,13 @@ export interface ClippedSample {
   tag: string;
   text: string;
   metrics: ClipMetrics;
+  rect?: DocRect;
+}
+
+/** A visible text node with its parent element's document-coordinate box. */
+export interface TextSample {
+  value: string;
+  rect?: DocRect;
 }
 
 export interface TextIntegrityData {
@@ -28,7 +36,14 @@ export interface TextIntegrityData {
   mojibake: string[];
   clippedText: string[];
   issues: Issue[];
+  /** Where each defect sits on the page (document coords); absent on older audits. */
+  highlights?: VisualHighlight[];
 }
+
+export const TEMPLATE_TOKENS_MESSAGE = 'Unrendered template tokens in page text';
+export const PLACEHOLDER_TEXT_MESSAGE = 'Placeholder text (lorem ipsum) on page';
+export const MOJIBAKE_MESSAGE = 'Garbled characters (mojibake) in page text';
+export const CLIPPED_TEXT_MESSAGE = 'Text clipped by its container';
 
 const CLIP_TOLERANCE_PX = 5;
 /** Boxes this small are the visually-hidden (`.sr-only`) pattern, not a layout that cut text off. */
@@ -84,6 +99,25 @@ export function isClippedText(m: ClipMetrics): boolean {
   return clippedX || clippedY;
 }
 
+const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+/** Box the text nodes and elements behind each text finding. Mojibake boxes only nodes containing a reported sequence. */
+export function buildTextHighlights(texts: TextSample[], mojibake: string[], clipped: ClippedSample[]): VisualHighlight[] {
+  const out: VisualHighlight[] = [];
+  for (const t of texts) {
+    if (!t.rect) continue;
+    const tokens = findTemplateTokens(t.value);
+    if (tokens.length > 0) out.push({ kind: TEMPLATE_TOKENS_MESSAGE, rect: t.rect, label: short(tokens.join(' ')) });
+    if (hasPlaceholderText(t.value)) out.push({ kind: PLACEHOLDER_TEXT_MESSAGE, rect: t.rect, label: 'lorem ipsum' });
+    const bad = mojibake.find((m) => t.value.includes(m));
+    if (bad) out.push({ kind: MOJIBAKE_MESSAGE, rect: t.rect, label: `“${bad}”` });
+  }
+  for (const c of clipped) {
+    if (c.rect) out.push({ kind: CLIPPED_TEXT_MESSAGE, rect: c.rect, label: `clipped: ${short(c.text, 30)}` });
+  }
+  return capHighlights(out);
+}
+
 function sampleList(items: string[]): string {
   const shown = items.slice(0, SAMPLE_LIMIT).map((s) => `"${s}"`).join(', ');
   return items.length > SAMPLE_LIMIT ? `${shown} (+${items.length - SAMPLE_LIMIT} more)` : shown;
@@ -92,8 +126,12 @@ function sampleList(items: string[]): string {
 class TextIntegrityAnalyzer {
   static async analyze(chromePage: ChromePage, url: string): Promise<TextIntegrityData> {
     const snapshot = await chromePage.evaluate(() => {
+      const docRect = (r: DOMRect) =>
+        r.width > 0 && r.height > 0
+          ? { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height }
+          : undefined;
       const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'CODE', 'PRE', 'KBD', 'SAMP', 'TEXTAREA']);
-      const texts: string[] = [];
+      const texts: Array<{ value: string; rect?: { x: number; y: number; width: number; height: number } }> = [];
       const clipCandidates = new Set<Element>();
       const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -111,7 +149,7 @@ class TextIntegrityAnalyzer {
         if (!parent) continue;
         const rect = parent.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) continue;
-        texts.push(value);
+        texts.push({ value, rect: docRect(rect) });
         if (clipCandidates.size < 500) clipCandidates.add(parent);
       }
       const clipped = Array.from(clipCandidates).map((el) => {
@@ -131,50 +169,52 @@ class TextIntegrityAnalyzer {
             clip: cs.clip,
             clipPath: cs.clipPath,
           },
+          rect: docRect(el.getBoundingClientRect()),
         };
       });
       return { texts, clipped };
     });
 
-    const templateTokens = [...new Set(snapshot.texts.flatMap(findTemplateTokens))];
-    const placeholderText = snapshot.texts.some(hasPlaceholderText);
-    const mojibake = findMojibake(snapshot.texts.join('\n'));
-    const clippedText = snapshot.clipped
-      .filter((c: ClippedSample) => isClippedText(c.metrics))
-      .map((c: ClippedSample) => `<${c.tag}> ${c.text}`);
+    const values = snapshot.texts.map((t) => t.value);
+    const templateTokens = [...new Set(values.flatMap(findTemplateTokens))];
+    const placeholderText = values.some(hasPlaceholderText);
+    const mojibake = findMojibake(values.join('\n'));
+    const clippedSamples = snapshot.clipped.filter((c: ClippedSample) => isClippedText(c.metrics));
+    const clippedText = clippedSamples.map((c: ClippedSample) => `<${c.tag}> ${c.text}`);
     const link = `<a href="${url}">${url}</a>`;
     const issues: Issue[] = [];
 
     if (templateTokens.length > 0) {
       issues.push({
         severity: SEVERITY.HIGH,
-        message: 'Unrendered template tokens in page text',
+        message: TEMPLATE_TOKENS_MESSAGE,
         detail: `${link} shows raw template output: ${sampleList(templateTokens)}`,
       });
     }
     if (placeholderText) {
       issues.push({
         severity: SEVERITY.MEDIUM,
-        message: 'Placeholder text (lorem ipsum) on page',
+        message: PLACEHOLDER_TEXT_MESSAGE,
         detail: `${link} contains lorem ipsum placeholder copy`,
       });
     }
     if (mojibake.length > 0) {
       issues.push({
         severity: SEVERITY.MEDIUM,
-        message: 'Garbled characters (mojibake) in page text',
+        message: MOJIBAKE_MESSAGE,
         detail: `${link} shows mis-decoded characters: ${sampleList(mojibake)}`,
       });
     }
     if (clippedText.length > 0) {
       issues.push({
         severity: SEVERITY.LOW,
-        message: 'Text clipped by its container',
+        message: CLIPPED_TEXT_MESSAGE,
         detail: `${link} has ${clippedText.length} element(s) whose text is cut off without an ellipsis: ${sampleList(clippedText)}`,
       });
     }
 
-    return { templateTokens, placeholderText, mojibake, clippedText, issues };
+    const highlights = buildTextHighlights(snapshot.texts, mojibake, clippedSamples);
+    return { templateTokens, placeholderText, mojibake, clippedText, issues, highlights };
   }
 }
 

@@ -6,6 +6,7 @@
 import type { PresetName } from './presets';
 import type { BrokenMediaData } from './analyzers/visual/broken-media-analyzer';
 import type { TextIntegrityData } from './analyzers/visual/text-integrity-analyzer';
+import type { VisualShot } from './crawler/visual-shot-capture';
 
 // ─── Severity & Issues ───────────────────────────────────────────────────────
 
@@ -197,6 +198,8 @@ export interface PageInfo {
   imageOptimization?: ImageOptimizationData;
   brokenMediaData?: BrokenMediaData;
   textIntegrityData?: TextIntegrityData;
+  /** `--visual`: screenshots of the page regions holding visual defects, with highlight boxes. */
+  visualShots?: VisualShot[];
   consoleAnalysis?: ConsoleAnalysisData;
   formData?: FormAccessibilityData;
   resourceOptimization?: ResourceOptimizationData;
@@ -1573,6 +1576,8 @@ export interface ReportSectionData {
   comparison?: ComparisonData;
   /** --no-score: omit every score and the scoring-rules block. */
   noScore?: boolean;
+  /** Run directory, for reading evidence files (e.g. visual screenshots) into the report. */
+  runDir?: string;
 }
 
 export interface TopIssue {

@@ -62,6 +62,7 @@ import { BrokenMediaAnalyzer } from '../analyzers/visual/broken-media-analyzer';
 import { TextIntegrityAnalyzer } from '../analyzers/visual/text-integrity-analyzer';
 import { AgenticBrowsingAnalyzer } from '../analyzers/agentic/agentic-browsing-analyzer';
 import type { AgenticPageData } from '../analyzers/agentic/agentic-checks';
+import { captureVisualShots } from './visual-shot-capture';
 import { CookieConsentAnalyzer } from '../analyzers/security/cookie-consent-analyzer';
 import { MixedContentAnalyzer } from '../analyzers/security/mixed-content-analyzer';
 
@@ -452,6 +453,21 @@ export async function runAnalyzers(
   if (visual) {
     pageData.brokenMediaData = brokenMediaResult as unknown as typeof pageData.brokenMediaData;
     pageData.textIntegrityData = textIntegrityResult as unknown as typeof pageData.textIntegrityData;
+    const highlights = [
+      ...(pageData.brokenMediaData?.highlights ?? []),
+      ...(pageData.textIntegrityData?.highlights ?? []),
+    ];
+    if (options.evidenceDir && highlights.length > 0) {
+      const shots = await withTimeout(
+        captureVisualShots(chromePage, url, options.evidenceDir, highlights),
+        analyzerTimeout,
+        `Visual screenshot timeout for ${url}`,
+      ).catch((e) => {
+        if (options.verbose) console.warn(`[visual] screenshots failed for ${url}: ${e instanceof Error ? e.message : e}`);
+        return [];
+      });
+      if (shots.length > 0) pageData.visualShots = shots;
+    }
   }
   if (agentic) {
     const { issues: _agenticIssues, ...agenticData } = agenticResult as unknown as AgenticPageData;

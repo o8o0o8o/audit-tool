@@ -63,6 +63,13 @@ export function categoryLabel(c: ScoredCategory): string {
  *   3. Accessibility, 4. Performance, 5. SEO, 6. Technical (default).
  */
 const RULES: Array<{ category: ScoredCategory; patterns: RegExp[] }> = [
+  { category: 'security', patterns: [/^Personal data sent to Google Analytics/i, /^Consent Mode default set after/i] },
+  {
+    category: 'technical',
+    patterns: [
+      /^(?:Google tag script failed to load|Server-side tagging endpoint returns errors|Google Analytics hits fail to send|Analytics installed but no GA4 hits sent|GA4 hits sent to a property not referenced|Page views sent to multiple GA4 properties|Duplicate GA4 page_view|GA4 debug mode enabled|Meta Pixel fires duplicate PageView|dataLayer is overwritten after GTM loads|Internal links with UTM parameters|Product page sends no view_item event|Cross-domain links lack GA4 linker|Client-side navigation sends no page_view|GTM container|Many Custom HTML tags in GTM container)/i,
+    ],
+  },
   {
     category: 'performance',
     patterns: [

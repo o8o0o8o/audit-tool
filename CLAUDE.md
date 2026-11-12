@@ -263,6 +263,15 @@ Second wave (same runner, same never-refute rule):
 
 Per-page checks reported in the same block: **head-integrity-analyzer.ts** (served HTML; invalid element in the head that pushes canonical/hreflang/robots into the body), **bfcache-analyzer.ts** (`Cache-Control: no-store`, `unload` handlers counted by an init script), **js-library-analyzer.ts** (curated Retire.js-style advisories for jQuery, jQuery UI, Bootstrap, AngularJS, Lodash, Underscore, Moment, Handlebars, DOMPurify, Vue 2), **consent-mode-analyzer.ts** (Google tags without Consent Mode, or without the v2 `ad_user_data` / `ad_personalization` signals).
 
+### Analytics & Tags
+
+Shown as the **Analytics & Tags** block (status table + findings) next to Domain & Exposure; Phase 3 never refutes these findings.
+
+- **tag-runtime-analyzer.ts** (per page): decodes GA4 `/g/collect` hits (incl. batched POST bodies, kept as `RequestInfo.postData`) and Meta `facebook.com/tr` hits from the network log. Flags failed gtag/GTM scripts, failing hits / server-side tagging endpoints, tags installed but no GA4 hit, hits to a property not on the page, page views to several properties, duplicate page_view, debug mode, personal data in hits (masked), duplicate Meta PageView, `dataLayer = [...]` after GTM, consent default after tags start, internal `utm_` links, Product pages without view_item. The crawler keeps listening up to 3 s after load on tagged pages so late hits are captured; a 2xx hit that later reports `ERR_ABORTED` (beacon quirk) is not a failure.
+- **gtm-container-analyzer.ts** (site): fetches each public `gtm.js` once — container fails to load (incl. Google's empty stub for unknown IDs), Universal Analytics tags left in, IDs not seen on the site, size near the limit (config JSON ≥ 180 KB, an estimate), many Custom HTML tags; vendor inventory in the check note.
+- **tag-behavior-probe.ts** (site, headless Chromium, homepage): duplicate page_view within 6 s (gtag batches repeat hits ~5 s late), cross-domain links to brand sibling domains without the `_gl` linker (skipped when analytics consent is denied), SPA client-side navigation without a new page_view.
+- Site row "GA4 hits": share of tagged pages that actually sent hits, and the properties seen.
+
 ### Render & Delivery (per page, `analyzer-runner.ts`)
 
 `hydration-mismatch-analyzer.ts` (served vs rendered title/description/canonical/robots/H1), `hidden-content-analyzer.ts`, `scroll-loaded-content-analyzer.ts`, `dark-mode-contrast-analyzer.ts`, `form-health-analyzer.ts` (insecure/third-party form actions, CAPTCHA failed to load), `price-consistency-analyzer.ts` (Product schema price vs visible text), `asset-delivery-analyzer.ts` (asset redirects, long-cached assets without cache-busting, duplicate libraries, CDN not caching HTML — site-level), `cls-attribution.ts` (cookie banner layout shift). Dark-mode and scroll checks mutate the page and run last. `JavaScriptRenderingAnalyzer` now runs (raw = served HTML, rendered = post-JS DOM). Request entries carry `headers`, `count` and `failed`.

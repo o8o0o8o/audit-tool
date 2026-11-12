@@ -85,7 +85,7 @@ export function buildSiteHints(
   return hints;
 }
 
-function anchorsOf(parsedPage: ParsedPage, url: string): PageLink[] {
+export function anchorsOf(parsedPage: ParsedPage, url: string): PageLink[] {
   const out: PageLink[] = [];
   for (const a of parsedPage.querySelectorAll('a[href]')) {
     const href = a.getAttribute('href') ?? '';

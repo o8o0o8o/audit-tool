@@ -44,11 +44,29 @@ export const GRAPH_CHECK_FINDING_PATTERN =
 export const RENDER_CHECK_FINDING_PATTERN =
   /^(?:Server and rendered HTML disagree|Most page text is hidden|Content loads only after scrolling|Low color contrast in dark mode|Form submits (?:over insecure HTTP|data to a third-party domain)|CAPTCHA failed to load|Product schema price not shown|Assets are served through redirects|Long-cached assets without cache-busting|Same JavaScript library loaded more than once|CDN does not cache HTML pages|Cookie banner causes layout shift)/i;
 
+/** Analytics / tag findings, shown in the report's Analytics & Tags block. */
+export const ANALYTICS_FINDING_PATTERN =
+  /^(?:Google tag script failed to load|Server-side tagging endpoint returns errors|Google Analytics hits fail to send|Analytics installed but no GA4 hits sent|GA4 hits sent to a property not referenced|Page views sent to multiple GA4 properties|Duplicate GA4 page_view|GA4 debug mode enabled|Personal data sent to Google Analytics|Meta Pixel fires duplicate PageView|dataLayer is overwritten after GTM loads|Consent Mode default set after tags start|Internal links with UTM parameters|Product page sends no view_item event|Cross-domain links lack GA4 linker|Client-side navigation sends no page_view|GTM container|Many Custom HTML tags in GTM container|GTM tags without consent settings|Google tags run without Consent Mode|Google Consent Mode v2 signals missing|Trackers still run after consent is rejected|Session replay runs on pages)/i;
+
+/** Check-row ids rendered in the Analytics & Tags table instead of Domain & Exposure. */
+export const ANALYTICS_CHECK_IDS = new Set([
+  'ga4-hits',
+  'gtm-container',
+  'ga4-linker',
+  'spa-pageview',
+  'consent-reject',
+  'session-replay-sensitive',
+]);
+
+export function isAnalyticsFinding(message: string): boolean {
+  return ANALYTICS_FINDING_PATTERN.test(plain(message));
+}
+
 /** Strips HTML, markdown backticks/emphasis and leading punctuation before matching. */
 const plain = (m: string) =>
   m
     .replace(/<[^>]*>/g, '')
-    .replace(/[`*_]/g, '')
+    .replace(/[`*]/g, '')
     .replace(/^[^A-Za-z0-9.]+/, '')
     .trim();
 
@@ -70,6 +88,7 @@ export function isNeverRefuteCheckFinding(message: string): boolean {
     isSiteCheckFinding(message) ||
     isPageCheckFinding(message) ||
     isGraphCheckFinding(message) ||
+    isAnalyticsFinding(message) ||
     RENDER_CHECK_FINDING_PATTERN.test(plain(message))
   );
 }

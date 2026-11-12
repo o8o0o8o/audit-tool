@@ -17,6 +17,7 @@ export type Section = 'performance' | 'seo' | 'privacy' | 'accessibility' | 'ux'
  * detected" — which read as Technical, not Performance.
  */
 const PRECEDENCE: Array<{ section: Section; patterns: RegExp[] }> = [
+  { section: 'privacy', patterns: [/^Personal data sent to Google Analytics/i, /^Consent Mode default set after/i] },
   {
     section: 'technical',
     patterns: [
@@ -30,6 +31,7 @@ const PRECEDENCE: Array<{ section: Section; patterns: RegExp[] }> = [
       /^(?:SPF |No SPF record|Multiple SPF records|DMARC |No DMARC record|Multiple DMARC records|No DKIM key|MTA-STS |No MTA-STS|No TLS-RPT|No CAA record)/i,
       /^(?:Git repository exposed|Subversion metadata exposed|\.env file exposed|\.DS_Store file exposed|\.htpasswd file exposed|Backup or database dump|phpinfo\(\) page exposed|Directory listing enabled|Dangling CNAME)/i,
       /^Outdated JavaScript library with known vulnerabilities/i,
+      /^(?:Google tag script failed to load|Server-side tagging endpoint returns errors|Google Analytics hits fail to send|Analytics installed but no GA4 hits sent|GA4 hits sent to a property not referenced|Page views sent to multiple GA4 properties|Duplicate GA4 page_view|GA4 debug mode enabled|Meta Pixel fires duplicate PageView|dataLayer is overwritten after GTM loads|Internal links with UTM parameters|Product page sends no view_item event|Cross-domain links lack GA4 linker|Client-side navigation sends no page_view|GTM container|Many Custom HTML tags in GTM container)/i,
       /^(?:Form submits (?:over insecure HTTP|data to a third-party domain))/i,
       /(?: leaked in public JavaScript|^Google API key in public JavaScript|^Firebase Realtime Database|^Cloud storage bucket allows|^CORS reflects|^Script loaded from a domain that no longer resolves|^WordPress plugin with known|^Staging or development host)/i,
     ],
@@ -103,7 +105,7 @@ const RULES: Array<{ section: Section; patterns: RegExp[] }> = [
   },
   {
     section: 'privacy',
-    patterns: [/cookie/i, /consent/i, /privacy|GDPR|CCPA/i, /tracking/i, /session replay/i],
+    patterns: [/cookie/i, /consent/i, /privacy|GDPR|CCPA/i, /tracking/i, /session replay/i, /^Personal data sent to Google Analytics/i, /^Consent Mode default set after/i],
   },
   {
     section: 'accessibility',

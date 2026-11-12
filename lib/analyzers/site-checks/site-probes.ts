@@ -31,6 +31,8 @@ import { LocaleRedirectProbe } from './locale-redirect-probe';
 import { ConsentRejectTest, type ConsentBrowser } from './consent-reject-test';
 import { SessionReplaySensitive } from './session-replay-sensitive';
 import { mergeSiteHints } from './crawl-hints';
+import { TagBehaviorProbe, type ProbeBrowser } from './tag-behavior-probe';
+import { GtmContainerAnalyzer } from '../analytics/gtm-container-analyzer';
 import { siteDomain, type SiteChecksData, type SiteProbeResult } from './site-checks-types';
 
 type SaveErrorFn = (message: string, detail: string, severity?: string) => void;
@@ -92,13 +94,69 @@ export function samplePages(origin: string, pages: Record<string, PageInfo>, n =
   return out;
 }
 
-async function consentTest(home: string, second: string | undefined, userAgent?: string): Promise<SiteProbeResult> {
+/** One headless browser for the consent "Reject" test and the tag behaviour probe. */
+async function browserProbes(home: string, second: string | undefined, userAgent?: string): Promise<SiteProbeResult> {
   const browser = await chromium.launch();
+  const merged: SiteProbeResult = { issues: [], checks: [] };
   try {
-    return await ConsentRejectTest.probe(browser as unknown as ConsentBrowser, home, { secondUrl: second, userAgent });
+    for (const run of [
+      () => ConsentRejectTest.probe(browser as unknown as ConsentBrowser, home, { secondUrl: second, userAgent }),
+      () => TagBehaviorProbe.probe(browser as unknown as ProbeBrowser, home, { userAgent }),
+    ]) {
+      try {
+        const r = await run();
+        merged.issues.push(...r.issues);
+        merged.checks.push(...r.checks);
+      } catch (e) {
+        console.log(`  ⚠️  browser probe skipped: ${(e as Error).message}`);
+      }
+    }
+    return merged;
   } finally {
     await browser.close().catch(() => undefined);
   }
+}
+
+/** Site-wide tag facts from the per-page analytics data. */
+export function tagSummary(pages: Record<string, PageInfo>) {
+  const gtm = new Set<string>();
+  const ga4 = new Set<string>();
+  const ads = new Set<string>();
+  let installed = 0;
+  let withHits = 0;
+  for (const p of Object.values(pages)) {
+    const ids = p.analytics?.trackingIds ?? {};
+    (ids.gtm ?? []).forEach((i) => gtm.add(i.toUpperCase()));
+    (ids.ga4 ?? []).forEach((i) => ga4.add(i.toUpperCase()));
+    Object.entries(ids)
+      .filter(([k]) => /ads|adwords|aw/i.test(k))
+      .forEach(([, v]) => v.forEach((i) => ads.add(i.toUpperCase())));
+    const rt = p.tagRuntime;
+    rt?.ga4Ids.forEach((i) => ga4.add(i));
+    if ((ids.gtm?.length ?? 0) + (ids.ga4?.length ?? 0) > 0 || (rt?.hits ?? 0) > 0) installed++;
+    if ((rt?.hits ?? 0) > 0) withHits++;
+  }
+  return { gtm: [...gtm], ga4: [...ga4], ads: [...ads], installed, withHits };
+}
+
+function ga4HitsCheck(pages: Record<string, PageInfo>): SiteProbeResult {
+  const s = tagSummary(pages);
+  const runtimeIds = new Set(Object.values(pages).flatMap((p) => p.tagRuntime?.ga4Ids ?? []));
+  return {
+    issues: [],
+    checks: [
+      {
+        id: 'ga4-hits',
+        label: 'GA4 hits',
+        status:
+          s.installed === 0 ? 'skipped' : s.withHits === s.installed ? 'pass' : s.withHits === 0 ? 'fail' : 'warn',
+        note:
+          s.installed === 0
+            ? 'no Google tags found'
+            : `hits on ${s.withHits} of ${s.installed} tagged pages${runtimeIds.size ? `; properties: ${[...runtimeIds].join(', ')}` : ''}`,
+      },
+    ],
+  };
 }
 
 export async function runSiteProbes(
@@ -139,10 +197,18 @@ export async function runSiteProbes(
     ['WordPress plugins', () => WordPressPluginsAnalyzer.analyze(origin, extractWpPlugins(allAssets))],
     ['bot parity', () => BotParityProbe.probe(origin, { sampleUrls: samples, robotsAllows })],
     ['locale redirect', () => LocaleRedirectProbe.probe(origin)],
+    ['GA4 hits', () => Promise.resolve(ga4HitsCheck(pages))],
+    [
+      'GTM container',
+      () => {
+        const s = tagSummary(pages);
+        return GtmContainerAnalyzer.analyze(s.gtm, s.ga4, s.ads);
+      },
+    ],
     ['session replay', () => Promise.resolve(SessionReplaySensitive.analyze(hints.replayPages))],
     ...(ctx.skipBrowser
       ? []
-      : ([['consent reject', () => consentTest(samples[0], samples[1], ctx.userAgent)]] as Step[])),
+      : ([['browser probes', () => browserProbes(samples[0], samples[1], ctx.userAgent)]] as Step[])),
   ];
   for (const [name, run] of steps) {
     try {

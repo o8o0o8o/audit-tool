@@ -4,6 +4,7 @@
  */
 
 import type { SiteHints } from './analyzers/site-checks/crawl-hints';
+import type { TagRuntimeInfo } from './analyzers/analytics/tag-runtime-analyzer';
 
 import type { PresetName } from './presets';
 import type { BrokenMediaData } from './analyzers/visual/broken-media-analyzer';
@@ -266,6 +267,8 @@ export interface PageInfo {
   siteHints?: SiteHints;
   /** CDN cache state of the HTML document (asset-delivery-analyzer). */
   cdnCache?: 'hit' | 'miss' | 'none';
+  /** What tags actually sent during load (tag-runtime-analyzer). */
+  tagRuntime?: TagRuntimeInfo;
 }
 
 export interface PageData {

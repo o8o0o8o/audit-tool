@@ -77,6 +77,8 @@ export interface RequestInfo {
   count?: number;
   /** Request failed at the network level (DNS, blocked, aborted). */
   failed?: boolean;
+  /** POST body of analytics hits (GA4 /g/collect batches), capped; dropped at checkpoint. */
+  postData?: string;
 }
 
 export interface RedirectEntry {

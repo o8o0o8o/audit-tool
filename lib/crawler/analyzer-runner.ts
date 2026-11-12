@@ -105,7 +105,8 @@ import { FormHealthAnalyzer } from '../analyzers/content/form-health-analyzer';
 import { PriceConsistencyAnalyzer } from '../analyzers/seo/price-consistency-analyzer';
 import { AssetDeliveryAnalyzer } from '../analyzers/performance/asset-delivery-analyzer';
 import { ClsAttributionAnalyzer } from '../analyzers/performance/cls-attribution';
-import { capturePageHints } from '../analyzers/site-checks/crawl-hints';
+import { anchorsOf, capturePageHints } from '../analyzers/site-checks/crawl-hints';
+import { TagRuntimeAnalyzer } from '../analyzers/analytics/tag-runtime-analyzer';
 import { HeadIntegrityAnalyzer } from '../analyzers/seo/head-integrity-analyzer';
 import { BfcacheAnalyzer } from '../analyzers/performance/bfcache-analyzer';
 import { JsLibraryAnalyzer } from '../analyzers/security/js-library-analyzer';
@@ -728,6 +729,34 @@ export async function runAnalyzers(
     } catch {
       pageData.codeCoverage = null;
     }
+  }
+
+  // What GA4 / GTM / Meta Pixel actually sent during load (the crawler waits
+  // for late analytics hits before it stops recording requests).
+  try {
+    const ids = pageData.analytics?.trackingIds ?? {};
+    const schemaTypes = [
+      ...(pageData.structuredData?.schemas ?? []).map((s) => s.type),
+      ...(pageData.structuredData?.jsonLdSchemas ?? []).map((s) => String(s.type ?? '')),
+    ];
+    const tagResult = await withTimeout(
+      TagRuntimeAnalyzer.analyze(chromePage, {
+        url,
+        requests,
+        htmlGa4Ids: ids.ga4 ?? [],
+        htmlGtmIds: ids.gtm ?? [],
+        servedHtml,
+        anchors: anchorsOf(parsedPage, url).map((a) => a.href),
+        hasProductSchema: schemaTypes.some((t) => /\bProduct\b/.test(t)),
+        consentToolDetected: pageData.consentData?.hasConsentBanner === true,
+      }),
+      analyzerTimeout,
+      `Tag runtime timeout for ${url}`,
+    );
+    pageData.tagRuntime = tagResult.info;
+    reportIssues(tagResult, reportIssue, url);
+  } catch {
+    /* best-effort */
   }
 
   const runLast: Array<[string, () => Promise<AnalyzerResult>]> = [

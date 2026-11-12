@@ -130,6 +130,8 @@ audit-results/
 
 **Accessibility.** axe-core 4.x scan on every sampled page + hand-rolled heuristics: ARIA, color contrast, focus states, form labels, semantic landmarks, keyboard navigation, touch targets.
 
+**Analytics & Tags.** What GA4, GTM and Meta Pixel actually send: failed containers and hits, tags installed but silent, duplicate page views, wrong or extra GA4 properties, debug mode, personal data in hits, `dataLayer` overwrites, consent ordering, internal UTM links, missing `view_item`, cross-domain linker, SPA page views, and a GTM container review (dead UA tags, size, Custom HTML, vendors).
+
 **Security.** HTTPS, CSP, X-Frame-Options, HSTS, mixed content, SRI, cookies, permissions-policy, vulnerable front-end libraries (jQuery, Bootstrap, AngularJS, Lodash…).
 
 **Domain & Exposure.** Email authentication (SPF, DMARC, DKIM, MTA-STS, TLS-RPT), CAA, exposed `.git` / `.env` / backups / directory listings, missing-page status (soft 404 probe), dangling CNAMEs (subdomain takeover), leaked secrets in JS bundles, open cloud buckets and Firebase databases, CORS reflection, abandoned script domains, vulnerable WordPress plugins (with `WPSCAN_API_TOKEN`), indexable staging hosts, Googlebot/AI-crawler parity, language redirects, a consent "Reject" test, invalid `<head>` elements hiding canonical/hreflang, back/forward-cache blockers and Google Consent Mode v2 — shown as a status table in the HTML report.

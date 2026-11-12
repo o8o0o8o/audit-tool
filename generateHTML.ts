@@ -13,7 +13,7 @@ import { FileManager } from './lib/storage/file-manager';
 import { computePageCounts, type PageCounts } from './lib/utils/page-counts';
 import { escapeHtml } from './lib/reports/html-utils';
 import { getAgenticBrowsingSection, resolveAgenticState } from './lib/reports/sections/agentic-browsing';
-import { getDomainExposureSection } from './lib/reports/sections/domain-exposure';
+import { getAnalyticsTagsSection, getDomainExposureSection } from './lib/reports/sections/domain-exposure';
 import type { SiteChecksData } from './lib/analyzers/site-checks/site-checks-types';
 import { getComparisonHeader, shortDomain } from './lib/reports/comparison-helpers';
 import { categorize, VISUAL_FINDING_MESSAGES } from './lib/phase2/categorize';
@@ -292,7 +292,8 @@ function generateHTML(
 
   const domainExposureHtml = isComparison || loadError
     ? ''
-    : getDomainExposureSection(readSiteChecks(file), agenticAnalysis?.details ?? {});
+    : getDomainExposureSection(readSiteChecks(file), agenticAnalysis?.details ?? {}) +
+      getAnalyticsTagsSection(readSiteChecks(file), agenticAnalysis?.details ?? {});
 
   const bodyFragments: Record<HtmlSectionId, () => string> = {
     history: () => getHistoricalProgress(sectionData),

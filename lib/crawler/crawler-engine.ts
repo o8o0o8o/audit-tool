@@ -383,6 +383,11 @@ class CrawlerEngine {
         startTime: Date.now(),
         count: (requests[request.url()]?.count ?? 0) + 1,
       };
+      // GA4 batches several events in the POST body; keep it for the tag analyzer.
+      if (/\/g\/collect\b/.test(request.url())) {
+        const body = request.postData();
+        if (body) requests[request.url()].postData = body.slice(0, 16384);
+      }
     };
     const requestFailedHandler = (request: PlaywrightRequest) => {
       const entry = requests[request.url()];
@@ -605,6 +610,18 @@ class CrawlerEngine {
           }
         } else {
           console.log(`Error: ${status} ${url}`);
+        }
+      }
+
+      // Analytics hits fire after the load event. On pages with Google tags,
+      // keep listening until the request log stops growing (max 3 s) so the
+      // tag analyzer sees every GA4 hit (e.g. a duplicate page_view).
+      if (Object.keys(requests).some((u) => /googletagmanager\.com|google-analytics\.com|\/g\/collect/.test(u))) {
+        for (let i = 0, last = -1; i < 6; i++) {
+          const n = Object.keys(requests).length;
+          if (n === last) break;
+          last = n;
+          await page.waitForTimeout(500);
         }
       }
 

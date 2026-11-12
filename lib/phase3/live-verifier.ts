@@ -37,6 +37,12 @@ import { withTimeout } from '../crawler/resilience';
 import { isFetchAllowed } from '../../validators';
 import { PhaseProgress } from '../utils/phase-progress';
 import { isVisualFinding } from '../phase2/categorize';
+import {
+  fetchTextFile,
+  securityTxtIssues,
+  validateAdsTxtLines,
+  type TextFileFetch,
+} from '../analyzers/seo/site-text-files-analyzer';
 
 // SSRF guard for the standalone --verify re-fetch: the report's example URLs are
 // re-fetched live, so a private/internal host parsed out of an old report must
@@ -1378,6 +1384,19 @@ const TOO_MANY_FONTS_BAR = 4;
 // Ordered: more specific kinds first (the first match wins).
 const CHECKERS: LiveChecker[] = [
   {
+    // security.txt / ads.txt / app-ads.txt are site-level files fetched once (SPECIAL_KINDS).
+    kind: 'security-txt',
+    match: (t) => /security\.txt/.test(t),
+    noFetch: true,
+    check: () => unverifiable('handled by the security.txt special verifier'),
+  },
+  {
+    kind: 'ads-txt',
+    match: (t) => /\b(?:app-)?ads\.txt/.test(t),
+    noFetch: true,
+    check: () => unverifiable('handled by the ads.txt special verifier'),
+  },
+  {
     // A rendered-page defect (broken image, clipped text…) can't be re-observed
     // from a plain fetch, so it must never be refuted.
     kind: 'visual',
@@ -2578,7 +2597,84 @@ const SPECIAL_KINDS = new Set([
   'robots-ai',
   'robots-sitemap',
   'css-js-blocked',
+  'security-txt',
+  'ads-txt',
 ]);
+
+const plainTitle = (t: string): string => t.replace(/`/g, '').toLowerCase();
+
+/**
+ * Pure verdict for a security.txt finding. `body` null means the file is absent
+ * (non-2xx, HTML soft-404 or cross-host redirect). Unit-tested.
+ */
+export function securityTxtVerdict(
+  body: string | null,
+  contentType: string,
+  now: Date,
+  findingMessage: string,
+  legacyOnly = false,
+): CheckResult {
+  const title = plainTitle(findingMessage);
+  if (/security\.txt missing/.test(title)) {
+    return body == null ? confirmed('security.txt is still absent') : refuted('security.txt is now served');
+  }
+  if (body == null) return refuted('security.txt is no longer served');
+  const current = securityTxtIssues(body, contentType, now, legacyOnly);
+  return current.some((i) => title.includes(i.message!.toLowerCase()))
+    ? confirmed('the live security.txt still has this problem')
+    : refuted('the live security.txt no longer has this problem');
+}
+
+/** Pure verdict for an ads.txt / app-ads.txt finding; `body` null means absent. Unit-tested. */
+export function adsTxtVerdict(body: string | null, findingMessage: string): CheckResult {
+  const title = plainTitle(findingMessage);
+  if (/ads\.txt missing/.test(title)) {
+    return body == null ? confirmed('ads.txt is still absent') : refuted('ads.txt is now served');
+  }
+  if (body == null) return refuted('the file is no longer served');
+  const invalid = validateAdsTxtLines(body);
+  return invalid.length
+    ? confirmed(`${invalid.length} invalid record line(s) remain`)
+    : refuted('every record line is now valid');
+}
+
+function findingOrigin(f: ReportFinding, originHint: string | null): string | null {
+  if (f.exampleUrl) {
+    try {
+      return new URL(f.exampleUrl).origin;
+    } catch {
+      /* keep originHint */
+    }
+  }
+  return originHint;
+}
+
+async function fetchSiteFile(url: string): Promise<TextFileFetch> {
+  if (!liveFetchAllowed(url)) return { found: undefined, body: '', contentType: '' };
+  return fetchTextFile(url);
+}
+
+async function verifySecurityTxt(f: ReportFinding, originHint: string | null): Promise<CheckResult> {
+  const origin = findingOrigin(f, originHint);
+  if (!origin) return unverifiable('no site origin to fetch security.txt', 'no-example');
+  let file = await fetchSiteFile(`${origin}/.well-known/security.txt`);
+  let legacyOnly = false;
+  if (file.found === false) {
+    file = await fetchSiteFile(`${origin}/security.txt`);
+    legacyOnly = file.found === true;
+  }
+  if (file.found === undefined) return unverifiable('could not fetch security.txt', 'unreachable');
+  return securityTxtVerdict(file.found ? file.body : null, file.contentType, new Date(), f.title, legacyOnly);
+}
+
+async function verifyAdsTxt(f: ReportFinding, originHint: string | null): Promise<CheckResult> {
+  const origin = findingOrigin(f, originHint);
+  if (!origin) return unverifiable('no site origin to fetch ads.txt', 'no-example');
+  const name = /app-ads\.txt/.test(plainTitle(f.title)) ? 'app-ads.txt' : 'ads.txt';
+  const file = await fetchSiteFile(`${origin}/${name}`);
+  if (file.found === undefined) return unverifiable(`could not fetch ${name}`, 'unreachable');
+  return adsTxtVerdict(file.found ? file.body : null, f.title);
+}
 
 /** Known AI/LLM crawler user-agent tokens, for the robots.txt AI-crawler checks. */
 const AI_BOT_RE =
@@ -3711,6 +3807,8 @@ export async function verifyFindings(
         else if (checker.kind === 'robots-ai') r = await verifyRobotsAi(f, timeoutMs, siteOriginForGuard);
         else if (checker.kind === 'robots-sitemap') r = await verifyRobotsSitemap(f, timeoutMs, siteOriginForGuard);
         else if (checker.kind === 'css-js-blocked') r = await verifyCssJsBlocked(f, timeoutMs, siteOriginForGuard);
+        else if (checker.kind === 'security-txt') r = await verifySecurityTxt(f, siteOriginForGuard);
+        else if (checker.kind === 'ads-txt') r = await verifyAdsTxt(f, siteOriginForGuard);
         else if (checker.kind === 'site-graph') {
           const t = f.title.toLowerCase();
           if (!site) r = unverifiable('site context unavailable', 'site-level');
@@ -3732,7 +3830,9 @@ export async function verifyFindings(
           checker.kind === 'broken-pagination' ||
           checker.kind === 'robots-ai' ||
           checker.kind === 'robots-sitemap' ||
-          checker.kind === 'css-js-blocked';
+          checker.kind === 'css-js-blocked' ||
+          checker.kind === 'security-txt' ||
+          checker.kind === 'ads-txt';
         const guarded = selfGated ? r : guardPluralRefute(r, f);
         verdictByPlan.set(f, { ...guarded, kind: checker.kind });
       }

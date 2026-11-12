@@ -211,6 +211,7 @@ Input validation and security:
 - **image-analyzer.ts**: Alt text and image metadata
 - **indexability-analyzer.ts**: Canonical, noindex, nofollow
 - **structured-data-analyzer.ts**: Schema.org markup validation
+- **site-text-files-analyzer.ts**: security.txt (RFC 9116) and ads.txt / app-ads.txt checks, fetched once before the crawl
 
 ### Site-Wide Validators
 
@@ -417,6 +418,12 @@ audit-results/
 - Images / CSS background images upscaled beyond natural resolution (LOW/MEDIUM)
 - Unrendered template tokens in page text (HIGH); placeholder text (lorem ipsum) (MEDIUM)
 - Garbled characters (mojibake) in page text (MEDIUM); text clipped by its container (LOW)
+
+### Site Text Files
+
+- security.txt: missing (LOW); no `Contact` (MEDIUM); `Expires` missing, unparseable or past (MEDIUM); `Expires` more than a year ahead (LOW); not `text/plain` (LOW); only at legacy `/security.txt` (LOW). PGP cleartext-signed files are unwrapped (signature not verified)
+- ads.txt / app-ads.txt: invalid record lines (LOW); missing ads.txt (MEDIUM) only when a crawled page has a detected ad network (decided post-crawl; refetched on resume from an older checkpoint)
+- An HTML / soft-404 response or a redirect to another host (apex ↔ `www.` counts as same host) counts as a missing file; network errors give no finding
 
 ### Privacy Issues
 

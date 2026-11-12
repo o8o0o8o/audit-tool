@@ -11,7 +11,8 @@ import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
 import { populateIncomingLinksCount } from '../crawler/page-data-builder';
 import type { QueryParamConfig } from '../crawler/crawler-types';
-import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel } from '../types';
+import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel, SiteTextFilesData } from '../types';
+import { SiteTextFilesAnalyzer } from '../analyzers/seo/site-text-files-analyzer';
 
 interface AnalyzeContext {
   results: {
@@ -472,6 +473,7 @@ class AuditOrchestrator {
     isMultiLang: boolean,
     saveError: SaveErrorFn,
     sitemapUrls: Record<string, unknown> = {},
+    siteTextFiles?: SiteTextFilesData,
   ) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
@@ -698,6 +700,8 @@ class AuditOrchestrator {
     AuditOrchestrator.#reportOrphanedPages(pageData.pages, saveError);
     AuditOrchestrator.#reconcileSitemapStatusCodes(pageData.pages, sitemapUrls, saveError);
 
+    await AuditOrchestrator.checkAdsTxtGate(pageData.pages, origin, saveError, siteTextFiles);
+
     // Run async/data-storing validators that need special result handling
     await AuditOrchestrator.#runDataStoringValidators(pageData, origin, saveError);
 
@@ -712,6 +716,36 @@ class AuditOrchestrator {
     const defectivePageUrls = [...new Set([...brokenPaginationUrls, ...soft404Urls])];
 
     return { defectivePageUrls };
+  }
+
+  /**
+   * Flags a missing ads.txt only when a crawled page shows a known ad network.
+   * `totalAds` alone is ignored: its generic selectors match ad-free markup.
+   * Without stored info (resume from an older checkpoint) ads.txt is fetched here.
+   */
+  static async checkAdsTxtGate(
+    pages: Record<string, PageInfo>,
+    origin: string,
+    saveError: SaveErrorFn,
+    siteTextFiles?: SiteTextFilesData,
+  ): Promise<void> {
+    const adPage = Object.entries(pages).find(([, p]) => (p.adDensityData?.adNetworks?.length ?? 0) > 0);
+    if (!adPage) return;
+    let found = siteTextFiles?.adsTxt?.found;
+    if (!siteTextFiles) {
+      try {
+        found = (await SiteTextFilesAnalyzer.analyzeAdsTxt(origin)).info.adsTxt.found;
+      } catch {
+        found = undefined;
+      }
+    }
+    if (found !== false) return;
+    const [url, page] = adPage;
+    saveError(
+      'ads.txt missing on a site that shows ads',
+      `No /ads.txt found, but ad networks (${page.adDensityData!.adNetworks.join(', ')}) were detected on ${url}. Publish ads.txt to declare authorized sellers.`,
+      SEVERITY.MEDIUM,
+    );
   }
 
   /**

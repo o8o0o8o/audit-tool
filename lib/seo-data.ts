@@ -21,6 +21,7 @@ import { RobotsParser } from './parsers/robots-parser';
 import { SitemapParser } from './parsers/sitemap-parser';
 import { probeSitemapMedia } from './orchestrators/sitemap-media-probe';
 import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
+import { SiteTextFilesAnalyzer } from './analyzers/seo/site-text-files-analyzer';
 import { parse } from 'node-html-parser';
 
 class SEOData {
@@ -370,6 +371,12 @@ class SEOData {
     } catch (e: unknown) {
       console.log('llms.txt check skipped:', (e as Error).message);
     }
+
+    const securityResult = await SiteTextFilesAnalyzer.analyzeSecurityTxt(this.origin ?? '');
+    securityResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
+    const adsResult = await SiteTextFilesAnalyzer.analyzeAdsTxt(this.origin ?? '');
+    adsResult.issues.forEach((i) => this.saveError(i.message!, i.detail!, i.severity));
+    this.#results.siteTextFiles = { securityTxt: securityResult.info, ...adsResult.info };
   }
 
   /**
@@ -618,6 +625,7 @@ class SEOData {
       this.#results.isMultiLang,
       this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[3],
       this.#results.sitemaps?.urls ?? {},
+      this.#results.siteTextFiles,
     );
 
     // Defective/non-real pages (broken-pagination tails + soft 404s) are phantom

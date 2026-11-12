@@ -71,11 +71,13 @@ const RULES: Array<{ category: ScoredCategory; patterns: RegExp[] }> = [
       /uncaught\s+(exception|error)/i,
       /runtime\s+error/i,
       /unhandled\s+(promise\s+)?rejection/i,
+      /\b(?:app-)?ads\.txt/i,
     ],
   },
   {
     category: 'security',
     patterns: [
+      /security\.txt/i,
       /security header|Content-Security-Policy|\bCSP\b|X-Frame|X-XSS|X-Content-Type/i,
       /\bHSTS\b|Strict-Transport|Permissions-Policy|Referrer-Policy/i,
       /cross-origin (isolation|opener|embedder)|\bCOOP\b|\bCOEP\b/i,

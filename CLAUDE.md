@@ -195,6 +195,7 @@ Input validation and security:
 
 ### Performance
 
+- **favicon-manifest-validator.ts**: Site-wide favicon and web manifest fetch checks (status, content type, icon size, manifest JSON and icons)
 - **caching-analyzer.ts**: CDN detection, cache headers, Service Worker
 - **image-optimization-analyzer.ts**: Image format, size, lazy loading, upscaled `<img>` without srcset and upscaled CSS background images
 - **resource-optimization-analyzer.ts**: Render-blocking resources, minification
@@ -424,6 +425,14 @@ audit-results/
 - security.txt: missing (LOW); no `Contact` (MEDIUM); `Expires` missing, unparseable or past (MEDIUM); `Expires` more than a year ahead (LOW); not `text/plain` (LOW); only at legacy `/security.txt` (LOW). PGP cleartext-signed files are unwrapped (signature not verified)
 - ads.txt / app-ads.txt: invalid record lines (LOW); missing ads.txt (MEDIUM) only when a crawled page has a detected ad network (decided post-crawl; refetched on resume from an older checkpoint)
 - An HTML / soft-404 response or a redirect to another host (apex ↔ `www.` counts as same host) counts as a missing file; network errors give no finding
+
+### Favicon / Manifest Issues
+
+Site-wide, fetched once per audit (`favicon-manifest-validator.ts`); timeouts, network errors and SSRF-blocked or `data:` URLs give no finding. On resume from an older checkpoint (pages without captured head links) icon/manifest links are read from the homepage; if it cannot be read, no "Favicon missing" is reported.
+
+- Favicon missing — no `<link rel="icon">` and `/favicon.ico` returns non-2xx or an HTML page (MEDIUM)
+- Favicon returns error status / is not an image (MEDIUM); favicon smaller than 48px (LOW)
+- Web manifest failed to load, invalid manifest JSON, manifest icon returns 404 (MEDIUM)
 
 ### Privacy Issues
 

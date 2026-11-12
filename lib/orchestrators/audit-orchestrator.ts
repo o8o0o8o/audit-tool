@@ -3,6 +3,7 @@
  * Handles site-wide validation and audit workflow coordination
  */
 
+import { checkFaviconAndManifest } from '../analyzers/performance/favicon-manifest-validator';
 import { detectLanguagePatternsInUrls } from './language-pattern-detector';
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
@@ -812,6 +813,11 @@ class AuditOrchestrator {
           pageData.externalLinkVerification = result.stats;
         },
       },
+      {
+        name: 'Favicon & Web Manifest (Site-Wide)',
+        run: () => checkFaviconAndManifest(pageData.pages, origin),
+        apply: () => {},
+      },
     ];
 
     for (const validator of dataValidators) {
@@ -918,6 +924,7 @@ class AuditOrchestrator {
       'MixedContentAnalyzer',
       'HTTPProtocolAnalyzer',
       'PWAAnalyzer',
+      'Favicon & Web Manifest (Site-Wide)',
       'AboveFoldAnalyzer',
       'JavaScriptRenderingAnalyzer',
       'AnchorTextAnalyzer',

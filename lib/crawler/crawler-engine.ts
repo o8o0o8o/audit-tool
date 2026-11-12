@@ -109,6 +109,7 @@ import {
   saveScreenshot,
   captureRepresentativeEvidence,
   populateIncomingLinksCount,
+  extractHeadLinks,
 } from './page-data-builder';
 import { runAnalyzers, ConsoleErrorAnalyzer, CodeCoverageAnalyzer } from './analyzer-runner';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
@@ -1467,6 +1468,7 @@ class CrawlerEngine {
     );
     pageData.links = linksResult.links;
     pageData.httpLinksCount = linksResult.httpLinksCount;
+    extractHeadLinks(parsedPage, url, pageData);
 
     // Run all analyzers with error isolation
     // Wrap in try-catch to prevent analyzer failures from losing all page data

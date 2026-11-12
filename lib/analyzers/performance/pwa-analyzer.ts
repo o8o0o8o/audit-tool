@@ -129,7 +129,7 @@ class PWAAnalyzer {
     }
 
     // Check for theme-color meta tag
-    if (pageData.themeColor || pageData.metaTags?.['theme-color']) {
+    if (pageData.themeColor || pageData.metaMap?.['theme-color'] || pageData.metaTags?.['theme-color']) {
       info.hasThemeColor = true;
     } else {
       warnings.push({
@@ -355,7 +355,7 @@ class PWAAnalyzer {
         }
       }
 
-      if (pageData.themeColor || pageData.metaTags?.['theme-color']) {
+      if (pageData.themeColor || pageData.metaMap?.['theme-color'] || pageData.metaTags?.['theme-color']) {
         stats.pagesWithThemeColor++;
       }
     }

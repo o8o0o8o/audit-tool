@@ -19,6 +19,10 @@ that reader and for honesty over flattery:
 - **No filler.** Low-signal boilerplate checks (web-app manifest, service
   worker, theme-color, Apple touch icon, noscript, Shadow DOM, …) collapse into
   a compact "Minor & informational" list rather than headline findings.
+  Broken favicon / broken manifest findings are an exception and route as
+  warnings: a favicon or manifest that 404s, is served as a non-image/HTML page,
+  has invalid JSON, or lists icons that 404 (MEDIUM, catalog tier `warning`).
+  Only "Favicon smaller than 48px" stays in "Minor & informational".
   Screenshots are captured to `evidence/` (they feed the `--llm` findings pass) but are
   **not** padded into the report body.
 - **Honest scores.** The overall score is min-aware

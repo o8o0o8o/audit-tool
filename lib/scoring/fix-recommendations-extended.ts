@@ -1035,6 +1035,38 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     resources: [],
   },
 
+  // ─── Favicon / Web manifest (site-wide fetch checks) ───────────────────────
+  'Favicon missing': {
+    effort: '15 minutes',
+    fix: 'Add <link rel="icon" href="/favicon.png" sizes="48x48"> to every page, or serve a real icon at /favicon.ico.',
+    resources: [{ text: 'Google: Define a favicon', url: 'https://developers.google.com/search/docs/appearance/favicon-in-search' }],
+  },
+  'Favicon returns error status': {
+    effort: '15 minutes',
+    fix: 'The <link rel="icon"> href points to a file that does not load. Upload the icon or fix the href.',
+    resources: [{ text: 'Google: Define a favicon', url: 'https://developers.google.com/search/docs/appearance/favicon-in-search' }],
+  },
+  'Favicon is not an image': {
+    effort: '15 minutes',
+    fix: 'The favicon URL returns HTML or another non-image type (often a soft-404). Point it to a real PNG, ICO or SVG file served with an image/* content type.',
+    resources: [],
+  },
+  'Favicon smaller than 48px': {
+    effort: '15 minutes',
+    fix: 'Provide a favicon of at least 48×48px (multiples of 48 work best) so search results show a sharp icon.',
+    resources: [{ text: 'Google: Define a favicon', url: 'https://developers.google.com/search/docs/appearance/favicon-in-search' }],
+  },
+  'Web manifest failed to load': {
+    effort: '15 minutes',
+    fix: 'The <link rel="manifest"> href returns an error. Upload the manifest file or fix the href.',
+    resources: [{ text: 'Web App Manifest', url: 'https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest' }],
+  },
+  'Manifest icon returns 404': {
+    effort: '15 minutes',
+    fix: 'An icon listed in the web manifest does not load. Upload the icon or fix its src (relative srcs resolve against the manifest URL).',
+    resources: [],
+  },
+
   // ─── Performance: PWA / manifest ─────────────────────────────────────────
   'PWA requires HTTPS': {
     effort: '1 hour',

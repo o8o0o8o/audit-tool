@@ -366,6 +366,8 @@ export interface LiveSignals {
   autoplayVideosNoControls: number;
   /** `<link rel="manifest">` present. Server-rendered <head> → stable confirm/refute. */
   hasManifestLink: boolean;
+  /** `<link rel="icon">` / `rel="shortcut icon"` present. Server-rendered <head> → stable refute. */
+  hasIconLink?: boolean;
   /** `<meta name="theme-color">` present. Stable confirm/refute. */
   hasThemeColor: boolean;
   /** `<link rel*="apple-touch-icon">` present. Stable confirm/refute. */
@@ -896,6 +898,7 @@ async function captureOne(
       // PWA / head presence signals — server-rendered in <head>, so stable
       // confirm/refute (not CORS- or hydration-limited).
       const hasManifestLink = !!document.querySelector('link[rel="manifest" i]');
+      const hasIconLink = !!document.querySelector('link[rel="icon" i], link[rel="shortcut icon" i]');
       const hasThemeColor = !!document.querySelector('meta[name="theme-color" i]');
       const hasAppleTouchIcon = !!document.querySelector('link[rel*="apple-touch-icon" i]');
       // A <noscript> counts only when it has MEANINGFUL fallback content — exactly
@@ -1035,6 +1038,7 @@ async function captureOne(
         videosWithoutTitle,
         autoplayVideosNoControls,
         hasManifestLink,
+        hasIconLink,
         hasThemeColor,
         hasAppleTouchIcon,
         hasNoscript,
@@ -1148,6 +1152,7 @@ async function captureOne(
       videosWithoutTitle: dom.videosWithoutTitle,
       autoplayVideosNoControls: dom.autoplayVideosNoControls,
       hasManifestLink: dom.hasManifestLink,
+      hasIconLink: dom.hasIconLink,
       hasThemeColor: dom.hasThemeColor,
       hasAppleTouchIcon: dom.hasAppleTouchIcon,
       hasNoscript: dom.hasNoscript,
@@ -2187,6 +2192,26 @@ const CHECKERS: LiveChecker[] = [
     kind: 'inline-js',
     match: (t) => /inline javascript|inline js/.test(t),
     check: (s) => overOrUnsure(s.inlineJsBytes, THRESHOLDS.INLINE_JS_SIZE_WARNING, 'inline JS', ' bytes'),
+  },
+  {
+    // "Favicon missing" claims no icon link on any page, so a live <link rel="icon">
+    // refutes it. Status, content-type and pixel size come from a network fetch
+    // and are never refuted.
+    kind: 'favicon',
+    match: (t) => /\bfavicon\b/.test(t),
+    siteWidePage: true,
+    check: (s, f) =>
+      /favicon missing/i.test(f.title) && s.hasIconLink
+        ? refuted('a <link rel="icon"> is present')
+        : unverifiable('favicon fetch result — not re-checkable from the page DOM', 'volatile'),
+  },
+  {
+    // Manifest/manifest-icon fetch failures and invalid JSON are network/body
+    // results; listed before the broad pwa-manifest matcher so it cannot refute them.
+    kind: 'manifest-fetch',
+    match: (t) => /web manifest failed to load|manifest icon returns|invalid manifest json/.test(t),
+    siteWidePage: true,
+    check: () => unverifiable('manifest fetch result — not re-checkable from the page DOM', 'volatile'),
   },
   {
     // "No web app manifest" — <link rel="manifest"> is server-rendered in <head>,

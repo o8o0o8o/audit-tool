@@ -296,6 +296,10 @@ class ProgressManager {
         status: pageData.status,
         statusCode: pageData.statusCode ?? pageData.status,
         title: pageData.title,
+        manifest: pageData.manifest,
+        icons: pageData.icons,
+        appleTouchIcon: pageData.appleTouchIcon,
+        themeColor: pageData.themeColor,
         error: 'Page data could not be serialized',
       } as PageInfo;
     }

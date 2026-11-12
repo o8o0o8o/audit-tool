@@ -6,7 +6,9 @@
  * Accessibility / UX / Technical) so the synthesis output can mechanically
  * route findings without an LLM.
  */
-export type Section = 'performance' | 'seo' | 'privacy' | 'accessibility' | 'ux' | 'technical';
+import { isAgenticFinding } from '../analyzers/agentic/agentic-checks';
+
+export type Section = 'performance' | 'seo' | 'privacy' | 'accessibility' | 'ux' | 'technical' | 'agentic';
 
 /**
  * Patterns that must win over the general RULES list below. The general rules
@@ -146,6 +148,8 @@ export function isVisualFinding(message: string): boolean {
 export function categorize(message: string): Section {
   // Visual findings say "image", so they must win over the Performance image rule.
   if (isVisualFinding(message)) return 'ux';
+  // Agentic findings (form labels, llms.txt) would otherwise land in Accessibility / SEO.
+  if (isAgenticFinding(message.replace(/<[^>]*>/g, ''))) return 'agentic';
   // Strip embedded URLs first so a cited example URL ("… — https://site/page")
   // can't trip keyword rules via its scheme/host (e.g. `/HTTPS|TLS|SSL/` matching
   // the `https://` of the link rather than the finding's actual subject).

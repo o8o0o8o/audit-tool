@@ -37,6 +37,7 @@ Each category section header shows the current 0–100 score and, where there is
 | Technical | 20% | Share of crawled pages with no Error-tier technical issue (URL-pass): (pages without errors ÷ pages crawled) × 100. |
 | Accessibility | 15% | Mean of the per-page accessibility scores (axe-style deductions per violation; 100 − 10 per violation when only a count is known). |
 | Security | 10% | Mean of the per-page security scores (Mozilla Observatory-style deductions for missing headers, HTTPS, cookie flags). |
+| Agentic Browsing | 0% | Shown beside the other categories but not part of the overall score. 80% × mean share of passed page checks (accessible names, unlabeled click targets, form labels, hover-only content) over pages that ran them + 20% × llms.txt (valid 100, invalid 50, missing 0). Absent when the agentic checks did not run (--no-agentic). |
 
 Grades: A+ 95–100 · A 90–94 · B 80–89 · C 70–79 · D 60–69 · F 0–59.
 

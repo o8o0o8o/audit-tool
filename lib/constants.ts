@@ -572,3 +572,25 @@ export function normalizeTextForComparison(text: string): string {
 
 /** Language detections at or below this confidence are treated as "undetermined". */
 export const LANGUAGE_DETECTION_MIN_CONFIDENCE = 0.5;
+
+// Agentic browsing check family: can an AI agent read and operate the page?
+export const AGENTIC_CHECK_IDS = [
+  'interactive-names',
+  'interactive-roles',
+  'form-labels',
+  'hover-only',
+  'llms-txt',
+] as const;
+
+export type AgenticCheckId = (typeof AGENTIC_CHECK_IDS)[number];
+
+export const AGENTIC_FINDING_MESSAGES = {
+  interactiveNames: { message: 'Interactive elements without an accessible name', severity: SEVERITY.HIGH },
+  interactiveRoles: { message: 'Unlabeled click targets without an interactive role', severity: SEVERITY.MEDIUM },
+  formLabels: { message: 'Form inputs without a label', severity: SEVERITY.HIGH },
+  hoverOnly: { message: 'Content reachable only via hover or JavaScript', severity: SEVERITY.MEDIUM },
+  llmsTxtMissing: { message: 'llms.txt is missing', severity: SEVERITY.LOW },
+  llmsTxtInvalid: { message: 'llms.txt is invalid', severity: SEVERITY.MEDIUM },
+} as const;
+
+export const AGENTIC_HINTS_TIMEOUT_MS = 3000;

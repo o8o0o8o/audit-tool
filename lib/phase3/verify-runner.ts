@@ -137,7 +137,13 @@ export async function runVerifyPhase(runDir: string, options: VerifyPhaseOptions
     anomalies: (persisted?.anomalies ?? []) as Anomaly[],
     suppressed: new Set(persisted?.suppressed ?? []),
     noScore: options.noScore ?? persisted?.noScore ?? false,
-    selection: { sections: persisted?.sections, checks: persisted?.checks, preset: options.preset ?? persisted?.preset },
+    selection: {
+      sections: persisted?.sections,
+      checks: persisted?.checks,
+      preset: options.preset ?? persisted?.preset,
+      // A state file from before the agentic family renders no Agentic notes; no state file derives it from the run.
+      agentic: persisted ? (persisted.agentic ?? null) : undefined,
+    },
     verbose: options.verbose === true,
   };
 

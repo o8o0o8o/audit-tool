@@ -4,6 +4,7 @@
  */
 
 import { SCORING } from '../constants';
+import { AGENTIC_PER_PAGE_WEIGHT } from './score-calculator';
 import { GRADE_BANDS, FIX_RECOVERY_RATIO, escapeHtml } from '../utils';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -12,6 +13,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   technical: 'Technical',
   accessibility: 'Accessibility',
   security: 'Security',
+  agentic: 'Agentic Browsing',
 };
 
 const CATEGORY_METHODS: Record<string, string> = {
@@ -24,6 +26,8 @@ const CATEGORY_METHODS: Record<string, string> = {
   security:
     'Mean of the per-page security scores (Mozilla Observatory-style deductions for missing headers, HTTPS, cookie flags).',
 };
+
+const AGENTIC_METHOD = `Shown beside the other categories but not part of the overall score. ${Math.round(AGENTIC_PER_PAGE_WEIGHT * 100)}% × mean share of passed page checks (accessible names, unlabeled click targets, form labels, hover-only content) over pages that ran them + ${100 - Math.round(AGENTIC_PER_PAGE_WEIGHT * 100)}% × llms.txt (valid 100, invalid 50, missing 0). Absent when the agentic checks did not run (--no-agentic).`;
 
 export interface ScoringRules {
   categories: Array<{ key: string; label: string; weightPct: number; method: string }>;
@@ -50,6 +54,7 @@ export function getScoringRules(): ScoringRules {
     weightPct: pct(w),
     method: key === 'performance' ? perfMethod : (CATEGORY_METHODS[key] ?? ''),
   }));
+  categories.push({ key: 'agentic', label: CATEGORY_LABELS.agentic, weightPct: 0, method: AGENTIC_METHOD });
   const meanWeightPct = pct(SCORING.OVERALL_MEAN_WEIGHT);
   const worstWeightPct = 100 - meanWeightPct;
 

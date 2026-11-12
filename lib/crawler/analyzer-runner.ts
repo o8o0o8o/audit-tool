@@ -60,6 +60,8 @@ import { AnalyticsTrackingAnalyzer } from '../analyzers/analytics/analytics-trac
 import { SecurityAnalyzer } from '../analyzers/security/security-analyzer';
 import { BrokenMediaAnalyzer } from '../analyzers/visual/broken-media-analyzer';
 import { TextIntegrityAnalyzer } from '../analyzers/visual/text-integrity-analyzer';
+import { AgenticBrowsingAnalyzer } from '../analyzers/agentic/agentic-browsing-analyzer';
+import type { AgenticPageData } from '../analyzers/agentic/agentic-checks';
 import { CookieConsentAnalyzer } from '../analyzers/security/cookie-consent-analyzer';
 import { MixedContentAnalyzer } from '../analyzers/security/mixed-content-analyzer';
 
@@ -164,6 +166,7 @@ export async function runAnalyzers(
   reportIssue: ReportIssueFn,
   servedHtml?: string,
   visual = false,
+  agentic = true,
 ): Promise<void> {
   const analyzerTimeout = CRAWL_SETTINGS.ANALYZER_TIMEOUT || 10000;
   // Cast requests for analyzer compatibility (analyzers use broader parameter types)
@@ -231,6 +234,8 @@ export async function runAnalyzers(
     // Visual
     { issues: [] }, // brokenMediaResult
     { issues: [] }, // textIntegrityResult
+    // Agentic browsing
+    { checks: null, issues: [] }, // agenticResult
   ];
 
   const browserAnalyzersSettled = await withTimeout(
@@ -319,6 +324,9 @@ export async function runAnalyzers(
       // Visual — opt-in via --visual
       visual ? BrokenMediaAnalyzer.analyze(chromePage, url, requests) : Promise.resolve({ issues: [] }),
       visual ? TextIntegrityAnalyzer.analyze(chromePage, url) : Promise.resolve({ issues: [] }),
+
+      // Agentic browsing — on by default, off with --no-agentic
+      agentic ? AgenticBrowsingAnalyzer.analyze(chromePage, url, pageContent) : Promise.resolve({ issues: [] }),
     ]),
     analyzerTimeout,
     `Analyzer timeout for ${url}`,
@@ -372,6 +380,7 @@ export async function runAnalyzers(
     spellingResult,
     brokenMediaResult,
     textIntegrityResult,
+    agenticResult,
   ] = browserAnalyzers as AnalyzerResult[];
 
   // Apply analyzer results to pageData with typed assignments
@@ -444,6 +453,10 @@ export async function runAnalyzers(
     pageData.brokenMediaData = brokenMediaResult as unknown as typeof pageData.brokenMediaData;
     pageData.textIntegrityData = textIntegrityResult as unknown as typeof pageData.textIntegrityData;
   }
+  if (agentic) {
+    const { issues: _agenticIssues, ...agenticData } = agenticResult as unknown as AgenticPageData;
+    (pageData as PageInfo & { agentic?: Omit<AgenticPageData, 'issues'> }).agentic = agenticData;
+  }
 
   // Report issues from Group 1
   [
@@ -487,6 +500,7 @@ export async function runAnalyzers(
     spellingResult,
     brokenMediaResult,
     textIntegrityResult,
+    agenticResult,
   ].forEach((result) => reportIssues(result as AnalyzerResult, reportIssue, url));
 
   // ============================================================

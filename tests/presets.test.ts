@@ -255,3 +255,27 @@ void describe('visual family', () => {
     for (const m of otherMessages) assert.ok(!findingCheckGroups(m, 'technical').includes('visual'), m);
   });
 });
+
+void describe('agentic family', () => {
+  const agenticMessages = [
+    'Interactive elements without an accessible name',
+    'Unlabeled click targets without an interactive role',
+    'Form inputs without a label',
+    'Content reachable only via hover or JavaScript',
+    'llms.txt is missing',
+    'llms.txt is invalid',
+  ];
+
+  void it('is a valid --checks value, in marketing and seo but not sales', () => {
+    assert.deepEqual(resolvePreset('custom', { checks: ['agentic'] }).checks, ['agentic']);
+    assert.equal(resolvePreset('seo').checks, undefined);
+    assert.ok(ROLE_DEFINITIONS.marketing.checks?.includes('agentic'));
+    assert.ok(!ROLE_DEFINITIONS.sales.checks?.includes('agentic'));
+  });
+
+  void it('maps the agentic messages to agentic and leaves others alone', () => {
+    for (const m of agenticMessages) assert.ok(findingCheckGroups(m, 'technical').includes('agentic'), m);
+    for (const m of ['Broken internal links', 'Missing meta description', 'Placeholder used instead of label'])
+      assert.ok(!findingCheckGroups(m, 'technical').includes('agentic'), m);
+  });
+});

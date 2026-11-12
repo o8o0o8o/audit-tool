@@ -9,6 +9,7 @@ import { fetchWithTimeout, readResponseTextCapped } from '../utils';
 import { fetchTextViaBrowser } from '../crawler/browser-fetch';
 import { describeBlockedResponse, fetchWithRetryAfter } from '../utils/blocked-fetch';
 import { isFetchAllowed } from '../../validators';
+import type { SitemapImage, SitemapMediaTargets, SitemapNews, SitemapVideo } from '../types';
 
 /** Origin hostname for the SSRF same-host allowance, or undefined. */
 function hostOf(urlString: string): string | undefined {
@@ -80,6 +81,170 @@ async function fetchSitemapText(url: string): Promise<{ status: number; text: st
   return { status: response.status, text };
 }
 
+/** Direct children of `el` whose tag name is `name` (case-insensitive). CSS
+ *  selectors read `image:loc` as a pseudo-class, so namespaced tags are matched by name. */
+function childrenNamed(el: HTMLElement, name: string): HTMLElement[] {
+  const wanted = name.toLowerCase();
+  return el.childNodes.filter(
+    (node): node is HTMLElement => (node as HTMLElement).rawTagName?.toLowerCase() === wanted,
+  );
+}
+
+function childText(el: HTMLElement, name: string): string | undefined {
+  const text = childrenNamed(el, name)[0]?.innerText?.trim();
+  return text || undefined;
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function escapeExample(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const MEDIA_EXAMPLE_LIMIT = 5;
+const VIDEO_MAX_DURATION_SECONDS = 28800;
+
+/** One grouped finding per broken extension rule; see processSitemap(). */
+const SITEMAP_EXTENSION_RULES = {
+  imageMissingLoc: { message: 'Sitemap image entries missing <image:loc>', severity: SEVERITY.MEDIUM },
+  tooManyImages: {
+    message: `Sitemap URLs exceed ${THRESHOLDS.SITEMAP_MAX_IMAGES_PER_URL} images`,
+    severity: SEVERITY.MEDIUM,
+  },
+  videoMissingThumbnail: { message: 'Sitemap video entries missing <video:thumbnail_loc>', severity: SEVERITY.MEDIUM },
+  videoMissingTitle: { message: 'Sitemap video entries missing <video:title>', severity: SEVERITY.MEDIUM },
+  videoMissingDescription: { message: 'Sitemap video entries missing <video:description>', severity: SEVERITY.MEDIUM },
+  videoMissingContent: {
+    message: 'Sitemap video entries missing <video:content_loc> and <video:player_loc>',
+    severity: SEVERITY.MEDIUM,
+  },
+  videoBadDuration: { message: 'Sitemap video entries have an invalid <video:duration>', severity: SEVERITY.LOW },
+  newsMissingName: { message: 'Sitemap news entries missing <news:name>', severity: SEVERITY.MEDIUM },
+  newsMissingLanguage: { message: 'Sitemap news entries missing <news:language>', severity: SEVERITY.MEDIUM },
+  newsMissingDate: { message: 'Sitemap news entries missing <news:publication_date>', severity: SEVERITY.MEDIUM },
+  newsMissingTitle: { message: 'Sitemap news entries missing <news:title>', severity: SEVERITY.MEDIUM },
+  mediaNotAbsolute: { message: 'Sitemap media URLs are not absolute', severity: SEVERITY.MEDIUM },
+  undeclaredNamespace: { message: 'Sitemap uses image/video/news tags without declaring the namespace', severity: SEVERITY.LOW },
+} as const;
+
+type SitemapExtensionRule = keyof typeof SITEMAP_EXTENSION_RULES;
+
+/** Every title the sitemap extension checks can emit. */
+export const SITEMAP_EXTENSION_TITLES: string[] = Object.values(SITEMAP_EXTENSION_RULES).map((r) => r.message);
+
+function parseImages(site: HTMLElement): SitemapImage[] {
+  return childrenNamed(site, 'image:image').map((el) => ({ loc: childText(el, 'image:loc') }));
+}
+
+function parseVideos(site: HTMLElement): SitemapVideo[] {
+  return childrenNamed(site, 'video:video').map((el) => ({
+    thumbnailLoc: childText(el, 'video:thumbnail_loc'),
+    title: childText(el, 'video:title'),
+    description: childText(el, 'video:description'),
+    contentLoc: childText(el, 'video:content_loc'),
+    playerLoc: childText(el, 'video:player_loc'),
+    duration: childText(el, 'video:duration'),
+  }));
+}
+
+function parseNews(site: HTMLElement): SitemapNews | undefined {
+  const news = childrenNamed(site, 'news:news')[0];
+  if (!news) return undefined;
+  const publication = childrenNamed(news, 'news:publication')[0];
+  return {
+    name: publication ? childText(publication, 'news:name') : undefined,
+    language: publication ? childText(publication, 'news:language') : undefined,
+    publicationDate: childText(news, 'news:publication_date'),
+    title: childText(news, 'news:title'),
+  };
+}
+
+function isValidVideoDuration(duration: string): boolean {
+  if (!/^\d+$/.test(duration)) return false;
+  const seconds = Number(duration);
+  return seconds >= 1 && seconds <= VIDEO_MAX_DURATION_SECONDS;
+}
+
+/** Collects offending page URLs per extension rule across one sitemap. */
+class SitemapExtensionCollector {
+  readonly offenders = new Map<SitemapExtensionRule, string[]>();
+  readonly usedPrefixes = new Set<'image' | 'video' | 'news'>();
+
+  add(rule: SitemapExtensionRule, example: string) {
+    const list = this.offenders.get(rule) ?? [];
+    list.push(example);
+    this.offenders.set(rule, list);
+  }
+
+  /** Validates one entry's media; returns the absolute media URLs worth probing. */
+  check(pageUrl: string, images: SitemapImage[], videos: SitemapVideo[], news: SitemapNews | undefined) {
+    const targets: SitemapMediaTargets = { images: [], videos: [] };
+    const absolute = (value: string | undefined, bucket: string[]) => {
+      if (value === undefined) return;
+      if (isAbsoluteHttpUrl(value)) bucket.push(value);
+      else this.add('mediaNotAbsolute', `${pageUrl} → "${value}"`);
+    };
+
+    if (images.length) this.usedPrefixes.add('image');
+    if (images.length > THRESHOLDS.SITEMAP_MAX_IMAGES_PER_URL) this.add('tooManyImages', `${pageUrl} (${images.length})`);
+    for (const image of images) {
+      if (!image.loc) this.add('imageMissingLoc', pageUrl);
+      absolute(image.loc, targets.images);
+    }
+
+    if (videos.length) this.usedPrefixes.add('video');
+    for (const video of videos) {
+      if (!video.thumbnailLoc) this.add('videoMissingThumbnail', pageUrl);
+      if (!video.title) this.add('videoMissingTitle', pageUrl);
+      if (!video.description) this.add('videoMissingDescription', pageUrl);
+      if (!video.contentLoc && !video.playerLoc) this.add('videoMissingContent', pageUrl);
+      if (video.duration !== undefined && !isValidVideoDuration(video.duration)) {
+        this.add('videoBadDuration', `${pageUrl} ("${video.duration}")`);
+      }
+      absolute(video.thumbnailLoc, targets.images);
+      absolute(video.contentLoc, targets.videos);
+      if (video.playerLoc !== undefined && !isAbsoluteHttpUrl(video.playerLoc)) {
+        this.add('mediaNotAbsolute', `${pageUrl} → "${video.playerLoc}"`);
+      }
+    }
+
+    if (news) {
+      this.usedPrefixes.add('news');
+      if (!news.name) this.add('newsMissingName', pageUrl);
+      if (!news.language) this.add('newsMissingLanguage', pageUrl);
+      if (!news.publicationDate) this.add('newsMissingDate', pageUrl);
+      if (!news.title) this.add('newsMissingTitle', pageUrl);
+    }
+    return targets;
+  }
+
+  checkNamespaces(urlset: HTMLElement | null | undefined) {
+    const attributes = urlset?.attributes ?? {};
+    const undeclared = [...this.usedPrefixes].filter((prefix) => !(`xmlns:${prefix}` in attributes));
+    for (const prefix of undeclared) this.add('undeclaredNamespace', `xmlns:${prefix}`);
+  }
+
+  findings(currentSitemap: string) {
+    return [...this.offenders].map(([rule, examples]) => {
+      const { message, severity } = SITEMAP_EXTENSION_RULES[rule];
+      const shown = examples.slice(0, MEDIA_EXAMPLE_LIMIT).map(escapeExample).join('; ');
+      const more = examples.length > MEDIA_EXAMPLE_LIMIT ? ` (+${examples.length - MEDIA_EXAMPLE_LIMIT} more)` : '';
+      return {
+        message,
+        detail: `${examples.length} occurrence(s) in sitemap ${currentSitemap}. Examples: ${shown}${more}`,
+        severity,
+      };
+    });
+  }
+}
+
 interface SitemapEntry {
   total: number;
   totalUnique: number;
@@ -93,6 +258,9 @@ interface SitemapParsedUrl {
   changefreq?: string;
   priority?: string;
   alternates?: Record<string, { hreflang: string; href: string }>;
+  imageCount?: number;
+  videoCount?: number;
+  hasNews?: boolean;
 }
 
 /** Combined result type for the sitemap parser */
@@ -101,6 +269,8 @@ interface SitemapParserResult {
   urls: Record<string, SitemapParsedUrl>;
   total: number;
   errors: Array<{ message: string; detail: string; severity: string }>;
+  /** Media URLs per page for the main-audit load probe; never persisted. */
+  media?: Record<string, SitemapMediaTargets>;
 }
 
 class SitemapParser {
@@ -116,6 +286,7 @@ class SitemapParser {
       urls: {}, // All URLs combined
       total: 0, // Total URL count
       errors: [], // Array of { message, detail, severity }
+      media: {},
     };
 
     console.log('Analyzing sitemaps...');
@@ -280,6 +451,7 @@ class SitemapParser {
     const validChangefreqValues = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'];
     const unique = new Set<string>();
     const processedUrls: Record<string, SitemapParsedUrl> = {};
+    const extensions = new SitemapExtensionCollector();
 
     for (const site of urls) {
       const loc = site.querySelector('loc')?.innerText?.trim();
@@ -373,8 +545,23 @@ class SitemapParser {
         }
       }
 
+      const images = parseImages(site);
+      const videos = parseVideos(site);
+      const news = parseNews(site);
+      if (images.length) processedData.imageCount = images.length;
+      if (videos.length) processedData.videoCount = videos.length;
+      if (news) processedData.hasNews = true;
+      const targets = extensions.check(processedData.loc, images, videos, news);
+      if (targets.images.length || targets.videos.length) {
+        result.media ??= {};
+        result.media[processedData.loc] = targets;
+      }
+
       processedUrls[processedData.loc] = processedData;
     }
+
+    extensions.checkNamespaces(urls[0]?.parentNode);
+    result.errors.push(...extensions.findings(currentSitemap));
 
     const locs = Object.keys(processedUrls);
 

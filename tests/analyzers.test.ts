@@ -8372,3 +8372,107 @@ void describe('language confidence', () => {
     assert.deepStrictEqual(csv(strong), ['fr', 'No']);
   });
 });
+
+void describe('sitemap extensions', () => {
+  type SitemapResult = {
+    sitemaps: Record<string, unknown>;
+    urls: Record<string, { imageCount?: number; videoCount?: number; hasNews?: boolean }>;
+    total: number;
+    errors: Array<{ message: string; detail: string; severity: string }>;
+    media?: Record<string, { images: string[]; videos: string[] }>;
+  };
+  const NS =
+    'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1" ' +
+    'xmlns:video="http://www.google.com/schemas/sitemap-video/1.1" ' +
+    'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"';
+  const run = (xml: string): SitemapResult => {
+    const urls = parseHtml(xml).querySelectorAll('url');
+    const result: SitemapResult = { sitemaps: {}, urls: {}, total: 0, errors: [] };
+    SitemapParser.processSitemap(
+      urls as unknown as Parameters<typeof SitemapParser.processSitemap>[0],
+      'https://example.com',
+      'https://example.com/sitemap.xml',
+      result as unknown as Parameters<typeof SitemapParser.processSitemap>[3],
+    );
+    return result;
+  };
+  const messages = (r: SitemapResult) => r.errors.map((e) => e.message);
+  const validVideo =
+    '<video:video><video:thumbnail_loc>https://cdn.example.com/t.jpg</video:thumbnail_loc>' +
+    '<video:title>T</video:title><video:description>D</video:description>' +
+    '<video:content_loc>https://cdn.example.com/v.mp4</video:content_loc><video:duration>120</video:duration></video:video>';
+  const validNews =
+    '<news:news><news:publication><news:name>Paper</news:name><news:language>en</news:language></news:publication>' +
+    '<news:publication_date>2026-01-01</news:publication_date><news:title>Headline</news:title></news:news>';
+
+  void it('stores counts and media targets for valid entries without findings', () => {
+    const r = run(
+      `<urlset ${NS}><url><loc>https://example.com/a</loc>` +
+        '<image:image><image:loc>https://cdn.example.com/1.jpg</image:loc></image:image>' +
+        `${validVideo}${validNews}</url></urlset>`,
+    );
+    assert.deepStrictEqual(r.errors, []);
+    const entry = r.urls['https://example.com/a'];
+    assert.strictEqual(entry.imageCount, 1);
+    assert.strictEqual(entry.videoCount, 1);
+    assert.strictEqual(entry.hasNews, true);
+    assert.deepStrictEqual(r.media?.['https://example.com/a'], {
+      images: ['https://cdn.example.com/1.jpg', 'https://cdn.example.com/t.jpg'],
+      videos: ['https://cdn.example.com/v.mp4'],
+    });
+  });
+
+  void it('groups each broken rule into one finding across URLs', () => {
+    const broken =
+      '<image:image></image:image><video:video><video:duration>99999</video:duration></video:video>' +
+      '<news:news></news:news>';
+    const r = run(
+      `<urlset ${NS}><url><loc>https://example.com/a</loc>${broken}</url>` +
+        `<url><loc>https://example.com/b</loc>${broken}</url></urlset>`,
+    );
+    const expected = [
+      'Sitemap image entries missing <image:loc>',
+      'Sitemap video entries missing <video:thumbnail_loc>',
+      'Sitemap video entries missing <video:title>',
+      'Sitemap video entries missing <video:description>',
+      'Sitemap video entries missing <video:content_loc> and <video:player_loc>',
+      'Sitemap video entries have an invalid <video:duration>',
+      'Sitemap news entries missing <news:name>',
+      'Sitemap news entries missing <news:language>',
+      'Sitemap news entries missing <news:publication_date>',
+      'Sitemap news entries missing <news:title>',
+    ];
+    for (const title of expected) {
+      assert.strictEqual(messages(r).filter((m) => m === title).length, 1, title);
+    }
+    const imageFinding = r.errors.find((e) => e.message === expected[0]);
+    assert.match(imageFinding?.detail ?? '', /^2 occurrence/);
+  });
+
+  void it('flags more than 1000 images on one URL', () => {
+    const images = '<image:image><image:loc>https://cdn.example.com/x.jpg</image:loc></image:image>'.repeat(1001);
+    const r = run(`<urlset ${NS}><url><loc>https://example.com/a</loc>${images}</url></urlset>`);
+    assert.ok(messages(r).includes('Sitemap URLs exceed 1000 images'));
+  });
+
+  void it('flags non-absolute media URLs and keeps them out of the probe targets', () => {
+    const r = run(
+      `<urlset ${NS}><url><loc>https://example.com/a</loc>` +
+        '<image:image><image:loc>/img/a.jpg</image:loc></image:image>' +
+        '<image:image><image:loc>//cdn.example.com/b.jpg</image:loc></image:image></url></urlset>',
+    );
+    assert.strictEqual(messages(r).filter((m) => m === 'Sitemap media URLs are not absolute').length, 1);
+    assert.strictEqual(r.media?.['https://example.com/a'], undefined);
+  });
+
+  void it('flags image/video/news tags used without an xmlns declaration', () => {
+    const r = run(
+      '<urlset><url><loc>https://example.com/a</loc>' +
+        '<image:image><image:loc>https://cdn.example.com/1.jpg</image:loc></image:image></url></urlset>',
+    );
+    const finding = r.errors.find((e) => e.message === 'Sitemap uses image/video/news tags without declaring the namespace');
+    assert.ok(finding);
+    assert.strictEqual(finding.severity, SEVERITY.LOW);
+    assert.match(finding.detail, /xmlns:image/);
+  });
+});

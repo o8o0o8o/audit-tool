@@ -19,6 +19,7 @@ import { AuditOrchestrator } from './orchestrators/audit-orchestrator';
 import { CrawlerEngine } from './crawler/crawler-engine';
 import { RobotsParser } from './parsers/robots-parser';
 import { SitemapParser } from './parsers/sitemap-parser';
+import { probeSitemapMedia } from './orchestrators/sitemap-media-probe';
 import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { parse } from 'node-html-parser';
 
@@ -374,7 +375,7 @@ class SEOData {
   /**
    * Parse a local sitemap XML file and derive origin from its URLs
    */
-  #parseSitemapFile() {
+  async #parseSitemapFile() {
     console.log(`📄 Parsing local sitemap file: ${this.#sitemapFile}`);
 
     const xml = fs.readFileSync(this.#sitemapFile ?? '', 'utf-8');
@@ -406,6 +407,7 @@ class SEOData {
       urls: Record<string, unknown>;
       total: number;
       errors: { message: string; detail: string; severity: string }[];
+      media?: Parameters<typeof probeSitemapMedia>[0];
     } = {
       sitemaps: {},
       urls: {},
@@ -424,6 +426,8 @@ class SEOData {
     result.errors.forEach((error: { message: string; detail: string; severity: string }) => {
       this.saveError(error.message, error.detail, error.severity);
     });
+    // On --proceed the probe's findings are already in the restored checkpoint.
+    if (!this.#proceed) await probeSitemapMedia(result.media, this.origin ?? '', this.saveError.bind(this));
 
     console.log(`✅ Parsed ${result.total} URLs from sitemap file`);
   }
@@ -441,6 +445,7 @@ class SEOData {
     result.errors.forEach((error: { message: string; detail: string; severity: string }) => {
       this.saveError(error.message, error.detail, error.severity);
     });
+    await probeSitemapMedia(result.media, this.origin ?? '', this.saveError.bind(this));
   }
 
   async #analyzePages() {
@@ -530,7 +535,7 @@ class SEOData {
     try {
       if (this.#sitemapFile && !this.origin) {
         // Sitemap file mode: parse local file to derive origin and init managers
-        this.#parseSitemapFile();
+        await this.#parseSitemapFile();
       }
 
       if (this.#proceed) {

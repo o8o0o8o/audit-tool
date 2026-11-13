@@ -42,6 +42,10 @@ next-env.d.ts
 SEOAnalysis*
 failedPages.json
 audit-results
+lead-results
+# lock / temp files of the shared CSV writer (lib/leads/csv-store.ts)
+*.csv.lock
+.*.csv.*.tmp
 # Generated reports/sitemaps land at the repo root or under audit-results/.
 # Scope the ignore there so committed test fixtures (tests/fixtures/**.html,
 # sample sitemaps) aren't silently excluded by a bare `*.html` / `*.xml`.

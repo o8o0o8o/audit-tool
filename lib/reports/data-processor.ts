@@ -153,6 +153,8 @@ class ReportDataProcessor {
       isMultiLang: metadata.isMultiLang,
       timing: metadata.timing,
       cruxData: metadata.cruxData ?? null,
+      // Present only on lead scans (`--lead`); marks the run as one that has no audit history.
+      ...((metadata as { leadScan?: unknown }).leadScan ? { leadScan: (metadata as { leadScan?: unknown }).leadScan } : {}),
       repoAnalysis,
       pageData: {
         pages,
@@ -382,7 +384,10 @@ class ReportDataProcessor {
    */
   static prepareReportData(file: string, domainName: string) {
     const jsonData = this.loadAuditData(file, domainName);
-    const historyData = this.loadHistory(domainName);
+    // A lead scan is not part of a domain's audit history: it neither reads nor creates it, so its
+    // report shows no trend against full audits and nothing is written under `audit-results/`.
+    const isLeadScan = Boolean((jsonData as { leadScan?: unknown }).leadScan);
+    const historyData = isLeadScan ? null : this.loadHistory(domainName);
 
     const pageData = (jsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0, byError: {} }) as PageData & {
       incomingLinks?: Record<string, string[]>;

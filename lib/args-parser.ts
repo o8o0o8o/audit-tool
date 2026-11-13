@@ -96,14 +96,21 @@ function parseArgs(args: string[]): ParsedArgs {
     noScore: false, // When true, strip all scores (category projections + per-finding point chips) from the curated PDF report
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
+    lead: false, // --lead: lead scan of a prospect site (small, passive, own results folder)
+    passive: false, // --passive: skip the site probes that go beyond reading published pages
     contentResearch: false, // Phase 4 — competitive content research + content plan (opt-in)
     competitors: null, // Competitor URLs (CSV or file path); optional — LLM discovers when omitted
     warnings: [] as string[], // Collect validation warnings
     errors: [] as string[], // Fatal argument errors
   };
 
+  let evidenceCapExplicit = false;
   for (const arg of args) {
-    if (arg === '--version' || arg === '-V') {
+    if (arg === '--lead') {
+      parsed.lead = true;
+    } else if (arg === '--passive') {
+      parsed.passive = true;
+    } else if (arg === '--version' || arg === '-V') {
       parsed.version = true;
     } else if (arg === '--help' || arg === '-h') {
       parsed.help = true;
@@ -179,6 +186,7 @@ function parseArgs(args: string[]): ParsedArgs {
         parsed.warnings.push(`Invalid --evidence-cap value "${arg.substring('--evidence-cap='.length)}" — must be a positive integer. Ignoring.`);
       } else {
         parsed.evidenceCap = Math.min(val, 100); // safety ceiling
+        evidenceCapExplicit = true;
       }
     } else if (arg.startsWith('--origin=')) {
       parsed.origin = arg.substring('--origin='.length);
@@ -290,7 +298,55 @@ function parseArgs(args: string[]): ParsedArgs {
     }
   }
 
+  if (parsed.lead) applyLeadMode(parsed, { evidenceCapExplicit });
   return parsed;
+}
+
+/** Lead-scan settings. The page cap is a ceiling: `--limit` can lower it, never raise it. */
+export const LEAD_MODE = { pageCap: 25, concurrency: 3, evidenceCap: 5, resultsBase: 'lead-results' } as const;
+
+/**
+ * `--lead`: a scan of a site whose owner did not ask for it. Small (one total page cap), slow
+ * (few pages at a time), passive (no probing), and kept apart from full audits (own results
+ * folder, no curated report, no history entry). Nothing here applies without the flag.
+ */
+export function applyLeadMode(parsed: ParsedArgs, opts: { evidenceCapExplicit?: boolean } = {}): void {
+  parsed.passive = true;
+  parsed.limit = Math.min(parsed.limit ?? LEAD_MODE.pageCap, LEAD_MODE.pageCap);
+  if (!parsed.concurrencyExplicit || parsed.concurrency > LEAD_MODE.concurrency) {
+    parsed.concurrency = LEAD_MODE.concurrency;
+  }
+  parsed.visual ??= true;
+  if (!opts.evidenceCapExplicit) parsed.evidenceCap = LEAD_MODE.evidenceCap;
+  parsed.phase2 = false;
+
+  const dropped: string[] = [];
+  if (parsed.perf) {
+    parsed.perf = false;
+    dropped.push('--perf (a lead scan uses real-user data, not a throttled lab run on every page)');
+  }
+  if (parsed.verify) {
+    parsed.verify = false;
+    dropped.push('--verify');
+  }
+  if (parsed.llmNarrative || parsed.llmFindings || parsed.llmRepo || parsed.llmVerify) {
+    parsed.llmNarrative = parsed.llmFindings = parsed.llmRepo = parsed.llmVerify = false;
+    dropped.push('--llm');
+  }
+  if (parsed.contentResearch) {
+    parsed.contentResearch = false;
+    dropped.push('--content-research');
+  }
+  if (dropped.length) parsed.warnings.push(`--lead ignores ${dropped.join(', ')}.`);
+  for (const [flag, value] of [['--compare', parsed.compare], ['--sites', parsed.sites], ['--repo', parsed.repo], ['--sitemap', parsed.sitemap]] as const) {
+    if (value) parsed.errors.push(`--lead cannot be combined with ${flag}.`);
+  }
+}
+
+/** Child-process flags that carry `--lead` / `--passive` across a `start.ts` restart. */
+export function leadChildArgs(args: Pick<ParsedArgs, 'lead' | 'passive'>): string[] {
+  if (args.lead) return ['--lead'];
+  return args.passive ? ['--passive'] : [];
 }
 
 export { parseArgs, calculateSafeConcurrency };

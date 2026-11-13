@@ -216,7 +216,16 @@ export function collectScriptUrls(origin: string, urls: Iterable<string>, limit 
 const SEVERITY_RANK: Record<SeverityLevel, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
 export class JsSecretsScanner {
-  static async scan(scriptUrls: string[], fetcher: HttpProbeFetcher = defaultHttpFetcher): Promise<SiteProbeResult> {
+  /**
+   * `checkFirebase: false` (passive mode) keeps the key-pattern scan of the public scripts but does
+   * not query a Firebase database named in them: that is a read of a data store, not of the site.
+   */
+  static async scan(
+    scriptUrls: string[],
+    fetcher: HttpProbeFetcher = defaultHttpFetcher,
+    opts: { checkFirebase?: boolean } = {},
+  ): Promise<SiteProbeResult> {
+    const checkFirebase = opts.checkFirebase !== false;
     const scripts = [...new Set(scriptUrls)].slice(0, MAX_SCRIPTS);
     const hits = new Map<string, { severity: SeverityLevel; why: string; items: Map<string, string> }>();
     const firebase = new Set<string>();
@@ -248,7 +257,7 @@ export class JsSecretsScanner {
     }
 
     const openDbs: string[] = [];
-    await runPool([...firebase].slice(0, MAX_FIREBASE_DBS), CONCURRENCY, async (db) => {
+    await runPool(checkFirebase ? [...firebase].slice(0, MAX_FIREBASE_DBS) : [], CONCURRENCY, async (db) => {
       const res = await fetcher(`${db}/.json?shallow=true`, { maxBytes: 64 * 1024, redirect: 'manual' });
       if (res?.status !== 200 || /Permission denied/i.test(res.body)) return;
       try {
@@ -284,7 +293,7 @@ export class JsSecretsScanner {
             ? 'no same-site scripts found'
             : failed
               ? 'scripts could not be downloaded'
-              : `${plural(fetched, 'script')} scanned${firebase.size ? `, ${plural(firebase.size, 'Firebase database')} checked` : ''}${issues.length ? `, ${plural(issues.length, 'finding')}` : ''}`,
+              : `${plural(fetched, 'script')} scanned${firebase.size ? `, ${plural(firebase.size, 'Firebase database')} ${checkFirebase ? 'checked' : 'found, not queried (passive mode)'}` : ''}${issues.length ? `, ${plural(issues.length, 'finding')}` : ''}`,
         },
       ],
     };

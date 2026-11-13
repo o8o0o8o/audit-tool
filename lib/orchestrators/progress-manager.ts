@@ -46,6 +46,8 @@ interface MetadataData {
   timing: Record<string, unknown>;
   cruxData?: unknown;
   visual?: boolean;
+  passive?: boolean;
+  leadScan?: unknown;
 }
 
 /** The checkpoint's `visual` setting; a legacy checkpoint without the field never ran the visual analyzers. */
@@ -79,6 +81,9 @@ export function buildCheckpointMetadata(results: ProgressResults) {
     crawlProfile: results.crawlProfile ?? null,
     visual: results.visual === true,
     siteChecks: results.siteChecks ?? null,
+    // Only present on runs that used the flags, so a full audit's metadata is unchanged.
+    ...(results.passive ? { passive: true } : {}),
+    ...(results.leadScan ? { leadScan: results.leadScan } : {}),
   };
 }
 
@@ -91,6 +96,10 @@ export interface ProgressResults {
   crawlProfile?: CrawlProfile | null;
   visual?: boolean;
   siteChecks?: SiteChecksData | null;
+  /** `--passive` / `--lead`: the site probes ran in passive mode. */
+  passive?: boolean;
+  /** `--lead`: page selection, sitemap sample and request counts of the lead scan. */
+  leadScan?: unknown;
   pageData: {
     pages: Record<string, PageInfo>;
     processedPages: Set<string> | string[];
@@ -223,6 +232,7 @@ class ProgressManager {
       isMultiLang: metadataTyped.isMultiLang,
       timing: metadataTyped.timing,
       visual: checkpointVisual(metadataTyped),
+      ...(metadataTyped.leadScan ? { leadScan: metadataTyped.leadScan } : {}),
       pageData: {
         pages,
         processedPages: processedPagesSet,

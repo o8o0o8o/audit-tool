@@ -31,6 +31,8 @@ interface CrUXFieldData {
   targetType: string;
   collectionPeriod: unknown;
   metrics: Record<string, CrUXMetricData>;
+  /** Set by `fetchOriginCrUX`: the device class the numbers are for. */
+  formFactor?: string;
 }
 
 interface CrUXComparisonMetric {
@@ -140,6 +142,28 @@ class CrUXAPI {
     }
 
     return null;
+  }
+
+  /**
+   * Real-user data for the whole origin on one device class (lead scans). Origin level and phones are
+   * what PageSpeed Insights shows a site owner first, so the numbers can be checked by the prospect.
+   * Needs a Google API key (`CRUX_API_KEY`); without one, or without enough Chrome traffic, null.
+   */
+  static async fetchOriginCrUX(
+    urlOrOrigin: string,
+    apiKey: string | null = null,
+    formFactor: 'PHONE' | 'DESKTOP' = 'PHONE',
+  ): Promise<CrUXFieldData | null> {
+    const key = apiKey ?? process.env.CRUX_API_KEY ?? null;
+    if (!key) return null;
+    let origin: string;
+    try {
+      origin = new URL(urlOrOrigin).origin;
+    } catch {
+      return null;
+    }
+    const data = await this.#queryCrUX(origin, 'origin', key, formFactor);
+    return data ? { ...data, formFactor } : null;
   }
 
   /**

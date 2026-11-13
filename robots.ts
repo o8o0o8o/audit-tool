@@ -8,7 +8,7 @@ import { generateHTML } from './generateHTML';
 import { getOpenCommand, getHostname } from './lib/utils';
 
 // Import modularized components
-import { parseArgs, calculateSafeConcurrency } from './lib/args-parser';
+import { parseArgs, calculateSafeConcurrency, LEAD_MODE } from './lib/args-parser';
 import {
   loadConfig,
   generateSampleConfig,
@@ -347,6 +347,8 @@ async function audit() {
     }
     const presetSummary = applyPresetRunOptions(args, resolvedPreset);
     if (presetSummary) console.log(presetSummary);
+    // A role preset may turn the throttled lab run on; a lead scan never runs it.
+    if (args.lead) args.perf = false;
 
     // Apply config to concurrency only if not explicitly set via CLI
     if (!args.concurrencyExplicit && config.crawl?.concurrency) {
@@ -375,7 +377,9 @@ async function audit() {
     if (args.perf) console.log(`📊 Performance metrics: enabled`);
     if (resolveVisual(args.visual, config)) console.log(`🖼️  Visual (UI defect) checks: enabled`);
     if (!resolveAgentic(args.agentic, config)) console.log(`🤖 Agentic browsing checks: disabled`);
-    if (args.limit) console.log(`🔢 Page limit: ${args.limit}`);
+    if (args.limit) console.log(`🔢 Page limit: ${args.limit}${args.lead ? ' in total (lead scan)' : ''}`);
+    if (args.lead) console.log(`🎯 Lead scan: passive checks only, results in ${LEAD_MODE.resultsBase}/, no curated report, no history entry`);
+    else if (args.passive) console.log(`🤫 Passive mode: site probes that go beyond reading published pages are skipped`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
 
     // Check if comparison mode
@@ -445,6 +449,9 @@ async function audit() {
       evidenceCap: args.evidenceCap,
       visual: resolveVisual(args.visual, config),
       agentic: resolveAgentic(args.agentic, config),
+      lead: args.lead,
+      passive: args.passive,
+      resultsBase: args.lead ? LEAD_MODE.resultsBase : undefined,
     });
     _seoInstance = seo;
 
@@ -539,9 +546,13 @@ async function audit() {
       }
     }
 
-    // Save to history for tracking and get previous score for diff
+    // Save to history for tracking and get previous score for diff.
+    // A lead scan is not an audit of record: it never enters the history, so trends and
+    // comparisons only ever see full audits.
     try {
-      if (seo.data && seo.fileManager?.timestamp) {
+      if (args.lead) {
+        // no history entry
+      } else if (seo.data && seo.fileManager?.timestamp) {
         const manager = new HistoryManager(seo.domainName!);
 
         // Get previous score before adding new snapshot
@@ -747,9 +758,10 @@ async function audit() {
       postJson(args.webhook, JSON.stringify(jsonSummary), `Webhook to ${args.webhook}`);
     }
 
-    // Send desktop notification (best effort, no dependency required)
+    // Send desktop notification (best effort, no dependency required).
+    // Not for lead scans: they run in batches of dozens.
     try {
-      if (process.platform === 'darwin') {
+      if (process.platform === 'darwin' && !args.lead) {
         execFile('osascript', [
           '-e',
           `display notification "Score: ${score}/100 | ${totalPages} pages crawled" with title "SEO Audit Complete" subtitle "${seo.domainName}"`,
@@ -762,7 +774,7 @@ async function audit() {
     // Append to audit log
     try {
       const logEntry = `${new Date().toISOString()} | ${seo.domainName} | Score: ${score} | Issues: ${totalIssues} | Pages: ${totalPages}\n`;
-      fs.appendFileSync('audit-results/audit.log', logEntry);
+      fs.appendFileSync(`${args.lead ? LEAD_MODE.resultsBase : 'audit-results'}/audit.log`, logEntry);
     } catch (e: unknown) {
       console.debug('Audit log append failed:', (e as Error).message);
     }

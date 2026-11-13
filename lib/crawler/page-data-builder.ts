@@ -1439,6 +1439,8 @@ export async function captureRepresentativeEvidence(
         userAgent: options.userAgent ?? undefined,
       });
       try {
+        const observe = options.requestObserver;
+        if (observe) nojsContext.on('request', (request) => observe(request.url()));
         const nojsPage = await nojsContext.newPage();
         await nojsPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 8_000 });
         await nojsPage.screenshot({ path: path.join(pageDir, 'screenshot.nojs.png'), fullPage: false, timeout: 5_000 });

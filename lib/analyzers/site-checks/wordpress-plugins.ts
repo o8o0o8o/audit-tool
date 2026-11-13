@@ -76,12 +76,15 @@ export class WordPressPluginsAnalyzer {
     plugins: Map<string, string | null>,
     fetcher: HttpProbeFetcher = defaultHttpFetcher,
     token: string | undefined = process.env.WPSCAN_API_TOKEN,
+    /** `readReadme: false` (passive mode): versions come from asset URLs only; no readme.txt is requested. */
+    opts: { readReadme?: boolean } = {},
   ): Promise<SiteProbeResult> {
     const base = origin.replace(/\/$/, '');
     const slugs = [...plugins.keys()].slice(0, MAX_PLUGINS);
     const versions = new Map<string, string | null>();
+    if (opts.readReadme === false) for (const slug of slugs) versions.set(slug, plugins.get(slug) ?? null);
 
-    await runPool(slugs, CONCURRENCY, async (slug) => {
+    await runPool(opts.readReadme === false ? [] : slugs, CONCURRENCY, async (slug) => {
       const res = await fetcher(`${base}/wp-content/plugins/${slug}/readme.txt`, { maxBytes: 16 * 1024 });
       const tag = res?.status === 200 ? parseStableTag(res.body) : null;
       versions.set(slug, tag ?? plugins.get(slug) ?? null);

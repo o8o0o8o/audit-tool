@@ -21,6 +21,8 @@ export interface SiteChecksData {
   checkedAt: string;
   domain: string;
   checks: SiteCheckResult[];
+  /** Set when the probes ran in passive mode (`--passive` / `--lead`). */
+  passive?: boolean;
 }
 
 export interface SiteProbeResult {

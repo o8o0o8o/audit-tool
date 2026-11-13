@@ -31,6 +31,12 @@ export interface CrawlerInternalOptions {
   evidenceDir?: string;
   /** Max number of representative-page samples (default 10). */
   evidenceCap?: number;
+  /** Lead scan (`--lead`). */
+  lead?: boolean;
+  /** Most page loads (navigations) across all crawl passes of the run. */
+  maxPages?: number | null;
+  /** Called with the URL of every request sent from the crawl's browser contexts. */
+  requestObserver?: (url: string) => void;
 }
 
 export interface QueryParamConfig {

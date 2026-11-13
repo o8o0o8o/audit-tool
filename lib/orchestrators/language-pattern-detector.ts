@@ -1,7 +1,7 @@
 import type { SitemapUrl } from '../types';
 
 // Common language codes (ISO 639-1)
-const LANG_CODES = new Set([
+export const LANG_CODES = new Set([
   'en',
   'de',
   'fr',

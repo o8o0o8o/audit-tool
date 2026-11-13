@@ -1749,6 +1749,13 @@ export interface ParsedArgs {
   noScore: boolean;
   evidence: boolean;
   evidenceCap: number;
+  /**
+   * `--lead`: lead scan of a prospect's site — a small, passive run that writes to `lead-results/`
+   * and skips the curated report and the history save. See `applyLeadMode` in `lib/args-parser.ts`.
+   */
+  lead: boolean;
+  /** `--passive` (implied by `--lead`): skip the site probes that go beyond reading published pages. */
+  passive: boolean;
   /** Phase 4 — opt-in competitive content research + content plan. */
   contentResearch: boolean;
   /** Comma-separated competitor URLs or a path to a file (one URL per line). Optional — LLM discovers when omitted. */
@@ -1774,6 +1781,12 @@ export interface SEODataOptions {
   evidenceCap?: number;
   /** Run the visual (UI defect) analyzers. On `--proceed` the checkpoint's value wins. */
   visual?: boolean;
+  /** Lead scan (`--lead`): homepage-first page selection under one total page cap (`limit`). */
+  lead?: boolean;
+  /** Passive site probes (`--passive`, implied by `--lead`). */
+  passive?: boolean;
+  /** Base folder for the run (default `audit-results`; lead scans use `lead-results`). */
+  resultsBase?: string;
 }
 
 // ─── History Types ──────────────────────────────────────────────────────────
@@ -1942,6 +1955,12 @@ export interface CrawlerEngineOptions {
   evidenceCap?: number;
   /** Run the visual (UI defect) analyzers. */
   visual?: boolean;
+  /** Lead scan: real-user data without the lab run, no click probes, navigation links recorded. */
+  lead?: boolean;
+  /** Most page loads (navigations) across all crawl passes of the run. */
+  maxPages?: number | null;
+  /** Called with the URL of every request the crawl sends from the browser. */
+  requestObserver?: (url: string) => void;
 }
 
 export interface CrawlerCallbacks {

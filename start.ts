@@ -22,7 +22,7 @@ if (fs.existsSync(envFile)) {
 import { spawn } from 'child_process';
 import * as zlib from 'zlib';
 import type { ParsedArgs } from './lib/args-parser';
-import { parseArgs, visualChildArgs, agenticChildArgs } from './lib/args-parser';
+import { parseArgs, visualChildArgs, agenticChildArgs, leadChildArgs, LEAD_MODE } from './lib/args-parser';
 import { validateURL, sanitizeDomainName } from './validators';
 import { printHelp, interactiveMode } from './lib/cli-interactive';
 import { FileManager } from './lib/storage/file-manager';
@@ -155,6 +155,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.llmNarrative || args.llmFindings || args.llmRepo || args.llmVerify) childArgs.push('--llm');
     if (args.verify) childArgs.push('--verify');
     if (args.noScore) childArgs.push('--no-score');
+    childArgs.push(...leadChildArgs(args));
     childArgs.push(...visualChildArgs(args.visual));
     childArgs.push(...agenticChildArgs(args.agentic));
     if (args.evidence === false) childArgs.push('--no-evidence');
@@ -179,7 +180,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
         // Try to show crash progress summary
         try {
           const domain = args.origin ? sanitizeDomainName(args.origin) : args.sitemap ? 'sitemap' : 'unknown';
-          const latestRun = FileManager.findLatestRun(domain);
+          const latestRun = FileManager.findLatestRun(domain, args.lead ? LEAD_MODE.resultsBase : undefined);
           if (latestRun) {
             const manifestPath = path.join(latestRun, 'manifest.json.gz');
             if (fs.existsSync(manifestPath)) {

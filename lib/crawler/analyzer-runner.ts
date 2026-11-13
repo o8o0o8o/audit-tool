@@ -556,7 +556,8 @@ export async function runAnalyzers(
   // never eats that budget; uses its own isolated page. Bounded per-audit by
   // PaginationAnalyzer's probe budget. Only runs for JS-driven "next" controls
   // (static-href series are covered post-crawl by BrokenPaginationAnalyzer).
-  if (pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
+  // A lead scan never clicks through a site's controls, so the probe is off there.
+  if (!options.lead && pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
     const probeResult = await withTimeout(
       PaginationAnalyzer.probeJsNext(chromePage, url, options.evidenceDir),
       CRAWL_SETTINGS.BROKEN_PAGINATION_PROBE_TIMEOUT_MS + 2000,
@@ -687,7 +688,9 @@ export async function runAnalyzers(
   // Crawl-time hints for the post-crawl site checks (+ structured-data phone check)
   try {
     reportIssues(
-      { issues: await capturePageHints(chromePage, parsedPage, url, pageData, requests) } as AnalyzerResult,
+      {
+        issues: await capturePageHints(chromePage, parsedPage, url, pageData, requests, { navLinks: options.lead === true }),
+      } as AnalyzerResult,
       reportIssue,
       url,
     );
@@ -783,7 +786,9 @@ export async function runAnalyzers(
     }
   }
 
-  // Outbound link health check (async, rate-limited)
+  // Outbound link health check (async, rate-limited). Skipped in a lead scan: it sends requests to
+  // third-party sites and no lead finding uses it.
+  if (options.lead) return;
   try {
     const outboundResult = await withTimeout(
       OutboundLinkChecker.analyze(pageData, url, options.origin, options.analysis),

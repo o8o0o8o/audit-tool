@@ -149,6 +149,9 @@ class CrawlerEngine {
   /** URLs whose final main-frame response was still a bot challenge. */
   #challengedUrls = new Set<string>();
 
+  /** True once real-user (CrUX) data was found for the origin; a lead scan then skips the lab fallback. */
+  #hasFieldData = false;
+
   /** URLs the sampler authorised for evidence capture. Read after crawl completes. */
   getSampledUrls(): string[] {
     return this.#sampler.getSampledUrls();
@@ -163,18 +166,23 @@ class CrawlerEngine {
    * swallowed silently so they don't block the audit.
    */
   async capturePSIForSampled(): Promise<{ attempted: number; succeeded: number }> {
-    if (!this.#options.perf || !this.#options.evidenceDir) {
+    // Lead scan: a lab run only as a fallback when the origin has no real-user data, on three
+    // pages at most and for phones only. Full audits: every sampled page, both strategies, with --perf.
+    const leadFallback = this.#options.lead === true && !this.#hasFieldData;
+    if ((!this.#options.perf && !leadFallback) || !this.#options.evidenceDir) {
       return { attempted: 0, succeeded: 0 };
     }
-    const sampled = this.#sampler.getSampledUrls();
+    const sampled = leadFallback ? this.#sampler.getSampledUrls().slice(0, 3) : this.#sampler.getSampledUrls();
     if (sampled.length === 0) return { attempted: 0, succeeded: 0 };
 
     const apiKey = process.env.CRUX_API_KEY ?? this.#options.cruxApiKey ?? null;
-    const strategies: Array<'mobile' | 'desktop'> = ['mobile', 'desktop'];
+    const strategies: Array<'mobile' | 'desktop'> = leadFallback ? ['mobile'] : ['mobile', 'desktop'];
     const tasks: Array<{ url: string; strategy: 'mobile' | 'desktop' }> = [];
     for (const url of sampled) for (const strategy of strategies) tasks.push({ url, strategy });
 
-    console.log(`\n📈 Fetching PSI lab scores for ${sampled.length} representative page(s) × 2 strategies…`);
+    console.log(
+      `\n📈 Fetching PSI lab scores for ${sampled.length} representative page(s) × ${strategies.length} strateg${strategies.length === 1 ? 'y' : 'ies'}…`,
+    );
 
     let attempted = 0;
     let succeeded = 0;
@@ -267,6 +275,9 @@ class CrawlerEngine {
       cruxApiKey: options.cruxApiKey ?? null,
       evidenceDir: options.evidenceDir,
       evidenceCap: options.evidenceCap,
+      lead: options.lead === true,
+      maxPages: options.maxPages ?? null,
+      requestObserver: options.requestObserver,
       queryParams: options.queryParams ??
         (config.queryParams as unknown as QueryParamConfig | undefined) ?? {
           mode: 'strip_tracking',
@@ -345,7 +356,9 @@ class CrawlerEngine {
 
     // Override sampler cap when caller supplied one (default 10 is in the sampler)
     if (typeof options.evidenceCap === 'number' && options.evidenceCap > 0) {
-      this.#sampler = new RepresentativeSampler(options.evidenceCap);
+      // Lead scans bucket by template with the language prefix ignored, so a `/en/…` site still
+      // gets evidence for several templates. Full audits keep the original bucketing.
+      this.#sampler = new RepresentativeSampler(options.evidenceCap, { ignoreLanguagePrefix: options.lead === true });
     }
   }
 
@@ -795,6 +808,8 @@ class CrawlerEngine {
       const context = await browser.newContext(
         contextOptions as { viewport: { width: number; height: number }; userAgent?: string },
       );
+      const observe = this.#options.requestObserver;
+      if (observe) context.on('request', (request) => observe(request.url()));
 
       // Inject __name polyfill for tsx/esbuild compatibility.
       // tsx compiles with keepNames:true, injecting __name() calls into serialized
@@ -818,12 +833,16 @@ class CrawlerEngine {
       let isMultiLang = false;
       let saveCounter = 0; // Track saves to reduce frequency
 
-      // Fetch CrUX data for the origin (only once at start)
-      if (this.#options.perf && !results.cruxData) {
+      // Fetch CrUX data for the origin (only once at start).
+      // A lead scan fetches it without --perf: origin level, phones only (what PageSpeed Insights
+      // shows the site owner). It goes to Google, not to the audited site.
+      if ((this.#options.perf || this.#options.lead) && !results.cruxData) {
         const cruxApiKey = process.env.CRUX_API_KEY ?? this.#options.cruxApiKey ?? null;
         console.log(`\n📊 Fetching Chrome UX Report (CrUX) field data...${cruxApiKey ? ' (API key found)' : ''}`);
         try {
-          results.cruxData = await CrUXAPI.fetchCrUXData(this.#options.origin, cruxApiKey);
+          results.cruxData = this.#options.lead
+            ? await CrUXAPI.fetchOriginCrUX(this.#options.origin, cruxApiKey, 'PHONE')
+            : await CrUXAPI.fetchCrUXData(this.#options.origin, cruxApiKey);
           if (results.cruxData) {
             console.log(`   ✓ CrUX data available (${results.cruxData.targetType}-level)`);
             const cwvMetrics = ['LCP', 'CLS', 'INP'];
@@ -850,6 +869,7 @@ class CrawlerEngine {
           console.log(`   ⚠️  Could not fetch CrUX data: ${(e as Error).message}`);
         }
       }
+      if (results.cruxData) this.#hasFieldData = true;
 
       // Track pages already processed at start (for resume) to avoid double-counting in progress
       // Only count pages that are BOTH processed AND in the current crawl list
@@ -898,7 +918,8 @@ class CrawlerEngine {
       // Process pages in batches for parallel execution
       const concurrency = this.#options.concurrency;
 
-      for (let batchStart = 0; batchStart < pagesToCrawl.length; batchStart += concurrency) {
+      // `batchSize` is the step: normally `concurrency`, smaller when the page budget cuts a batch short.
+      for (let batchStart = 0, batchSize = concurrency; batchStart < pagesToCrawl.length; batchStart += batchSize) {
         // Check for graceful / force shutdown
         if (abortRequested || forceQuit) {
           console.log('   Saving checkpoint before exit...');
@@ -917,7 +938,17 @@ class CrawlerEngine {
         // Update total in case new pages were discovered (only happens when addMissing=true)
         progress.updateTotal(pagesToCrawl.length);
 
-        const batchEnd = Math.min(batchStart + concurrency, pagesToCrawl.length);
+        // One total page budget for the run (lead scans): every navigation counts, across all
+        // passes, including a redirect and the page it leads to.
+        const maxPages = this.#options.maxPages;
+        const budgetLeft = maxPages ? maxPages - results.pageData.processedPages.size : Infinity;
+        if (budgetLeft <= 0) {
+          console.log(`   Page budget of ${maxPages} reached; ${pagesToCrawl.length - batchStart} URL(s) not loaded.`);
+          break;
+        }
+
+        const batchEnd = Math.min(batchStart + concurrency, pagesToCrawl.length, batchStart + budgetLeft);
+        batchSize = Math.max(1, batchEnd - batchStart);
         const batch = pagesToCrawl.slice(batchStart, batchEnd);
 
         // Process batch in parallel using Promise.allSettled to isolate failures

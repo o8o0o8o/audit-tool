@@ -47,7 +47,41 @@ export interface SiteProbeContext {
   userAgent?: string;
   /** Test seam: skip the browser-based consent test. */
   skipBrowser?: boolean;
+  /**
+   * Passive mode (`--passive`, implied by `--lead`): for a site whose owner did not ask for the
+   * audit. Only checks that read what the site publishes to every visitor run; the probes that ask
+   * for unlinked files, send forged headers, impersonate a crawler or touch other hosts and data
+   * stores are skipped and show as "not run in passive mode". See `PASSIVE_SKIPPED_STEPS`.
+   */
+  passive?: boolean;
+  /** Called with the URL of every request the browser probes send (lead scans count them). */
+  onBrowserRequest?: (url: string) => void;
 }
+
+/**
+ * Steps that do not run in passive mode, with the reason and the check rows they would have filled.
+ * Policy table: docs/gtm/sales-audit-system.md, "Probe policy in lead mode".
+ */
+export const PASSIVE_SKIPPED_STEPS: Record<string, { why: string; checks: Array<[id: string, label: string]> }> = {
+  'exposed files': { why: 'requests files nobody linked to', checks: [['exposed-files', 'Exposed files']] },
+  'staging hosts': { why: 'requests hosts the site never published', checks: [['staging-hosts', 'Staging hosts']] },
+  'open buckets': { why: 'requests a storage bucket listing', checks: [['open-buckets', 'Open storage buckets']] },
+  CORS: { why: 'sends forged Origin headers', checks: [['cors', 'CORS']] },
+  'bot parity': {
+    why: 'sends requests that claim to be a search crawler',
+    checks: [
+      ['googlebot-parity', 'Googlebot parity'],
+      ['ai-crawler-access', 'AI crawler access'],
+    ],
+  },
+  'locale redirect': {
+    why: 'repeats the homepage request with other languages',
+    checks: [['locale-redirect', 'Locale redirect']],
+  },
+  'consent reject': { why: 'clicks the consent banner', checks: [['consent-reject', 'Trackers after consent reject']] },
+};
+
+export const PASSIVE_NOTE = 'not run in passive mode';
 
 /** Same-origin asset URLs (images) and linked hostnames gathered from the crawled pages. */
 export function gatherCrawlHints(pages: Record<string, PageInfo>): { assetUrls: string[]; linkHosts: string[] } {
@@ -94,13 +128,42 @@ export function samplePages(origin: string, pages: Record<string, PageInfo>, n =
   return out;
 }
 
-/** One headless browser for the consent "Reject" test and the tag behaviour probe. */
-async function browserProbes(home: string, second: string | undefined, userAgent?: string): Promise<SiteProbeResult> {
-  const browser = await chromium.launch();
+/**
+ * One headless browser for the consent "Reject" test and the tag behaviour probe.
+ * In passive mode only the tag behaviour probe runs (a second homepage load, no clicks on consent).
+ */
+async function browserProbes(
+  home: string,
+  second: string | undefined,
+  userAgent?: string,
+  passive = false,
+  onRequest?: (url: string) => void,
+): Promise<SiteProbeResult> {
+  const launched = await chromium.launch();
+  // Every context the probes open reports its requests to the observer.
+  const browser = onRequest
+    ? new Proxy(launched, {
+        get(target, prop) {
+          if (prop !== 'newContext') {
+            const value = Reflect.get(target, prop, target) as unknown;
+            return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+          }
+          return async (...args: Parameters<typeof launched.newContext>) => {
+            const context = await target.newContext(...args);
+            context.on('request', (request) => onRequest(request.url()));
+            return context;
+          };
+        },
+      })
+    : launched;
   const merged: SiteProbeResult = { issues: [], checks: [] };
   try {
     for (const run of [
-      () => ConsentRejectTest.probe(browser as unknown as ConsentBrowser, home, { secondUrl: second, userAgent }),
+      ...(passive
+        ? []
+        : [
+            () => ConsentRejectTest.probe(browser as unknown as ConsentBrowser, home, { secondUrl: second, userAgent }),
+          ]),
       () => TagBehaviorProbe.probe(browser as unknown as ProbeBrowser, home, { userAgent }),
     ]) {
       try {
@@ -113,7 +176,7 @@ async function browserProbes(home: string, second: string | undefined, userAgent
     }
     return merged;
   } finally {
-    await browser.close().catch(() => undefined);
+    await launched.close().catch(() => undefined);
   }
 }
 
@@ -159,15 +222,16 @@ function ga4HitsCheck(pages: Record<string, PageInfo>): SiteProbeResult {
   };
 }
 
-export async function runSiteProbes(
-  origin: string,
-  pages: Record<string, PageInfo>,
-  saveError: SaveErrorFn,
-  ctx: SiteProbeContext = {},
-): Promise<SiteChecksData> {
+type Step = [string, () => Promise<SiteProbeResult>];
+
+/**
+ * The probe steps for a run, in order. Exported so the passive policy can be tested without
+ * running a probe: in passive mode the steps of `PASSIVE_SKIPPED_STEPS` are absent.
+ */
+export function siteProbeSteps(origin: string, pages: Record<string, PageInfo>, ctx: SiteProbeContext = {}): Step[] {
   const domain = siteDomain(origin);
-  const data: SiteChecksData = { checkedAt: new Date().toISOString(), domain, checks: [] };
-  if (!domain) return data;
+  if (!domain) return [];
+  const passive = ctx.passive === true;
   const { assetUrls, linkHosts } = gatherCrawlHints(pages);
   const hints = mergeSiteHints(pages);
   const allAssets = [...hints.assets, ...assetUrls];
@@ -179,7 +243,6 @@ export async function runSiteProbes(
 
   // DNS-based checks need a real domain name, not an IP or a local host.
   const dnsName = !isIpOrLocal(domain);
-  type Step = [string, () => Promise<SiteProbeResult>];
   const steps: Step[] = [
     ...(dnsName ? ([['email/DNS', () => EmailDnsAnalyzer.analyze(domain)]] as Step[]) : []),
     ['exposed files', () => ExposedFilesProbe.probe(origin, candidateDirectories(origin, assetUrls))],
@@ -191,10 +254,22 @@ export async function runSiteProbes(
           ['abandoned script domains', () => AbandonedScriptDomains.analyze(origin, hints.thirdPartyHosts)],
         ] as Step[])
       : []),
-    ['JS secrets', () => JsSecretsScanner.scan(collectScriptUrls(origin, hints.scripts))],
+    // Passive: the public scripts are still read for key patterns, but a Firebase database named in
+    // them is not queried (that would be an unauthenticated read of a data store).
+    [
+      'JS secrets',
+      () => JsSecretsScanner.scan(collectScriptUrls(origin, hints.scripts), undefined, { checkFirebase: !passive }),
+    ],
     ['open buckets', () => OpenBucketProbe.probe(allAssets)],
     ['CORS', () => CorsProbe.probe(origin, selectApiUrls(origin, hints.api))],
-    ['WordPress plugins', () => WordPressPluginsAnalyzer.analyze(origin, extractWpPlugins(allAssets))],
+    // Passive: plugin versions come from asset URLs only; the unlinked readme files are not requested.
+    [
+      'WordPress plugins',
+      () =>
+        WordPressPluginsAnalyzer.analyze(origin, extractWpPlugins(allAssets), undefined, undefined, {
+          readReadme: !passive,
+        }),
+    ],
     ['bot parity', () => BotParityProbe.probe(origin, { sampleUrls: samples, robotsAllows })],
     ['locale redirect', () => LocaleRedirectProbe.probe(origin)],
     ['GA4 hits', () => Promise.resolve(ga4HitsCheck(pages))],
@@ -208,8 +283,25 @@ export async function runSiteProbes(
     ['session replay', () => Promise.resolve(SessionReplaySensitive.analyze(hints.replayPages))],
     ...(ctx.skipBrowser
       ? []
-      : ([['browser probes', () => browserProbes(samples[0], samples[1], ctx.userAgent)]] as Step[])),
+      : ([
+          ['browser probes', () => browserProbes(samples[0], samples[1], ctx.userAgent, passive, ctx.onBrowserRequest)],
+        ] as Step[])),
   ];
+  return passive ? steps.filter(([name]) => !(name in PASSIVE_SKIPPED_STEPS)) : steps;
+}
+
+export async function runSiteProbes(
+  origin: string,
+  pages: Record<string, PageInfo>,
+  saveError: SaveErrorFn,
+  ctx: SiteProbeContext = {},
+): Promise<SiteChecksData> {
+  const domain = siteDomain(origin);
+  const data: SiteChecksData = { checkedAt: new Date().toISOString(), domain, checks: [] };
+  if (!domain) return data;
+  if (ctx.passive) data.passive = true;
+  const hints = mergeSiteHints(pages);
+  const steps = siteProbeSteps(origin, pages, ctx);
   for (const [name, run] of steps) {
     try {
       const result = await run();
@@ -217,6 +309,12 @@ export async function runSiteProbes(
       data.checks.push(...result.checks);
     } catch (e) {
       console.log(`  ⚠️  ${name} check skipped: ${(e as Error).message}`);
+    }
+  }
+  if (ctx.passive) {
+    // Show what was left out, so a clean table is not read as "checked and fine".
+    for (const { checks } of Object.values(PASSIVE_SKIPPED_STEPS)) {
+      for (const [id, label] of checks) data.checks.push({ id, label, status: 'skipped', note: PASSIVE_NOTE });
     }
   }
 

@@ -19,13 +19,25 @@
  * Trailing slashes, query strings, and fragments are ignored when bucketing.
  */
 
+import { templateKey } from '../leads/page-selector';
+
 export class RepresentativeSampler {
   readonly #cap: number;
   readonly #seenBuckets = new Set<string>();
   readonly #sampled: string[] = [];
+  readonly #ignoreLanguagePrefix: boolean;
 
-  constructor(cap = 10) {
+  /**
+   * `ignoreLanguagePrefix` (lead scans): bucket `/en/blog/x` as `/blog/*`, so a site whose every
+   * URL starts with a language code is still sampled across its templates.
+   */
+  constructor(cap = 10, opts: { ignoreLanguagePrefix?: boolean } = {}) {
     this.#cap = Math.max(1, cap);
+    this.#ignoreLanguagePrefix = opts.ignoreLanguagePrefix === true;
+  }
+
+  #bucket(url: string): string | null {
+    return this.#ignoreLanguagePrefix ? templateKey(url) : RepresentativeSampler.bucketOf(url);
   }
 
   /**
@@ -36,7 +48,7 @@ export class RepresentativeSampler {
   shouldSample(url: string): boolean {
     if (this.#sampled.length >= this.#cap) return false;
 
-    const bucket = RepresentativeSampler.bucketOf(url);
+    const bucket = this.#bucket(url);
     if (bucket === null) return false; // unparseable URL
     if (this.#seenBuckets.has(bucket)) return false;
 
@@ -54,7 +66,7 @@ export class RepresentativeSampler {
    */
   wouldSample(url: string): boolean {
     if (this.#sampled.length >= this.#cap) return false;
-    const bucket = RepresentativeSampler.bucketOf(url);
+    const bucket = this.#bucket(url);
     if (bucket === null) return false;
     return !this.#seenBuckets.has(bucket);
   }

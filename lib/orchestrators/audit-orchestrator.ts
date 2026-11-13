@@ -14,10 +14,14 @@ import { populateIncomingLinksCount } from '../crawler/page-data-builder';
 import type { QueryParamConfig } from '../crawler/crawler-types';
 import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel, SiteTextFilesData } from '../types';
 import { SiteTextFilesAnalyzer } from '../analyzers/seo/site-text-files-analyzer';
+import { evenSample, selectLeadPages, type HomeLink } from '../leads/page-selector';
+import type { LeadScanInfo } from '../leads/types';
 
 interface AnalyzeContext {
   results: {
-    sitemaps: { urls: Record<string, SitemapUrl> };
+    sitemaps: { urls: Record<string, SitemapUrl>; total?: number };
+    /** Lead scan (`--lead`): what was selected and why. */
+    leadScan?: LeadScanInfo;
     isMultiLang?: boolean;
     pageData: {
       pages: Record<string, PageInfo>;
@@ -48,6 +52,17 @@ interface AnalyzeContext {
   /** Site origin; when the sitemap yields no URLs the crawl is seeded from its homepage. */
   origin?: string | null;
   resultsDir: string;
+  /**
+   * Lead scan (`--lead`): crawl the homepage, choose the rest of the pages from its links and the
+   * sitemap (`selectLeadPages`), and load at most `cap` pages in total.
+   */
+  lead?: {
+    cap: number;
+    /** robots.txt check for `*`; a disallowed URL is never loaded. */
+    isAllowed?: (path: string) => boolean;
+    /** Brings pages that a checkpoint save moved to disk back into `results.pageData.pages`. */
+    reloadPages?: () => void;
+  };
 }
 
 interface PageDataForValidation {
@@ -179,7 +194,13 @@ class AuditOrchestrator {
    * @returns {Promise<void>}
    */
   static async analyzePages(context: AnalyzeContext) {
-    const { results, crawlerEngine, incomingLinksTracking, saveError, resultsDir } = context;
+    const { results, crawlerEngine, incomingLinksTracking } = context;
+
+    if (context.lead) {
+      const lead = await AuditOrchestrator.#crawlLeadPages(context, context.lead);
+      await AuditOrchestrator.#finishPageAnalysis(context, lead);
+      return;
+    }
 
     const uniquePages = new Set(Object.keys(results.sitemaps.urls));
     const collectedURLs = new Set<string>();
@@ -255,6 +276,136 @@ class AuditOrchestrator {
       isMultiLang = isMultiLang || discoveredData.isMultiLang;
       failedPages = [...discoveredData.failedPages, ...failedPages];
     }
+
+    await AuditOrchestrator.#finishPageAnalysis(context, { alternatesErrors, isMultiLang, failedPages });
+  }
+
+  /**
+   * Lead scan crawl: the homepage first, then the pages `selectLeadPages` chooses from the
+   * homepage's links and the sitemap. Links found along the way are recorded but never followed,
+   * and the crawler's page budget keeps the total at `cap` navigations.
+   */
+  static async #crawlLeadPages(
+    context: AnalyzeContext,
+    lead: NonNullable<AnalyzeContext['lead']>,
+  ): Promise<{ alternatesErrors: string[]; isMultiLang: boolean; failedPages: string[] }> {
+    const { results, crawlerEngine, incomingLinksTracking } = context;
+    const sitemapList = Object.keys(results.sitemaps.urls);
+    const uniquePages = new Set(sitemapList);
+    const collectedURLs = new Set<string>();
+    const crawlFrontierKeys = new Set<string>();
+    let isMultiLang = AuditOrchestrator.#detectMultilanguage(results);
+
+    // The homepage, in the form the sitemap uses when it lists it.
+    const originHome = `${(context.origin ?? '').replace(/\/+$/, '')}/`;
+    const homeKey = normalizeUrlForComparison(originHome);
+    const home = sitemapList.find((u) => normalizeUrlForComparison(u) === homeKey) ?? originHome;
+    crawlFrontierKeys.add(homeKey);
+
+    console.log(`Lead scan: loading the homepage (${home})...`);
+    const first = await crawlerEngine.crawlPages({
+      pagesToCrawl: [home],
+      collectedURLs,
+      uniquePages,
+      crawlFrontierKeys,
+      results,
+      incomingLinksTracking,
+      sitemapUrls: results.sitemaps.urls,
+    });
+    let alternatesErrors = first.alternatesErrors;
+    isMultiLang = isMultiLang || first.isMultiLang;
+    let failedPages = first.failedPages;
+
+    // A checkpoint save may have moved the homepage to disk; bring it back to read its links.
+    lead.reloadPages?.();
+    let homePage: PageInfo | undefined = results.pageData.pages[home];
+    let landed = home;
+    for (let hop = 0; hop < 3 && homePage?.redirectOnly && homePage.finalUrl; hop++) {
+      landed = homePage.finalUrl;
+      homePage = results.pageData.pages[landed];
+    }
+
+    const homeLinks: HomeLink[] = [];
+    for (const link of homePage?.siteHints?.navLinks ?? []) homeLinks.push({ url: link.href, position: link.position });
+    const anchors = homePage?.internalAnchors ?? (Array.isArray(homePage?.links) ? (homePage.links as Array<{ href?: string; isInternal?: boolean }>) : []);
+    for (const anchor of anchors) {
+      if (typeof anchor.href !== 'string' || (anchor as { isInternal?: boolean }).isInternal === false) continue;
+      try {
+        homeLinks.push({ url: new URL(anchor.href, landed).toString(), position: 'main' });
+      } catch {
+        // not a URL
+      }
+    }
+
+    const processedCount = () => {
+      const done = results.pageData.processedPages;
+      return Array.isArray(done) ? done.length : done.size;
+    };
+    const loaded = processedCount();
+    const selection = selectLeadPages({
+      home: landed,
+      homeLinks,
+      sitemapUrls: sitemapList,
+      cap: Math.max(1, lead.cap - Math.max(0, loaded - 1)),
+      isAllowed: lead.isAllowed,
+    });
+    const toCrawl = selection.selected.slice(1).map((p) => p.url);
+    for (const url of toCrawl) crawlFrontierKeys.add(normalizeUrlForComparison(url));
+
+    results.leadScan = {
+      cap: lead.cap,
+      home: landed,
+      selected: selection.selected,
+      disallowedByRobots: selection.disallowed.slice(0, 50),
+      languages: selection.languages,
+      sitemapTotal: sitemapList.length,
+      sitemapSample: evenSample(sitemapList, 200),
+    } satisfies LeadScanInfo;
+
+    const byReason = new Map<string, number>();
+    for (const p of selection.selected) byReason.set(p.reason, (byReason.get(p.reason) ?? 0) + 1);
+    console.log(
+      `Lead scan: ${selection.selected.length} page(s) selected (${[...byReason].map(([r, n]) => `${n} ${r}`).join(', ')})` +
+        (selection.disallowed.length ? `; ${selection.disallowed.length} left out by robots.txt` : ''),
+    );
+
+    if (toCrawl.length) {
+      const second = await crawlerEngine.crawlPages({
+        pagesToCrawl: toCrawl,
+        collectedURLs,
+        uniquePages,
+        crawlFrontierKeys,
+        results,
+        incomingLinksTracking,
+        sitemapUrls: results.sitemaps.urls,
+      });
+      alternatesErrors = [...alternatesErrors, ...second.alternatesErrors];
+      isMultiLang = isMultiLang || second.isMultiLang;
+      failedPages = [...second.failedPages, ...failedPages];
+    }
+
+    // Like `--limit`: keep only the sitemap entries of pages the scan could have loaded, so the
+    // site-wide checks do not report every other sitemap URL as "not crawled" or "orphan".
+    const chosen = new Set(selection.selected.map((p) => normalizeUrlForComparison(p.url)));
+    const kept: Record<string, SitemapUrl> = {};
+    for (const url of sitemapList) {
+      if (chosen.has(normalizeUrlForComparison(url))) kept[url] = results.sitemaps.urls[url];
+    }
+    results.sitemaps.urls = kept;
+    results.sitemaps.total = Object.keys(kept).length;
+    results.leadScan.pagesLoaded = processedCount();
+
+    return { alternatesErrors, isMultiLang, failedPages };
+  }
+
+  /** What follows the crawl passes, shared by the full audit and the lead scan. */
+  static async #finishPageAnalysis(
+    context: AnalyzeContext,
+    crawled: { alternatesErrors: string[]; isMultiLang: boolean; failedPages: string[] },
+  ) {
+    const { results, crawlerEngine, incomingLinksTracking, saveError, resultsDir } = context;
+    const { alternatesErrors, failedPages } = crawled;
+    let isMultiLang = crawled.isMultiLang;
 
     // A language switcher whose targets were crawled (even when they 404)
     // proves a second language exists although no hreflang declares it.

@@ -23,6 +23,10 @@ import { probeSitemapMedia } from './orchestrators/sitemap-media-probe';
 import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { SiteTextFilesAnalyzer } from './analyzers/seo/site-text-files-analyzer';
 import { runSiteProbes } from './analyzers/site-checks/site-probes';
+import { RequestCounter } from './leads/request-counter';
+
+/** Where full audits are written. Lead scans use their own base folder (`LEAD_MODE.resultsBase`). */
+export const DEFAULT_RESULTS_BASE = 'audit-results';
 import { parse } from 'node-html-parser';
 
 /**
@@ -58,6 +62,13 @@ class SEOData {
   #evidenceCap: number;
   #visual: boolean;
   #agentic: boolean;
+  /** Lead scan (`--lead`): homepage-first selection under one page cap, no media probe. */
+  #lead: boolean;
+  /** Passive site probes (`--passive`, implied by `--lead`). */
+  #passive: boolean;
+  /** Base folder of the run: `audit-results`, or `lead-results` for a lead scan. */
+  #resultsBase: string;
+  #requestCounter: RequestCounter | null = null;
 
   origin: string | null;
   domainName: string | null;
@@ -101,6 +112,9 @@ class SEOData {
     this.#evidenceCap = options.evidenceCap ?? 10;
     this.#visual = options.visual ?? false;
     this.#agentic = options.agentic ?? true;
+    this.#lead = options.lead ?? false;
+    this.#passive = options.passive ?? this.#lead;
+    this.#resultsBase = options.resultsBase ?? DEFAULT_RESULTS_BASE;
 
     // Initialize incoming links tracking (Map<target, Set<source>>)
     this.#incomingLinksTracking = new Map();
@@ -122,6 +136,7 @@ class SEOData {
       isMultiLang: false,
       visual: this.#visual,
       agentic: this.#agentic,
+      ...(this.#passive ? { passive: true } : {}),
       pageData: {
         pages: {},
         processedPages: new Set(),
@@ -164,7 +179,7 @@ class SEOData {
     // If proceeding, find and use the latest run's timestamp
     let timestamp = null;
     if (this.#proceed) {
-      const latestRun = FileManager.findLatestRun(this.domainName);
+      const latestRun = FileManager.findLatestRun(this.domainName, this.#resultsBase);
       if (latestRun) {
         // Extract timestamp from path
         timestamp = path.basename(latestRun);
@@ -184,7 +199,7 @@ class SEOData {
       }
     }
 
-    this.fileManager = new FileManager(this.domainName, 'audit-results', timestamp);
+    this.fileManager = new FileManager(this.domainName, this.#resultsBase, timestamp);
     this.resultsDir = this.fileManager.resultsDir;
     this.file = this.fileManager.manifestFile; // Use manifest for multi-file format
 
@@ -207,6 +222,9 @@ class SEOData {
         evidenceCap: this.#evidenceCap,
         visual: this.#visual,
         agentic: this.#agentic,
+        lead: this.#lead,
+        maxPages: this.#lead ? this.#limit : null,
+        requestObserver: this.#lead ? (this.#requestCounter ??= new RequestCounter(this.domainName)).observeBrowser : undefined,
       },
       {
         saveError: this.saveError.bind(this),
@@ -341,6 +359,7 @@ class SEOData {
       this.#agentic = agentic;
       this.#results.agentic = agentic;
       if (this.#crawlerEngine) this.#crawlerEngine.agentic = agentic;
+      if (this.#passive) this.#results.passive = true;
     } catch (error: unknown) {
       const err = error as Error;
       console.error(`\n❌ ERROR restoring progress:`, err.message);
@@ -473,12 +492,15 @@ class SEOData {
     result.errors.forEach((error: { message: string; detail: string; severity: string }) => {
       this.saveError(error.message, error.detail, error.severity);
     });
-    await probeSitemapMedia(result.media, this.origin ?? '', this.saveError.bind(this));
+    // A lead scan does not request the sitemap's image and video URLs (up to 50 extra requests).
+    if (!this.#lead) await probeSitemapMedia(result.media, this.origin ?? '', this.saveError.bind(this));
   }
 
   async #analyzePages() {
-    // Apply --exclude patterns and --limit before crawling
-    if (this.#exclude.length > 0 || this.#limit) {
+    // Apply --exclude patterns and --limit before crawling.
+    // A lead scan keeps the whole sitemap as candidates and chooses its pages after the homepage
+    // has been loaded; its limit is one total cap, enforced by the orchestrator and the crawler.
+    if (!this.#lead && (this.#exclude.length > 0 || this.#limit)) {
       const urls = Object.keys(this.#results.sitemaps.urls);
       let filtered = urls;
 
@@ -512,7 +534,24 @@ class SEOData {
       resultsDir: this.resultsDir,
       origin: this.origin,
       limit: this.#limit,
+      lead: this.#lead ? this.#leadContext() : undefined,
     });
+  }
+
+  /** Lead scan: the page cap, the robots.txt rule for all crawlers, and `--exclude` as extra disallows. */
+  #leadContext() {
+    const robots = { userAgents: this.#results.robots?.['user-agent'] ?? {} } as unknown as Parameters<
+      typeof RobotsParser.isPathAllowed
+    >[2];
+    const excluded = this.#exclude.map((p) => new RegExp(p, 'i'));
+    return {
+      cap: this.#limit ?? 25,
+      isAllowed: (path: string) =>
+        RobotsParser.isPathAllowed(path, '*', robots) && !excluded.some((re) => re.test(path)),
+      reloadPages: () => {
+        this.#pm.reloadEvictedPages(this.#results.pageData.pages);
+      },
+    };
   }
 
   /**
@@ -561,6 +600,16 @@ class SEOData {
   }
 
   async audit() {
+    // Lead scan: count every request sent to the prospect's hosts, from the browser and from Node.
+    this.#requestCounter?.installFetch();
+    try {
+      await this.#audit();
+    } finally {
+      this.#requestCounter?.uninstallFetch();
+    }
+  }
+
+  async #audit() {
     try {
       if (this.#sitemapFile && !this.origin) {
         // Sitemap file mode: parse local file to derive origin and init managers
@@ -662,6 +711,8 @@ class SEOData {
           robotsUserAgents: this.#results.robots?.['user-agent'],
           sitemapUrls: this.#results.sitemaps?.urls ?? {},
           discoveredUrls: Object.keys(this.#results.pageData.incomingLinks ?? {}),
+          passive: this.#passive,
+          onBrowserRequest: this.#requestCounter?.observeBrowser,
         },
       );
     } catch (e: unknown) {
@@ -698,6 +749,12 @@ class SEOData {
 
     // Calculate final summary statistics
     this.#calculateSummary();
+
+    if (this.#requestCounter && this.#results.leadScan) {
+      this.#results.leadScan.requests = this.#requestCounter.counts;
+      const { browser, node, total } = this.#requestCounter.counts;
+      console.log(`Requests sent to the site: ${total} (${browser} from page loads, ${node} direct)`);
+    }
 
     await this.saveData();
   }

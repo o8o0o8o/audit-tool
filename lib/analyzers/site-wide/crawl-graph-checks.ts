@@ -473,9 +473,14 @@ export function checkSitemapLastmod(
 
 // ---------- 7. CTA links to broken / login pages ----------
 
+/** Where on the page a link sits: site chrome (header, navigation, footer) or the page body. */
+export type LinkPosition = 'header' | 'nav' | 'footer' | 'main';
+
 export interface PageLink {
   href: string;
   text: string;
+  /** Set by `anchorsOf` (crawl hints); absent on links from older checkpoints. */
+  position?: LinkPosition;
 }
 
 export const CTA_PATTERN = new RegExp(

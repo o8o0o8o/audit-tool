@@ -8,7 +8,13 @@
  */
 
 import type { Issue, PageInfo, ParsedPage } from '../../types';
-import { checkPhoneConsistency, extractSchemaPhones, isCtaText, type PageLink } from '../site-wide/crawl-graph-checks';
+import {
+  checkPhoneConsistency,
+  extractSchemaPhones,
+  isCtaText,
+  type LinkPosition,
+  type PageLink,
+} from '../site-wide/crawl-graph-checks';
 import {
   detectReplayVendors,
   extractSensitiveFields,
@@ -23,11 +29,16 @@ export interface SiteHints {
   api: Array<{ url: string; resourceType?: string; method?: string }>;
   thirdPartyHosts: string[];
   ctaLinks: PageLink[];
+  /**
+   * Links in the header, navigation and footer, in document order. Captured only when asked for
+   * (lead scans), so a full audit's checkpoints do not grow.
+   */
+  navLinks?: PageLink[];
   replayVendors: string[];
   sensitive?: SensitiveFields;
 }
 
-const CAP = { scripts: 30, assets: 60, api: 10, hosts: 40, cta: 20 };
+const CAP = { scripts: 30, assets: 60, api: 10, hosts: 40, cta: 20, nav: 80 };
 
 interface RequestLike {
   resourceType?: string;
@@ -51,6 +62,7 @@ export function buildSiteHints(
   url: string,
   requests: Record<string, RequestLike>,
   anchors: PageLink[],
+  opts: { navLinks?: boolean } = {},
 ): Omit<SiteHints, 'sensitive'> {
   const pageHost = hostOf(url) ?? '';
   const site = orgDomain(pageHost);
@@ -82,7 +94,35 @@ export function buildSiteHints(
     if (hints.ctaLinks.length >= CAP.cta) break;
     if (a.href && isCtaText(a.text)) hints.ctaLinks.push(a);
   }
+  if (opts.navLinks) {
+    // Links in the site chrome, in document order and without repeats: the navigation a visitor uses.
+    const navLinks: PageLink[] = [];
+    const seenNav = new Set<string>();
+    for (const a of anchors) {
+      if (navLinks.length >= CAP.nav) break;
+      if (!a.href || !a.position || a.position === 'main' || !/^https?:/i.test(a.href) || seenNav.has(a.href)) continue;
+      seenNav.add(a.href);
+      navLinks.push(a);
+    }
+    hints.navLinks = navLinks;
+  }
   return hints;
+}
+
+const closest = (el: unknown, selector: string): boolean => {
+  try {
+    return Boolean((el as { closest?: (s: string) => unknown }).closest?.(selector));
+  } catch {
+    return false;
+  }
+};
+
+/** Footer wins over header and navigation: a `<nav>` inside the footer is footer navigation. */
+export function linkPosition(anchor: unknown): LinkPosition {
+  if (closest(anchor, 'footer, [role="contentinfo"]')) return 'footer';
+  if (closest(anchor, 'header, [role="banner"]')) return 'header';
+  if (closest(anchor, 'nav, [role="navigation"]')) return 'nav';
+  return 'main';
 }
 
 export function anchorsOf(parsedPage: ParsedPage, url: string): PageLink[] {
@@ -90,7 +130,11 @@ export function anchorsOf(parsedPage: ParsedPage, url: string): PageLink[] {
   for (const a of parsedPage.querySelectorAll('a[href]')) {
     const href = a.getAttribute('href') ?? '';
     try {
-      out.push({ href: new URL(href, url).toString(), text: (a.text ?? '').replace(/\s+/g, ' ').trim() });
+      out.push({
+        href: new URL(href, url).toString(),
+        text: (a.text ?? '').replace(/\s+/g, ' ').trim(),
+        position: linkPosition(a),
+      });
     } catch {
       /* skip */
     }
@@ -105,8 +149,9 @@ export async function capturePageHints(
   url: string,
   pageData: PageInfo,
   requests: Record<string, RequestLike>,
+  opts: { navLinks?: boolean } = {},
 ): Promise<Issue[]> {
-  const hints: SiteHints = buildSiteHints(url, requests, anchorsOf(parsedPage, url));
+  const hints: SiteHints = buildSiteHints(url, requests, anchorsOf(parsedPage, url), opts);
   if (hints.replayVendors.length) hints.sensitive = await extractSensitiveFields(page);
   pageData.siteHints = hints;
 

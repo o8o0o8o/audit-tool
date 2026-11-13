@@ -2091,6 +2091,17 @@ ${noScore ? '' : `        'Security Score': {
           // Add PDF mode class for dedicated styling
           document.body.classList.add('pdf-mode');
 
+          // 0. Unfold every section first: charts in a folded section have no size until shown.
+          document.querySelectorAll('details:not([open])').forEach(el => {
+              _printState.details.push(el);
+              el.setAttribute('open', '');
+          });
+          if (window.Chart && Chart.instances) {
+              Object.values(Chart.instances).forEach(function(c) {
+                  try { c.resize(); c.update('none'); } catch (e) { /* ignore */ }
+              });
+          }
+
           // 1. Convert all canvas charts to static images (canvas is blank in PDF)
           document.querySelectorAll('.chart-container canvas, .chart-card canvas').forEach(canvas => {
               try {
@@ -2137,12 +2148,6 @@ ${noScore ? '' : `        'Security Score': {
           document.querySelectorAll('.issue-toggle-btn, .pagination-controls, .table-pagination, .show-more-btn').forEach(el => {
               _printState.paginationEls.push({ el: el, prev: el.style.display });
               el.style.display = 'none';
-          });
-
-          // 6. Expand all <details> elements
-          document.querySelectorAll('details:not([open])').forEach(el => {
-              _printState.details.push(el);
-              el.setAttribute('open', '');
           });
 
           // 7. Set print date
@@ -2246,6 +2251,14 @@ ${noScore ? '' : `        'Security Score': {
                   });
 
                   if (countEl) countEl.textContent = q ? count + ' found' : '';
+                  // Unfold the sections that hold a match so it can be seen.
+                  if (q) {
+                      searchable.forEach(function(el) {
+                          if (el.textContent.toLowerCase().indexOf(q) < 0) return;
+                          var panel = el.closest('details.report-panel');
+                          if (panel && !panel.open) panel.open = true;
+                      });
+                  }
               }, 200);
           });
 
@@ -2281,54 +2294,25 @@ ${noScore ? '' : `        'Security Score': {
           requestAnimationFrame(animate);
       })();
 
-      // === Section Tabs ===
+      // === Section Tabs (scrollspy; clicks are handled by the panel script) ===
       (function() {
-          var tabs = document.querySelectorAll('.section-tab');
+          var tabs = Array.from(document.querySelectorAll('.section-tab[data-target]'));
           if (!tabs.length) return;
-
-          tabs.forEach(function(tab) {
-              tab.addEventListener('click', function() {
-                  tabs.forEach(function(t) { t.classList.remove('active'); });
-                  tab.classList.add('active');
-                  var target = document.getElementById(tab.dataset.target);
-                  if (target) {
-                      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
-              });
-          });
-
-          // Update active tab on scroll
-          var sectionIds = Array.from(tabs).map(function(t) { return t.dataset.target; });
-          window.addEventListener('scroll', function() {
-              var scrollY = window.scrollY + 150;
-              var active = sectionIds[0];
-              sectionIds.forEach(function(id) {
-                  var el = document.getElementById(id);
-                  if (el && el.offsetTop <= scrollY) active = id;
-              });
+          function panelOf(tab) {
+              var el = document.getElementById(tab.dataset.target);
+              return el ? (el.closest('.report-panel') || el) : null;
+          }
+          function update() {
+              var active = tabs[0];
               tabs.forEach(function(t) {
-                  t.classList.toggle('active', t.dataset.target === active);
+                  var p = panelOf(t);
+                  if (p && p.getBoundingClientRect().top <= 140) active = t;
               });
-          });
-      })();
-
-      // === FAB Menu ===
-      (function() {
-          var toggle = document.getElementById('fabToggle');
-          var menu = document.getElementById('fabMenu');
-          if (!toggle || !menu) return;
-
-          toggle.addEventListener('click', function() {
-              toggle.classList.toggle('open');
-              menu.classList.toggle('visible');
-          });
-
-          document.addEventListener('click', function(e) {
-              if (!toggle.contains(e.target) && !menu.contains(e.target)) {
-                  toggle.classList.remove('open');
-                  menu.classList.remove('visible');
-              }
-          });
+              tabs.forEach(function(t) { t.classList.toggle('active', t === active); });
+          }
+          window.addEventListener('scroll', update, { passive: true });
+          document.addEventListener('toggle', update, true);
+          update();
       })();
 
       // === Reading Progress Bar ===
@@ -2352,46 +2336,8 @@ ${noScore ? '' : `        'Security Score': {
           }
       });
 
-      // === Sidebar Navigation Highlighting ===
-      (function() {
-          const navLinks = document.querySelectorAll('.report-nav a');
-          const sections = [];
-          navLinks.forEach(function(link) {
-              const id = link.getAttribute('href').slice(1);
-              const el = document.getElementById(id);
-              if (el) sections.push({ id: id, el: el, link: link });
-          });
-
-          function updateActiveNav() {
-              let current = '';
-              const scrollY = window.scrollY + 200;
-              sections.forEach(function(s) {
-                  if (s.el.offsetTop <= scrollY) {
-                      current = s.id;
-                  }
-              });
-              navLinks.forEach(function(link) { link.classList.remove('active'); });
-              if (current) {
-                  const activeLink = document.querySelector('.report-nav a[href="#' + current + '"]');
-                  if (activeLink) activeLink.classList.add('active');
-              }
-          }
-
-          window.addEventListener('scroll', updateActiveNav);
-          updateActiveNav();
-      })();
-
       // === Keyboard Shortcuts ===
       (function() {
-          let helpVisible = false;
-          const hint = document.getElementById('keyboardHint');
-
-          // Show hint briefly on load
-          setTimeout(function() {
-              hint.classList.add('visible');
-              setTimeout(function() { hint.classList.remove('visible'); }, 3000);
-          }, 1000);
-
           document.addEventListener('keydown', function(e) {
               // Don't intercept when typing in inputs
               if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -2470,9 +2416,8 @@ ${noScore ? '' : `        'Security Score': {
                   case 'e':
                       // Expand/collapse all sections
                       if (!e.ctrlKey && !e.metaKey) {
-                          var toggles = document.querySelectorAll('.section-toggle');
-                          var allCollapsed = Array.from(toggles).every(function(t) { return t.classList.contains('collapsed'); });
-                          toggles.forEach(function(t) { t.click(); });
+                          var btn = document.getElementById('togglePanels');
+                          if (btn) btn.click();
                       }
                       break;
                   case 'p':
@@ -2481,9 +2426,9 @@ ${noScore ? '' : `        'Security Score': {
                           window.print();
                       }
                       break;
-                  case '1': case '2': case '3': case '4': case '5': case '6':
+                  case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
                       if (!e.ctrlKey && !e.metaKey) {
-                          var navLinks = document.querySelectorAll('.report-nav a');
+                          var navLinks = document.querySelectorAll('.section-tab[data-target]');
                           var idx = parseInt(e.key) - 1;
                           if (navLinks[idx]) {
                               navLinks[idx].click();
@@ -2510,7 +2455,7 @@ ${noScore ? '' : `        'Security Score': {
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">j/k</kbd></td><td style="border:none;">Navigate table rows</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">e</kbd></td><td style="border:none;">Expand/collapse all</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">p</kbd></td><td style="border:none;">Print report</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">1-6</kbd></td><td style="border:none;">Jump to section</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">1-9</kbd></td><td style="border:none;">Jump to section</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">Esc</kbd></td><td style="border:none;">Close modals</td></tr>' +
                   '</table>' +
                   '<button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:6px 16px;background:var(--color-accent);color:#000;border-radius:100px;border:none;border-radius:var(--radius-md);cursor:pointer;">Close</button>' +
@@ -3064,31 +3009,6 @@ ${noScore ? '' : `        'Security Score': {
           setInterval(update, 60000);
       })();
 
-      // === Section Tab Badges (issue counts) ===
-      (function() {
-          var tabs = document.querySelectorAll('.section-tab');
-          tabs.forEach(function(tab) {
-              var target = tab.getAttribute('data-target');
-              if (target === 'top-issues') {
-                  var cards = document.querySelectorAll('.issues-table-row');
-                  if (cards.length > 0) {
-                      var badge = document.createElement('span');
-                      badge.className = 'tab-badge';
-                      badge.textContent = cards.length;
-                      tab.appendChild(badge);
-                  }
-              } else if (target === 'quick-wins') {
-                  var wins = document.querySelectorAll('.win-card');
-                  if (wins.length > 0) {
-                      var badge = document.createElement('span');
-                      badge.className = 'tab-badge zero';
-                      badge.textContent = wins.length;
-                      tab.appendChild(badge);
-                  }
-              }
-          });
-      })();
-
       // === Notification Toast System ===
       (function() {
           var toast = document.createElement('div');
@@ -3104,28 +3024,6 @@ ${noScore ? '' : `        'Security Score': {
                   toast.classList.remove('visible');
               }, duration || 2000);
           };
-      })();
-
-      // === Deep Link Handling ===
-      (function() {
-          if (window.location.hash) {
-              var target = document.querySelector(window.location.hash);
-              if (target) {
-                  setTimeout(function() {
-                      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 500);
-              }
-          }
-
-          // Update URL hash on section nav click
-          document.querySelectorAll('.report-nav a').forEach(function(link) {
-              link.addEventListener('click', function(e) {
-                  var hash = this.getAttribute('href');
-                  if (hash && hash.startsWith('#')) {
-                      history.replaceState(null, null, hash);
-                  }
-              });
-          });
       })();
 
       // === Phase Timeline Visualization ===
@@ -3195,68 +3093,6 @@ ${noScore ? '' : `        'Security Score': {
           sections.forEach(function(s) { observer.observe(s); });
       })();
 
-      </script>
-      <script>
-      // Own script tag so the collapse toggles still work when an earlier block throws (e.g. Chart.js CDN unreachable).
-      (function() {
-          var sectionIds = ['executive-summary', 'quick-wins', 'top-issues', 'performance', 'charts', 'pages-table'];
-          sectionIds.forEach(function(id) {
-              var section = document.getElementById(id);
-              if (!section || !section.firstElementChild) return;
-
-              var firstChild = section.firstElementChild;
-              var h2 = firstChild.querySelector('h2') || firstChild.querySelector('.wins-issues-title') || firstChild.querySelector('.chart-title');
-              if (!h2) return;
-
-              // Wrap h2 in a clickable header
-              var toggle = document.createElement('button');
-              toggle.className = 'section-toggle';
-              toggle.textContent = '▼';
-              toggle.title = 'Collapse section';
-
-              h2.style.cursor = 'pointer';
-              h2.style.display = 'flex';
-              h2.style.alignItems = 'center';
-              h2.style.justifyContent = 'space-between';
-              h2.appendChild(toggle);
-
-              // Content to collapse = h2's own following siblings, plus the header wrapper's
-              // siblings when h2 sits inside firstChild (previously only the latter, which is
-              // empty when firstChild wraps the whole section, so nothing collapsed). Remember
-              // each element's inline display (e.g. 'grid') so re-expanding restores it.
-              var contentElements = [];
-              function collectFrom(sibling) {
-                  while (sibling) {
-                      contentElements.push({ el: sibling, shownDisplay: sibling.style.display });
-                      sibling = sibling.nextElementSibling;
-                  }
-              }
-              collectFrom(h2.nextElementSibling);
-              if (h2.parentElement === firstChild) collectFrom(firstChild.nextElementSibling);
-
-              // Saved state
-              var saved = localStorage.getItem('seo-collapse-' + id);
-
-              h2.addEventListener('click', function() {
-                  var isCollapsed = toggle.classList.toggle('collapsed');
-                  toggle.textContent = isCollapsed ? '▶' : '▼';
-                  toggle.title = isCollapsed ? 'Expand section' : 'Collapse section';
-                  contentElements.forEach(function(item) {
-                      item.el.style.display = isCollapsed ? 'none' : item.shownDisplay;
-                  });
-                  localStorage.setItem('seo-collapse-' + id, isCollapsed ? '1' : '0');
-              });
-
-              // Restore saved state
-              if (saved === '1') {
-                  toggle.classList.add('collapsed');
-                  toggle.textContent = '▶';
-                  contentElements.forEach(function(item) {
-                      item.el.style.display = 'none';
-                  });
-              }
-          });
-      })();
       </script>
   `;
 }

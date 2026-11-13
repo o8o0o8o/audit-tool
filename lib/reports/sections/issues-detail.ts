@@ -121,14 +121,11 @@ interface IssueEntry {
   isQuickWin: boolean;
 }
 
-// ── Main export ──────────────────────────────────────────────────────────────
-
-function getIssuesDetail(data: ReportSectionData) {
-  if (data.comparison) {
-    return getComparisonIssuesDetail(data.jsonData, data.comparison);
-  }
-
-  const { jsonData } = data;
+/**
+ * The rows of the Issues table: numeric variants merged, crawler errors and
+ * zero-count findings dropped. Shared with the panel header so its counts match the table.
+ */
+function collectIssues(jsonData: Record<string, unknown>): { issues: IssueEntry[]; details: Record<string, AnalysisDetail> } {
   // Group numeric-variant findings (e.g. "Element with too many children (87)"
   // / "(65)") into one row with the summed count and merged examples, instead
   // of one row per variant.
@@ -162,6 +159,25 @@ function getIssuesDetail(data: ReportSectionData) {
       isQuickWin: impactScore >= 40 && effortMinutes <= 30,
     });
   }
+
+  return { issues, details };
+}
+
+/** Severity counts of the Issues table rows (what the reader sees, not the raw scoring summary). */
+export function getIssueTableCounts(jsonData: Record<string, unknown>) {
+  const { issues } = collectIssues(jsonData);
+  return { total: issues.length, ...countBySeverity(issues) };
+}
+
+// ── Main export ──────────────────────────────────────────────────────────────
+
+function getIssuesDetail(data: ReportSectionData) {
+  if (data.comparison) {
+    return getComparisonIssuesDetail(data.jsonData, data.comparison);
+  }
+
+  const { jsonData } = data;
+  const { issues, details } = collectIssues(jsonData);
 
   const visualNote = getVisualNote(jsonData, Object.keys(details));
   if (issues.length === 0) return visualNote;

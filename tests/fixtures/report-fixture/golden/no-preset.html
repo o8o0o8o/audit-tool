@@ -3903,6 +3903,366 @@
                   height: 1px;
               }
           }
+          
+          /* ===== Report header ===== */
+          header { padding-bottom: var(--space-7); margin-bottom: var(--space-6); }
+          header .fr-header-bar { margin-bottom: var(--space-7); }
+          .report-toolbar { display: flex; gap: var(--space-3); align-items: center; }
+          .report-brand-logo { max-height: 40px; margin-bottom: var(--space-3); display: block; }
+          .report-site {
+              display: inline-block;
+              font-size: var(--font-size-md);
+              font-weight: var(--font-weight-medium);
+              color: var(--color-accent);
+              text-decoration: none;
+              margin-bottom: var(--space-2);
+          }
+          a.report-site:hover { text-decoration: underline; color: var(--color-accent); }
+          header h1 { margin-bottom: var(--space-3); }
+          .report-facts, .report-scope {
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 4px 0;
+              color: var(--color-text-muted);
+              font-size: var(--font-size-sm);
+          }
+          .report-facts__sep { margin: 0 10px; opacity: 0.5; }
+          .report-scope { margin-top: var(--space-4); font-size: var(--font-size-xs); }
+          header .stats {
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+              gap: var(--space-3);
+              margin-top: var(--space-6);
+              max-width: 760px;
+          }
+          header .stat {
+              display: flex;
+              flex-direction: column;
+              gap: 2px;
+              padding: var(--space-4) var(--space-5);
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-lg);
+              background: var(--color-bg-surface);
+          }
+          header .stat-value { font-size: var(--font-size-xl, 24px); font-weight: var(--font-weight-semibold); line-height: 1.2; }
+          header .stat-label { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+          /* Export menu */
+          .export-menu { position: relative; }
+          .export-menu > summary { list-style: none; }
+          .export-menu > summary::-webkit-details-marker { display: none; }
+          .export-menu__caret {
+              width: 6px; height: 6px;
+              border-right: 1.5px solid currentColor;
+              border-bottom: 1.5px solid currentColor;
+              transform: translateY(-2px) rotate(45deg);
+          }
+          .export-menu__list {
+              position: absolute;
+              right: 0;
+              top: calc(100% + 8px);
+              min-width: 240px;
+              padding: 6px;
+              background: var(--color-bg-surface);
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-lg);
+              box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+              z-index: 200;
+          }
+          .export-menu__item {
+              display: flex;
+              justify-content: space-between;
+              gap: var(--space-5);
+              width: 100%;
+              padding: 8px 12px;
+              background: transparent;
+              border: 0;
+              border-radius: var(--radius-md);
+              color: var(--color-text-primary);
+              font: inherit;
+              font-size: var(--font-size-sm);
+              text-align: left;
+              cursor: pointer;
+          }
+          .export-menu__item:hover { background: rgba(255, 255, 255, 0.06); }
+          .export-menu__format { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+
+          /* Sticky section navigation */
+          .section-tabs {
+              display: flex;
+              gap: 2px;
+              margin: 0 0 var(--space-6);
+              padding: 6px;
+              background: rgba(10, 10, 10, 0.85);
+              backdrop-filter: blur(8px);
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-pill);
+              box-shadow: none;
+              overflow-x: auto;
+              scrollbar-width: none;
+          }
+          .section-tabs::-webkit-scrollbar { display: none; }
+          .section-tabs .section-tab {
+              flex: none;
+              padding: 6px 14px;
+              border: 0;
+              border-radius: var(--radius-pill);
+              background: transparent;
+              color: var(--color-text-secondary);
+              font-size: var(--font-size-sm);
+              font-weight: var(--font-weight-medium);
+              text-decoration: none;
+              white-space: nowrap;
+          }
+          .section-tabs .section-tab:hover { color: var(--color-text-primary); background: rgba(255, 255, 255, 0.06); }
+          .section-tabs .section-tab.active { color: var(--color-on-accent); background: var(--color-accent); border: 0; }
+          .section-tabs .section-tabs__toggle {
+              margin-left: auto;
+              border: 1px solid var(--color-border-default);
+              color: var(--color-text-muted);
+              font-size: var(--font-size-xs);
+              cursor: pointer;
+          }
+
+          @media (max-width: 768px) {
+              /* One scrollable row of tabs rather than a wrapped block */
+              .section-tabs { flex-wrap: nowrap !important; border-radius: var(--radius-lg); }
+              .section-tabs .section-tab { padding: 6px 12px; font-size: var(--font-size-sm); }
+          }
+          @media (max-width: 640px) {
+              header .stats { grid-template-columns: repeat(2, 1fr); }
+              .report-toolbar .fr-btn:not(summary) { display: none; }
+          }
+          @media print {
+              .report-toolbar, .export-menu { display: none !important; }
+              header .stat { border: 1px solid #ccc !important; background: #fff !important; }
+          }
+  
+          
+          /* ===== Report panels ===== */
+          .report-panel {
+              background: var(--color-bg-surface);
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-card);
+              margin-bottom: var(--space-5);
+              scroll-margin-top: 64px;
+          }
+          .report-panel[open] { margin-bottom: var(--space-7); }
+          .report-panel__header {
+              display: flex;
+              align-items: center;
+              gap: var(--space-4);
+              padding: var(--space-5) var(--space-7);
+              cursor: pointer;
+              list-style: none;
+              user-select: none;
+              border-radius: var(--radius-card);
+          }
+          .report-panel__header::-webkit-details-marker { display: none; }
+          .report-panel__header:hover { background: rgba(255, 255, 255, 0.02); }
+          .report-panel__header:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+          .report-panel__heading {
+              display: flex;
+              align-items: baseline;
+              flex-wrap: wrap;
+              gap: 4px var(--space-4);
+              min-width: 0;
+              flex: 1 1 auto;
+          }
+          .report-panel__title {
+              font-size: var(--font-size-lg);
+              font-weight: var(--font-weight-semibold);
+              color: var(--color-text-primary);
+              letter-spacing: -0.01em;
+          }
+          .report-panel__meta {
+              font-size: var(--font-size-sm);
+              color: var(--color-text-muted);
+          }
+          .report-panel__chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+          .report-panel__chevron {
+              flex: none;
+              width: 28px;
+              height: 28px;
+              border-radius: 50%;
+              border: 1px solid var(--color-border-default);
+              position: relative;
+              transition: transform var(--transition-fast), border-color var(--transition-fast);
+          }
+          .report-panel__chevron::before {
+              content: '';
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 7px;
+              height: 7px;
+              border-right: 1.5px solid var(--color-text-secondary);
+              border-bottom: 1.5px solid var(--color-text-secondary);
+              transform: translate(-50%, -70%) rotate(45deg);
+          }
+          .report-panel__header:hover .report-panel__chevron { border-color: var(--color-accent); }
+          .report-panel[open] > .report-panel__header .report-panel__chevron { transform: rotate(180deg); }
+          .report-panel[open] > .report-panel__header {
+              border-bottom: 1px solid var(--color-border-default);
+              border-radius: var(--radius-card) var(--radius-card) 0 0;
+          }
+          .report-panel__body {
+              padding: var(--space-6) var(--space-7) var(--space-7);
+              overflow-x: auto;
+          }
+          /* The panel is the card: flatten the section card each generator renders inside it. */
+          .report-panel__body > :is(.section, .charts-section, .executive-summary, .info-section, .issues-section),
+          .report-panel__body > div > :is(.section, .charts-section, .executive-summary, .info-section, .issues-section) {
+              background: transparent;
+              border: 0;
+              box-shadow: none;
+              padding: 0;
+              margin: 0;
+              border-radius: 0;
+          }
+          .report-panel__body [data-panel-heading] { display: none !important; }
+          .panel-empty { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+          .report-panel__body [data-panel-heading] + p {
+              text-align: left !important;
+              margin-bottom: var(--space-6) !important;
+          }
+
+          /* Summary hero: score on the left, category health on the right */
+          .summary-hero {
+              display: grid;
+              grid-template-columns: minmax(220px, 300px) 1fr;
+              gap: var(--space-8);
+              align-items: center;
+              margin-bottom: var(--space-7);
+          }
+          .summary-hero__score { text-align: center; }
+          .summary-hero .summary-score { margin-bottom: var(--space-4); }
+          .summary-hero__estimate { font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5; }
+          .summary-hero__label {
+              font-size: var(--font-size-xs);
+              text-transform: uppercase;
+              letter-spacing: 0.06em;
+              color: var(--color-text-muted);
+              margin-bottom: var(--space-4);
+          }
+          .summary-hero__categories { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4) var(--space-7); }
+          .summary-hero__categories .summary-hero__label { grid-column: 1 / -1; margin-bottom: 0; }
+          .summary-category .progress-bar-container { height: 6px; margin: 6px 0 0; background: rgba(255, 255, 255, 0.08); }
+          .summary-category > div:first-child { display: flex; justify-content: space-between; font-size: var(--font-size-sm); }
+          .report-panel__body .executive-summary .summary-card-hint { text-transform: none; letter-spacing: 0; opacity: 0.7; }
+          @media (max-width: 900px) {
+              .summary-hero { grid-template-columns: 1fr; }
+              .summary-hero__categories { grid-template-columns: 1fr; }
+          }
+
+          /* Audit timing rows: label left, duration right, one line each */
+          .report-panel__body .timing-phases .perf-budget-row {
+              display: flex;
+              justify-content: space-between;
+              gap: var(--space-5);
+              max-width: 520px;
+              padding: 6px 0;
+          }
+          .report-panel__body .timing-phases .perf-budget-label { white-space: nowrap; color: var(--color-text-secondary); }
+          .report-panel__body .timing-phases .perf-budget-value { font-variant-numeric: tabular-nums; }
+
+          /* Severity chips (panel and sub-panel headers) */
+          .sev-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              padding: 2px 10px;
+              border-radius: var(--radius-pill);
+              font-size: var(--font-size-xs);
+              font-weight: var(--font-weight-medium);
+              white-space: nowrap;
+              border: 1px solid var(--color-border-default);
+              color: var(--color-text-secondary);
+          }
+          .sev-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+          .sev-chip--critical { color: var(--red-400); border-color: rgba(255, 107, 107, 0.4); }
+          .sev-chip--high { color: var(--orange-500); border-color: rgba(255, 154, 77, 0.4); }
+          .sev-chip--medium { color: var(--amber-400); border-color: rgba(255, 201, 77, 0.35); }
+          .sev-chip--low { color: var(--color-text-muted); }
+          .sev-chip--ok { color: var(--color-success); border-color: rgba(0, 229, 109, 0.3); }
+
+          /* Sub-panels inside a section (Agentic Browsing, Domain & Exposure, Analytics & Tags) */
+          .report-subpanel {
+              border: 1px solid var(--color-border-default);
+              border-radius: var(--radius-lg);
+              margin-top: var(--space-4);
+              background: rgba(255, 255, 255, 0.015);
+          }
+          .report-subpanel > summary {
+              display: flex;
+              align-items: center;
+              gap: var(--space-4);
+              padding: var(--space-4) var(--space-5);
+              cursor: pointer;
+              list-style: none;
+          }
+          .report-subpanel > summary::-webkit-details-marker { display: none; }
+          .report-subpanel > summary h3 {
+              margin: 0 !important;
+              font-size: var(--font-size-md) !important;
+              font-weight: var(--font-weight-semibold);
+              color: var(--color-text-primary) !important;
+              flex: 1 1 auto;
+          }
+          .report-subpanel > summary .report-panel__chevron { width: 24px; height: 24px; }
+          .report-subpanel[open] > summary .report-panel__chevron { transform: rotate(180deg); }
+          .report-subpanel[open] > summary { border-bottom: 1px solid var(--color-border-default); }
+          .report-subpanel__body { padding: var(--space-5); }
+          .report-subpanel__body table { width: 100%; border-collapse: collapse; margin-bottom: var(--space-5); }
+          .report-subpanel__body th {
+              text-align: left;
+              padding: 8px 10px;
+              font-size: var(--font-size-xs);
+              text-transform: uppercase;
+              letter-spacing: 0.04em;
+              color: var(--color-text-muted);
+              font-weight: var(--font-weight-semibold);
+              border-bottom: 1px solid var(--color-border-default);
+          }
+          .report-subpanel__body td {
+              padding: 8px 10px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+              font-size: var(--font-size-sm);
+              vertical-align: top;
+          }
+          .finding-list { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+          .finding-list li {
+              display: flex;
+              align-items: baseline;
+              gap: var(--space-3);
+              padding: 8px 0;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+              font-size: var(--font-size-sm);
+          }
+          .finding-list li:last-child { border-bottom: 0; }
+          .finding-list .finding-count { margin-left: auto; color: var(--color-text-muted); white-space: nowrap; }
+          .subpanel-note { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--space-3); }
+
+          @media (max-width: 640px) {
+              /* Issues table on a phone: let issue names wrap, drop the effort column */
+              .issues-table col:first-child { width: 20px !important; }
+              .issues-table col:nth-child(2) { width: 68px !important; }
+              .issues-table col:last-child { width: 0 !important; }
+              .issues-table th:last-child, .issues-table-row td:last-child { display: none; }
+              .issues-table-row td { padding: 8px 6px; font-size: var(--font-size-sm); }
+              .issues-table-row td:nth-child(3) { white-space: normal !important; overflow-wrap: anywhere; }
+              .report-panel__header { padding: var(--space-4); }
+              .report-panel__body { padding: var(--space-4); }
+              .report-panel__chips { display: none; }
+          }
+          @media print {
+              .report-panel, .report-subpanel { border: 0 !important; break-inside: auto; }
+              .report-panel__chevron, .report-panel__chips { display: none !important; }
+              .report-panel__header { padding: 12px 0 !important; }
+              .report-panel__body { padding: 0 0 16px !important; }
+          }
+  
       </style>
   </head>
   <body>
@@ -3912,135 +4272,142 @@
       <!-- Skip to content for keyboard users -->
       <a href="#executive-summary" class="skip-link">Skip to content</a>
 
-      <!-- Dark mode toggle -->
-
-      <!-- Sticky navigation sidebar -->
-      <nav class="report-nav" id="reportNav" aria-label="Report sections">
-          <a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>
-          <a href="#issues-detail" title="Issues">📋<span class="nav-label">Issues</span></a>
-          <a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>
-          <a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>
-          <a href="#content-insights" title="Content Insights">🔍<span class="nav-label">Insights</span></a>
-          <a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>
-      </nav>
-
       <div class="container">
           <header>
               <div class="fr-header-bar">
                   <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
-                  <span class="fr-header-tag">Audit</span>
+                  <div class="report-toolbar">
+                      <details class="export-menu">
+                      <summary class="fr-btn fr-btn--sm fr-btn--outline">Export<span class="export-menu__caret" aria-hidden="true"></span></summary>
+                      <div class="export-menu__list" role="menu">
+                          <button type="button" class="export-menu__item" onclick="exportCSV('summary'); this.closest('details').open = false;">
+                              <span>Summary</span><span class="export-menu__format">CSV</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="exportCSV('issues'); this.closest('details').open = false;">
+                              <span>All issues</span><span class="export-menu__format">CSV</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="showIssueFilterModal(); this.closest('details').open = false;">
+                              <span>Filtered issues…</span><span class="export-menu__format">CSV</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="exportCSV('pages'); this.closest('details').open = false;">
+                              <span>Pages</span><span class="export-menu__format">CSV</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="exportCSV('performance'); this.closest('details').open = false;">
+                              <span>Performance</span><span class="export-menu__format">CSV</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="exportMarkdown(); this.closest('details').open = false;">
+                              <span>Report</span><span class="export-menu__format">Markdown</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="saveToPDF(); this.closest('details').open = false;">
+                              <span>Report</span><span class="export-menu__format">PDF</span>
+                          </button>
+                          <button type="button" class="export-menu__item" onclick="exportAll(); this.closest('details').open = false;">
+                              <span>Everything</span><span class="export-menu__format">ZIP</span>
+                          </button>
+                      </div>
+                  </details>
+                      <button type="button" onclick="shareReport()" class="fr-btn fr-btn--sm fr-btn--outline">Share</button>
+                  </div>
               </div>
               
+              <a class="report-site" href="https://fixture.example" target="_blank" rel="noopener">fixture.example</a>
               <h1>Audit report</h1>
-              <p class="subtitle">Audit type: Full audit</p>
-              <p class="subtitle">fixture.example</p>
-              <p class="subtitle">Generated on <time datetime="<ISO>" id="reportTimestamp"><LOCAL></time></p>
-              <p class="subtitle">Duration: 1m 2s</p>
+              <p class="report-facts"><span>Audit type: Full audit</span><span class="report-facts__sep" aria-hidden="true">·</span><span>Generated <time datetime="<ISO>" id="reportTimestamp"><LOCAL></time></span><span class="report-facts__sep" aria-hidden="true">·</span><span>Duration 1m 2s</span></p>
               <div class="stats">
                   <div class="stat">
-                      <span class="stat-label">Pages Crawled:</span>
                       <span class="stat-value">5</span>
+                      <span class="stat-label">Pages Crawled</span>
                   </div>
                   <div class="stat">
-                      <span class="stat-label">Successful:</span>
                       <span class="stat-value" style="color: var(--color-success);">5</span>
+                      <span class="stat-label">Successful</span>
                   </div>
                   <div class="stat">
-                      <span class="stat-label">With Errors:</span>
-                      <span class="stat-value" style="color: var(--color-error);">0</span>
-                  </div>
-                  
-                  
-                  <div class="stat">
-                      <span class="stat-label">In Sitemap:</span>
-                      <span class="stat-value" style="color: var(--color-link);">0</span>
-                  </div>
-                  
-                  <div class="stat">
-                      <span class="stat-label">Multilanguage:</span>
-                      <span class="stat-value" style="color: var(--color-text-muted);">No</span>
+                      <span class="stat-value">0</span>
+                      <span class="stat-label">With Errors</span>
                   </div>
               </div>
-
-              <div class="export-section">
-                  <div class="export-section-inner">
-                      <div class="export-section-label">
-                          📊 <strong>Export Data:</strong> Download audit data for analysis in Excel, Google Sheets, or other tools
-                      </div>
-                      <div class="export-section-actions">
-                          <button onclick="exportCSV('pages')" class="export-btn fr-btn fr-btn--sm">📄 Pages CSV</button>
-                          <button onclick="showIssueFilterModal()" class="export-btn fr-btn fr-btn--sm">⚠️ Issues CSV</button>
-                          <button onclick="exportCSV('performance')" class="export-btn fr-btn fr-btn--sm">⚡ Performance CSV</button>
-                          <button onclick="exportCSV('issues')" class="export-btn fr-btn fr-btn--sm">📋 All Issues CSV</button>
-                          <button onclick="exportCSV('summary')" class="export-btn fr-btn fr-btn--sm">📊 Summary CSV</button>
-                          <button onclick="saveToPDF()" class="pdf-btn fr-btn fr-btn--sm fr-btn--outline">📥 Save to PDF</button>
-                          <button onclick="exportMarkdown()" class="export-btn fr-btn fr-btn--sm fr-btn--outline">📝 Markdown</button>
-                          <button onclick="exportAll()" class="export-btn fr-btn fr-btn--sm fr-btn--outline">📦 Export All</button>
-                      </div>
-                  </div>
-              </div>
-
-              <!-- Issue Export Filter Modal -->
-              <div id="issueFilterModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-                  <div style="background: var(--color-bg-surface); border: 1px solid var(--color-border-default); padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                      <h3 style="margin: 0 0 20px; color: var(--color-text-primary);">Export Issues - Filter Options</h3>
-                      <div style="margin-bottom: 15px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Severity Levels:</label>
-                          <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterCritical" checked> <span style="color: var(--color-error);">Critical</span>
-                              </label>
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterHigh" checked> <span style="color: var(--color-warning);">High</span>
-                              </label>
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterMedium" checked> <span style="color: var(--color-info);">Medium</span>
-                              </label>
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterLow" checked> <span style="color: var(--color-text-muted);">Low</span>
-                              </label>
-                          </div>
-                      </div>
-                      <div style="margin-bottom: 20px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Minimum Affected Pages:</label>
-                          <input type="number" id="filterMinPages" value="1" min="1" style="width: 100%; padding: 8px 12px; border: 1px solid var(--color-border-default); border-radius: 6px; font-size: 14px; background: transparent; color: var(--color-text-primary);">
-                      </div>
-                      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                          <button onclick="hideIssueFilterModal()" class="fr-btn fr-btn--sm fr-btn--outline">Cancel</button>
-                          <button onclick="exportFilteredIssues()" class="fr-btn fr-btn--sm">Export CSV</button>
-                      </div>
-                  </div>
-              </div>
+              <p class="report-scope">0 from sitemap<span class="report-facts__sep" aria-hidden="true">·</span>Single language</p>
           </header>
 
-          
-
-          
-
-          <!-- Section tabs for quick navigation -->
-          <div class="section-tabs" id="sectionTabs">
-              <button class="section-tab active" data-target="executive-summary">Summary</button>
-              <button class="section-tab" data-target="issues-detail">Issues</button>
-              <button class="section-tab" data-target="performance">Performance</button>
-              <button class="section-tab" data-target="charts">Charts</button>
-              <button class="section-tab" data-target="content-insights">Insights</button>
-              <button class="section-tab" data-target="technology-stack">Tech Stack</button>
-              <button class="section-tab" data-target="pages-table">Pages</button>
+          <!-- Issue Export Filter Modal -->
+          <div id="issueFilterModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+              <div style="background: var(--color-bg-surface); border: 1px solid var(--color-border-default); padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                  <h3 style="margin: 0 0 20px; color: var(--color-text-primary);">Export Issues - Filter Options</h3>
+                  <div style="margin-bottom: 15px;">
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Severity Levels:</label>
+                      <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterCritical" checked> <span style="color: var(--color-error);">Critical</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterHigh" checked> <span style="color: var(--color-warning);">High</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterMedium" checked> <span style="color: var(--color-info);">Medium</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterLow" checked> <span style="color: var(--color-text-muted);">Low</span>
+                          </label>
+                      </div>
+                  </div>
+                  <div style="margin-bottom: 20px;">
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Minimum Affected Pages:</label>
+                      <input type="number" id="filterMinPages" value="1" min="1" style="width: 100%; padding: 8px 12px; border: 1px solid var(--color-border-default); border-radius: 6px; font-size: 14px; background: transparent; color: var(--color-text-primary);">
+                  </div>
+                  <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                      <button onclick="hideIssueFilterModal()" class="fr-btn fr-btn--sm fr-btn--outline">Cancel</button>
+                      <button onclick="exportFilteredIssues()" class="fr-btn fr-btn--sm">Export CSV</button>
+                  </div>
+              </div>
           </div>
 
-          <div id="executive-summary">
+          
+
+          
+
+          <!-- Sticky section navigation: jumps to a section and unfolds it -->
+          <nav class="section-tabs" id="sectionTabs" aria-label="Report sections">
+              <a class="section-tab active" href="#executive-summary" data-target="executive-summary">Summary</a>
+              <a class="section-tab" href="#issues-detail" data-target="issues-detail">Issues</a>
+              <a class="section-tab" href="#performance" data-target="performance">Performance</a>
+              <a class="section-tab" href="#charts" data-target="charts">Charts</a>
+              <a class="section-tab" href="#technology-stack" data-target="technology-stack">Tech Stack</a>
+              <a class="section-tab" href="#content-insights" data-target="content-insights">Insights</a>
+              <a class="section-tab" href="#history" data-target="history">History</a>
+              <a class="section-tab" href="#configuration" data-target="configuration">Setup</a>
+              <a class="section-tab" href="#pages-table" data-target="pages-table">Pages</a>
+              <button type="button" class="section-tab section-tabs__toggle" id="togglePanels" title="Expand or collapse every section (E)">Expand all</button>
+          </nav>
+
+          <details class="report-panel" id="panel-executive-summary" data-panel="executive-summary" open>
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Summary</span>
+            <span class="report-panel__meta">5 pages crawled</span>
+          </span>
+          
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="executive-summary">
           
     <div class="executive-summary">
-      <h2>📊 Executive Summary</h2>
+      <h2 data-panel-heading>Executive Summary</h2>
 
       
 
-      <div class="summary-score">
-        <div class="score-circle" style="position: relative;">
-          <div class="score-ring" style="--score: 0; --color: var(--color-score-bad);"></div>
-          <div class="score-number bad">0</div>
-          <div class="score-label">Site Health (F)</div>
+      <div class="summary-hero">
+        <div class="summary-hero__score">
+          <div class="summary-score">
+            <div class="score-circle" style="position: relative;">
+              <div class="score-ring" style="--score: 0; --color: var(--color-score-bad);"></div>
+              <div class="score-number bad">0</div>
+              <div class="score-label">Site Health (F)</div>
+            </div>
+          </div>
+          
         </div>
+        
       </div>
       
 
@@ -4051,22 +4418,22 @@
           <div class="summary-card-hint">distinct kinds of issue, not pages</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--red-200);">0</div>
+          <div class="summary-card-value" style="color: var(--red-400);">0</div>
           <div class="summary-card-label">Critical</div>
           <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--orange-200);">0</div>
+          <div class="summary-card-value" style="color: var(--orange-500);">0</div>
           <div class="summary-card-label">High</div>
           <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--amber-200);">0</div>
+          <div class="summary-card-value" style="color: var(--amber-400);">0</div>
           <div class="summary-card-label">Medium</div>
           <div class="summary-card-hint">kinds of issue</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--blue-200);">0</div>
+          <div class="summary-card-value" style="color: var(--blue-400);">0</div>
           <div class="summary-card-label">Low</div>
           <div class="summary-card-hint">kinds of issue</div>
         </div>
@@ -4076,10 +4443,6 @@
           <div class="summary-card-hint">share of crawled pages that loaded without errors</div>
         </div>
       </div>
-
-      
-
-      
 
       
     <details class="score-rules" id="score-rules">
@@ -4100,13 +4463,23 @@
       
     </div>
   
-          </div>
+          </div></div>
+      </details>
 
-          <div id="issues-detail">
+          <details class="report-panel" id="panel-issues-detail" data-panel="issues-detail" open>
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Issues</span>
+            <span class="report-panel__meta">4 issue types, most severe first</span>
+          </span>
+          
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="issues-detail">
           
     <div class="issues-section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
-        <h2 style="margin:0;font-size:var(--font-size-lg);color:var(--gray-800);">Issues (4)</h2>
+        <h2 data-panel-heading style="margin:0;font-size:var(--font-size-lg);color:var(--gray-800);">Issues (4)</h2>
         <div class="severity-filter-bar">
           <button class="sev-pill active" onclick="filterIssueSev('all',this)" style="background:var(--color-accent);color:#000;border-color:var(--color-accent);">All <span style="opacity:0.7;">4</span></button>
           
@@ -4290,16 +4663,34 @@
     </script>
   
           
-          </div>
+          </div></div>
+      </details>
 
-          <div id="performance">
+          <details class="report-panel" id="panel-performance" data-panel="performance">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Performance</span>
+            <span class="report-panel__meta">No data</span>
+          </span>
           
-          </div>
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="performance"><p class="panel-empty">No performance data in this audit. Run it with --perf to measure Core Web Vitals.</p></div></div>
+      </details>
 
-          <div id="charts">
+          <details class="report-panel" id="panel-charts" data-panel="charts">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Charts</span>
+            <span class="report-panel__meta">Issue severity and frequency, status codes, word count, indexability</span>
+          </span>
+          
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="charts">
           
     <div class="charts-section">
-      <h2 style="text-align: center; color: var(--color-text-primary); margin-bottom: 10px;">📊 Data Insights</h2>
+      <h2 data-panel-heading style="text-align: center; color: var(--color-text-primary); margin-bottom: 10px;">Data Insights</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Visual analysis of your audit results</p>
 
       <div class="charts-grid">
@@ -4375,34 +4766,70 @@
       </div>
     </div>
   
-          </div>
+          </div></div>
+      </details>
 
-          <div id="technology-stack">
+          <details class="report-panel" id="panel-technology-stack" data-panel="technology-stack">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Technology stack</span>
+            <span class="report-panel__meta">No technologies detected</span>
+          </span>
           
-      <div class="section" id="technology-stack">
-        <h2>🔧 Technology Stack</h2>
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="technology-stack">
+          
+      <div class="section">
+        <h2 data-panel-heading>Technology Stack</h2>
         <p style="color: var(--color-text-muted); text-align: center; padding: 20px;">
           No technologies detected. Technology detection requires crawling with performance metrics enabled.
         </p>
       </div>
     
-          </div>
+          </div></div>
+      </details>
 
+          <details class="report-panel" id="panel-content-insights" data-panel="content-insights">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Content &amp; technical insights</span>
+            <span class="report-panel__meta">No data</span>
+          </span>
           
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="content-insights"><p class="panel-empty">No content insights: no crawled pages carry content data.</p></div></div>
+      </details>
 
-          <div id="content-insights">
+          <details class="report-panel" id="panel-history" data-panel="history">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">History</span>
+            <span class="report-panel__meta">Trends appear after your second audit</span>
+          </span>
           
-          </div>
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="history"><p class="history-note">Trends appear after your second audit.</p></div></div>
+      </details>
 
-          <p class="history-note">Trends appear after your second audit.</p>
-
+          <details class="report-panel" id="panel-configuration" data-panel="configuration">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">Crawl setup</span>
+            <span class="report-panel__meta">robots.txt, sitemaps, crawl coverage and timing</span>
+          </span>
           
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="configuration">
     <div class="info-section">
-      <h2>Configuration & Sitemaps</h2>
+      <h2 data-panel-heading>Configuration & Sitemaps</h2>
       <div class="info-grid">
         
     <div class="info-card success">
-      <h3>🤖 Robots.txt</h3>
+      <h3>Robots.txt</h3>
       <p><span class="label">Status:</span> Found</p>
       <p><span class="label">Sitemaps Listed:</span> 1</p>
       
@@ -4416,7 +4843,7 @@
   
         
     <div class="info-card success">
-      <h3>🗺️ Sitemaps</h3>
+      <h3>Sitemaps</h3>
       <p><span class="label">Total Sitemaps:</span> 0</p>
       <p><span class="label">Total URLs:</span> 5</p>
       <p style="color: var(--color-error);">✗ No sitemaps found</p>
@@ -4425,13 +4852,13 @@
   
         
       <div class="info-card success">
-        <h3>⚠️ Related Issues</h3>
+        <h3>Related Issues</h3>
         <p style="color: var(--color-success);">✓ No robots.txt or sitemap issues detected</p>
       </div>
     
         
       <div class="info-card success">
-        <h3>✅ Crawl Coverage</h3>
+        <h3>Crawl Coverage</h3>
         <p style="color: var(--color-success);">All URLs from sitemap were successfully crawled</p>
         <p><span class="label">Sitemap URLs:</span> 5</p>
         <p><span class="label">Pages Crawled:</span> 5</p>
@@ -4449,9 +4876,19 @@
   
       
     </div>
-  
+  </div></div>
+      </details>
 
-          <div id="pages-table">
+          <details class="report-panel" id="panel-pages-table" data-panel="pages-table">
+        <summary class="report-panel__header">
+          <span class="report-panel__heading">
+            <span class="report-panel__title">All pages</span>
+            <span class="report-panel__meta">5 pages · filter, sort and export</span>
+          </span>
+          
+          <span class="report-panel__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="report-panel__body"><div id="pages-table">
           
     <div class="table-filters" style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -5642,41 +6079,22 @@
         </table>
     </div>
   
-          </div>
+          </div></div>
+      </details>
 
           <footer>
               <div class="fr-footer-inner">
                   <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
                   <div class="fr-footer-meta">
                       <p>Audit Tool v1.0.0 - Generated <ISO></p>
-                      <p>Node.js v24.11.1 | Playwright | 5 pages analyzed</p>
+                      <p>Node.js v24.11.1 | Playwright | 5 pages analyzed · Press <kbd>?</kbd> for keyboard shortcuts</p>
                   </div>
                   <div class="fr-footer-actions">
-                      <button onclick="shareReport()" class="fr-btn fr-btn--sm fr-btn--outline">Share</button>
+                      <button onclick="copyScoreSummary()" class="fr-btn fr-btn--sm fr-btn--outline">Copy summary</button>
                       <button onclick="window.print()" class="fr-btn fr-btn--sm fr-btn--outline">Print</button>
                   </div>
               </div>
           </footer>
-      </div>
-
-      <!-- Floating action button menu -->
-      <div class="fab-container">
-          <div class="fab-menu" id="fabMenu">
-              <div class="fab-label">Share</div>
-              <button class="fab-item" onclick="shareReport()">📤 Share Report</button>
-              <button class="fab-item" onclick="copyScoreSummary()">📋 Copy Summary</button>
-              <div class="fab-divider"></div>
-              <div class="fab-label">Export</div>
-              <button class="fab-item" onclick="exportCSV('summary')">📊 Summary CSV</button>
-              <button class="fab-item" onclick="exportCSV('issues')">⚠️ Issues CSV</button>
-              <button class="fab-item" onclick="exportCSV('pages')">📄 Pages CSV</button>
-              <button class="fab-item" onclick="exportCSV('performance')">⚡ Performance CSV</button>
-              <button class="fab-item" onclick="exportCSV('issues')">📋 Issues CSV</button>
-              <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
-              <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
-              <button class="fab-item" onclick="exportAll()">📦 Export All</button>
-          </div>
-          <button class="fab-toggle" id="fabToggle" title="Quick actions">+</button>
       </div>
 
       <!-- Back to top button -->
@@ -5686,11 +6104,6 @@
       <div class="global-search" id="globalSearch">
           <input type="text" id="globalSearchInput" placeholder="Search report..." autocomplete="off">
           <span class="search-count" id="searchCount"></span>
-      </div>
-
-      <!-- Keyboard shortcut hint -->
-      <div class="keyboard-hint" id="keyboardHint">
-          Press <kbd>?</kbd> for keyboard shortcuts &middot; <kbd>s</kbd> to search
       </div>
 
       <!-- Modal for detailed information -->
@@ -7483,6 +7896,17 @@
           // Add PDF mode class for dedicated styling
           document.body.classList.add('pdf-mode');
 
+          // 0. Unfold every section first: charts in a folded section have no size until shown.
+          document.querySelectorAll('details:not([open])').forEach(el => {
+              _printState.details.push(el);
+              el.setAttribute('open', '');
+          });
+          if (window.Chart && Chart.instances) {
+              Object.values(Chart.instances).forEach(function(c) {
+                  try { c.resize(); c.update('none'); } catch (e) { /* ignore */ }
+              });
+          }
+
           // 1. Convert all canvas charts to static images (canvas is blank in PDF)
           document.querySelectorAll('.chart-container canvas, .chart-card canvas').forEach(canvas => {
               try {
@@ -7529,12 +7953,6 @@
           document.querySelectorAll('.issue-toggle-btn, .pagination-controls, .table-pagination, .show-more-btn').forEach(el => {
               _printState.paginationEls.push({ el: el, prev: el.style.display });
               el.style.display = 'none';
-          });
-
-          // 6. Expand all <details> elements
-          document.querySelectorAll('details:not([open])').forEach(el => {
-              _printState.details.push(el);
-              el.setAttribute('open', '');
           });
 
           // 7. Set print date
@@ -7638,6 +8056,14 @@
                   });
 
                   if (countEl) countEl.textContent = q ? count + ' found' : '';
+                  // Unfold the sections that hold a match so it can be seen.
+                  if (q) {
+                      searchable.forEach(function(el) {
+                          if (el.textContent.toLowerCase().indexOf(q) < 0) return;
+                          var panel = el.closest('details.report-panel');
+                          if (panel && !panel.open) panel.open = true;
+                      });
+                  }
               }, 200);
           });
 
@@ -7673,54 +8099,25 @@
           requestAnimationFrame(animate);
       })();
 
-      // === Section Tabs ===
+      // === Section Tabs (scrollspy; clicks are handled by the panel script) ===
       (function() {
-          var tabs = document.querySelectorAll('.section-tab');
+          var tabs = Array.from(document.querySelectorAll('.section-tab[data-target]'));
           if (!tabs.length) return;
-
-          tabs.forEach(function(tab) {
-              tab.addEventListener('click', function() {
-                  tabs.forEach(function(t) { t.classList.remove('active'); });
-                  tab.classList.add('active');
-                  var target = document.getElementById(tab.dataset.target);
-                  if (target) {
-                      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }
-              });
-          });
-
-          // Update active tab on scroll
-          var sectionIds = Array.from(tabs).map(function(t) { return t.dataset.target; });
-          window.addEventListener('scroll', function() {
-              var scrollY = window.scrollY + 150;
-              var active = sectionIds[0];
-              sectionIds.forEach(function(id) {
-                  var el = document.getElementById(id);
-                  if (el && el.offsetTop <= scrollY) active = id;
-              });
+          function panelOf(tab) {
+              var el = document.getElementById(tab.dataset.target);
+              return el ? (el.closest('.report-panel') || el) : null;
+          }
+          function update() {
+              var active = tabs[0];
               tabs.forEach(function(t) {
-                  t.classList.toggle('active', t.dataset.target === active);
+                  var p = panelOf(t);
+                  if (p && p.getBoundingClientRect().top <= 140) active = t;
               });
-          });
-      })();
-
-      // === FAB Menu ===
-      (function() {
-          var toggle = document.getElementById('fabToggle');
-          var menu = document.getElementById('fabMenu');
-          if (!toggle || !menu) return;
-
-          toggle.addEventListener('click', function() {
-              toggle.classList.toggle('open');
-              menu.classList.toggle('visible');
-          });
-
-          document.addEventListener('click', function(e) {
-              if (!toggle.contains(e.target) && !menu.contains(e.target)) {
-                  toggle.classList.remove('open');
-                  menu.classList.remove('visible');
-              }
-          });
+              tabs.forEach(function(t) { t.classList.toggle('active', t === active); });
+          }
+          window.addEventListener('scroll', update, { passive: true });
+          document.addEventListener('toggle', update, true);
+          update();
       })();
 
       // === Reading Progress Bar ===
@@ -7744,46 +8141,8 @@
           }
       });
 
-      // === Sidebar Navigation Highlighting ===
-      (function() {
-          const navLinks = document.querySelectorAll('.report-nav a');
-          const sections = [];
-          navLinks.forEach(function(link) {
-              const id = link.getAttribute('href').slice(1);
-              const el = document.getElementById(id);
-              if (el) sections.push({ id: id, el: el, link: link });
-          });
-
-          function updateActiveNav() {
-              let current = '';
-              const scrollY = window.scrollY + 200;
-              sections.forEach(function(s) {
-                  if (s.el.offsetTop <= scrollY) {
-                      current = s.id;
-                  }
-              });
-              navLinks.forEach(function(link) { link.classList.remove('active'); });
-              if (current) {
-                  const activeLink = document.querySelector('.report-nav a[href="#' + current + '"]');
-                  if (activeLink) activeLink.classList.add('active');
-              }
-          }
-
-          window.addEventListener('scroll', updateActiveNav);
-          updateActiveNav();
-      })();
-
       // === Keyboard Shortcuts ===
       (function() {
-          let helpVisible = false;
-          const hint = document.getElementById('keyboardHint');
-
-          // Show hint briefly on load
-          setTimeout(function() {
-              hint.classList.add('visible');
-              setTimeout(function() { hint.classList.remove('visible'); }, 3000);
-          }, 1000);
-
           document.addEventListener('keydown', function(e) {
               // Don't intercept when typing in inputs
               if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -7862,9 +8221,8 @@
                   case 'e':
                       // Expand/collapse all sections
                       if (!e.ctrlKey && !e.metaKey) {
-                          var toggles = document.querySelectorAll('.section-toggle');
-                          var allCollapsed = Array.from(toggles).every(function(t) { return t.classList.contains('collapsed'); });
-                          toggles.forEach(function(t) { t.click(); });
+                          var btn = document.getElementById('togglePanels');
+                          if (btn) btn.click();
                       }
                       break;
                   case 'p':
@@ -7873,9 +8231,9 @@
                           window.print();
                       }
                       break;
-                  case '1': case '2': case '3': case '4': case '5': case '6':
+                  case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
                       if (!e.ctrlKey && !e.metaKey) {
-                          var navLinks = document.querySelectorAll('.report-nav a');
+                          var navLinks = document.querySelectorAll('.section-tab[data-target]');
                           var idx = parseInt(e.key) - 1;
                           if (navLinks[idx]) {
                               navLinks[idx].click();
@@ -7902,7 +8260,7 @@
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">j/k</kbd></td><td style="border:none;">Navigate table rows</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">e</kbd></td><td style="border:none;">Expand/collapse all</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">p</kbd></td><td style="border:none;">Print report</td></tr>' +
-                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">1-6</kbd></td><td style="border:none;">Jump to section</td></tr>' +
+                  '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">1-9</kbd></td><td style="border:none;">Jump to section</td></tr>' +
                   '<tr><td style="padding:4px 12px 4px 0;border:none;"><kbd style="background:var(--color-bg-surface-alt);padding:2px 8px;border-radius:var(--radius-sm);font-family:monospace;color:var(--color-text-primary);">Esc</kbd></td><td style="border:none;">Close modals</td></tr>' +
                   '</table>' +
                   '<button onclick="this.parentElement.parentElement.remove()" style="margin-top:16px;padding:6px 16px;background:var(--color-accent);color:#000;border-radius:100px;border:none;border-radius:var(--radius-md);cursor:pointer;">Close</button>' +
@@ -8456,31 +8814,6 @@
           setInterval(update, 60000);
       })();
 
-      // === Section Tab Badges (issue counts) ===
-      (function() {
-          var tabs = document.querySelectorAll('.section-tab');
-          tabs.forEach(function(tab) {
-              var target = tab.getAttribute('data-target');
-              if (target === 'top-issues') {
-                  var cards = document.querySelectorAll('.issues-table-row');
-                  if (cards.length > 0) {
-                      var badge = document.createElement('span');
-                      badge.className = 'tab-badge';
-                      badge.textContent = cards.length;
-                      tab.appendChild(badge);
-                  }
-              } else if (target === 'quick-wins') {
-                  var wins = document.querySelectorAll('.win-card');
-                  if (wins.length > 0) {
-                      var badge = document.createElement('span');
-                      badge.className = 'tab-badge zero';
-                      badge.textContent = wins.length;
-                      tab.appendChild(badge);
-                  }
-              }
-          });
-      })();
-
       // === Notification Toast System ===
       (function() {
           var toast = document.createElement('div');
@@ -8496,28 +8829,6 @@
                   toast.classList.remove('visible');
               }, duration || 2000);
           };
-      })();
-
-      // === Deep Link Handling ===
-      (function() {
-          if (window.location.hash) {
-              var target = document.querySelector(window.location.hash);
-              if (target) {
-                  setTimeout(function() {
-                      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 500);
-              }
-          }
-
-          // Update URL hash on section nav click
-          document.querySelectorAll('.report-nav a').forEach(function(link) {
-              link.addEventListener('click', function(e) {
-                  var hash = this.getAttribute('href');
-                  if (hash && hash.startsWith('#')) {
-                      history.replaceState(null, null, hash);
-                  }
-              });
-          });
       })();
 
       // === Phase Timeline Visualization ===
@@ -8588,68 +8899,70 @@
       })();
 
       </script>
+  
+      
       <script>
-      // Own script tag so the collapse toggles still work when an earlier block throws (e.g. Chart.js CDN unreachable).
       (function() {
-          var sectionIds = ['executive-summary', 'quick-wins', 'top-issues', 'performance', 'charts', 'pages-table'];
-          sectionIds.forEach(function(id) {
-              var section = document.getElementById(id);
-              if (!section || !section.firstElementChild) return;
-
-              var firstChild = section.firstElementChild;
-              var h2 = firstChild.querySelector('h2') || firstChild.querySelector('.wins-issues-title') || firstChild.querySelector('.chart-title');
-              if (!h2) return;
-
-              // Wrap h2 in a clickable header
-              var toggle = document.createElement('button');
-              toggle.className = 'section-toggle';
-              toggle.textContent = '▼';
-              toggle.title = 'Collapse section';
-
-              h2.style.cursor = 'pointer';
-              h2.style.display = 'flex';
-              h2.style.alignItems = 'center';
-              h2.style.justifyContent = 'space-between';
-              h2.appendChild(toggle);
-
-              // Content to collapse = h2's own following siblings, plus the header wrapper's
-              // siblings when h2 sits inside firstChild (previously only the latter, which is
-              // empty when firstChild wraps the whole section, so nothing collapsed). Remember
-              // each element's inline display (e.g. 'grid') so re-expanding restores it.
-              var contentElements = [];
-              function collectFrom(sibling) {
-                  while (sibling) {
-                      contentElements.push({ el: sibling, shownDisplay: sibling.style.display });
-                      sibling = sibling.nextElementSibling;
-                  }
+          function openAncestors(el) {
+              var node = el;
+              while (node) {
+                  if (node.tagName === 'DETAILS' && !node.open) node.open = true;
+                  node = node.parentElement;
               }
-              collectFrom(h2.nextElementSibling);
-              if (h2.parentElement === firstChild) collectFrom(firstChild.nextElementSibling);
-
-              // Saved state
-              var saved = localStorage.getItem('seo-collapse-' + id);
-
-              h2.addEventListener('click', function() {
-                  var isCollapsed = toggle.classList.toggle('collapsed');
-                  toggle.textContent = isCollapsed ? '▶' : '▼';
-                  toggle.title = isCollapsed ? 'Expand section' : 'Collapse section';
-                  contentElements.forEach(function(item) {
-                      item.el.style.display = isCollapsed ? 'none' : item.shownDisplay;
-                  });
-                  localStorage.setItem('seo-collapse-' + id, isCollapsed ? '1' : '0');
+          }
+          window.revealInReport = function(id, smooth) {
+              var el = id && document.getElementById(id);
+              if (!el) return false;
+              openAncestors(el);
+              // A section's own wrapper sits right in the panel body: scroll to the panel header instead.
+              var parent = el.parentElement;
+              var target = parent && parent.classList.contains('report-panel__body') ? parent.parentElement : el;
+              target.scrollIntoView({ behavior: smooth === false ? 'auto' : 'smooth', block: 'start' });
+              return true;
+          };
+          window.setAllPanels = function(open) {
+              document.querySelectorAll('details.report-panel').forEach(function(d) { d.open = open; });
+          };
+          var toggleBtn = document.getElementById('togglePanels');
+          function syncToggle() {
+              if (!toggleBtn) return;
+              var panels = Array.from(document.querySelectorAll('details.report-panel'));
+              toggleBtn.textContent = panels.every(function(d) { return d.open; }) ? 'Collapse all' : 'Expand all';
+          }
+          if (toggleBtn) {
+              toggleBtn.addEventListener('click', function() {
+                  window.setAllPanels(toggleBtn.textContent === 'Expand all');
+                  syncToggle();
               });
-
-              // Restore saved state
-              if (saved === '1') {
-                  toggle.classList.add('collapsed');
-                  toggle.textContent = '▶';
-                  contentElements.forEach(function(item) {
-                      item.el.style.display = 'none';
-                  });
+              document.addEventListener('toggle', function(e) {
+                  if (e.target.classList && e.target.classList.contains('report-panel')) syncToggle();
+              }, true);
+          }
+          // Close the Export menu on an outside click or Escape.
+          document.addEventListener('click', function(e) {
+              document.querySelectorAll('details.export-menu[open]').forEach(function(m) {
+                  if (!m.contains(e.target)) m.open = false;
+              });
+          });
+          document.addEventListener('keydown', function(e) {
+              if (e.key === 'Escape') document.querySelectorAll('details.export-menu[open]').forEach(function(m) { m.open = false; });
+          });
+          // In-page links (e.g. the score-rules link) open the folded panel they point into.
+          document.addEventListener('click', function(e) {
+              var a = e.target.closest && e.target.closest('a[href^="#"]');
+              if (!a) return;
+              var id = a.getAttribute('href').slice(1);
+              if (!id) return;
+              if (window.revealInReport(id)) {
+                  e.preventDefault();
+                  history.replaceState(null, '', '#' + id);
               }
           });
+          if (location.hash.length > 1) {
+              var id = decodeURIComponent(location.hash.slice(1));
+              setTimeout(function() { window.revealInReport(id, false); }, 50);
+          }
       })();
       </script>
-  
   </body>
   </html>

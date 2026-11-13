@@ -47,8 +47,8 @@ function getContentInsights(data: ReportSectionData) {
   if (sections.length === 0) return '';
 
   return `
-    <div class="charts-section" id="content-insights">
-      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">🔍 Content & Technical Insights</h2>
+    <div class="charts-section">
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">Content & Technical Insights</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Advanced analysis across ${pagesArray.length} pages</p>
       ${sections.join('')}
     </div>
@@ -78,8 +78,8 @@ function getComparisonContentInsights(jsonData: Record<string, unknown>, compari
   if (sections.length === 0) return '';
 
   return `
-    <div class="charts-section" id="content-insights">
-      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">🔍 Content & Technical Insights (Comparison)</h2>
+    <div class="charts-section">
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">Content & Technical Insights (Comparison)</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">${originLabel}: ${originPages.length} pages | ${compareLabel}: ${comparePages.length} pages</p>
       ${sections.join('')}
     </div>
@@ -128,7 +128,7 @@ function getComparisonCTASection(
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🎯 Conversion Elements</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Conversion Elements</h3>
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
         ${dualStat('Forms', '📝', o.forms, c.forms, 'var(--color-info)')}
         ${dualStat('CTA Buttons', '🔘', o.buttons, c.buttons, 'var(--purple-500)')}
@@ -172,7 +172,7 @@ function getComparisonCodeCoverageSection(
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">📦 Code Coverage</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Code Coverage</h3>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <div style="background: var(--color-bg-surface); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
           <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: 10px;">JavaScript Unused</div>
@@ -284,7 +284,7 @@ function getComparisonOutboundLinksSection(
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🔗 Outbound Link Health</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Outbound Link Health</h3>
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
         <div style="background: var(--color-success-bg); padding: 12px; border-radius: var(--radius-lg); text-align: center;">
           <div style="font-size: var(--font-size-xs); color: var(--color-success-text); margin-bottom: 4px;">Checked</div>
@@ -365,7 +365,7 @@ function getPageRankSection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🏆 Internal PageRank Distribution</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Internal PageRank Distribution</h3>
       <p style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 15px;">Estimated internal link equity. Higher scores indicate pages receiving more internal link authority.</p>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <div>
@@ -422,7 +422,7 @@ function getContentSimilaritySection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">📑 Near-Duplicate Content</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Near-Duplicate Content</h3>
       <div style="display: flex; gap: 15px; margin-bottom: 15px;">
         <div style="background: var(--amber-100); padding: 15px 20px; border-radius: var(--radius-lg); text-align: center;">
           <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning-text);">${withSimilarity.length}</div>
@@ -477,7 +477,7 @@ function getLanguageSection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🌐 Language Detection</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Language Detection</h3>
       <div style="display: flex; gap: 15px; margin-bottom: 15px;">
         ${
           mismatches > 0
@@ -548,7 +548,7 @@ function getCTASection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🎯 Conversion Elements</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Conversion Elements</h3>
       ${cards ? `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 15px;">${cards}</div>` : ''}
       <div style="display: flex; gap: 12px;">
         <div style="padding: 10px 16px; background: ${pagesWithNoCTAs > 0 ? 'var(--color-error-bg)' : 'var(--color-success-bg)'}; border-radius: var(--radius-md); font-size: var(--font-size-sm);">
@@ -584,7 +584,7 @@ function getCodeCoverageSection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">📦 Code Coverage</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Code Coverage</h3>
       <p style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 15px;">Based on ${withCoverage.length} pages with coverage data</p>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <div style="background: var(--color-bg-surface); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
@@ -652,7 +652,7 @@ function getOutboundLinksSection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🔗 Outbound Link Health</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Outbound Link Health</h3>
       <div style="display: flex; gap: 12px; margin-bottom: 15px;">
         <div style="background: var(--color-success-bg); padding: 12px 20px; border-radius: var(--radius-lg); text-align: center;">
           <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: #059669;">${totalChecked}</div>
@@ -712,7 +712,7 @@ function getResponseHeadersSection(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">📨 Response Header Signals</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Response Header Signals</h3>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">${items.join('')}</div>
     </div>`;
 }
@@ -761,7 +761,7 @@ function getWordCountBreakdown(pages: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">📊 Word Count by Section</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Word Count by Section</h3>
       <p style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 15px;">Average word distribution across ${withData.length} pages. Boilerplate ratio: <strong style="color: ${boilerplateRatio > 50 ? 'var(--color-error)' : 'var(--color-success)'};">${boilerplateRatio}%</strong></p>
       ${bars}
     </div>`;

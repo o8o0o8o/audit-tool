@@ -203,8 +203,8 @@ function getTechnologyStack(data: ReportSectionData) {
 
   if (aggregated.totalUnique === 0) {
     return `
-      <div class="section" id="technology-stack">
-        <h2>🔧 Technology Stack</h2>
+      <div class="section">
+        <h2>Technology Stack</h2>
         <p style="color: var(--color-text-muted); text-align: center; padding: 20px;">
           No technologies detected. Technology detection requires crawling with performance metrics enabled.
         </p>
@@ -318,8 +318,8 @@ function getTechnologyStack(data: ReportSectionData) {
   const totalCategories = detectedCategories.length;
 
   return `
-    <div class="section" id="technology-stack">
-      <h2>🔧 Technology Stack</h2>
+    <div class="section">
+      <h2>Technology Stack</h2>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px;">
         <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #667eea; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
@@ -344,7 +344,7 @@ function getTechnologyStack(data: ReportSectionData) {
         comparison.removedTechs.length > 0
           ? `
       <div style="margin-top: 20px; padding: 15px; background: var(--color-error-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-error);">
-        <h4 style="margin: 0 0 10px; color: var(--color-error-text);">🗑️ No Longer Detected (${comparison.removedTechs.length})</h4>
+        <h4 style="margin: 0 0 10px; color: var(--color-error-text);">No Longer Detected (${comparison.removedTechs.length})</h4>
         <p style="margin: 0 0 12px; color: var(--color-error-text); font-size: var(--font-size-base);">
           These technologies were detected in the previous audit but are no longer present:
         </p>
@@ -366,7 +366,7 @@ function getTechnologyStack(data: ReportSectionData) {
         comparison.newTechs.length > 0
           ? `
       <div style="margin-top: 20px; padding: 15px; background: var(--color-success-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-success);">
-        <h4 style="margin: 0 0 10px; color: var(--color-success-text);">✨ Newly Detected (${comparison.newTechs.length})</h4>
+        <h4 style="margin: 0 0 10px; color: var(--color-success-text);">Newly Detected (${comparison.newTechs.length})</h4>
         <p style="margin: 0; color: var(--color-success-text); font-size: var(--font-size-base);">
           ${comparison.newTechs.map((t) => escapeHtml(t)).join(', ')}
         </p>
@@ -376,7 +376,7 @@ function getTechnologyStack(data: ReportSectionData) {
       }
 
       <div style="margin-top: 20px; padding: 15px; background: var(--color-info-bg); border-radius: var(--radius-lg); border-left: 4px solid var(--color-info);">
-        <h4 style="margin: 0 0 10px; color: var(--color-info-text);">💡 About Technology Detection</h4>
+        <h4 style="margin: 0 0 10px; color: var(--color-info-text);">About Technology Detection</h4>
         <p style="margin: 0 0 12px; color: var(--color-info-text); font-size: var(--font-size-base); line-height: 1.6;">
           Technologies are detected by analyzing multiple signals. <strong>Hover over each technology</strong> to see how it was detected.
         </p>
@@ -400,7 +400,7 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
   const { originLabel, compareLabel } = extractComparisonLabels(comparison);
 
   if (originAgg.totalUnique === 0 && compareAgg.totalUnique === 0) {
-    return `<div class="section" id="technology-stack"><h2>🔧 Technology Stack</h2><p style="color: var(--color-text-muted); text-align: center; padding: 20px;">No technologies detected.</p></div>`;
+    return `<div class="section"><h2>Technology Stack</h2><p style="color: var(--color-text-muted); text-align: center; padding: 20px;">No technologies detected.</p></div>`;
   }
 
   const originNames = new Set(originAgg.technologies.map((t) => t.name));
@@ -420,8 +420,8 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
       .join('');
 
   return `
-    <div class="section" id="technology-stack">
-      <h2>🔧 Technology Stack (Comparison)</h2>
+    <div class="section">
+      <h2>Technology Stack (Comparison)</h2>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px;">
         <div style="background: var(--color-bg-surface-alt); border: 1px solid var(--color-border-default); border-top: 3px solid #667eea; padding: 20px; border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: center;">
@@ -473,4 +473,10 @@ function getComparisonTechnologyStack(originPages: PageInfo[], comparison: Compa
   `;
 }
 
-export { getTechnologyStack, aggregateTechnologies };
+/** Technologies the section lists: present on at least ~0.5% of pages (rounds to a non-zero share). */
+function countDetectedTechnologies(pages: PageInfo[]): number {
+  if (pages.length === 0) return 0;
+  return aggregateTechnologies(pages).technologies.filter((t) => Math.round((t.count / pages.length) * 100) > 0).length;
+}
+
+export { getTechnologyStack, aggregateTechnologies, countDetectedTechnologies };

@@ -8284,7 +8284,7 @@ void describe('page counts', () => {
 
 void describe('page counts header', () => {
   const statValue = (html: string, label: string): number | null => {
-    const m = new RegExp(`${label}:</span>\\s*<span[^>]*>(\\d+)<`).exec(html);
+    const m = new RegExp(`<span class="stat-value"[^>]*>(\\d+)</span>\\s*<span class="stat-label">${label}</span>`).exec(html);
     return m ? Number(m[1]) : null;
   };
 

@@ -6,6 +6,8 @@
 
 import { getDesignTokens } from './design-tokens';
 import { getUIComponents } from './ui-components';
+import { getPanelStyles } from './report-panel';
+import { getHeaderStyles } from './report-header';
 
 /**
  * Generate the CSS styles for the HTML report
@@ -2960,6 +2962,8 @@ function getStyles() {
                   height: 1px;
               }
           }
+          ${getHeaderStyles()}
+          ${getPanelStyles()}
       </style>`;
 }
 

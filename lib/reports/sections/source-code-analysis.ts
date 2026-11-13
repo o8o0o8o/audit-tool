@@ -43,7 +43,7 @@ function getSourceCodeAnalysis(data: ReportSectionData) {
 
   return `
     <div class="section" id="source-code-analysis">
-      <h2>📂 Source Code Analysis</h2>
+      <h2>Source Code Analysis</h2>
 
       ${frameworkHtml}
       ${configHtml}
@@ -88,7 +88,7 @@ function getLlmFindings(repo: Record<string, unknown>) {
 
   return `
     <div style="margin-top: 25px;">
-      <h3 style="display: flex; align-items: center; gap: 8px;">🔍 AI-discovered insights
+      <h3 style="display: flex; align-items: center; gap: 8px;">AI-discovered insights
         <span style="font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); color: var(--color-text-muted);">(additive — layered on the deterministic analysis)</span>
       </h3>
       <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">

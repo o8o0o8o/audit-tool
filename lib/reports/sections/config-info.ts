@@ -77,7 +77,7 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
 
   return `
     <div class="info-card ${robotsStatus}">
-      <h3>🤖 Robots.txt</h3>
+      <h3>Robots.txt</h3>
       <p><span class="label">Status:</span> ${robotsStatusText}</p>
       <p><span class="label">Sitemaps Listed:</span> ${robotsSitemaps.length}</p>
       ${sitemapsList}
@@ -128,7 +128,7 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
 
   return `
     <div class="info-card ${sitemapStatus}">
-      <h3>🗺️ Sitemaps</h3>
+      <h3>Sitemaps</h3>
       <p><span class="label">Total Sitemaps:</span> ${individualSitemaps.length}</p>
       <p><span class="label">Total URLs:</span> ${totalUrls.toLocaleString()}</p>
       ${sitemapsList}
@@ -173,7 +173,7 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
   if (totalRobotsSitemapIssues === 0) {
     return `
       <div class="info-card ${issuesStatus}">
-        <h3>⚠️ Related Issues</h3>
+        <h3>Related Issues</h3>
         <p style="color: var(--color-success);">✓ No robots.txt or sitemap issues detected</p>
       </div>
     `;
@@ -209,7 +209,7 @@ function getIssuesCard(jsonData: Record<string, unknown>) {
 
   return `
     <div class="info-card ${issuesStatus}">
-      <h3>⚠️ Related Issues</h3>
+      <h3>Related Issues</h3>
       <p><span class="label">Total Issues:</span> ${totalRobotsSitemapIssues}</p>
       ${badgeCounts}
       <ul style="margin-top: 8px;">
@@ -232,7 +232,7 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
   if (notCrawled <= 0) {
     return `
       <div class="info-card success">
-        <h3>✅ Crawl Coverage</h3>
+        <h3>Crawl Coverage</h3>
         <p style="color: var(--color-success);">All URLs from sitemap were successfully crawled</p>
         <p><span class="label">Sitemap URLs:</span> ${sitemapTotal}</p>
         <p><span class="label">Pages Crawled:</span> ${pagesCrawled}</p>
@@ -266,7 +266,7 @@ function getCoverageCard(jsonData: Record<string, unknown>, pages: PageInfo[]) {
 
   return `
     <div class="info-card ${cardClass}">
-      <h3>⚠️ Crawl Coverage</h3>
+      <h3>Crawl Coverage</h3>
       <p><span class="label">Coverage:</span> ${coveragePercent}%</p>
       <p><span class="label">Sitemap URLs:</span> ${sitemapTotal.toLocaleString()}</p>
       <p><span class="label">Pages Crawled:</span> ${pagesCrawled.toLocaleString()}</p>

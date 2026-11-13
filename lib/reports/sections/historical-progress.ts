@@ -43,7 +43,7 @@ function getHistoricalProgress(data: ReportSectionData) {
 
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Historical Progress</h2>
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">Historical Progress</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Track your SEO improvements over ${auditCount} audit${auditCount > 1 ? 's' : ''}</p>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
@@ -196,8 +196,7 @@ function getIssueTrendsSection(trendData: TrendDataCompat) {
 
   return `
     <div style="margin-top: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-        📊 Issue Changes Between Audits
+      <h3 style="color: var(--gray-800); margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">Issue Changes Between Audits
         <span style="font-size: var(--font-size-xs); font-weight: 400; color: var(--color-text-muted);">(Top 10 most impactful)</span>
       </h3>
       <p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-bottom: 15px;">

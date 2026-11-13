@@ -10,7 +10,7 @@
 function getChartsSection() {
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: var(--color-text-primary); margin-bottom: 10px;">📊 Data Insights</h2>
+      <h2 style="text-align: center; color: var(--color-text-primary); margin-bottom: 10px;">Data Insights</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Visual analysis of your audit results</p>
 
       <div class="charts-grid">

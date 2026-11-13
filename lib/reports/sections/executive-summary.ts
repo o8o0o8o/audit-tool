@@ -83,8 +83,8 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
   const categoryHealthHtml =
     !noScore && Object.keys(categoryScores).length > 0
       ? `
-    <div class="mt-7 border-t" style="border-color: rgba(255,255,255,0.2); padding-top: var(--space-6);">
-      <div class="text-center mb-5 text-base opacity-90">Category Health</div>
+    <div class="summary-hero__categories">
+      <div class="summary-hero__label">Category health</div>
       ${getCategoryBars(categoryScores)}
     </div>
   `
@@ -92,19 +92,25 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
 
   return `
     <div class="executive-summary">
-      <h2>📊 Executive Summary</h2>
+      <h2>Executive Summary</h2>
 
       ${crawlAbortedBanner}${crawlerBlockedBanner}
 
       ${
         noScore
           ? ''
-          : `<div class="summary-score">
-        <div class="score-circle" style="position: relative;">
-          <div class="score-ring" style="--score: ${overallScore}; --color: ${getScoreColor(overallScore)};"></div>
-          <div class="score-number ${scoreClass}">${overallScore}</div>
-          <div class="score-label">${scoreLabel} (${letterGrade})</div>
+          : `<div class="summary-hero">
+        <div class="summary-hero__score">
+          <div class="summary-score">
+            <div class="score-circle" style="position: relative;">
+              <div class="score-ring" style="--score: ${overallScore}; --color: ${getScoreColor(overallScore)};"></div>
+              <div class="score-number ${scoreClass}">${overallScore}</div>
+              <div class="score-label">${scoreLabel} (${letterGrade})</div>
+            </div>
+          </div>
+          ${getEstimatedScoreAfterFixes(summary, overallScore)}
         </div>
+        ${categoryHealthHtml}
       </div>`
       }
       ${scopeNoteHtml}
@@ -116,22 +122,22 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
           <div class="summary-card-hint">${ISSUE_TYPES_HINT}</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--red-200);">${summary.criticalCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--red-400);">${summary.criticalCount ?? 0}</div>
           <div class="summary-card-label">Critical</div>
           ${((summary.criticalCount as number) ?? 0) > 0 ? `<div class="summary-card-hint">${SEVERITY_HINT} · fix immediately</div>` : `<div class="summary-card-hint">${SEVERITY_HINT}</div>`}
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--orange-200);">${summary.highCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--orange-500);">${summary.highCount ?? 0}</div>
           <div class="summary-card-label">High</div>
           ${((summary.highCount as number) ?? 0) > 0 ? `<div class="summary-card-hint">${SEVERITY_HINT} · fix this week</div>` : `<div class="summary-card-hint">${SEVERITY_HINT}</div>`}
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--amber-200);">${summary.mediumCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--amber-400);">${summary.mediumCount ?? 0}</div>
           <div class="summary-card-label">Medium</div>
           <div class="summary-card-hint">${SEVERITY_HINT}</div>
         </div>
         <div class="summary-card">
-          <div class="summary-card-value" style="color: var(--blue-200);">${summary.lowCount ?? 0}</div>
+          <div class="summary-card-value" style="color: var(--blue-400);">${summary.lowCount ?? 0}</div>
           <div class="summary-card-label">Low</div>
           <div class="summary-card-hint">${SEVERITY_HINT}</div>
         </div>
@@ -141,10 +147,6 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
           <div class="summary-card-hint">${PAGES_OK_HINT}</div>
         </div>
       </div>
-
-      ${noScore ? '' : getEstimatedScoreAfterFixes(summary, overallScore)}
-
-      ${categoryHealthHtml}
 
       ${noScore ? '' : scoringRulesHtml()}
 
@@ -173,7 +175,7 @@ function getComparisonExecutiveSummary(
 
   return `
     <div class="executive-summary">
-      <h2>📊 Comparison Summary</h2>
+      <h2>Comparison Summary</h2>
 
       ${
         noScore
@@ -208,10 +210,10 @@ function getComparisonExecutiveSummary(
       <!-- Dual issue counts -->
       <div class="summary-grid">
         ${getDualSummaryCard('Total Issues', (originSummary.totalIssues as number) ?? 0, (compareSummary.totalIssues as number) ?? 0, originLabel, compareLabel, '', true, '', ISSUE_TYPES_HINT)}
-        ${getDualSummaryCard('Critical', (originSummary.criticalCount as number) ?? 0, (compareSummary.criticalCount as number) ?? 0, originLabel, compareLabel, 'var(--red-200)', true)}
-        ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, 'var(--orange-200)', true)}
-        ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, 'var(--amber-200)', true)}
-        ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, 'var(--blue-200)', true)}
+        ${getDualSummaryCard('Critical', (originSummary.criticalCount as number) ?? 0, (compareSummary.criticalCount as number) ?? 0, originLabel, compareLabel, 'var(--red-400)', true)}
+        ${getDualSummaryCard('High', (originSummary.highCount as number) ?? 0, (compareSummary.highCount as number) ?? 0, originLabel, compareLabel, 'var(--orange-500)', true)}
+        ${getDualSummaryCard('Medium', (originSummary.mediumCount as number) ?? 0, (compareSummary.mediumCount as number) ?? 0, originLabel, compareLabel, 'var(--amber-400)', true)}
+        ${getDualSummaryCard('Low', (originSummary.lowCount as number) ?? 0, (compareSummary.lowCount as number) ?? 0, originLabel, compareLabel, 'var(--blue-400)', true)}
         ${getDualSummaryCard('Pass Rate', (originSummary.passRate as number) || 0, (compareSummary.passRate as number) || 0, originLabel, compareLabel, '', false, '%', PAGES_OK_HINT)}
       </div>
 
@@ -277,10 +279,9 @@ function getEstimatedScoreAfterFixes(summary: Record<string, unknown>, overallSc
   if (!predicted) return '';
 
   return `
-    <div class="ui-stat mt-6 text-center text-sm">
-      <strong>Estimated Score After Fixes:</strong>
-      Fix all critical + high issues to potentially reach
-      <strong style="color: var(--color-success);">~${predicted}/100</strong>
+    <div class="summary-hero__estimate">
+      Fix all critical and high issues to reach about
+      <strong style="color: var(--color-success);">${predicted}/100</strong>
     </div>`;
 }
 
@@ -381,14 +382,12 @@ function getCategoryBars(categoryScores: Partial<CategoryScores>) {
 
   return categories
     .map((cat) => {
-      const config = (CATEGORY_CONFIG as Record<string, { name: string; icon: string; color: string }>)[cat.key] || {};
-      const icon = config.icon || '';
       const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
 
       return `
-      <div class="mb-4" title="${description}">
+      <div class="summary-category" title="${description}">
         <div class="flex justify-between mb-1 text-sm">
-          <span>${icon} ${cat.name}</span>
+          <span>${cat.name}</span>
           <span class="font-bold">${cat.score}/100</span>
         </div>
         <div class="progress-bar-container">

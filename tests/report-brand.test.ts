@@ -38,7 +38,7 @@ void describe('HTML report — FocusReactive brand theme', () => {
     assert.match(html, /<footer>[\s\S]*fr-footer-inner/);
   });
 
-  void it('keeps every report section and the collapse toggle wiring', () => {
+  void it('keeps every report section, folded into panels with only summary and issues open', () => {
     for (const id of [
       'executive-summary',
       'issues-detail',
@@ -50,7 +50,12 @@ void describe('HTML report — FocusReactive brand theme', () => {
     ]) {
       assert.ok(html.includes(`id="${id}"`), `missing section #${id}`);
     }
-    assert.ok(html.includes("toggle.className = 'section-toggle'"));
+    assert.match(html, /<details class="report-panel" id="panel-executive-summary" data-panel="executive-summary" open>/);
+    assert.match(html, /<details class="report-panel" id="panel-issues-detail" data-panel="issues-detail" open>/);
+    assert.match(html, /<details class="report-panel" id="panel-pages-table" data-panel="pages-table">/);
+    assert.match(html, /<details class="report-panel" id="panel-charts" data-panel="charts">/);
+    assert.ok(html.includes('window.revealInReport'), 'tabs and links unfold the panel they point into');
+    assert.ok(!html.includes('class="report-nav"'), 'no duplicate sidebar navigation');
     assert.ok(html.includes('<canvas id="issueChart">'));
   });
 

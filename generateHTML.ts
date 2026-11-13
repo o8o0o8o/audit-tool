@@ -12,6 +12,13 @@ import { ReportDataProcessor } from './lib/reports/data-processor';
 import { FileManager } from './lib/storage/file-manager';
 import { computePageCounts, type PageCounts } from './lib/utils/page-counts';
 import { escapeHtml } from './lib/reports/html-utils';
+import { extractSummary } from './lib/reports/data-processor';
+import { statPercentile } from './lib/utils';
+import { renderPanel, severityChip, getPanelScript } from './lib/reports/sections/report-panel';
+import { renderReportHeader, renderStatTiles, pageCountStats } from './lib/reports/sections/report-header';
+import { collectUiFindings } from './lib/reports/sections/ui-issues';
+import { countDetectedTechnologies } from './lib/reports/sections/technology-stack';
+import { getIssueTableCounts } from './lib/reports/sections/issues-detail';
 import { getAgenticBrowsingSection, resolveAgenticState } from './lib/reports/sections/agentic-browsing';
 import { getAnalyticsTagsSection, getDomainExposureSection } from './lib/reports/sections/domain-exposure';
 import type { SiteChecksData } from './lib/analyzers/site-checks/site-checks-types';
@@ -52,48 +59,37 @@ export interface HtmlReportSelection {
   noScore?: boolean;
 }
 
-const NAV_LINKS: Partial<Record<HtmlSectionId, string>> = {
-  'executive-summary':
-    '<a href="#executive-summary" title="Executive Summary">📊<span class="nav-label">Summary</span></a>',
-  'issues-detail': '<a href="#issues-detail" title="Issues">📋<span class="nav-label">Issues</span></a>',
-  'ui-issues': '<a href="#ui-issues" title="UI Issues">🖼️<span class="nav-label">UI</span></a>',
-  performance: '<a href="#performance" title="Performance">⚡<span class="nav-label">Performance</span></a>',
-  charts: '<a href="#charts" title="Charts">📈<span class="nav-label">Charts</span></a>',
-  'content-insights':
-    '<a href="#content-insights" title="Content Insights">🔍<span class="nav-label">Insights</span></a>',
-  'pages-table': '<a href="#pages-table" title="Pages Table">📄<span class="nav-label">Pages</span></a>',
-};
-
-const TAB_LABELS: Partial<Record<HtmlSectionId, string>> = {
+/** Short labels for the sticky section navigation. */
+const TAB_LABELS: Record<HtmlSectionId, string> = {
   'executive-summary': 'Summary',
   'issues-detail': 'Issues',
   'ui-issues': 'UI Issues',
   performance: 'Performance',
   charts: 'Charts',
-  'content-insights': 'Insights',
   'technology-stack': 'Tech Stack',
+  'source-code': 'Source Code',
+  'content-insights': 'Insights',
+  history: 'History',
   'pages-table': 'Pages',
 };
 
-const DEFAULT_NAV_ORDER: HtmlSectionId[] = [
-  'executive-summary',
-  'issues-detail',
-  'ui-issues',
-  'performance',
-  'charts',
-  'content-insights',
-  'pages-table',
-];
-const DEFAULT_TAB_ORDER: HtmlSectionId[] = [
-  'executive-summary',
-  'issues-detail',
-  'ui-issues',
-  'performance',
-  'charts',
-  'content-insights',
-  'technology-stack',
-  'pages-table',
-];
+/** Panel titles; the section generators' own headings are hidden inside a panel. */
+const PANEL_TITLES: Record<HtmlSectionId, string> = {
+  'executive-summary': 'Summary',
+  'issues-detail': 'Issues',
+  'ui-issues': 'UI issues',
+  performance: 'Performance',
+  charts: 'Charts',
+  'technology-stack': 'Technology stack',
+  'source-code': 'Source code',
+  'content-insights': 'Content & technical insights',
+  history: 'History',
+  'pages-table': 'All pages',
+};
+
+/** Open by default: what a reader needs first. Everything else is folded with a one-line summary. */
+const OPEN_BY_DEFAULT = new Set<HtmlSectionId>(['executive-summary', 'issues-detail']);
+
 const DEFAULT_BODY_ORDER: HtmlSectionId[] = [
   'executive-summary',
   'issues-detail',
@@ -179,16 +175,29 @@ function recalculateSummary(jsonData: Record<string, unknown>, pageData: PageDat
 
 /** Header stats: Successful + With Errors always sum to Pages Crawled; load failures are listed apart. */
 export function renderPageCountStats(counts: PageCounts): string {
-  const stat = (label: string, value: number, color?: string) => `<div class="stat">
-                      <span class="stat-label">${label}:</span>
-                      <span class="stat-value"${color ? ` style="color: var(${color});"` : ''}>${value}</span>
-                  </div>`;
-  return [
-    stat('Pages Crawled', counts.crawled),
-    stat('Successful', counts.successful, '--color-success'),
-    stat('With Errors', counts.withErrors, '--color-error'),
-    ...(counts.failedToLoad > 0 ? [stat('Failed to load', counts.failedToLoad, '--color-warning')] : []),
-  ].join('\n                  ');
+  return renderStatTiles(pageCountStats(counts));
+}
+
+const emptyState = (text: string) => `<p class="panel-empty">${escapeHtml(text)}</p>`;
+
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`);
+
+/** "LCP p75 1.65 s · TTFB p75 159 ms · CLS p75 0.00" from the crawled pages' lab metrics. */
+function performanceMeta(pages: PageInfo[]): string {
+  const values = (get: (p: PageInfo) => number | undefined, min: number) =>
+    pages
+      .map(get)
+      .filter((v): v is number => typeof v === 'number' && v >= min)
+      .sort((x, y) => x - y);
+  const lcp = values((p) => p.LCP, 1);
+  const ttfb = values((p) => p.TTFB, 1);
+  const cls = values((p) => p.CLS, 0);
+  const parts = [
+    lcp.length ? `LCP p75 ${fmtMs(statPercentile(lcp, 0.75))}` : '',
+    ttfb.length ? `TTFB p75 ${fmtMs(statPercentile(ttfb, 0.75))}` : '',
+    cls.length ? `CLS p75 ${statPercentile(cls, 0.75).toFixed(2)}` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No lab performance data';
 }
 
 function generateHTML(
@@ -296,7 +305,10 @@ function generateHTML(
       getAnalyticsTagsSection(readSiteChecks(file), agenticAnalysis?.details ?? {});
 
   const bodyFragments: Record<HtmlSectionId, () => string> = {
-    history: () => getHistoricalProgress(sectionData),
+    history: () => {
+      const html = getHistoricalProgress(sectionData);
+      return html ? `<div id="history">${html}</div>` : '';
+    },
     'executive-summary': () => `<div id="executive-summary">
           ${getExecutiveSummary(sectionData)}
           </div>`,
@@ -305,9 +317,10 @@ function generateHTML(
           ${agenticHtml}${domainExposureHtml}
           </div>`,
     'ui-issues': () => getUiIssues(sectionData),
-    performance: () => `<div id="performance">
-          ${getPerformanceStats(sectionData)}
-          </div>`,
+    performance: () => {
+      const html = getPerformanceStats(sectionData);
+      return `<div id="performance">${html.trim() ? html : emptyState('No performance data in this audit. Run it with --perf to measure Core Web Vitals.')}</div>`;
+    },
     charts: () => `<div id="charts">
           ${getChartsSection()}
           </div>`,
@@ -315,34 +328,123 @@ function generateHTML(
           ${getTechnologyStack(sectionData)}
           </div>`,
     'source-code': () => getSourceCodeAnalysis(sectionData),
-    'content-insights': () => `<div id="content-insights">
-          ${getContentInsights(sectionData)}
-          </div>`,
+    'content-insights': () => {
+      const html = getContentInsights(sectionData);
+      return `<div id="content-insights">${html.trim() ? html : emptyState('No content insights: no crawled pages carry content data.')}</div>`;
+    },
     'pages-table': () => `<div id="pages-table">
           ${getPagesTable(sectionData)}
           </div>`,
   };
+
+  const summary = extractSummary(jsonData as Record<string, unknown>);
+  // Issues header counts come from the Issues table itself (variants merged), so they match the rows below.
+  const tableCounts = isComparison || loadError
+    ? { total: 0, critical: 0, high: 0, medium: 0, low: 0 }
+    : getIssueTableCounts(jsonData as Record<string, unknown>);
+  const severityChips = (['critical', 'high', 'medium', 'low'] as const)
+    .map((sev) => severityChip(sev, tableCounts[sev]))
+    .join('');
+  const overallScore = summary.overallScore;
+  const uiFindingCount = () =>
+    collectUiFindings(
+      pages,
+      ((jsonData as { analysis?: { details?: Record<string, AnalysisDetail> } }).analysis?.details ?? {}) as Parameters<
+        typeof collectUiFindings
+      >[1],
+    ).length;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  /** One-line summary shown in each panel header, so a folded section still says what is inside. */
+  const panelMeta: Record<HtmlSectionId, () => string> = {
+    'executive-summary': () =>
+      [
+        !selection.noScore && typeof overallScore === 'number' ? `Site health ${overallScore}/100` : '',
+        `${crawlCounts.crawled} pages crawled`,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    'issues-detail': () =>
+      isComparison
+        ? 'Side-by-side issue comparison'
+        : tableCounts.total > 0
+          ? `${plural(tableCounts.total, 'issue type')}, most severe first`
+          : 'No issues found',
+    'ui-issues': () => {
+      const n = uiFindingCount();
+      return n > 0 ? `${plural(n, 'visual defect')} with screenshots` : 'No UI issues found';
+    },
+    performance: () => performanceMeta(pages),
+    charts: () => 'Issue severity and frequency, status codes, word count, indexability',
+    'technology-stack': () => {
+      const n = countDetectedTechnologies(pages);
+      return n > 0 ? `${n} ${n === 1 ? 'technology' : 'technologies'} detected` : 'No technologies detected';
+    },
+    'source-code': () => 'Findings from the linked source repository',
+    'content-insights': () => 'Internal linking, CTAs, code coverage, outbound links, response headers',
+    history: () => {
+      const labels = (trendData as { labels?: unknown[] } | null)?.labels?.length ?? 1;
+      return labels >= 2 ? `Trends across ${labels} audits` : 'Trends appear after your second audit';
+    },
+    'pages-table': () => `${plural(pages.length, 'page')} · filter, sort and export`,
+  };
+
   const chosen = selection.sections;
   // The UI Issues section exists only when the visual check ran and is in this report.
   const hidden = new Set<HtmlSectionId>(jsonData.visual === true ? [] : ['ui-issues']);
-  const inOrder = (defaults: HtmlSectionId[]) =>
-    (chosen ? chosen.filter((id) => defaults.includes(id)) : defaults).filter((id) => !hidden.has(id));
-  const navLinks = inOrder(DEFAULT_NAV_ORDER)
-    .map((id) => NAV_LINKS[id])
-    .join('\n          ');
-  const sectionTabs = inOrder(DEFAULT_TAB_ORDER)
+  const order = (chosen ? chosen.filter((id) => DEFAULT_BODY_ORDER.includes(id)) : DEFAULT_BODY_ORDER).filter(
+    (id) => !hidden.has(id),
+  );
+  const rendered = order
+    .map((id) => ({ id, html: bodyFragments[id]() }))
+    .filter((s) => s.html.trim() !== '');
+  const panels = rendered.map(({ id, html }) =>
+    renderPanel({
+      id,
+      title: PANEL_TITLES[id],
+      meta: loadError ? undefined : html.includes('class="panel-empty"') ? 'No data' : panelMeta[id](),
+      chips: id === 'issues-detail' ? severityChips : undefined,
+      open: OPEN_BY_DEFAULT.has(id),
+      body: html,
+    }),
+  );
+  const configPanel = renderPanel({
+    id: 'configuration',
+    title: 'Crawl setup',
+    meta: 'robots.txt, sitemaps, crawl coverage and timing',
+    body: `<div id="configuration">${getConfigInfo(sectionData)}</div>`,
+  });
+  // The default layout keeps the crawl setup just before the pages table; a preset puts it last.
+  const lastIsPages = !chosen && rendered.at(-1)?.id === 'pages-table';
+  panels.splice(lastIsPages ? panels.length - 1 : panels.length, 0, configPanel);
+  // Tabs point at the section wrapper; the panel script opens the folded panel around it.
+  const tabs: Array<[string, string]> = rendered.map((r) => [
+    r.id === 'source-code' ? 'source-code-analysis' : r.id,
+    TAB_LABELS[r.id],
+  ]);
+  tabs.splice(lastIsPages ? tabs.length - 1 : tabs.length, 0, ['configuration', 'Setup']);
+  const sectionTabs = tabs
     .map(
-      (id, i) =>
-        `<button class="section-tab${i === 0 ? ' active' : ''}" data-target="${id}">${TAB_LABELS[id]}</button>`,
+      ([anchor, label], i) =>
+        `<a class="section-tab${i === 0 ? ' active' : ''}" href="#${anchor}" data-target="${anchor}">${label}</a>`,
     )
     .join('\n              ');
-  const bodyHtml = inOrder(DEFAULT_BODY_ORDER).map((id) => bodyFragments[id]());
-  // The default layout keeps config info just before the pages table; a preset puts it last.
-  const configAt = chosen ? bodyHtml.length : bodyHtml.length - 1;
-  bodyHtml.splice(configAt, 0, getConfigInfo(sectionData));
-  const sectionsHtml = bodyHtml.join('\n\n          ');
+  const sectionsHtml = panels.join('\n\n          ');
 
   const safeCompareDomain = isComparison && comparisonOpts ? sanitizeDomainName(comparisonOpts.compareDomainName) : '';
+  const generatedAt = new Date();
+  const timingInfo = timing as Record<string, unknown>;
+  const notCrawled = (jsonData.sitemaps?.total ?? 0) - pages.length;
+  const headerStats = [
+    ...pageCountStats(crawlCounts),
+    ...(notCrawled > 0 ? [{ label: 'Not Crawled', value: notCrawled, tone: '--color-warning' }] : []),
+  ];
+  const scope = [
+    `${pagesFromSitemap} from sitemap`,
+    ...(pagesDiscovered > 0 ? [`${pagesDiscovered} discovered via links`] : []),
+    ...(pagesWithMetrics.length > 0 ? [`${pagesWithMetrics.length} with performance data`] : []),
+    jsonData.isMultiLang ? 'Multilanguage site' : 'Single language',
+  ];
 
   const htmlContent = `
   <!DOCTYPE html>
@@ -364,123 +466,58 @@ function generateHTML(
       <!-- Skip to content for keyboard users -->
       <a href="#executive-summary" class="skip-link">Skip to content</a>
 
-      <!-- Dark mode toggle -->
-
-      <!-- Sticky navigation sidebar -->
-      <nav class="report-nav" id="reportNav" aria-label="Report sections">
-          ${navLinks}
-      </nav>
-
       <div class="container">
-          <header>
-              <div class="fr-header-bar">
-                  <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
-                  <span class="fr-header-tag">Audit</span>
-              </div>
-              ${jsonData.branding?.logo ? `<img src="${escapeHtml(jsonData.branding.logo)}" alt="Logo" style="max-height:40px;margin-bottom:10px;">` : ''}
-              <h1>${jsonData.branding?.name ? escapeHtml(jsonData.branding.name) + ' - ' : ''}${isComparison ? 'SEO Comparison Report' : 'Audit report'}</h1>
-              <p class="subtitle">Audit type: ${escapeHtml(auditTypeLabel(selection.preset))}</p>
-              <p class="subtitle">${isComparison ? `${escapeHtml(safeDomainName)} vs ${escapeHtml(safeCompareDomain)}` : escapeHtml(safeDomainName)}</p>
-              <p class="subtitle">Generated on <time datetime="${new Date().toISOString()}" id="reportTimestamp">${new Date().toLocaleString()}</time></p>
-              ${(timing as Record<string, unknown>).elapsedTimeFormatted ? `<p class="subtitle">Duration: ${escapeHtml((timing as Record<string, unknown>).elapsedTimeFormatted as string)}</p>` : ''}
-              <div class="stats">
-                  ${renderPageCountStats(crawlCounts)}
-                  ${
-                    (jsonData.sitemaps?.total ?? 0) > pages.length
-                      ? `
-                  <div class="stat">
-                      <span class="stat-label">Not Crawled:</span>
-                      <span class="stat-value" style="color: var(--color-warning);">${(jsonData.sitemaps?.total ?? 0) - pages.length}</span>
-                  </div>
-                  `
-                      : ''
-                  }
-                  ${
-                    pagesWithMetrics.length > 0
-                      ? `
-                  <div class="stat">
-                      <span class="stat-label">With Performance Data:</span>
-                      <span class="stat-value">${pagesWithMetrics.length}</span>
-                  </div>
-                  `
-                      : ''
-                  }
-                  <div class="stat">
-                      <span class="stat-label">In Sitemap:</span>
-                      <span class="stat-value" style="color: var(--color-link);">${pagesFromSitemap}</span>
-                  </div>
-                  ${
-                    pagesDiscovered > 0
-                      ? `
-                  <div class="stat">
-                      <span class="stat-label">Discovered:</span>
-                      <span class="stat-value" style="color: var(--color-warning);">${pagesDiscovered}</span>
-                  </div>
-                  `
-                      : ''
-                  }
-                  <div class="stat">
-                      <span class="stat-label">Multilanguage:</span>
-                      <span class="stat-value" style="color: ${jsonData.isMultiLang ? 'var(--color-success)' : 'var(--color-text-muted)'};">${jsonData.isMultiLang ? 'Yes' : 'No'}</span>
-                  </div>
-              </div>
+          ${renderReportHeader({
+            site: isComparison ? `${safeDomainName} vs ${safeCompareDomain}` : safeDomainName,
+            siteUrl: isComparison ? undefined : `https://${safeDomainName}`,
+            title: isComparison ? 'Comparison report' : 'Audit report',
+            brandName: jsonData.branding?.name,
+            brandLogo: jsonData.branding?.logo,
+            auditType: auditTypeLabel(selection.preset),
+            generatedIso: generatedAt.toISOString(),
+            generatedLocal: generatedAt.toLocaleString(),
+            duration: timingInfo.elapsedTimeFormatted as string | undefined,
+            stats: headerStats,
+            scope,
+          })}
 
-              <div class="export-section">
-                  <div class="export-section-inner">
-                      <div class="export-section-label">
-                          📊 <strong>Export Data:</strong> Download audit data for analysis in Excel, Google Sheets, or other tools
-                      </div>
-                      <div class="export-section-actions">
-                          <button onclick="exportCSV('pages')" class="export-btn fr-btn fr-btn--sm">📄 Pages CSV</button>
-                          <button onclick="showIssueFilterModal()" class="export-btn fr-btn fr-btn--sm">⚠️ Issues CSV</button>
-                          <button onclick="exportCSV('performance')" class="export-btn fr-btn fr-btn--sm">⚡ Performance CSV</button>
-                          <button onclick="exportCSV('issues')" class="export-btn fr-btn fr-btn--sm">📋 All Issues CSV</button>
-                          <button onclick="exportCSV('summary')" class="export-btn fr-btn fr-btn--sm">📊 Summary CSV</button>
-                          <button onclick="saveToPDF()" class="pdf-btn fr-btn fr-btn--sm fr-btn--outline">📥 Save to PDF</button>
-                          <button onclick="exportMarkdown()" class="export-btn fr-btn fr-btn--sm fr-btn--outline">📝 Markdown</button>
-                          <button onclick="exportAll()" class="export-btn fr-btn fr-btn--sm fr-btn--outline">📦 Export All</button>
-                      </div>
-                  </div>
-              </div>
-
-              <!-- Issue Export Filter Modal -->
-              <div id="issueFilterModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-                  <div style="background: var(--color-bg-surface); border: 1px solid var(--color-border-default); padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                      <h3 style="margin: 0 0 20px; color: var(--color-text-primary);">Export Issues - Filter Options</h3>
-                      <div style="margin-bottom: 15px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Severity Levels:</label>
-                          <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterCritical" checked> <span style="color: var(--color-error);">Critical</span>
-                              </label>
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterHigh" checked> <span style="color: var(--color-warning);">High</span>
-                              </label>
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterMedium" checked> <span style="color: var(--color-info);">Medium</span>
-                              </label>
-                              <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                                  <input type="checkbox" id="filterLow" checked> <span style="color: var(--color-text-muted);">Low</span>
-                              </label>
-                          </div>
-                      </div>
-                      <div style="margin-bottom: 20px;">
-                          <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Minimum Affected Pages:</label>
-                          <input type="number" id="filterMinPages" value="1" min="1" style="width: 100%; padding: 8px 12px; border: 1px solid var(--color-border-default); border-radius: 6px; font-size: 14px; background: transparent; color: var(--color-text-primary);">
-                      </div>
-                      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                          <button onclick="hideIssueFilterModal()" class="fr-btn fr-btn--sm fr-btn--outline">Cancel</button>
-                          <button onclick="exportFilteredIssues()" class="fr-btn fr-btn--sm">Export CSV</button>
+          <!-- Issue Export Filter Modal -->
+          <div id="issueFilterModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+              <div style="background: var(--color-bg-surface); border: 1px solid var(--color-border-default); padding: 25px; border-radius: 16px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                  <h3 style="margin: 0 0 20px; color: var(--color-text-primary);">Export Issues - Filter Options</h3>
+                  <div style="margin-bottom: 15px;">
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Severity Levels:</label>
+                      <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterCritical" checked> <span style="color: var(--color-error);">Critical</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterHigh" checked> <span style="color: var(--color-warning);">High</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterMedium" checked> <span style="color: var(--color-info);">Medium</span>
+                          </label>
+                          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                              <input type="checkbox" id="filterLow" checked> <span style="color: var(--color-text-muted);">Low</span>
+                          </label>
                       </div>
                   </div>
+                  <div style="margin-bottom: 20px;">
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--color-text-secondary);">Minimum Affected Pages:</label>
+                      <input type="number" id="filterMinPages" value="1" min="1" style="width: 100%; padding: 8px 12px; border: 1px solid var(--color-border-default); border-radius: 6px; font-size: 14px; background: transparent; color: var(--color-text-primary);">
+                  </div>
+                  <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                      <button onclick="hideIssueFilterModal()" class="fr-btn fr-btn--sm fr-btn--outline">Cancel</button>
+                      <button onclick="exportFilteredIssues()" class="fr-btn fr-btn--sm">Export CSV</button>
+                  </div>
               </div>
-          </header>
+          </div>
 
           ${
             loadError
               ? `
           <div class="section" style="background: var(--color-error-bg); border: 1px solid var(--color-error-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-              <h2 style="color: var(--color-error); margin-top: 0;">⚠️ Report Generation Error</h2>
+              <h2 style="color: var(--color-error); margin-top: 0;">Report generation error</h2>
               <p style="color: var(--color-error-text);">An error occurred while loading the audit data. Some sections may be incomplete or missing.</p>
               <details style="margin-top: 10px;">
                   <summary style="cursor: pointer; color: var(--color-error); font-weight: 600;">Error Details</summary>
@@ -509,10 +546,11 @@ function generateHTML(
               : ''
           }
 
-          <!-- Section tabs for quick navigation -->
-          <div class="section-tabs" id="sectionTabs">
+          <!-- Sticky section navigation: jumps to a section and unfolds it -->
+          <nav class="section-tabs" id="sectionTabs" aria-label="Report sections">
               ${sectionTabs}
-          </div>
+              <button type="button" class="section-tab section-tabs__toggle" id="togglePanels" title="Expand or collapse every section (E)">Expand all</button>
+          </nav>
 
           ${sectionsHtml}
 
@@ -520,35 +558,15 @@ function generateHTML(
               <div class="fr-footer-inner">
                   <a class="fr-wordmark" href="https://focusreactive.com" target="_blank" rel="noopener">Focus Reactive<span class="fr-wordmark-dot">.</span></a>
                   <div class="fr-footer-meta">
-                      <p>Audit Tool v${pkg.version} - Generated ${new Date().toISOString()}</p>
-                      <p>Node.js ${process.version} | Playwright | ${pages.length} pages analyzed</p>
+                      <p>Audit Tool v${pkg.version} - Generated ${generatedAt.toISOString()}</p>
+                      <p>Node.js ${process.version} | Playwright | ${pages.length} pages analyzed · Press <kbd>?</kbd> for keyboard shortcuts</p>
                   </div>
                   <div class="fr-footer-actions">
-                      <button onclick="shareReport()" class="fr-btn fr-btn--sm fr-btn--outline">Share</button>
+                      <button onclick="copyScoreSummary()" class="fr-btn fr-btn--sm fr-btn--outline">Copy summary</button>
                       <button onclick="window.print()" class="fr-btn fr-btn--sm fr-btn--outline">Print</button>
                   </div>
               </div>
           </footer>
-      </div>
-
-      <!-- Floating action button menu -->
-      <div class="fab-container">
-          <div class="fab-menu" id="fabMenu">
-              <div class="fab-label">Share</div>
-              <button class="fab-item" onclick="shareReport()">📤 Share Report</button>
-              <button class="fab-item" onclick="copyScoreSummary()">📋 Copy Summary</button>
-              <div class="fab-divider"></div>
-              <div class="fab-label">Export</div>
-              <button class="fab-item" onclick="exportCSV('summary')">📊 Summary CSV</button>
-              <button class="fab-item" onclick="exportCSV('issues')">⚠️ Issues CSV</button>
-              <button class="fab-item" onclick="exportCSV('pages')">📄 Pages CSV</button>
-              <button class="fab-item" onclick="exportCSV('performance')">⚡ Performance CSV</button>
-              <button class="fab-item" onclick="exportCSV('issues')">📋 Issues CSV</button>
-              <button class="fab-item" onclick="exportMarkdown()">📝 Markdown</button>
-              <button class="fab-item" onclick="saveToPDF()">📥 PDF</button>
-              <button class="fab-item" onclick="exportAll()">📦 Export All</button>
-          </div>
-          <button class="fab-toggle" id="fabToggle" title="Quick actions">+</button>
       </div>
 
       <!-- Back to top button -->
@@ -558,11 +576,6 @@ function generateHTML(
       <div class="global-search" id="globalSearch">
           <input type="text" id="globalSearchInput" placeholder="Search report..." autocomplete="off">
           <span class="search-count" id="searchCount"></span>
-      </div>
-
-      <!-- Keyboard shortcut hint -->
-      <div class="keyboard-hint" id="keyboardHint">
-          Press <kbd>?</kbd> for keyboard shortcuts &middot; <kbd>s</kbd> to search
       </div>
 
       <!-- Modal for detailed information -->
@@ -589,6 +602,7 @@ function generateHTML(
       </div>
 
       ${getScripts({ ...sectionData, domainName: safeDomainName })}
+      ${getPanelScript()}
   </body>
   </html>`;
 

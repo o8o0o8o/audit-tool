@@ -67,7 +67,7 @@ function getPerformanceStats(data: ReportSectionData) {
 
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Performance Statistics</h2>
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">Performance Statistics</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Statistical analysis based on ${pagesWithPerf.length} pages with performance data</p>
 
       ${cruxSection}
@@ -194,8 +194,7 @@ function getCrUXSection(
     <div style="margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, var(--color-success-bg) 0%, var(--color-success-bg) 100%); border-radius: var(--radius-xl); border: 2px solid #10b981;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <div>
-          <h3 style="margin: 0; color: var(--color-success-text); display: flex; align-items: center; gap: 8px;">
-            🌐 Chrome UX Report (CrUX) - Real User Data
+          <h3 style="margin: 0; color: var(--color-success-text); display: flex; align-items: center; gap: 8px;">Chrome UX Report (CrUX) - Real User Data
             <span style="background: var(--color-success); color: #000; font-size: var(--font-size-2xs); padding: 2px 6px; border-radius: var(--radius-sm); font-weight: var(--font-weight-semibold);">FIELD DATA</span>
           </h3>
           <p style="margin: 5px 0 0; font-size: var(--font-size-xs); color: var(--color-success-text);">
@@ -348,7 +347,7 @@ function getSlowestPagesSection(pagesArray: PageInfo[]) {
 
   return `
     <div style="margin-top: 20px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🐢 Slowest Pages</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Slowest Pages</h3>
       <div style="background: var(--color-bg-surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);">
         <table style="width: 100%; border-collapse: collapse; min-width: auto;">
           <thead>
@@ -419,7 +418,7 @@ function getVitalsAttributionSection(pagesArray: PageInfo[]) {
 
   return `
     <div style="margin-bottom: 30px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🔍 LCP Bottleneck Analysis</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">LCP Bottleneck Analysis</h3>
       <div style="background: var(--color-bg-surface); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-default);">
         <p style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: 15px;">
           Analysis of ${total} pages with LCP data — showing what's slowing down the Largest Contentful Paint.
@@ -563,7 +562,7 @@ function getComparisonPerformanceStats(jsonData: Record<string, unknown>, compar
 
   return `
     <div class="charts-section">
-      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">📈 Performance Comparison</h2>
+      <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">Performance Comparison</h2>
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">
         ${originLabel}: ${origin.pagesWithPerf.length} pages | ${compareLabel}: ${compare.pagesWithPerf.length} pages with performance data
       </p>
@@ -627,7 +626,7 @@ function getComparisonSlowestPages(
 
   return `
     <div style="margin-top: 20px;">
-      <h3 style="color: var(--gray-800); margin-bottom: 12px;">🐢 Slowest Pages</h3>
+      <h3 style="color: var(--gray-800); margin-bottom: 12px;">Slowest Pages</h3>
       <div style="background: var(--color-bg-surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);">
         <table style="width: 100%; border-collapse: collapse;">
           <thead>

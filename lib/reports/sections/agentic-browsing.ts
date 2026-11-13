@@ -7,6 +7,7 @@
 
 import { isAgenticFinding } from '../../analyzers/agentic/agentic-checks';
 import { agenticCoverage } from '../../scoring/score-calculator';
+import { findingChips, renderFindingList, renderSubpanel } from './report-panel';
 import { escapeHtml } from '../html-utils';
 import type { AgenticCoverage, PageInfo } from '../../types';
 
@@ -80,24 +81,24 @@ export function getAgenticBrowsingSection(
   score?: number,
 ): string {
   if (!state?.enabled) return '';
-  const findings = Object.entries(details).filter(([m]) => isAgenticFinding(m.replace(/<[^>]*>/g, '')));
+  const findings = Object.entries(details)
+    .filter(([m]) => isAgenticFinding(m.replace(/<[^>]*>/g, '')))
+    .map(([m, d]) => [m.replace(/<[^>]*>/g, ''), d] as [string, { severity?: string; count?: number }]);
   const notes = agenticCoverageNotes(state)
-    .map((n) => `<p class="agentic-note" style="font-size:var(--font-size-sm);color:var(--gray-600);">${escapeHtml(n)}</p>`)
+    .map((n) => `<p class="agentic-note subpanel-note">${escapeHtml(n)}</p>`)
     .join('');
   const scoreHtml =
     score === undefined ? '' : ` <span class="agentic-score" style="font-weight:600;">${score}/100</span>`;
   const body = isClean(state, findings.length)
     ? `<div class="agentic-clean" style="border:1px solid var(--color-success);border-radius:var(--radius-lg);padding:10px 14px;margin-bottom:16px;font-size:var(--font-size-sm);"><strong>${NO_AGENTIC_ISSUES_TEXT}.</strong> ${escapeHtml(CLEAN_DETAIL)}</div>`
     : findings.length > 0
-      ? `<ul class="agentic-findings">${findings
-          .map(
-            ([m, d]) =>
-              `<li><strong>${escapeHtml(String(d.severity ?? '').toUpperCase())}</strong> ${escapeHtml(m.replace(/<[^>]*>/g, ''))}${d.count ? ` <span>(${d.count})</span>` : ''}</li>`,
-          )
-          .join('')}</ul>`
+      ? renderFindingList('agentic-findings', findings)
       : '';
-  return `<div class="agentic-browsing-section" id="agentic-browsing" style="margin-top:24px;">
-      <h2 style="margin:0 0 12px;font-size:var(--font-size-lg);color:var(--gray-800);">${AGENTIC_SECTION_TITLE}${scoreHtml}</h2>
-      ${body}${notes}
-    </div>`;
+  return renderSubpanel({
+    id: 'agentic-browsing',
+    className: 'agentic-browsing-section',
+    heading: `${AGENTIC_SECTION_TITLE}${scoreHtml}`,
+    chips: findingChips(findings),
+    body: `${body}${notes}`,
+  });
 }

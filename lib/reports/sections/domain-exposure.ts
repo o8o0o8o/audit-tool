@@ -14,6 +14,7 @@ import {
   type SiteChecksData,
 } from '../../analyzers/site-checks/site-checks-types';
 import { escapeHtml } from '../html-utils';
+import { findingChips, renderFindingList, renderSubpanel } from './report-panel';
 
 export const DOMAIN_EXPOSURE_TITLE = 'Domain & Exposure';
 
@@ -54,40 +55,35 @@ function renderChecksBlock(
     .map((c) => {
       const s = STATUS_LABEL[c.status] ?? STATUS_LABEL.skipped;
       return `<tr>
-          <td style="padding:6px 10px;">${escapeHtml(c.label)}</td>
-          <td style="padding:6px 10px;font-weight:600;color:${s.color};">${s.text}</td>
-          <td style="padding:6px 10px;color:var(--gray-600);font-size:var(--font-size-sm);word-break:break-word;">${escapeHtml(c.note ?? '')}</td>
+          <td>${escapeHtml(c.label)}</td>
+          <td style="font-weight:600;color:${s.color};white-space:nowrap;">${s.text}</td>
+          <td style="color:var(--color-text-muted);word-break:break-word;">${escapeHtml(c.note ?? '')}</td>
         </tr>`;
     })
     .join('');
   const table = rows
-    ? `<table class="domain-exposure-checks" style="width:100%;border-collapse:collapse;margin-bottom:16px;">
-        <thead><tr>
-          <th style="text-align:left;padding:6px 10px;">Check</th>
-          <th style="text-align:left;padding:6px 10px;">Status</th>
-          <th style="text-align:left;padding:6px 10px;">Details</th>
-        </tr></thead>
+    ? `<table class="domain-exposure-checks">
+        <thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`
     : '';
 
+  const stripped = findings.map(([m, d]) => [strip(m), d] as [string, { severity?: string; count?: number }]);
   const list = findings.length
-    ? `<ul class="domain-exposure-findings">${findings
-        .map(
-          ([m, d]) =>
-            `<li><strong>${escapeHtml(String(d.severity ?? '').toUpperCase())}</strong> ${escapeHtml(strip(m))}${d.count ? ` <span>(${d.count})</span>` : ''}</li>`,
-        )
-        .join('')}</ul>`
+    ? renderFindingList('domain-exposure-findings', stripped)
     : `<div class="domain-exposure-clean" style="border:1px solid var(--color-success);border-radius:var(--radius-lg);padding:10px 14px;font-size:var(--font-size-sm);"><strong>${escapeHtml(opts.cleanText)}</strong></div>`;
 
   const domain = siteChecks?.domain
-    ? ` <span style="font-weight:400;color:var(--gray-600);font-size:var(--font-size-sm);">${escapeHtml(siteChecks.domain)}</span>`
+    ? ` <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--font-size-sm);">${escapeHtml(siteChecks.domain)}</span>`
     : '';
-  return `<div class="domain-exposure-section" id="${opts.id}" style="margin-top:24px;">
-      <h2 style="margin:0 0 12px;font-size:var(--font-size-lg);color:var(--gray-800);">${escapeHtml(opts.title)}${domain}</h2>
-      ${table}${list}
-      <p style="font-size:var(--font-size-sm);color:var(--gray-600);">Full details and affected pages for each finding are in the issues list above.</p>
-    </div>`;
+  return renderSubpanel({
+    id: opts.id,
+    className: 'domain-exposure-section',
+    heading: `${escapeHtml(opts.title)}${domain}`,
+    chips: findingChips(stripped),
+    body: `${list}${table}
+      <p class="subpanel-note">Full details and affected pages for each finding are in the issues list above.</p>`,
+  });
 }
 
 export function getDomainExposureSection(

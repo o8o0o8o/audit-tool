@@ -12,13 +12,13 @@ const PAGE = 'https://site.test/about';
 const rect = (y: number, height = 40) => ({ x: 10, y, width: 100, height });
 
 describe('visual highlights', () => {
-  it('boxes broken images, failed requests and source-less media', () => {
+  it('boxes broken images, failed requests and media with network errors', () => {
     const imgs = [
       { src: 'https://site.test/a.png', complete: true, naturalWidth: 0, displayWidth: 100, displayHeight: 40, rect: rect(100) },
       { src: 'https://site.test/b.png', complete: true, naturalWidth: 0, displayWidth: 100, displayHeight: 40, rect: rect(300) },
       { src: 'https://site.test/ok.png', complete: true, naturalWidth: 50, displayWidth: 100, displayHeight: 40, rect: rect(500) },
     ];
-    const media = [{ src: 'https://site.test/v.mp4', tag: 'video' as const, noSource: true, rect: rect(700) }];
+    const media = [{ src: 'https://site.test/v.mp4', tag: 'video' as const, errorCode: 2, rect: rect(700) }];
     const out = buildMediaHighlights(
       imgs,
       media,

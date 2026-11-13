@@ -17,7 +17,8 @@ export interface ImageSnapshot {
 export interface MediaSnapshot {
   src: string;
   tag: 'video' | 'audio';
-  noSource: boolean;
+  /** `MediaError.code` (2 = network, 4 = source not supported), absent when no error. */
+  errorCode?: number;
   rect?: DocRect;
 }
 
@@ -58,9 +59,9 @@ export function buildMediaHighlights(
     const status = failed.get(el.src);
     if (status !== undefined) out.push({ kind: FAILED_MEDIA_MESSAGE, rect: el.rect, label: `HTTP ${status}` });
   }
-  const noSource = new Set(brokenMedia);
+  const networkFailed = new Set(brokenMedia);
   for (const m of media) {
-    if (m.rect && noSource.has(m.src || `<${m.tag}>`) && !failed.has(m.src)) {
+    if (m.rect && networkFailed.has(m.src) && !failed.has(m.src)) {
       out.push({ kind: FAILED_MEDIA_MESSAGE, rect: m.rect, label: `${m.tag} failed to load` });
     }
   }
@@ -71,6 +72,16 @@ export function buildMediaHighlights(
 const TRACKING_PIXEL_MAX_PX = 2;
 const MEDIA_RESOURCE_TYPES = new Set(['image', 'media']);
 const DETAIL_URL_LIMIT = 5;
+const MEDIA_ERR_NETWORK = 2;
+
+/**
+ * Audio/video that hit a network error while loading. Deliberately not `NETWORK_NO_SOURCE` or
+ * `MEDIA_ERR_SRC_NOT_SUPPORTED`: Playwright's Chromium has no H.264/AAC, so every working .mp4
+ * ends up there. Media without a src (lazy-loaded) is skipped too; HTTP errors come from the request log.
+ */
+export function classifyBrokenMedia(media: MediaSnapshot[]): string[] {
+  return [...new Set(media.filter((m) => m.src && m.errorCode === MEDIA_ERR_NETWORK).map((m) => m.src))];
+}
 
 /** Images that finished loading yet decoded to nothing. Lazy images not yet loaded (`complete` false) are skipped. */
 export function classifyBrokenImages(imgs: ImageSnapshot[]): string[] {
@@ -133,7 +144,7 @@ class BrokenMediaAnalyzer {
         return {
           src: m.currentSrc || (m.getAttribute('src') ?? ''),
           tag: m.tagName.toLowerCase() as 'video' | 'audio',
-          noSource: m.networkState === HTMLMediaElement.NETWORK_NO_SOURCE,
+          errorCode: m.error?.code,
           rect: docRect(m.getBoundingClientRect()),
         };
       });
@@ -141,7 +152,7 @@ class BrokenMediaAnalyzer {
     });
 
     const brokenImages = classifyBrokenImages(snapshot.imgs);
-    const brokenMedia = snapshot.media.filter((m) => m.noSource).map((m) => m.src || `<${m.tag}>`);
+    const brokenMedia = classifyBrokenMedia(snapshot.media);
     const failedRequests = classifyFailedMediaRequests(requests, brokenImages);
     const issues: Issue[] = [];
 

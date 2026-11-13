@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import {
   BrokenMediaAnalyzer,
   classifyBrokenImages,
+  classifyBrokenMedia,
   classifyFailedMediaRequests,
 } from '../lib/analyzers/visual/broken-media-analyzer';
 import { ISSUE_CATALOG } from '../lib/scoring/seo-catalog';
@@ -59,11 +60,23 @@ void describe('broken media', () => {
     assert.strictEqual(failed.length, 0);
   });
 
+  void it('ignores unplayable codecs and source-less media; keeps network errors', () => {
+    assert.deepStrictEqual(
+      classifyBrokenMedia([
+        { src: 'https://x.test/h264.mp4', tag: 'video', errorCode: 4 },
+        { src: 'https://x.test/ok.webm', tag: 'video' },
+        { src: '', tag: 'video', errorCode: 2 },
+        { src: 'https://x.test/net.mp4', tag: 'video', errorCode: 2 },
+      ]),
+      ['https://x.test/net.mp4'],
+    );
+  });
+
   void it('analyze emits each finding once with the right severity', async () => {
     const page = {
       evaluate: async () => ({
         imgs: [img({ naturalWidth: 0 })],
-        media: [{ src: 'https://x.test/v.mp4', tag: 'video', noSource: true }],
+        media: [{ src: 'https://x.test/v.mp4', tag: 'video', errorCode: 2 }],
       }),
     } as unknown as ChromePage;
     const res = await BrokenMediaAnalyzer.analyze(page, 'https://x.test/', {

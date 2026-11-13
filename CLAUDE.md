@@ -108,6 +108,12 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 - `--no-score` - strip scores and the scoring-rules explanation from the HTML report and the Phase 2 report (CSV export unchanged); with scores on, every score links to the generated `#score-rules` block (`lib/scoring/scoring-rules.ts`)
 - `--preset=<name>` - `quick|standard|deep` (crawl speed) or role presets `sales|marketing|seo|custom` that also select report sections (in order) and finding groups; `--sections=<csv>` / `--checks=<csv>` build a `custom` one. Defined in `lib/presets.ts`; each preset, its data and rationale are in [`docs/audit-presets.md`](docs/audit-presets.md)
 - `--evidence` / `--no-evidence` / `--evidence-cap=<n>` - per-page evidence capture
+- `--passive` - for a site whose owner did not ask for the audit: skip the site probes that go beyond reading published pages (exposed files, staging hosts, open buckets, CORS, bot parity, locale redirect, consent reject, Firebase read, WordPress readme files)
+- `--lead` - lead scan of a prospect site: 25 page loads in total, passive, real-user data instead of the lab run, written to `lead-results/` (never `audit-results/`), no Phase 2 report, no history entry. Driven by `scripts/lead-pipeline.ts`
+
+### scripts/lead-pipeline.ts + lib/leads/
+
+Sales-audit pipeline for the prospect list `docs/gtm/companies.csv`: fingerprint → score/select → lead scan → truth gate → teaser → review. **Read `docs/gtm/sales-audit-system.md` and the "Lead pipeline" paragraph of `docs/architecture.md` before changing `lib/leads/`, `--lead` or `--passive`.** Rules that must hold: the full audit is unchanged without `--lead` (`tests/lead-mode-isolation.test.ts`); lead scans never write under `audit-results/`; prospect sites get passive checks only; a teaser fact needs a second-method re-check and a passing control; a blocked request is never evidence; teaser text never claims a cause; `do_not_contact` rows are never touched.
 
 ### lib/constants.ts
 

@@ -188,8 +188,8 @@ interface PageLike {
   evaluate<T>(fn: () => T): Promise<T>;
 }
 
-/** Runtime globals → versions. Runs in the browser. */
-function readRuntimeVersions(): Record<string, string> {
+/** Runtime globals → versions. Runs in the browser, so it must stay self-contained (no outer references). */
+export function readRuntimeVersions(): Record<string, string> {
   const w = window as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const out: Record<string, string> = {};
   const set = (k: string, v: unknown) => {

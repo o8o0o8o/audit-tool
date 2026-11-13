@@ -69,6 +69,8 @@ This runs the whole flow: crawl + Lighthouse field data + PSI lab scores per rep
 | `--no-score`          | —             | Strip all scores and the scoring-rules explanation from the HTML and curated reports (CSV export unchanged) |
 | `--visual`            | off           | Run the visual (UI defect) checks: broken images/media, unrendered template tokens, lorem ipsum, mojibake, clipped text. Findings go to the User Experience section; with no defects the reports say "No UI issues found". Also `visual: true` in `.seoauditrc`; `--no-visual` overrides it. On `--proceed` the resumed audit keeps its original setting |
 | `--no-agentic`        | on            | Skip the agentic browsing checks (on by default): interactive elements without an accessible name, unlabeled click targets without an interactive role, inputs without a form label, content reachable only via hover-only or JS-only interactions, and a missing or invalid llms.txt (checked once per site). Findings go to the Agentic Browsing section with its own score. Also `agentic: false` in `.seoauditrc`; `--agentic` overrides it. On `--proceed` the resumed audit keeps its original setting |
+| `--passive`           | off           | For a site whose owner did not ask for the audit: skip the site probes that go beyond reading published pages (requests for unlinked files such as `.env` and `.git`, storage bucket listings, forged `Origin` headers, staging hosts from certificate logs, crawler impersonation, the locale redirect test, the consent "Reject" click, Firebase database reads, WordPress plugin readme files). The skipped checks show as "not run in passive mode" |
+| `--lead`              | off           | Lead scan of a prospect's site: at most 25 page loads in total (homepage, its navigation, one page per template), 3 at a time, `--passive`, visual checks on, real-user (CrUX) data instead of the throttled lab run, robots.txt `Disallow` honoured. Writes to `lead-results/<domain>/<timestamp>/`, never to `audit-results/`; no curated PDF, no history entry. Driven by `scripts/lead-pipeline.ts`; see [`docs/gtm/sales-audit-system.md`](docs/gtm/sales-audit-system.md) |
 | `--no-phase2`         | —             | Skip curated PDF generation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `--content-research`  | off           | Phase 4: competitive content research — crawl competitor content, compute the topic-coverage gap, and emit a separate `content-research-report.{md,pdf}` + content plan. Keyless by default; with `--llm` it discovers competitors (when none supplied) and synthesizes the plan. Standalone re-runnable. |
 | `--competitors=<list>`| none          | Competitor hosts for `--content-research`: comma-separated (`a.com,b.com`) or a path to a file (one URL per line). Optional — omit to let `--llm` discover them. Also settable via `competitors: []` in `.seoauditrc`. |
@@ -183,6 +185,23 @@ npx tsx historyManager.ts save audit-results/example.com/<timestamp>/SEOAnalysis
 # Compare two audits
 npx tsx generateComparison.ts example.com 0 1
 ```
+
+## Lead pipeline (prospect sites)
+
+`scripts/lead-pipeline.ts` runs the sales-audit stages over the prospect list in `docs/gtm/companies.csv`. It is separate from the full audit: lead scans go to `lead-results/`, and a run without `--lead` behaves exactly as before.
+
+```bash
+npx tsx scripts/lead-pipeline.ts fingerprint          # stage 1: CMS, front end, versions per site (homepage + robots.txt)
+npx tsx scripts/lead-pipeline.ts summary              # counts per stack kind
+npx tsx scripts/lead-pipeline.ts select --top=60      # stage 2: fit score, pick who to scan
+npx tsx scripts/lead-pipeline.ts scan                 # stages 3-6: lead scan, truth gate, teaser
+npx tsx scripts/lead-pipeline.ts review               # lead-results/leads-review.html
+npx tsx scripts/lead-pipeline.ts approve <domain>     # or: reject <domain> --highlight=1 --reason="…"
+npx tsx scripts/lead-pipeline.ts recheck <domain>     # on the day of sending
+npx tsx scripts/lead-pipeline.ts mark <domain> sent   # then replied / call_booked / do_not_contact …
+```
+
+Run the script without arguments for every command and option. Design and rules: [`docs/gtm/sales-audit-system.md`](docs/gtm/sales-audit-system.md); plan and status: [`docs/gtm/sales-audit-roadmap.md`](docs/gtm/sales-audit-roadmap.md). The end-of-life table `lib/data/eol-versions.json` is generated: `npx tsx scripts/build-eol-data.ts`.
 
 ## Configuration file
 

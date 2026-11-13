@@ -6,21 +6,27 @@
 
 import type { ChromePage, NetworkRequest, ParsedPage } from '../../types';
 
-interface TechSignaturePatterns {
+export interface TechSignaturePatterns {
   html?: RegExp[];
   meta?: Record<string, RegExp>;
   scripts?: RegExp[];
   headers?: Record<string, RegExp>;
   cookies?: RegExp[];
   globals?: string[];
+  /**
+   * Hosts that serve the technology's files (image CDN, asset API), matched against the HTML and the
+   * script URLs. Reported as `asset-host`: it proves that files come from that service, not that the
+   * site is built on it — a legacy CMS can use a headless CMS as an image store.
+   */
+  assetHosts?: RegExp[];
 }
 
-interface TechSignature {
+export interface TechSignature {
   name: string;
   patterns: TechSignaturePatterns;
 }
 
-interface DetectionMethod {
+export interface DetectionMethod {
   type: string;
   pattern?: string;
   matched?: string;
@@ -30,7 +36,7 @@ interface DetectionMethod {
   variable?: string;
 }
 
-interface DetectedTechnology {
+export interface DetectedTechnology {
   name: string;
   category: string;
   confidence: string;
@@ -64,38 +70,89 @@ class TechnologyDetector {
           html: [/wp-content/i, /wp-includes/i],
           meta: { generator: /wordpress/i },
           scripts: [/wp-content|wp-includes/i],
+          // The REST API discovery header and the pingback header are sent by WordPress itself.
+          headers: { link: /api\.w\.org/i, 'x-pingback': /xmlrpc\.php/i },
+          cookies: [/(?:^|[\s,;])(?:wordpress_[a-z0-9_]+|wp-settings-\d+)=/i],
         },
       },
       {
         name: 'Drupal',
         patterns: {
-          html: [/Drupal\.settings/i, /drupal\.js/i],
+          html: [/Drupal\.settings/i, /drupal\.js/i, /data-drupal-selector=|drupal-settings-json/i],
           meta: { generator: /drupal/i },
-          headers: { 'x-drupal-cache': /./i },
+          headers: { 'x-drupal-cache': /./i, 'x-drupal-dynamic-cache': /./i, 'x-generator': /drupal/i },
         },
       },
-      { name: 'Joomla', patterns: { html: [/\/media\/jui\//i], meta: { generator: /joomla/i } } },
+      {
+        name: 'Joomla',
+        patterns: { html: [/\/media\/jui\//i, /joomla-script-options/i], meta: { generator: /joomla/i } },
+      },
       {
         name: 'Shopify',
         patterns: {
           html: [/cdn\.shopify\.com/i, /Shopify\.theme/i],
           scripts: [/cdn\.shopify\.com/i],
-          cookies: [/^_shopify/i],
+          headers: { 'x-shopid': /./i, 'x-shopify-stage': /./i, 'powered-by': /shopify/i },
+          cookies: [/(?:^|[\s,;])_shopify/i],
         },
       },
       {
         name: 'Squarespace',
-        patterns: { html: [/squarespace\.com/i, /static\.squarespace/i], scripts: [/squarespace/i] },
+        // A link to squarespace.com / wix.com / webflow.com / ghost.org in the page text is not a signal:
+        // only the platforms' own asset hosts, markup and headers count.
+        patterns: {
+          html: [/static1\.squarespace\.com|squarespace-cdn\.com|static\.squarespace/i],
+          scripts: [/static1\.squarespace\.com|squarespace-cdn\.com|assets\.squarespace\.com/i],
+          headers: { server: /squarespace/i },
+        },
       },
-      { name: 'Wix', patterns: { html: [/wix\.com/i, /wixstatic\.com/i], meta: { generator: /wix/i } } },
-      { name: 'Webflow', patterns: { html: [/webflow/i], meta: { generator: /webflow/i }, scripts: [/webflow/i] } },
-      { name: 'Ghost', patterns: { meta: { generator: /ghost/i }, html: [/ghost\.org/i] } },
-      { name: 'Contentful', patterns: { scripts: [/contentful\.com|\/contentful\./i] } },
-      { name: 'Sanity', patterns: { scripts: [/sanity\.io|cdn\.sanity\.io/i] } },
+      {
+        name: 'Wix',
+        patterns: {
+          html: [/static\.wixstatic\.com|static\.parastorage\.com/i],
+          meta: { generator: /wix\.com/i },
+          headers: { 'x-wix-request-id': /./i },
+        },
+      },
+      {
+        name: 'Webflow',
+        patterns: {
+          html: [/data-wf-(?:site|page)=/i, /assets\.website-files\.com|cdn\.prod\.website-files\.com/i],
+          meta: { generator: /webflow/i },
+          scripts: [/website-files\.com\/.*webflow[.\w-]*\.js/i],
+        },
+      },
+      {
+        name: 'Ghost',
+        patterns: {
+          meta: { generator: /ghost/i },
+          html: [/data-ghost=/i],
+          scripts: [/\/ghost\/(?:portal|sodo-search)|\/public\/cards\.min\.js/i],
+        },
+      },
+      { name: 'Contentful', patterns: { scripts: [/\/contentful\./i], assetHosts: [/ctfassets\.net|cdn\.contentful\.com/i] } },
+      { name: 'Sanity', patterns: { assetHosts: [/cdn\.sanity\.io|[a-z0-9]+\.api(?:cdn)?\.sanity\.io/i] } },
       { name: 'Strapi', patterns: { scripts: [/\/strapi\//i] } },
-      { name: 'HubSpot CMS', patterns: { html: [/hs-scripts\.com/i, /hubspot/i], scripts: [/hubspot/i] } },
+      {
+        // The tracking script (hs-scripts.com) is the marketing product, not the CMS: only signals of a
+        // page actually served by HubSpot CMS count here.
+        name: 'HubSpot CMS',
+        patterns: {
+          html: [/hs_cos_wrapper/i, /\/_hcms\//i],
+          meta: { generator: /hubspot/i },
+          headers: { 'x-hs-hub-id': /./i },
+        },
+      },
       { name: 'BigCommerce', patterns: { html: [/bigcommerce/i], scripts: [/bigcommerce/i] } },
-      { name: 'Magento', patterns: { html: [/mage\/cookies/i, /Magento_/i], cookies: [/^PHPSESSID/i, /^frontend/i] } },
+      {
+        // PHPSESSID is set by any PHP application, so it is not a Magento signal.
+        name: 'Magento',
+        patterns: {
+          html: [/mage\/cookies/i, /Magento_/i, /text\/x-magento-init/i],
+          headers: { 'x-magento-tags': /./i, 'x-magento-cache-debug': /./i },
+          cookies: [/(?:^|[\s,;])(?:frontend|mage-cache-sessid|mage-messages)=/i],
+        },
+      },
       { name: 'PrestaShop', patterns: { html: [/prestashop/i], meta: { generator: /prestashop/i } } },
       {
         name: 'Concrete CMS',
@@ -103,33 +160,76 @@ class TechnologyDetector {
           html: [/\/concrete\/(?:js|css|images|themes)\//i, /ccm_application_url|ccm_dispatcher_filename/i],
           scripts: [/\/concrete\/js\//i],
           meta: { generator: /concrete ?(?:5|cms)/i },
-          cookies: [/(?:^|[\s,;])CONCRETE5?=/],
+          cookies: [/(?:^|[\s,;])CONCRETE5?=/i],
           globals: ['CCM_APPLICATION_URL', 'CCM_DISPATCHER_FILENAME'],
         },
       },
       {
         name: 'TYPO3',
-        patterns: { html: [/\/typo3conf\/|\/typo3temp\//i], meta: { generator: /typo3/i } },
+        patterns: {
+          html: [/\/typo3conf\/|\/typo3temp\//i],
+          meta: { generator: /typo3/i },
+          cookies: [/(?:^|[\s,;])fe_typo_user=/i],
+        },
       },
       {
         name: 'Craft CMS',
-        patterns: { cookies: [/CraftSessionId=/], headers: { 'x-powered-by': /craft cms/i } },
+        // Craft sets its session cookie only once a session starts, so the public signals are the
+        // generator tag (often from the SEOmatic plugin, which exists only for Craft), control-panel
+        // resource paths and the CSRF field of its forms.
+        patterns: {
+          html: [/\/cpresources\/|name="craft_csrf_token"/i],
+          meta: { generator: /craft cms|seomatic/i },
+          cookies: [/CraftSessionId=/i],
+          headers: { 'x-powered-by': /craft cms/i },
+        },
       },
       { name: 'Contao', patterns: { meta: { generator: /contao/i } } },
-      { name: 'ExpressionEngine', patterns: { cookies: [/(?:^|[\s,;])exp_[a-z_]+=/] } },
-      { name: 'Sitecore', patterns: { html: [/\/-\/media\//i], cookies: [/SC_ANALYTICS_GLOBAL_COOKIE=/] } },
+      { name: 'ExpressionEngine', patterns: { cookies: [/(?:^|[\s,;])exp_[a-z_]+=/i] } },
+      {
+        name: 'Sitecore',
+        patterns: { html: [/\/-\/(?:media|jssmedia)\//i], cookies: [/SC_ANALYTICS_GLOBAL_COOKIE=/i] },
+      },
       { name: 'Adobe Experience Manager', patterns: { html: [/\/etc\.clientlibs\//i, /\/content\/dam\//i] } },
       { name: 'Optimizely CMS', patterns: { html: [/\/globalassets\/|\/contentassets\/|\/episerver\//i] } },
-      { name: 'Kentico', patterns: { cookies: [/CMSPreferredCulture=/] } },
+      {
+        name: 'Kentico',
+        patterns: {
+          html: [/\/cmspages\/getresource\.ashx|\/getmedia\/[0-9a-f-]{36}\//i],
+          cookies: [/CMSPreferredCulture=/i],
+        },
+      },
       { name: 'Umbraco', patterns: { html: [/\/umbraco\//i] } },
-      { name: 'Sitefinity', patterns: { html: [/\/sitefinity\//i] } },
-      { name: 'DNN', patterns: { html: [/\/desktopmodules\/|\/portals\/\d/i] } },
-      { name: 'Storyblok', patterns: { html: [/a\.storyblok\.com/i] } },
-      { name: 'Prismic', patterns: { html: [/images\.prismic\.io/i] } },
-      { name: 'DatoCMS', patterns: { html: [/datocms-assets\.com/i] } },
-      { name: 'Hygraph', patterns: { html: [/graphassets\.com/i] } },
-      { name: 'Contentstack', patterns: { html: [/contentstack\.io/i] } },
-      { name: 'Builder.io', patterns: { html: [/cdn\.builder\.io/i] } },
+      { name: 'Sitefinity', patterns: { html: [/\/sitefinity\//i], meta: { generator: /sitefinity/i } } },
+      {
+        name: 'DNN',
+        patterns: {
+          html: [/\/desktopmodules\/|\/portals\/\d/i],
+          meta: { generator: /dotnetnuke|dnn platform/i },
+          cookies: [/(?:^|[\s,;])(?:\.dotnetnuke|dnn_ismobile)=/i],
+        },
+      },
+      // Headless CMSs. Most are visible only through the host that serves their images or API, which is
+      // an `asset-host` signal; a bridge / preview script or CMS-specific markup is a stronger one.
+      {
+        name: 'Storyblok',
+        patterns: {
+          scripts: [/app\.storyblok\.com\/f\/storyblok/i],
+          assetHosts: [/a\.storyblok\.com|img2\.storyblok\.com/i],
+        },
+      },
+      {
+        name: 'Prismic',
+        patterns: { scripts: [/static\.cdn\.prismic\.io\/prismic/i], assetHosts: [/images\.prismic\.io|\.cdn\.prismic\.io/i] },
+      },
+      { name: 'DatoCMS', patterns: { assetHosts: [/datocms-assets\.com/i] } },
+      { name: 'Hygraph', patterns: { assetHosts: [/graphassets\.com|media\.graphcms\.com/i] } },
+      { name: 'Contentstack', patterns: { assetHosts: [/contentstack\.io|assets\.contentstack\.com/i] } },
+      { name: 'Kontent.ai', patterns: { assetHosts: [/kc-usercontent\.com/i] } },
+      {
+        name: 'Builder.io',
+        patterns: { html: [/builder-content-id=|class="builder-block/i], assetHosts: [/cdn\.builder\.io/i] },
+      },
     ],
 
     // JavaScript Frameworks
@@ -145,8 +245,9 @@ class TechnologyDetector {
       {
         name: 'Next.js',
         patterns: {
-          html: [/__NEXT_DATA__|_next\/static|_next\/image/],
+          html: [/__NEXT_DATA__|_next\/static|_next\/image/i],
           scripts: [/_next\/static\//],
+          headers: { 'x-powered-by': /next\.js/i, 'x-nextjs-cache': /./i, 'x-nextjs-prerender': /./i },
           globals: ['__NEXT_DATA__'],
         },
       },
@@ -158,12 +259,28 @@ class TechnologyDetector {
           globals: ['Vue', '__VUE__'],
         },
       },
-      { name: 'Nuxt.js', patterns: { html: [/__NUXT__/], scripts: [/_nuxt\//], globals: ['__NUXT__'] } },
+      {
+        name: 'Nuxt.js',
+        patterns: {
+          html: [/__NUXT__/i],
+          scripts: [/_nuxt\//],
+          headers: { 'x-powered-by': /nuxt/i },
+          globals: ['__NUXT__'],
+        },
+      },
       {
         name: 'Angular',
         patterns: {
           html: [/ng-version="/, /_ngcontent-/, /_nghost-/],
-          scripts: [/\/@angular\//i, /\/angular\.min\.js/i],
+          scripts: [/\/@angular\//i],
+        },
+      },
+      {
+        // AngularJS 1.x is a different, end-of-life framework; `angular.min.js` is its file name.
+        name: 'AngularJS',
+        patterns: {
+          html: [/\s(?:data-)?ng-(?:app|controller)\b/i],
+          scripts: [/\/angular(?:js)?(?:[.-]\d[\d.]*)?(?:\.min)?\.js|\/angularjs\//i],
         },
       },
       {
@@ -171,9 +288,15 @@ class TechnologyDetector {
         patterns: { html: [/svelte-[a-z0-9]+|__svelte/], scripts: [/\/svelte\//i, /svelte\.min\.js/i] },
       },
       { name: 'SvelteKit', patterns: { html: [/__sveltekit/], scripts: [/sveltekit/i] } },
-      { name: 'Gatsby', patterns: { html: [/id="___gatsby"|___gatsby/], scripts: [/\/gatsby-/i] } },
-      { name: 'Remix', patterns: { html: [/__remixContext/], globals: ['__remixContext'] } },
-      { name: 'Astro', patterns: { html: [/astro-island|data-astro/], scripts: [/astro\/[a-z]/i] } },
+      {
+        name: 'Gatsby',
+        patterns: { html: [/id="___gatsby"|___gatsby/], scripts: [/\/gatsby-/i], meta: { generator: /^gatsby/i } },
+      },
+      { name: 'Remix', patterns: { html: [/__remixContext/i], globals: ['__remixContext'] } },
+      {
+        name: 'Astro',
+        patterns: { html: [/astro-island|data-astro/], scripts: [/astro\/[a-z]/i], meta: { generator: /^astro/i } },
+      },
       { name: 'jQuery', patterns: { scripts: [/\/jquery[\.-]\d|\/jquery\.min\.js/i], globals: ['jQuery'] } },
       { name: 'Alpine.js', patterns: { html: [/x-data\s*=|x-init\s*=/i], scripts: [/\/alpine[\.\/@]/i] } },
       { name: 'HTMX', patterns: { html: [/hx-get\s*=|hx-post\s*=|hx-trigger\s*=/i], scripts: [/\/htmx[\.\/@]/i] } },
@@ -210,7 +333,7 @@ class TechnologyDetector {
       },
       {
         name: 'Material UI',
-        patterns: { html: [/class="[^"]*Mui[A-Z][a-z]+-root[^"]*"/], scripts: [/\/@mui\//i, /\/material-ui\//i] },
+        patterns: { html: [/class="[^"]*Mui[A-Z][a-z]+-root[^"]*"/i], scripts: [/\/@mui\//i, /\/material-ui\//i] },
       },
       { name: 'Chakra UI', patterns: { html: [/class="[^"]*chakra-[a-z]/i], scripts: [/\/@chakra-ui\//i] } },
       {
@@ -358,6 +481,38 @@ class TechnologyDetector {
     ],
   };
 
+  /** Window globals probed in the browser; every `globals` entry of a signature must be listed here to match. */
+  static KNOWN_GLOBALS: string[] = [
+    'React',
+    '__REACT_DEVTOOLS_GLOBAL_HOOK__',
+    'Vue',
+    '__VUE__',
+    'jQuery',
+    'Ember',
+    'Backbone',
+    '__NEXT_DATA__',
+    '__NUXT__',
+    '__remixContext',
+    'mixpanel',
+    'amplitude',
+    'heap',
+    'FS',
+    'LogRocket',
+    'posthog',
+    'Intercom',
+    'drift',
+    'zE',
+    '$crisp',
+    'Tawk_API',
+    'LiveChatWidget',
+    'Stripe',
+    'paypal',
+    'grecaptcha',
+    'Sentry',
+    'CCM_APPLICATION_URL',
+    'CCM_DISPATCHER_FILENAME',
+  ];
+
   /**
    * Detect technologies on a page
    * @param {Object} chromePage - Playwright page object
@@ -391,37 +546,7 @@ class TechnologyDetector {
     // Get global variables from browser context
     let globals: string[] = [];
     try {
-      const result = await chromePage.evaluate(() => {
-        const knownGlobals = [
-          'React',
-          '__REACT_DEVTOOLS_GLOBAL_HOOK__',
-          'Vue',
-          '__VUE__',
-          'jQuery',
-          'Ember',
-          'Backbone',
-          '__NEXT_DATA__',
-          '__NUXT__',
-          '__remixContext',
-          'mixpanel',
-          'amplitude',
-          'heap',
-          'FS',
-          'LogRocket',
-          'posthog',
-          'Intercom',
-          'drift',
-          'zE',
-          '$crisp',
-          'Tawk_API',
-          'LiveChatWidget',
-          'Stripe',
-          'paypal',
-          'grecaptcha',
-          'Sentry',
-          'CCM_APPLICATION_URL',
-          'CCM_DISPATCHER_FILENAME',
-        ];
+      const result = await chromePage.evaluate((knownGlobals: string[]) => {
         return knownGlobals.filter((g) => {
           try {
             return typeof (window as unknown as Record<string, unknown>)[g] !== 'undefined';
@@ -429,7 +554,7 @@ class TechnologyDetector {
             return false;
           }
         });
-      });
+      }, TechnologyDetector.KNOWN_GLOBALS);
       globals = result as string[];
     } catch {
       // Browser context not available
@@ -468,9 +593,15 @@ class TechnologyDetector {
   }
 
   /**
-   * Quick detection without browser context (for faster analysis)
+   * Quick detection without browser context (for faster analysis).
+   * `globals` lets a caller that did read the page in a browser pass the window globals it found.
    */
-  static detectFromHtml(htmlContent: string, responseHeaders: Record<string, string> = {}, scriptSrcs: string[] = []) {
+  static detectFromHtml(
+    htmlContent: string,
+    responseHeaders: Record<string, string> = {},
+    scriptSrcs: string[] = [],
+    globals: string[] = [],
+  ) {
     const detected = {
       technologies: [] as DetectedTechnology[],
       byCategory: {} as Record<string, string[]>,
@@ -485,7 +616,7 @@ class TechnologyDetector {
       detected.byCategory[category] = [];
 
       for (const sig of signatures) {
-        const detectionMethods = this.#matchSignature(sig, htmlLower, headersLower, scriptSrcs, metaTags, []);
+        const detectionMethods = this.#matchSignature(sig, htmlLower, headersLower, scriptSrcs, metaTags, globals);
         if (detectionMethods) {
           detected.technologies.push({
             name: sig.name,
@@ -546,6 +677,18 @@ class TechnologyDetector {
           }
         }
         if (methods.some((m) => m.type === 'script')) break;
+      }
+    }
+
+    // Check asset hosts (HTML and script URLs)
+    if (patterns.assetHosts) {
+      for (const pattern of patterns.assetHosts) {
+        const inHtml = pattern.exec(htmlLower);
+        const hit = inHtml?.[0] ?? scriptSrcs.map((src) => pattern.exec(src)?.[0]).find(Boolean);
+        if (hit) {
+          methods.push({ type: 'asset-host', pattern: pattern.source, matched: hit.substring(0, 60) });
+          break;
+        }
       }
     }
 
@@ -612,6 +755,9 @@ class TechnologyDetector {
 
     if (patterns.html) {
       for (const p of patterns.html) if (p.test(htmlLower)) matches++;
+    }
+    if (patterns.assetHosts) {
+      for (const p of patterns.assetHosts) if (p.test(htmlLower) || scriptSrcs.some((src) => p.test(src))) matches++;
     }
     if (patterns.scripts) {
       for (const p of patterns.scripts) {
@@ -719,7 +865,9 @@ class TechnologyDetector {
   }
 
   /**
-   * Lowercase all header keys
+   * Lowercase header keys AND values. Every header and cookie pattern therefore needs the `i` flag
+   * (or an all-lowercase source); the same holds for `html` and `scripts` patterns, which are matched
+   * against lowercased input. `tests/technology-detector.test.ts` guards this for every signature.
    * @private
    */
   static #lowercaseHeaders(headers: Record<string, string>) {
@@ -749,6 +897,10 @@ class TechnologyDetector {
     const lower = stripCodeBlocks(html).toLowerCase();
     for (const sig of this.SIGNATURES.cms) {
       if (sig.patterns.html?.some((p) => p.test(lower))) return sig.name;
+    }
+    // An asset host is the weakest signal: only when no CMS shows in the markup itself.
+    for (const sig of this.SIGNATURES.cms) {
+      if (sig.patterns.assetHosts?.some((p) => p.test(lower))) return sig.name;
     }
     return null;
   }

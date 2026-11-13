@@ -78,12 +78,20 @@ class LinkDepthAnalyzer {
       }
     }
 
-    // Report orphan pages
+    // Report orphan pages. Name the crawled parent listing so the reader has a
+    // page to open and check (e.g. a news index whose "Load more" is JS-only).
+    // When many pages are orphaned it is one listing/navigation pattern, not
+    // per-page neglect, so it is reported at MEDIUM.
+    const orphanSeverity = orphanPages.length > Math.max(10, totalPages * 0.25) ? SEVERITY.MEDIUM : SEVERITY.HIGH;
     for (const url of orphanPages) {
+      const parent = LinkDepthAnalyzer.crawledParent(url, pages);
+      const parentNote = parent
+        ? ` Its parent listing <a href="${parent}">${shortenUrl(parent)}</a> does not link to it in the HTML (check for a JS-only "Load more" or filter).`
+        : '';
       issues.push({
         message: 'Orphan page (no internal links point to it)',
-        detail: `<a href="${url}">${shortenUrl(url)}</a> — no internal links point here; reachable only via sitemap or external links.`,
-        severity: SEVERITY.HIGH,
+        detail: `<a href="${url}">${shortenUrl(url)}</a> — no internal links point here; reachable only via sitemap or external links.${parentNote}`,
+        severity: orphanSeverity,
       });
     }
 
@@ -176,6 +184,25 @@ class LinkDepthAnalyzer {
    * @param {string} origin - Site origin
    * @returns {Map} Link graph (url -> Set of linked urls)
    */
+  /** Nearest ancestor path of `url` that was crawled and loaded (200). */
+  static crawledParent(url: string, pages: Record<string, PageInfo>): string | null {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+    const segs = parsed.pathname.split('/').filter(Boolean);
+    for (let i = segs.length - 1; i >= 1; i--) {
+      const base = `${parsed.origin}/${segs.slice(0, i).join('/')}`;
+      for (const cand of [base, `${base}/`]) {
+        const p = pages[cand];
+        if (p && (p.status === undefined || p.status === 200)) return cand;
+      }
+    }
+    return null;
+  }
+
   static buildLinkGraph(
     pages: Record<string, PageInfo>,
     origin: string,

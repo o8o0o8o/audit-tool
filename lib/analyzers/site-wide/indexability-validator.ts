@@ -116,7 +116,15 @@ class IndexabilityValidator {
     }
 
     const totalPages = Object.keys(allPages).length;
-    const indexablePercent = calcPercent(stats.indexable, totalPages);
+    // Indexability share is measured over pages that actually serve content.
+    // Broken links (4xx/5xx targets) and redirect stubs are reported on their
+    // own; counting them here turned "198 links to a 404" into "only 49% of
+    // pages indexable".
+    const contentPages = Object.values(allPages).filter((p) => {
+      const status = p.indexability?.statusCode ?? p.status ?? 200;
+      return status < 300 && !p.hasRedirects && !p.redirectOnly;
+    }).length;
+    const indexablePercent = calcPercent(stats.indexable, contentPages);
 
     console.log(`Indexability: ${stats.indexable}/${totalPages} pages indexable (${indexablePercent}%)`);
     console.log(`Non-indexable: ${stats.nonIndexable} pages`);
@@ -164,10 +172,14 @@ class IndexabilityValidator {
       for (const [statusCode, urls] of stats.statusErrors) {
         const urlList = formatUrlList(urls, 5);
         const moreCount = urls.length > 5 ? ` (showing 5 of ${urls.length})` : '';
+        const pattern = IndexabilityValidator.dominantPattern(urls);
+        const patternNote = pattern
+          ? ` ${pattern.count} of them share one URL pattern (<code>${escapeHtml(pattern.key)}</code>), so a single template link (header, footer or language switcher) is the likely source.`
+          : '';
 
         issues.push({
           message: `Pages with HTTP ${statusCode} errors`,
-          detail: `${urls.length} page(s) return HTTP ${statusCode}${moreCount}:<ul>${urlList}</ul>`,
+          detail: `${urls.length} page(s) return HTTP ${statusCode}${moreCount}.${patternNote}<ul>${urlList}</ul>`,
           severity: statusCode >= 500 ? SEVERITY.CRITICAL : SEVERITY.HIGH,
         });
       }
@@ -205,10 +217,10 @@ class IndexabilityValidator {
     }
 
     // Report 7: Low indexability percentage
-    if (indexablePercent < 70 && totalPages > 10) {
+    if (indexablePercent < 70 && contentPages > 10) {
       issues.push({
         message: `Low site indexability`,
-        detail: `Only ${indexablePercent}% of pages (${stats.indexable}/${totalPages}) are indexable. This may significantly impact search visibility.`,
+        detail: `Only ${indexablePercent}% of pages that load (${stats.indexable}/${contentPages}) are indexable. This may significantly impact search visibility.`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -227,12 +239,37 @@ class IndexabilityValidator {
         indexable: stats.indexable,
         nonIndexable: stats.nonIndexable,
         totalPages: totalPages,
+        contentPages,
         noindexCount: stats.noindexPages.length,
         nofollowCount: stats.nofollowPages.length,
         redirectChainCount: stats.redirectChains.length,
         statusErrorCount: Array.from(stats.statusErrors.values()).reduce((sum, urls) => sum + urls.length, 0),
       },
     };
+  }
+
+  /**
+   * When most error URLs share one path + query-key shape (query values and
+   * numeric segments dropped), return that shape, e.g.
+   * `/tools/locale?_lcl&_path` for a broken language switcher on every page.
+   */
+  static dominantPattern(urls: string[]): { key: string; count: number } | null {
+    if (urls.length < 5) return null;
+    const counts = new Map<string, number>();
+    for (const u of urls) {
+      let key: string;
+      try {
+        const parsed = new URL(u);
+        const qs = [...parsed.searchParams.keys()].join('&');
+        key = parsed.pathname.replace(/\/\d+(?=\/|$)/g, '/{N}') + (qs ? `?${qs}` : '');
+      } catch {
+        continue;
+      }
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    let best: { key: string; count: number } | null = null;
+    for (const [key, count] of counts) if (!best || count > best.count) best = { key, count };
+    return best && best.count >= urls.length * 0.5 && best.count >= 5 ? best : null;
   }
 }
 

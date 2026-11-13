@@ -122,6 +122,9 @@ class BrokenPaginationAnalyzer {
     for (const [key, list] of series) {
       const sorted = list.sort((a, b) => a.pageNum - b.pageNum);
       const wasTruncated = key in truncatedSeries;
+      // One URL is not a pagination series: `/test-page-1` matches the
+      // `-page-N` shape but is a lone slug, not a "next" chain.
+      if (new Set(sorted.map((p) => p.pageNum)).size < 2) continue;
 
       const tail: SeriesPage[] = [];
       for (let i = sorted.length - 1; i >= 0; i--) {

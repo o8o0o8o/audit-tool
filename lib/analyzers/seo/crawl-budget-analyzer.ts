@@ -67,7 +67,9 @@ class CrawlBudgetAnalyzer {
       const isIndexable = this.isPageIndexable(pageData);
       if (isIndexable) {
         stats.indexablePages++;
-      } else {
+      } else if (Number(pageData.statusCode ?? pageData.status ?? 200) < 300) {
+        // Error and redirect URLs have their own findings below; counting them
+        // here inflates "non-indexable" with broken links.
         stats.nonIndexablePages++;
       }
 

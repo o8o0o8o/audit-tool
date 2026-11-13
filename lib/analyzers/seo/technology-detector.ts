@@ -97,6 +97,39 @@ class TechnologyDetector {
       { name: 'BigCommerce', patterns: { html: [/bigcommerce/i], scripts: [/bigcommerce/i] } },
       { name: 'Magento', patterns: { html: [/mage\/cookies/i, /Magento_/i], cookies: [/^PHPSESSID/i, /^frontend/i] } },
       { name: 'PrestaShop', patterns: { html: [/prestashop/i], meta: { generator: /prestashop/i } } },
+      {
+        name: 'Concrete CMS',
+        patterns: {
+          html: [/\/concrete\/(?:js|css|images|themes)\//i, /ccm_application_url|ccm_dispatcher_filename/i],
+          scripts: [/\/concrete\/js\//i],
+          meta: { generator: /concrete ?(?:5|cms)/i },
+          cookies: [/(?:^|[\s,;])CONCRETE5?=/],
+          globals: ['CCM_APPLICATION_URL', 'CCM_DISPATCHER_FILENAME'],
+        },
+      },
+      {
+        name: 'TYPO3',
+        patterns: { html: [/\/typo3conf\/|\/typo3temp\//i], meta: { generator: /typo3/i } },
+      },
+      {
+        name: 'Craft CMS',
+        patterns: { cookies: [/CraftSessionId=/], headers: { 'x-powered-by': /craft cms/i } },
+      },
+      { name: 'Contao', patterns: { meta: { generator: /contao/i } } },
+      { name: 'ExpressionEngine', patterns: { cookies: [/(?:^|[\s,;])exp_[a-z_]+=/] } },
+      { name: 'Sitecore', patterns: { html: [/\/-\/media\//i], cookies: [/SC_ANALYTICS_GLOBAL_COOKIE=/] } },
+      { name: 'Adobe Experience Manager', patterns: { html: [/\/etc\.clientlibs\//i, /\/content\/dam\//i] } },
+      { name: 'Optimizely CMS', patterns: { html: [/\/globalassets\/|\/contentassets\/|\/episerver\//i] } },
+      { name: 'Kentico', patterns: { cookies: [/CMSPreferredCulture=/] } },
+      { name: 'Umbraco', patterns: { html: [/\/umbraco\//i] } },
+      { name: 'Sitefinity', patterns: { html: [/\/sitefinity\//i] } },
+      { name: 'DNN', patterns: { html: [/\/desktopmodules\/|\/portals\/\d/i] } },
+      { name: 'Storyblok', patterns: { html: [/a\.storyblok\.com/i] } },
+      { name: 'Prismic', patterns: { html: [/images\.prismic\.io/i] } },
+      { name: 'DatoCMS', patterns: { html: [/datocms-assets\.com/i] } },
+      { name: 'Hygraph', patterns: { html: [/graphassets\.com/i] } },
+      { name: 'Contentstack', patterns: { html: [/contentstack\.io/i] } },
+      { name: 'Builder.io', patterns: { html: [/cdn\.builder\.io/i] } },
     ],
 
     // JavaScript Frameworks
@@ -386,6 +419,8 @@ class TechnologyDetector {
           'paypal',
           'grecaptcha',
           'Sentry',
+          'CCM_APPLICATION_URL',
+          'CCM_DISPATCHER_FILENAME',
         ];
         return knownGlobals.filter((g) => {
           try {

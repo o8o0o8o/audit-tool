@@ -18,7 +18,7 @@ function looksLikeRobots(text: string): boolean {
 const MAX_ROBOTS_SIZE = 500 * 1024;
 
 // Important bots to check for blocking
-const IMPORTANT_BOTS = ['googlebot', 'bingbot', 'googlebot-image', 'googlebot-news', 'googlebot-video'];
+const IMPORTANT_BOTS = ['googlebot', 'bingbot', 'googlebot-image', 'googlebot-news', 'googlebot-video', 'applebot', 'duckduckbot', 'yandexbot'];
 
 // Paths that should generally not be blocked (affects rendering/SEO)
 const CRITICAL_PATHS = [
@@ -296,14 +296,11 @@ class RobotsParser {
             result.userAgents[currentUserAgent].disallow.push(value);
 
             // Check for blocking all crawlers
-            if (value === '/') {
+            if (value === '/' && (currentUserAgent === '*' || IMPORTANT_BOTS.includes(currentUserAgent.toLowerCase()))) {
               result.errors.push({
                 message: 'User-agent blocked from crawling entire site',
                 detail: `User-agent "${currentUserAgent}" is completely blocked by "Disallow: /". This prevents indexing.`,
-                severity:
-                  currentUserAgent === '*' || IMPORTANT_BOTS.includes(currentUserAgent.toLowerCase())
-                    ? SEVERITY.CRITICAL
-                    : SEVERITY.HIGH,
+                severity: SEVERITY.CRITICAL,
               });
             }
           } else {

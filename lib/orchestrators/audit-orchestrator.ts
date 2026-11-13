@@ -43,6 +43,8 @@ interface AnalyzeContext {
   };
   incomingLinksTracking: Map<string, Set<string>>;
   saveError: SaveErrorFn;
+  /** `--limit`: also caps the "missing from sitemap" pass. */
+  limit?: number | null;
   /** Site origin; when the sitemap yields no URLs the crawl is seeded from its homepage. */
   origin?: string | null;
   resultsDir: string;
@@ -144,6 +146,27 @@ export function computeTotalPagesProcessed(pageData: { totalWithoutError: number
   return pageData.totalWithoutError + pageData.totalWithError;
 }
 
+const LOCALE_PARAMS = ['lang', 'locale', 'language', 'hl', '_lcl', 'lng'];
+const LOCALE_VALUE = /^[a-z]{2}(?:[-_][a-z]{2})?$/i;
+
+/** Language codes found in locale-switch query params (`?lang=ar`, `/tools/locale?_lcl=ar_AE`). */
+export function localeSwitcherLanguages(urls: string[]): string[] {
+  const langs = new Set<string>();
+  for (const u of urls) {
+    let parsed: URL;
+    try {
+      parsed = new URL(u);
+    } catch {
+      continue;
+    }
+    for (const key of LOCALE_PARAMS) {
+      const v = parsed.searchParams.get(key);
+      if (v && LOCALE_VALUE.test(v)) langs.add(v.slice(0, 2).toLowerCase());
+    }
+  }
+  return [...langs];
+}
+
 class AuditOrchestrator {
   /**
    * Analyze all pages - main crawling orchestration
@@ -218,7 +241,7 @@ class AuditOrchestrator {
       console.log('Crawling pages that are missing in sitemap...');
 
       const discoveredData = await crawlerEngine.crawlPages({
-        pagesToCrawl: Array.from(collectedURLs),
+        pagesToCrawl: context.limit ? Array.from(collectedURLs).slice(0, context.limit) : Array.from(collectedURLs),
         collectedURLs,
         uniquePages,
         crawlFrontierKeys,
@@ -231,6 +254,16 @@ class AuditOrchestrator {
       alternatesErrors = [...alternatesErrors, ...discoveredData.alternatesErrors];
       isMultiLang = isMultiLang || discoveredData.isMultiLang;
       failedPages = [...discoveredData.failedPages, ...failedPages];
+    }
+
+    // A language switcher whose targets were crawled (even when they 404)
+    // proves a second language exists although no hreflang declares it.
+    if (!isMultiLang) {
+      const langs = localeSwitcherLanguages(Object.keys(results.pageData.pages));
+      if (langs.length > 0) {
+        console.log(`Detected multilanguage site from language switcher links: ${langs.join(', ')}`);
+        isMultiLang = true;
+      }
     }
 
     // Store multilanguage flag in results

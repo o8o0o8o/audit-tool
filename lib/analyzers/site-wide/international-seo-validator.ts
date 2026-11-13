@@ -202,6 +202,16 @@ class InternationalSEOValidator {
       }
     }
 
+    // Report 7b: Site has several languages but no page declares hreflang at all
+    // (Report 7 only fires when SOME pages have it).
+    if (stats.pagesWithHreflang === 0 && totalPages > 0) {
+      issues.push({
+        message: `Multilanguage site has no hreflang`,
+        detail: `The site links to more than one language version (language switcher or localized URLs), but none of the ${totalPages} crawled page(s) declares hreflang. Search engines cannot match each page to its translation, so the wrong language can rank in each market.`,
+        severity: SEVERITY.HIGH,
+      });
+    }
+
     // Report 8: Missing language switcher
     if (stats.noLanguageSwitcher.length > stats.pagesWithHreflang * 0.3) {
       warnings.push({

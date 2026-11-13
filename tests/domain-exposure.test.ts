@@ -263,6 +263,19 @@ void test('NotFoundProbe requests a random path under the origin', async () => {
   assert.equal(res.checks[0].status, 'pass');
 });
 
+void test('NotFoundProbe follows a trailing-slash redirect and passes on the final 404', async () => {
+  const res = await NotFoundProbe.probe('https://example.com', async (u) =>
+    u.endsWith('/') ? { status: 404 } : { status: 308, location: new URL(u).pathname + '/' },
+  );
+  assert.equal(res.issues.length, 0);
+  assert.equal(res.checks[0].status, 'pass');
+});
+
+void test('NotFoundProbe still flags a redirect to the homepage', async () => {
+  const res = await NotFoundProbe.probe('https://example.com', async () => ({ status: 301, location: '/' }));
+  assert.equal(res.issues[0]?.message, 'Missing pages redirect instead of returning 404');
+});
+
 // ─── Subdomain takeover ─────────────────────────────────────────────────────
 
 void test('collectSiteHosts keeps same-site hosts only', () => {

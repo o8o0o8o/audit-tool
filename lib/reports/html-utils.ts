@@ -217,11 +217,17 @@ function renderExpandableList(
   const total = totalCount ?? items.length;
   const visible = items.slice(0, visibleCount).map(renderItem).join('');
   if (items.length <= visibleCount) {
-    const overflow = total > items.length ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${total} total, ${items.length} shown</div>` : '';
+    const overflow =
+      total > items.length
+        ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${total} total, ${items.length} shown</div>`
+        : '';
     return visible + overflow;
   }
   const hidden = items.slice(visibleCount).map(renderItem).join('');
-  const overflow = total > items.length ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${total} total, ${items.length} shown</div>` : '';
+  const overflow =
+    total > items.length
+      ? `<div style="font-size:var(--font-size-xs);color:var(--color-text-disabled);">${total} total, ${items.length} shown</div>`
+      : '';
   return `${visible}
     <div id="${id}" style="display:none;">${hidden}</div>
     <button onclick="event.stopPropagation();var el=document.getElementById('${id}');var s=el.style.display!=='none';el.style.display=s?'none':'block';this.textContent=s?'Show all ${items.length}...':'Show less';" style="background:none;border:none;color:var(--color-info);cursor:pointer;font-size:var(--font-size-xs);padding:2px 0;text-align:left;">Show all ${items.length}...</button>
@@ -566,7 +572,32 @@ function getSignalInfoIcon(signalKey: string) {
   return `<span class="info-icon" title="${tooltip}" data-signal="${signalKey}">ⓘ</span>`;
 }
 
+/**
+ * Render an analyzer example string safely. Examples carry intended markup
+ * (`<a href="…">…</a>`, `<ul><li>`, `<br>`, `<code>`, `<strong>`) around page-
+ * controlled text, so everything is escaped first, then only that whitelist is
+ * restored: anchors with an http(s) href (no other attributes) and bare
+ * formatting tags. Anything else — scripts, event handlers, other attributes —
+ * stays escaped text.
+ */
+function exampleHtml(example: unknown): string {
+  return (
+    escapeHtml(example)
+      // Restore analyzer markup first, so markup that came pre-escaped from
+      // page content (now `&amp;lt;a …`) can never match.
+      .replace(
+        /&lt;a href=&quot;(https?:\/\/[^\s<>]*?)&quot;&gt;([\s\S]*?)&lt;\/a&gt;/gi,
+        (_m, href: string, text: string) => `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`,
+      )
+      .replace(/&lt;(\/?)(ul|li|br|code|strong|em)\s*\/?&gt;/gi, '<$1$2>')
+      // Analyzers often pre-escape page text/URLs; undo the double escape.
+      // Still entity-encoded afterwards, so this cannot open a tag.
+      .replace(/&amp;(amp|lt|gt|quot|#039|#39);/g, '&$1;')
+  );
+}
+
 export {
+  exampleHtml,
   escapeHtml,
   formatBytes,
   getStatusColor,

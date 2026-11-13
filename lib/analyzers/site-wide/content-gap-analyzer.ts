@@ -2,6 +2,21 @@ import { SEVERITY } from '../../constants';
 import { clampScore } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
 
+/**
+ * Archive / listing URLs (author, category, tag, paginated listings). Their
+ * "top keywords" are the archive's name — an author's surname, a category
+ * label — not a topic the site covers, so they are not content-gap input.
+ */
+const ARCHIVE_PATH_RE = /\/(author|authors|category|categories|tag|tags|topics?|archive|page)\/[^/]+\/?$/i;
+
+export function isArchiveUrl(url: string): boolean {
+  try {
+    return ARCHIVE_PATH_RE.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 interface KeywordIndexEntry {
   word: string;
   urls: Set<string>;
@@ -94,12 +109,14 @@ class ContentGapAnalyzer {
     const keywordIndex = new Map<string, KeywordIndexEntry>();
 
     for (const url in allPages) {
+      if (isArchiveUrl(url)) continue;
       const page = allPages[url];
       const topKeywords = page.contentQuality?.topKeywords ?? [];
 
       topKeywords.forEach((kw: { word: string; count: number; density: number }) => {
         const word = kw.word.toLowerCase();
         if (word.length < 3) return; // Skip very short words
+        if (/^\d+$/.test(word)) return; // Years and other bare numbers are not topics
 
         if (!keywordIndex.has(word)) {
           keywordIndex.set(word, {

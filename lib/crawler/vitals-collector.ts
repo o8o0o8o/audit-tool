@@ -137,6 +137,38 @@ interface LongTaskAnalysis {
   recommendations: string[];
 }
 
+/**
+ * Correct TTFB for CDP network emulation. `Network.emulateNetworkConditions`
+ * latency delays the response but Navigation Timing's requestStart→responseStart
+ * does not include it, so a throttled run reports unthrottled TTFB. Replace that
+ * segment with the document's request→headers time as CDP measured it (which
+ * includes the emulated latency). Only ever raises TTFB; the added time comes
+ * out of the later LCP sub-parts so they still sum to LCP.
+ */
+function applyEmulatedLatencyToTtfb<T extends Pick<CollectedVitals, 'TTFB'> & { lcpSubParts?: LCPSubParts }>(
+  vitals: T,
+  navRequestMs: number,
+  cdpRequestMs: number,
+): T {
+  const delta = cdpRequestMs - navRequestMs;
+  if (!(delta > 0) || !Number.isFinite(delta)) return vitals;
+  const round = (n: number) => Number(n.toFixed(2));
+  const out = { ...vitals, TTFB: round(vitals.TTFB + delta) };
+  if (vitals.lcpSubParts) {
+    const sp = { ...vitals.lcpSubParts, ttfb: round(vitals.lcpSubParts.ttfb + delta) };
+    // Take the added time out of the later parts so they still sum to LCP
+    // (LCP itself already includes the emulated latency).
+    let rest = delta;
+    for (const key of ['resourceDelay', 'renderDelay', 'resourceLoad'] as const) {
+      const take = Math.min(rest, Math.max(sp[key], 0));
+      sp[key] = round(sp[key] - take);
+      rest -= take;
+    }
+    out.lcpSubParts = sp;
+  }
+  return out;
+}
+
 class VitalsCollector {
   /**
    * Collect all performance metrics from a page
@@ -579,7 +611,8 @@ class VitalsCollector {
           });
 
           // 'longtask' first; 'long-animation-frame' only where longtask is unsupported
-          const supported = (PerformanceObserver as unknown as { supportedEntryTypes?: string[] }).supportedEntryTypes ?? [];
+          const supported =
+            (PerformanceObserver as unknown as { supportedEntryTypes?: string[] }).supportedEntryTypes ?? [];
           if (supported.includes('longtask')) {
             longTaskObserver.observe({ type: 'longtask', buffered: true });
           } else {
@@ -855,7 +888,7 @@ class VitalsCollector {
   }
 }
 
-export { VitalsCollector };
+export { VitalsCollector, applyEmulatedLatencyToTtfb };
 export type {
   CollectedVitals,
   LCPSubParts,

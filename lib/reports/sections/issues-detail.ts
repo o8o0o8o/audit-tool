@@ -5,7 +5,7 @@
  */
 
 import { isCrawlerError, SEVERITY_ORDER } from '../../constants';
-import { escapeHtml, renderExpandableList } from '../html-utils';
+import { escapeHtml, exampleHtml, renderExpandableList } from '../html-utils';
 import { extractDetails } from '../data-processor';
 import { mergeNumericVariants } from '../../scoring/merge-variants';
 import { nextjsOverrideFor, isNextjsAudit } from '../../scoring/nextjs-recommendations';
@@ -287,7 +287,7 @@ function renderIssueDetail(
           // text, hrefs). Rendering them raw is stored XSS in a report the
           // author opens locally (often file://). Matches top-issues/quick-wins.
           (ex) =>
-            `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(ex)}</div>`,
+            `<div style="font-size:var(--font-size-xs);color:var(--color-text-secondary);padding:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${exampleHtml(ex)}</div>`,
           `issue-detail-more-${idx}`,
           VISIBLE,
           count,

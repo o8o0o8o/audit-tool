@@ -39,7 +39,7 @@ import { computeContentHash } from '../utils/content-hash';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
 import { ProgressReporter } from '../utils/progress-reporter';
-import { VitalsCollector } from './vitals-collector';
+import { VitalsCollector, applyEmulatedLatencyToTtfb } from './vitals-collector';
 import { CrUXAPI } from './crux-api';
 import { isFetchAllowed } from '../../validators';
 import {
@@ -204,7 +204,10 @@ class CrawlerEngine {
             // Self-describing meta in case captureRepresentativeEvidence didn't run.
             const metaPath = path.join(pageDir, '_meta.json');
             if (!fs.existsSync(metaPath)) {
-              fs.writeFileSync(metaPath, JSON.stringify({ url: task.url, capturedAt: new Date().toISOString() }, null, 2));
+              fs.writeFileSync(
+                metaPath,
+                JSON.stringify({ url: task.url, capturedAt: new Date().toISOString() }, null, 2),
+              );
             }
             fs.writeFileSync(path.join(pageDir, `psi.${task.strategy}.json`), JSON.stringify(summary, null, 2));
           }
@@ -259,7 +262,8 @@ class CrawlerEngine {
       cpuConditions: options.cpuConditions,
       verbose: options.verbose || false,
       userAgent: ((config.crawl as Record<string, unknown> | undefined)?.userAgent as string | null) ?? null,
-      headers: ((config.crawl as Record<string, unknown> | undefined)?.headers as Record<string, string> | null) ?? null,
+      headers:
+        ((config.crawl as Record<string, unknown> | undefined)?.headers as Record<string, string> | null) ?? null,
       cruxApiKey: options.cruxApiKey ?? null,
       evidenceDir: options.evidenceDir,
       evidenceCap: options.evidenceCap,
@@ -501,6 +505,9 @@ class CrawlerEngine {
       vitals: Partial<CollectedVitals>,
       metrics: PerformanceMetrics,
       firstLoadShot: Buffer | undefined;
+    let throttled = false;
+    let mainFrameId: string | undefined;
+    let cdpDocRequestMs: number | null = null;
 
     try {
       if (this.#options.perf) {
@@ -516,10 +523,27 @@ class CrawlerEngine {
           });
         }
 
+        await session.send('Network.enable');
+        // Measure every page as a first visit. All pages share one browser
+        // context, so without this every page after the first reuses cached
+        // CSS/JS/fonts and the lab vitals are repeat-view numbers. Per-page
+        // (unlike clearing the shared cache, which races concurrent pages).
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+
+        // CDP latency emulation is invisible to Navigation Timing (responseStart
+        // ignores it), so keep the document's request→headers time as CDP sees
+        // it and correct TTFB with it after load.
+        session.on('Network.responseReceived', (e) => {
+          if (e.type !== 'Document' || e.frameId !== mainFrameId) return;
+          const t = e.response.timing;
+          if (t && t.receiveHeadersEnd > 0 && t.sendStart >= 0) cdpDocRequestMs = t.receiveHeadersEnd - t.sendStart;
+        });
+        const frameTree = await session.send('Page.getFrameTree');
+        mainFrameId = frameTree.frameTree.frame.id;
+
         // Apply network throttling if needed
         if (!network.noThrottle) {
-          await session.send('Network.enable');
-
+          throttled = true;
           await session.send('Network.emulateNetworkConditions', {
             offline: false,
             downloadThroughput: network.download ?? -1,
@@ -623,6 +647,17 @@ class CrawlerEngine {
           // Collect performance metrics with error handling
           try {
             vitals = await VitalsCollector.collectVitals(page);
+            if (throttled && cdpDocRequestMs != null && vitals.TTFB != null) {
+              const navRequestMs = await page
+                .evaluate(() => {
+                  const n = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+                  return n && n.responseStart > 0 ? n.responseStart - n.requestStart : null;
+                })
+                .catch(() => null);
+              if (navRequestMs != null) {
+                vitals = applyEmulatedLatencyToTtfb(vitals as CollectedVitals, navRequestMs, cdpDocRequestMs);
+              }
+            }
           } catch (vitalsError: unknown) {
             console.log(`⚠️  Vitals collection failed for ${url}: ${(vitalsError as Error).message}`);
             vitals = {};
@@ -688,7 +723,10 @@ class CrawlerEngine {
     try {
       const text = await response?.text();
       // Cap retained HTML so a pathologically large document can't blow memory.
-      servedHtml = text !== undefined && text.length > THRESHOLDS.MAX_SERVED_HTML ? text.slice(0, THRESHOLDS.MAX_SERVED_HTML) : text;
+      servedHtml =
+        text !== undefined && text.length > THRESHOLDS.MAX_SERVED_HTML
+          ? text.slice(0, THRESHOLDS.MAX_SERVED_HTML)
+          : text;
     } catch {
       // Body unavailable (e.g. already consumed / non-text) — leave undefined.
     }
@@ -846,7 +884,9 @@ class CrawlerEngine {
           // actually persists progress, while falsely printing "Progress saved".
           // Set a flag and let the loop unwind to `finally`; the caller saves.
           forceQuit = true;
-          console.log('\n\n⚠️  Force quit — stopping as soon as the current batch settles; progress will be saved by the caller.');
+          console.log(
+            '\n\n⚠️  Force quit — stopping as soon as the current batch settles; progress will be saved by the caller.',
+          );
           return;
         }
         abortRequested = true;
@@ -1369,7 +1409,11 @@ class CrawlerEngine {
     // own page. Analysing the target here too counted it twice (duplicate titles, descriptions,
     // non-self canonicals…) whenever the final URL was also linked or in the sitemap.
     const finalUrl = redirectChain.length > 0 ? redirectChain[redirectChain.length - 1].url : url;
-    if (redirectChain.length > 0 && isSameSite(finalUrl, this.#options.origin) && sameResource(finalUrl, url) === false) {
+    if (
+      redirectChain.length > 0 &&
+      isSameSite(finalUrl, this.#options.origin) &&
+      sameResource(finalUrl, url) === false
+    ) {
       pageData.redirectOnly = true;
       pageData.finalUrl = finalUrl;
       pageData.status = Number(redirectChain[0].status) || status;

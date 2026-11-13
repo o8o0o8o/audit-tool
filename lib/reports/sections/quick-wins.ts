@@ -3,7 +3,7 @@
  * Displays high-impact, low-effort fixes
  */
 
-import { escapeHtml } from '../html-utils';
+import { escapeHtml, exampleHtml as renderExample } from '../html-utils';
 import { extractSummary } from '../data-processor';
 import { ScoreCalculator } from '../../scoring/score-calculator';
 import type { ReportSectionData, QuickWinFull } from '../../types';
@@ -62,7 +62,7 @@ function getQuickWinCard(win: QuickWinFull, index: number) {
       <div class="mt-2">
         ${win.examples
           .slice(0, 3)
-          .map((ex: string) => `<div class="opacity-85" style="margin: 2px 0;">${escapeHtml(ex)}</div>`)
+          .map((ex: string) => `<div class="opacity-85" style="margin: 2px 0;">${renderExample(ex)}</div>`)
           .join('')}
         ${win.affectedPages > 3 ? `<div class="opacity-70">... and ${win.affectedPages - 3} more</div>` : ''}
       </div>

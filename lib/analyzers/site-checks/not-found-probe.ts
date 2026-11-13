@@ -53,10 +53,37 @@ export function notFoundVerdict(probeUrl: string, res: NotFoundResponse | null):
   return null;
 }
 
+/**
+ * True when `location` only normalises `from` (trailing slash, http→https,
+ * apex↔www, letter case) — the same resource, not a soft-404 redirect.
+ */
+export function isNormalizingRedirect(from: string, location: string | null | undefined): boolean {
+  if (!location) return false;
+  try {
+    const a = new URL(from);
+    const b = new URL(location, from);
+    const host = (h: string) => h.toLowerCase().replace(/^www\./, '');
+    const path = (p: string) => p.toLowerCase().replace(/\/+$/, '');
+    return host(a.hostname) === host(b.hostname) && path(a.pathname) === path(b.pathname) && a.search === b.search;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_NORMALIZING_HOPS = 3;
+
 export class NotFoundProbe {
   static async probe(origin: string, fetcher: NotFoundFetcher = defaultFetcher): Promise<SiteProbeResult> {
     const probeUrl = `${origin.replace(/\/$/, '')}/seo-audit-missing-${randomBytes(6).toString('hex')}`;
-    const res = await fetcher(probeUrl);
+    let res = await fetcher(probeUrl);
+    // Follow canonicalising redirects (e.g. `/missing` → `/missing/`) and judge
+    // where they land: a slash redirect followed by a 404 is correct behaviour.
+    let current = probeUrl;
+    for (let hop = 0; hop < MAX_NORMALIZING_HOPS && res && res.status >= 300 && res.status < 400; hop++) {
+      if (!isNormalizingRedirect(current, res.location)) break;
+      current = new URL(res.location as string, current).href;
+      res = await fetcher(current);
+    }
     const issue = notFoundVerdict(probeUrl, res);
     return {
       issues: issue ? [issue] : [],

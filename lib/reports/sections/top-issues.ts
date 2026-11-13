@@ -5,7 +5,7 @@
 
 import { isCrawlerError } from '../../constants';
 import { stripIssueSeverity } from '../../utils';
-import { escapeHtml, renderExpandableList } from '../html-utils';
+import { escapeHtml, exampleHtml, renderExpandableList } from '../html-utils';
 import { extractDetails, extractBySeverity } from '../data-processor';
 import { extractComparisonLabels } from '../comparison-helpers';
 import type { ReportSectionData, ComparisonData } from '../../types';
@@ -14,12 +14,18 @@ import type { ReportSectionData, ComparisonData } from '../../types';
  * Flatten a bySeverity map into an array of issue objects, filtering out crawler errors.
  */
 function flattenSeverityIssues(bySeverity: Record<string, string[]>) {
-  return ([
-    ...(bySeverity.critical ?? []).map((issue: string) => ({ issue, severity: 'critical', severityLabel: 'Critical' })),
-    ...(bySeverity.high ?? []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
-    ...(bySeverity.medium ?? []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
-    ...(bySeverity.low ?? []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
-  ] as { issue: string; severity: string; severityLabel: string }[]).filter((item) => !isCrawlerError(item.issue));
+  return (
+    [
+      ...(bySeverity.critical ?? []).map((issue: string) => ({
+        issue,
+        severity: 'critical',
+        severityLabel: 'Critical',
+      })),
+      ...(bySeverity.high ?? []).map((issue: string) => ({ issue, severity: 'high', severityLabel: 'High' })),
+      ...(bySeverity.medium ?? []).map((issue: string) => ({ issue, severity: 'medium', severityLabel: 'Medium' })),
+      ...(bySeverity.low ?? []).map((issue: string) => ({ issue, severity: 'low', severityLabel: 'Low' })),
+    ] as { issue: string; severity: string; severityLabel: string }[]
+  ).filter((item) => !isCrawlerError(item.issue));
 }
 
 /**
@@ -228,7 +234,7 @@ function getIssueCard(
       <div class="issue-examples-list mt-2">
         ${renderExpandableList(
           examples,
-          (ex: string) => `<div class="issue-example-item">${escapeHtml(ex)}</div>`,
+          (ex: string) => `<div class="issue-example-item">${exampleHtml(ex)}</div>`,
           `issue-more-${index}`,
           VISIBLE_COUNT,
           totalCount,
@@ -325,6 +331,5 @@ function getComparisonTopIssues(jsonData: Record<string, unknown>, comparison: C
     </div>
   `;
 }
-
 
 export { getTopIssues };

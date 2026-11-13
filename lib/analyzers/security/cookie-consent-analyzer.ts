@@ -36,6 +36,18 @@ const CONSENT_ACTION_RE =
  */
 const BANNER_CONTAINER_TAGS = new Set(['div', 'aside', 'section', 'dialog', 'form']);
 
+/** Lower-cased script/link URLs plus element ids and classes, newline-joined, for CMP fingerprinting. */
+export function consentMarkupIdentifiers(parsedPage: ParsedPage): string {
+  const parts: string[] = [];
+  for (const el of parsedPage.querySelectorAll('script[src], link[href], [id], [class]')) {
+    for (const attr of ['src', 'href', 'id', 'class']) {
+      const v = el.getAttribute(attr);
+      if (v) parts.push(v.toLowerCase());
+    }
+  }
+  return parts.join('\n');
+}
+
 /**
  * Static "generic banner" heuristic (detection Method 3), extracted + hardened
  * for unit testing.
@@ -88,7 +100,7 @@ class CookieConsentAnalyzer {
   static #consentPlatforms = [
     { name: 'OneTrust', patterns: ['onetrust', 'optanon', 'cookiepro'] },
     { name: 'CookieBot', patterns: ['cookiebot', 'cookieconsent'] },
-    { name: 'TrustArc', patterns: ['trustarc', 'truste', 'consent.trustarc'] },
+    { name: 'TrustArc', patterns: ['trustarc', 'truste.com', 'consent.trustarc'] },
     { name: 'Quantcast', patterns: ['quantcast', '__cmpapi'] },
     { name: 'CookieYes', patterns: ['cookieyes', 'cookie-law-info'] },
     { name: 'GDPR Cookie Consent', patterns: ['gdpr-cookie-consent', 'moove_gdpr'] },
@@ -97,30 +109,30 @@ class CookieConsentAnalyzer {
     { name: 'iubenda', patterns: ['iubenda'] },
     { name: 'Usercentrics', patterns: ['usercentrics'] },
     { name: 'Didomi', patterns: ['didomi'] },
-    { name: 'Cookie Notice', patterns: ['cookie-notice', 'cn-'] },
+    { name: 'Cookie Notice', patterns: ['cookie-notice', 'cn-notice'] },
     { name: 'EU Cookie Law', patterns: ['eu-cookie-law'] },
   ];
 
-  // Common cookie types that require consent
+  // Common cookie types that require consent. Names are matched as a prefix
+  // (`_ga` covers `_ga_XXXX`); short names in #exactTrackingCookies only match
+  // exactly, so `fr` (Facebook) no longer matches a site's own `fr_vid`.
   static #trackingCookiePatterns = [
     '_ga',
     '_gid',
     '_gat', // Google Analytics
-    'fbp',
-    '_fbp',
-    'fr', // Facebook
+    '_fbp', // Facebook
     '__hssc',
     '__hstc',
-    'hubspot', // HubSpot
+    'hubspotutk', // HubSpot
     '_hjid',
-    '_hjSession', // Hotjar
+    '_hjsession', // Hotjar
     '_clck',
     '_clsk', // Microsoft Clarity
-    'intercom', // Intercom
+    'intercom-', // Intercom
     '_gcl', // Google Ads
-    'NID',
-    'IDE', // Google DoubleClick
   ];
+
+  static #exactTrackingCookies = new Set(['fr', 'fbp', 'nid', 'ide']);
 
   /**
    * Analyze cookie consent implementation
@@ -269,10 +281,12 @@ class CookieConsentAnalyzer {
       }
     }
 
-    // Method 2: Check HTML for consent-related elements
-    const html = parsedPage.toString().toLowerCase();
+    // Method 2: Check markup identifiers (script/link URLs, ids, classes) — never
+    // page text or comments, where words like "trusted" or an article about
+    // cookieconsent would otherwise match.
+    const markup = consentMarkupIdentifiers(parsedPage);
     for (const platform of this.#consentPlatforms) {
-      if (platform.patterns.some((p) => html.includes(p))) {
+      if (platform.patterns.some((p) => markup.includes(p))) {
         result.detected = true;
         result.platform = platform.name;
         result.method = 'html-detection';
@@ -295,14 +309,21 @@ class CookieConsentAnalyzer {
         const keywords = ['cookie', 'consent', 'privacy', 'gdpr', 'accept all', 'reject all'];
         const elements = document.querySelectorAll('div, aside, section');
 
+        // A banner offers a consent choice. Without that, a sticky table of contents in an
+        // article about cookie consent matched on its words alone.
+        const ACTION = /^(accept|accept all|allow|allow all|agree|i agree|ok|got it|reject|reject all|decline|deny|manage|customi[sz]e|preferences|settings)\b/i;
         for (const el of elements) {
           const style = getComputedStyle(el);
           // Check if visible and fixed/sticky (common for banners)
           if (style.position === 'fixed' || style.position === 'sticky') {
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue;
             const text = el.textContent.toLowerCase();
-            if (keywords.some((k) => text.includes(k)) && text.length < 2000) {
-              return true;
-            }
+            if (!keywords.some((k) => text.includes(k)) || text.length >= 2000) continue;
+            const hasAction = Array.from(el.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]')).some(
+              (b) => ACTION.test(((b as HTMLElement).innerText || (b as HTMLInputElement).value || '').trim()),
+            );
+            if (hasAction) return true;
           }
         }
         return false;
@@ -327,7 +348,14 @@ class CookieConsentAnalyzer {
    */
   static async #analyzeCookies(chromePage: ChromePage) {
     try {
-      const cookies = await chromePage.context().cookies();
+      // Only cookies that apply to this page and its frames: the crawl shares one browser context,
+      // so the full jar also holds cookies set by embeds on earlier pages (e.g. medium.com's).
+      const frameUrls = chromePage
+        .frames()
+        .map((f) => f.url())
+        .filter((u) => /^https?:/.test(u));
+      if (frameUrls.length === 0) frameUrls.push(chromePage.url());
+      const cookies = await chromePage.context().cookies([...new Set(frameUrls)]);
 
       let thirdParty = 0;
       const pageHost = new URL(chromePage.url()).hostname;
@@ -391,10 +419,13 @@ class CookieConsentAnalyzer {
 
     for (const cookie of cookies) {
       for (const pattern of this.#trackingCookiePatterns) {
-        if (cookie.name.toLowerCase().includes(pattern.toLowerCase())) {
+        if (cookie.name.toLowerCase().startsWith(pattern)) {
           trackingCookies.push(cookie.name);
           break;
         }
+      }
+      if (this.#exactTrackingCookies.has(cookie.name.toLowerCase()) && !trackingCookies.includes(cookie.name)) {
+        trackingCookies.push(cookie.name);
       }
     }
 

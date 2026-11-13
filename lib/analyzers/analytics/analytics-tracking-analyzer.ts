@@ -1,5 +1,6 @@
 import { detectImportantPageLinks } from '../../utils';
 import type { ChromePage, ParsedPage } from '../../types';
+import { consentMarkupIdentifiers } from '../security/cookie-consent-analyzer';
 
 class AnalyticsTrackingAnalyzer {
   static async analyzeAnalyticsTracking(chromePage: ChromePage, parsedPage: ParsedPage, _url: string) {
@@ -174,8 +175,11 @@ class AnalyticsTrackingAnalyzer {
       { name: 'Termly', patterns: ['app.termly.io/embed'] },
     ];
 
+    // Script URLs, ids and classes only: an article about cookie consent (or quoting a CMP's
+    // script tag in a code sample) is not a consent implementation.
+    const consentMarkup = consentMarkupIdentifiers(parsedPage);
     for (const tool of consentTools) {
-      const hasConsentTool = tool.patterns.some((pattern) => htmlContent.includes(pattern));
+      const hasConsentTool = tool.patterns.some((pattern) => consentMarkup.includes(pattern));
       if (hasConsentTool) {
         analyticsData.hasCookieConsent = true;
         analyticsData.consentTool = tool.name;
@@ -185,10 +189,10 @@ class AnalyticsTrackingAnalyzer {
 
     // Check for generic cookie consent patterns
     if (!analyticsData.hasCookieConsent) {
-      const genericConsentPatterns = [/cookie.*consent/i, /gdpr.*consent/i, /accept.*cookie/i, /cookie.*banner/i];
+      const genericConsentPatterns = [/cookie.?consent/i, /gdpr.?consent/i, /cookie.?banner/i, /consent.?banner/i];
 
       for (const pattern of genericConsentPatterns) {
-        if (pattern.test(htmlContent)) {
+        if (consentMarkup.split('\n').some((v) => pattern.test(v))) {
           analyticsData.hasCookieConsent = true;
           analyticsData.consentTool = 'Custom/Unknown';
           break;

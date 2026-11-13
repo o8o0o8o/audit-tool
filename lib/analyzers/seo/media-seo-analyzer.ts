@@ -18,6 +18,8 @@ interface NativeVideoInfo {
   captionKind: string | null;
   autoplay: boolean;
   muted: boolean;
+  /** Muted autoplay without controls: a silent background/UI clip, not content to caption or index. */
+  decorative?: boolean;
 }
 
 interface EmbeddedVideoInfo {
@@ -86,18 +88,20 @@ class MediaSEOAnalyzer {
 
     // 5. Count issues
     for (const video of [...nativeVideos, ...embeddedVideos] as (NativeVideoInfo | EmbeddedVideoInfo)[]) {
-      if (!video.hasCaption) mediaData.videosWithoutCaptions++;
+      const decorative = video.type === 'native' && !!video.decorative;
+      if (!video.hasCaption && !decorative) mediaData.videosWithoutCaptions++;
       if ('hasPoster' in video && !video.hasPoster && video.type === 'native') mediaData.videosWithoutPoster++;
-      if (!video.hasTitle) mediaData.videosWithoutTitle++;
+      if (!video.hasTitle && !decorative) mediaData.videosWithoutTitle++;
     }
+    const contentVideos = mediaData.totalVideos - nativeVideos.filter((v) => v.decorative).length;
 
     // Generate issues
 
     // Videos without schema markup
-    if (mediaData.totalVideos > 0 && !mediaData.hasVideoSchema) {
+    if (contentVideos > 0 && !mediaData.hasVideoSchema) {
       issues.push({
         message: 'Video content without VideoObject schema',
-        detail: `<a href="${url}">${url}</a> has ${mediaData.totalVideos} video(s) but no VideoObject structured data. Add schema markup for better search visibility and video rich results.`,
+        detail: `<a href="${url}">${url}</a> has ${contentVideos} video(s) but no VideoObject structured data. Add schema markup for better search visibility and video rich results.`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -165,6 +169,7 @@ class MediaSEOAnalyzer {
       const title = video.getAttribute('title') ?? video.getAttribute('aria-label');
       const autoplay = video.hasAttribute('autoplay');
       const muted = video.hasAttribute('muted');
+      const decorative = autoplay && muted && !video.hasAttribute('controls');
 
       // Check for track elements (captions)
       const tracks = video.querySelectorAll('track');
@@ -188,6 +193,7 @@ class MediaSEOAnalyzer {
         captionKind: captionTrack?.getAttribute('kind') ?? null,
         autoplay,
         muted,
+        decorative,
       });
     }
 

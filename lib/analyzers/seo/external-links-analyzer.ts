@@ -5,6 +5,7 @@
 
 import { SEVERITY } from '../../constants';
 import { isInternalLink, getOrigin, fetchWithTimeout, getHostname, shortenUrl } from '../../utils';
+import { LINK_CHECK_HEADERS, classifyLinkStatus, needsGetRetry } from '../../utils/link-status';
 import type { Issue, PageInfo } from '../../types';
 
 // Known spam/low-quality domains (simplified list)
@@ -119,7 +120,8 @@ class ExternalLinksAnalyzer {
       }
 
       // Check for suspicious links
-      const isSuspicious = SUSPICIOUS_PATTERNS.some((pattern) => pattern.test(href));
+      // Match the host only: a path word ("credit" in a help-article slug) says nothing about the site.
+      const isSuspicious = SUSPICIOUS_PATTERNS.some((pattern) => pattern.test(domain));
       if (isSuspicious) {
         info.suspiciousLinks.push({ href, anchor: link.text ?? link.anchor ?? '' });
 
@@ -151,7 +153,7 @@ class ExternalLinksAnalyzer {
       }
 
       // Check broken links if status available
-      if (link.status && link.status >= 400) {
+      if (link.status && classifyLinkStatus(link.status) === 'dead') {
         info.brokenLinks.push({ href, status: link.status! });
       }
     }
@@ -309,6 +311,8 @@ class ExternalLinksAnalyzer {
       redirected: [] as { url: string; status: number; finalUrl: string }[],
       timeout: [] as string[],
       errors: [] as { url: string; error: string }[],
+      /** Refused the check (403/429/999…): bot protection, not a dead page. */
+      blocked: [] as { url: string; status: number }[],
     };
 
     // Process in batches
@@ -318,13 +322,20 @@ class ExternalLinksAnalyzer {
       const batchResults = await Promise.allSettled(
         batch.map(async (url: string) => {
           try {
-            const response = await fetchWithTimeout(url, timeout, {
+            let response = await fetchWithTimeout(url, timeout, {
               method: 'HEAD',
               redirect: 'follow',
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
-              },
+              headers: LINK_CHECK_HEADERS,
             });
+            // HEAD is often refused or answered differently: confirm errors with a GET.
+            if (needsGetRetry(response.status)) {
+              response = await fetchWithTimeout(url, timeout, {
+                method: 'GET',
+                redirect: 'follow',
+                headers: LINK_CHECK_HEADERS,
+              });
+              await response.body?.cancel().catch(() => {});
+            }
 
             return {
               url,
@@ -351,7 +362,9 @@ class ExternalLinksAnalyzer {
         const result = settled.value;
         if (result.error === 'timeout') {
           results.timeout.push(result.url);
-        } else if (result.status >= 400) {
+        } else if (classifyLinkStatus(result.status) === 'blocked') {
+          results.blocked.push({ url: result.url, status: result.status });
+        } else if (classifyLinkStatus(result.status) === 'dead') {
           const sourcePages = Array.from(externalUrlMap.get(result.url) ?? []);
           results.broken.push({
             url: result.url,

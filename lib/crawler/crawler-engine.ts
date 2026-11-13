@@ -34,7 +34,7 @@ import type {
 } from './crawler-types';
 
 import { SEVERITY, THRESHOLDS, VIEWPORT, CRAWL_SETTINGS, DEFAULT_USER_AGENT } from '../constants';
-import { analyzeUrlStructure } from '../utils';
+import { analyzeUrlStructure, normalizeUrlForComparison } from '../utils';
 import { computeContentHash } from '../utils/content-hash';
 import { escapeHtml } from '../reports/html-utils';
 import { loadConfig } from '../config-loader';
@@ -117,6 +117,25 @@ import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
 import { RepresentativeSampler } from './representative-sampler';
 
 import type { Issue } from '../types';
+
+/** Same host, ignoring a leading `www.`. */
+function isSameSite(target: string, origin: string): boolean {
+  try {
+    const strip = (h: string) => h.replace(/^www\./, '');
+    return strip(new URL(target).hostname) === strip(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** True when two URLs are the same resource (trailing slash / hash ignored); null when unparseable. */
+function sameResource(a: string, b: string): boolean | null {
+  try {
+    return normalizeUrlForComparison(a) === normalizeUrlForComparison(b);
+  } catch {
+    return null;
+  }
+}
 
 class CrawlerEngine {
   #options: CrawlerInternalOptions;
@@ -659,6 +678,7 @@ class CrawlerEngine {
       responseHeaders['age'] = headers['age'];
       responseHeaders['date'] = headers['date'];
       responseHeaders['expires'] = headers['expires'];
+      responseHeaders['content-type'] = headers['content-type'];
     }
 
     // Capture the served HTML (pre-JS response body) — the floor of what every
@@ -1343,6 +1363,37 @@ class CrawlerEngine {
     pageData.foundIn = sitemapUrls[url] ? 'sitemap' : 'discovered';
     if (pageData.foundIn === 'discovered' && discoveredLinksSource.has(url)) {
       pageData.discoveredOn = discoveredLinksSource.get(url);
+    }
+
+    // A same-site redirect: record it under the requested URL, then crawl the final URL as its
+    // own page. Analysing the target here too counted it twice (duplicate titles, descriptions,
+    // non-self canonicals…) whenever the final URL was also linked or in the sitemap.
+    const finalUrl = redirectChain.length > 0 ? redirectChain[redirectChain.length - 1].url : url;
+    if (redirectChain.length > 0 && isSameSite(finalUrl, this.#options.origin) && sameResource(finalUrl, url) === false) {
+      pageData.redirectOnly = true;
+      pageData.finalUrl = finalUrl;
+      pageData.status = Number(redirectChain[0].status) || status;
+      const finalKey = normalizeUrlForComparison(finalUrl);
+      if (!crawlFrontierKeys.has(finalKey)) {
+        crawlFrontierKeys.add(finalKey);
+        collectedURLs.add(finalUrl);
+        uniquePages.add(finalUrl);
+        pagesToCrawl.push(finalUrl);
+        if (!sitemapUrls[finalUrl]) discoveredLinksSource.set(finalUrl, url);
+      }
+      results.pageData.processedPages.add(url);
+      return { isMultiLang: false, failed: false };
+    }
+
+    // Not an HTML document (an image or PDF linked from a page): nothing to analyse as a page.
+    const contentType = String(
+      (responseHeaders as Record<string, string> | undefined)?.['content-type'] ?? '',
+    ).toLowerCase();
+    if (status === 200 && contentType && !/text\/html|application\/xhtml/.test(contentType)) {
+      pageData.nonHtml = true;
+      pageData.response = { headers: (responseHeaders || {}) as Record<string, string> };
+      results.pageData.processedPages.add(url);
+      return { isMultiLang: false, failed: false };
     }
 
     // Analyze URL structure

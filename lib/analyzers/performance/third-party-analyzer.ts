@@ -34,6 +34,22 @@ interface NetworkRequestEntry {
   [key: string]: unknown;
 }
 
+const ANALYTICS_PROVIDERS: [RegExp, string][] = [
+  [/(^|\.)(google-analytics\.com|googletagmanager\.com|analytics\.google\.com)$/, 'Google Analytics / GTM'],
+  [/(^|\.)clarity\.ms$/, 'Microsoft Clarity'],
+  [/(^|\.)hotjar\.(com|io)$/, 'Hotjar'],
+  [/(^|\.)gaug\.es$/, 'Gauges'],
+  [/(^|\.)ahrefs\.com$/, 'Ahrefs Analytics'],
+  [/(^|\.)cloudflareinsights\.com$/, 'Cloudflare Web Analytics'],
+];
+
+/** Vendor name for an analytics hostname (the registrable domain when unknown). */
+export function analyticsProvider(host: string): string {
+  const h = host.toLowerCase();
+  for (const [re, name] of ANALYTICS_PROVIDERS) if (re.test(h)) return name;
+  return h.split('.').slice(-2).join('.');
+}
+
 class ThirdPartyAnalyzer {
   // Known third-party categories
   static #categories = {
@@ -52,6 +68,9 @@ class ThirdPartyAnalyzer {
       'plausible.io',
       'matomo',
       'piwik',
+      'gaug.es',
+      'analytics.ahrefs.com',
+      'cloudflareinsights.com',
     ],
     advertising: [
       'doubleclick.net',
@@ -250,11 +269,13 @@ class ThirdPartyAnalyzer {
     }
 
     // Multiple analytics providers
+    // Count vendors, not hostnames: Clarity alone loads from www., scripts. and a rotating x.clarity.ms.
     const analyticsCategory = thirdPartyData.byCategory.analytics;
-    if (analyticsCategory && analyticsCategory.hosts.length > 3) {
+    const providers = [...new Set((analyticsCategory?.hosts ?? []).map(analyticsProvider))];
+    if (providers.length > 3) {
       warnings.push({
         message: 'Multiple analytics providers',
-        detail: `${analyticsCategory.hosts.length} analytics providers detected: ${analyticsCategory.hosts.join(', ')}. Consider consolidating.`,
+        detail: `${providers.length} analytics providers detected: ${providers.join(', ')}. Consider consolidating.`,
         severity: SEVERITY.LOW,
       });
     }
@@ -298,7 +319,8 @@ class ThirdPartyAnalyzer {
 
             // Check if third-party and blocking
             const isThirdParty = !scriptHost.includes(origin) && !origin.includes(scriptHost);
-            const isBlocking = !el.async && !el.defer;
+            // Module scripts are deferred by default; scripts injected after parsing never block it.
+            const isBlocking = !el.async && !el.defer && el.type !== 'module' && !!el.closest('head');
 
             if (isThirdParty && isBlocking) {
               blocking.push({

@@ -112,7 +112,31 @@ class ReducedMotionAnalyzer {
           '.glide',
           '.flickity',
         ];
-        const carousels = document.querySelectorAll(carouselSelectors.join(', ')).length;
+        // Count only carousels with evidence of auto-advance: a live library instance with
+        // autoplay running, or an autoplay option in markup. A plain slider is not a motion issue.
+        const isAutoplaying = (el: Element): boolean => {
+          const lib = el as Element & {
+            swiper?: { autoplay?: { running?: boolean }; params?: { autoplay?: boolean | { enabled?: boolean } } };
+            splide?: { options?: { autoplay?: unknown } };
+          };
+          if (lib.swiper) {
+            const p = lib.swiper.params?.autoplay;
+            return !!lib.swiper.autoplay?.running || p === true || (typeof p === 'object' && !!p?.enabled);
+          }
+          if (lib.splide) return !!lib.splide.options?.autoplay;
+          if (el.querySelector('[data-swiper-autoplay]')) return true;
+          const attrs = ['data-autoplay', 'data-auto-play', 'data-ride', 'data-bs-ride', 'data-flickity', 'data-splide', 'data-slick'];
+          return attrs.some((a) => {
+            const v = el.getAttribute(a);
+            if (v === null) return false;
+            if (a === 'data-ride' || a === 'data-bs-ride') return v === 'carousel';
+            if (a === 'data-autoplay' || a === 'data-auto-play') return v !== 'false' && v !== '0';
+            return /"?autoplay"?\s*:\s*(true|\d)/i.test(v);
+          });
+        };
+        const carousels = Array.from(document.querySelectorAll(carouselSelectors.join(', '))).filter(
+          (el) => !el.parentElement?.closest(carouselSelectors.join(', ')) && isAutoplaying(el),
+        ).length;
 
         // 5. Check for deprecated marquee element
         const marquees = document.querySelectorAll('marquee').length;

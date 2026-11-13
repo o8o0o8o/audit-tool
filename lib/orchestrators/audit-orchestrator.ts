@@ -212,16 +212,9 @@ class AuditOrchestrator {
     let failedPages = crawledData.failedPages;
 
     // Second crawl: discovered URLs not in sitemap
+    // "Not listed in sitemap" is reported after the crawl (runSiteWideValidation), once each
+    // discovered URL's status is known: redirects, 404s and files are not missing pages.
     if (collectedURLs.size) {
-      for (const discoveredUrl of collectedURLs) {
-        const escapedUrl = escapeHtml(discoveredUrl);
-        saveError(
-          `Some URLs are not listed in sitemap`,
-          `<a href="${escapedUrl}">${escapedUrl}</a> was found on the site but is not listed in sitemap`,
-          SEVERITY.MEDIUM,
-        );
-      }
-
       console.log('Crawling pages that are missing in sitemap...');
 
       const discoveredData = await crawlerEngine.crawlPages({
@@ -441,6 +434,25 @@ class AuditOrchestrator {
    * (temporarily absent) page is silently skipped instead of checked.
    * @private
    */
+  static #reportPagesMissingFromSitemap(
+    pages: Record<string, PageInfo>,
+    sitemapUrls: Record<string, unknown>,
+    saveError: SaveErrorFn,
+  ) {
+    if (Object.keys(sitemapUrls).length === 0) return; // no sitemap: nothing can be "missing" from it
+    const inSitemap = new Set(Object.keys(sitemapUrls).map((u) => normalizeUrlForComparison(u)));
+    for (const [url, page] of Object.entries(pages)) {
+      if (page.foundIn !== 'discovered' || page.status !== 200 || page.redirectOnly || page.nonHtml || page.noindex) continue;
+      if (inSitemap.has(normalizeUrlForComparison(url))) continue;
+      const escapedUrl = escapeHtml(url);
+      saveError(
+        `Some URLs are not listed in sitemap`,
+        `<a href="${escapedUrl}">${escapedUrl}</a> was found on the site but is not listed in sitemap`,
+        SEVERITY.MEDIUM,
+      );
+    }
+  }
+
   static #reportOrphanedPages(pages: Record<string, PageInfo>, saveError: SaveErrorFn) {
     let orphanedPagesCount = 0;
 
@@ -490,10 +502,15 @@ class AuditOrchestrator {
     // soft-404 pages into the defective-page set the caller suppresses from
     // every other finding's affected list.
     let brokenPaginationUrls: string[] = [];
+    // Content checks run on real HTML pages only: not 4xx/5xx responses, redirect-source entries
+    // (their target is crawled as its own page) or non-HTML files (an image linked from a post).
+    const contentPages = Object.fromEntries(
+      Object.entries(pageData.pages).filter(([, p]) => p.status === 200 && !p.redirectOnly && !p.nonHtml),
+    );
     const validators = [
       {
         name: 'Duplicate Content',
-        run: () => DuplicateChecker.checkDuplicates(pageData.pages),
+        run: () => DuplicateChecker.checkDuplicates(contentPages),
       },
       {
         name: 'International SEO Consistency',
@@ -505,7 +522,7 @@ class AuditOrchestrator {
       },
       {
         name: 'Structured Data Consistency',
-        run: () => StructuredDataValidator.validateStructuredDataConsistency(pageData.pages),
+        run: () => StructuredDataValidator.validateStructuredDataConsistency(contentPages),
       },
       {
         name: 'Indexability & Crawlability',
@@ -517,11 +534,11 @@ class AuditOrchestrator {
       },
       {
         name: 'Social Media Implementation',
-        run: () => SocialMediaValidator.validateSocialMediaImplementation(pageData.pages),
+        run: () => SocialMediaValidator.validateSocialMediaImplementation(contentPages),
       },
       {
         name: 'Analytics Implementation',
-        run: () => AnalyticsValidator.validateAnalyticsImplementation(pageData.pages),
+        run: () => AnalyticsValidator.validateAnalyticsImplementation(contentPages),
       },
       {
         name: 'Link Depth & Architecture',
@@ -529,35 +546,35 @@ class AuditOrchestrator {
       },
       {
         name: 'URL Architecture (Site-Wide)',
-        run: () => UrlArchitectureAnalyzer.analyzeSiteWide(pageData.pages, origin),
+        run: () => UrlArchitectureAnalyzer.analyzeSiteWide(contentPages, origin),
       },
       {
         name: 'Content Freshness (Site-Wide)',
-        run: () => FreshnessAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => FreshnessAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'E-E-A-T Signals (Site-Wide)',
-        run: () => EEATAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => EEATAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Technical SEO (Site-Wide)',
-        run: () => TechnicalSEOAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => TechnicalSEOAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Thin Content Detection',
-        run: () => ThinContentAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => ThinContentAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Keyword Cannibalisation',
-        run: () => KeywordCannibalisationAnalyzer.analyze(pageData.pages),
+        run: () => KeywordCannibalisationAnalyzer.analyze(contentPages),
       },
       {
         name: 'Soft 404 Detection (Site-Wide)',
-        run: () => Soft404Analyzer.analyzeSiteWide(pageData.pages),
+        run: () => Soft404Analyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Console Errors (Site-Wide)',
-        run: () => ConsoleErrorAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => ConsoleErrorAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Pagination SEO (Site-Wide)',
@@ -575,35 +592,35 @@ class AuditOrchestrator {
       },
       {
         name: 'Media SEO (Site-Wide)',
-        run: () => MediaSEOAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => MediaSEOAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Web Components (Site-Wide)',
-        run: () => WebComponentAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => WebComponentAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Font Loading (Site-Wide)',
-        run: () => FontLoadingAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => FontLoadingAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Third-Party Scripts (Site-Wide)',
-        run: () => ThirdPartyAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => ThirdPartyAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Critical Rendering Path (Site-Wide)',
-        run: () => CriticalPathAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => CriticalPathAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Connection Timing (Site-Wide)',
-        run: () => ConnectionTimingAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => ConnectionTimingAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Form Accessibility (Site-Wide)',
-        run: () => FormAccessibilityAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => FormAccessibilityAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Cookie Consent (Site-Wide)',
-        run: () => CookieConsentAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => CookieConsentAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Redirect Chains (Site-Wide)',
@@ -611,39 +628,39 @@ class AuditOrchestrator {
       },
       {
         name: 'Compression (Site-Wide)',
-        run: () => CompressionAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => CompressionAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Resource Hints (Site-Wide)',
-        run: () => ResourceHintsAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => ResourceHintsAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Mixed Content (Site-Wide)',
-        run: () => MixedContentAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => MixedContentAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'HTTP Protocol (Site-Wide)',
-        run: () => HTTPProtocolAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => HTTPProtocolAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'PWA Features (Site-Wide)',
-        run: () => PWAAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => PWAAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Above-the-Fold (Site-Wide)',
-        run: () => AboveFoldAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => AboveFoldAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'JavaScript Rendering (Site-Wide)',
-        run: () => JavaScriptRenderingAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => JavaScriptRenderingAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Anchor Text (Site-Wide)',
-        run: () => AnchorTextAnalyzer.analyzeSiteWide(pageData.pages, origin),
+        run: () => AnchorTextAnalyzer.analyzeSiteWide(contentPages, origin),
       },
       {
         name: 'External Links (Site-Wide)',
-        run: () => ExternalLinksAnalyzer.analyzeSiteWide(pageData.pages, origin),
+        run: () => ExternalLinksAnalyzer.analyzeSiteWide(contentPages, origin),
       },
       {
         name: 'Crawl Budget (Site-Wide)',
@@ -651,23 +668,23 @@ class AuditOrchestrator {
       },
       {
         name: 'AI Search Readiness (Site-Wide)',
-        run: () => AEOAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => AEOAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Response Headers (Site-Wide)',
-        run: () => ResponseHeaderAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => ResponseHeaderAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'CTA Detection (Site-Wide)',
-        run: () => CTADetectorAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => CTADetectorAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Language Detection (Site-Wide)',
-        run: () => LanguageDetectionAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => LanguageDetectionAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Content Similarity',
-        run: () => ContentSimilarityAnalyzer.analyze(pageData.pages, analysisConfig),
+        run: () => ContentSimilarityAnalyzer.analyze(contentPages, analysisConfig),
       },
       {
         name: 'Internal PageRank',
@@ -675,7 +692,7 @@ class AuditOrchestrator {
       },
       {
         name: 'Code Coverage (Site-Wide)',
-        run: () => CodeCoverageAnalyzer.analyzeSiteWide(pageData.pages),
+        run: () => CodeCoverageAnalyzer.analyzeSiteWide(contentPages),
       },
       {
         name: 'Outbound Link Health (Site-Wide)',
@@ -706,6 +723,7 @@ class AuditOrchestrator {
     // codes (A1.4) — both moved here (from the crawl-time analyzePages path) so
     // they read the fully-reloaded page set, not a partially-evicted one.
     AuditOrchestrator.#reportOrphanedPages(pageData.pages, saveError);
+    AuditOrchestrator.#reportPagesMissingFromSitemap(pageData.pages, sitemapUrls, saveError);
     AuditOrchestrator.#reconcileSitemapStatusCodes(pageData.pages, sitemapUrls, saveError);
 
     await AuditOrchestrator.checkAdsTxtGate(pageData.pages, origin, saveError, siteTextFiles);

@@ -5,6 +5,36 @@ interface RequestEntry {
   size?: number | null;
   resourceType?: string;
   status?: number;
+  headers?: Record<string, string>;
+}
+
+/** Image format from the response Content-Type, falling back to the URL extension. */
+export function imageFormat(src: string, req?: RequestEntry): 'modern' | 'legacy' | 'vector' | 'unknown' {
+  const ct = (req?.headers?.['content-type'] ?? '').toLowerCase();
+  if (ct) {
+    if (/image\/(webp|avif|jxl)/.test(ct)) return 'modern';
+    if (/image\/svg/.test(ct)) return 'vector';
+    if (/image\/(jpe?g|png|gif)/.test(ct)) return 'legacy';
+  }
+  const path = src.toLowerCase().split(/[?#]/)[0];
+  if (/\.(webp|avif)$/.test(path)) return 'modern';
+  if (/\.svg$/.test(path) || /^data:image\/svg/.test(src)) return 'vector';
+  if (/\.(jpe?g|png|gif)$/.test(path)) return 'legacy';
+  return 'unknown';
+}
+
+/**
+ * A raster `<img>` downloaded at more than twice the pixels it needs (display × DPR). Vector and
+ * inline images scale for free, so they never count.
+ */
+export function isOversizedForDisplay(
+  img: { src: string | null; naturalWidth: number; naturalHeight: number; displayWidth: number; displayHeight: number },
+  dpr: number,
+): boolean {
+  if (!img.src || isVectorOrInline(img.src)) return false;
+  if (!img.naturalWidth || !img.displayWidth || !img.displayHeight) return false;
+  const limit = 2 * Math.max(1, dpr);
+  return img.naturalWidth / img.displayWidth > limit && img.naturalHeight / img.displayHeight > limit;
 }
 
 /** A single parsed candidate inside a srcset, e.g. `foo-800.webp 800w` → { url:"foo-800.webp", value:800, kind:"w" }. */
@@ -61,6 +91,8 @@ export interface BackgroundImageInput {
   elementHeight: number;
   backgroundSize: string;
   backgroundRepeat: string;
+  /** Computed CSS `filter`; a blurred backdrop is meant to be low-resolution. */
+  filter?: string;
 }
 
 const isVectorOrInline = (src: string) => /^data:/i.test(src) || /\.svg(?:[?#]|$)/i.test(src);
@@ -92,6 +124,7 @@ function renderedBackgroundWidth(bg: BackgroundImageInput): number | null {
 /** True when a non-repeating CSS background is stretched beyond its natural resolution. */
 export function classifyBackgroundUpscale(bg: BackgroundImageInput, dpr: number): boolean {
   if (isVectorOrInline(bg.url)) return false;
+  if (/blur\(/i.test(bg.filter ?? '')) return false;
   if (!/^no-repeat(?:\s+no-repeat)?$/.test(bg.backgroundRepeat.trim())) return false;
   if (bg.naturalWidth <= 0 || bg.naturalHeight <= 0 || bg.elementWidth <= 0 || bg.elementHeight <= 0) return false;
   const rendered = renderedBackgroundWidth(bg);
@@ -148,6 +181,7 @@ class ImageOptimizationAnalyzer {
     });
 
     imageAnalysis.totalImages = imageElements.length;
+    const downscaled = new Map<string, (typeof imageElements)[number]>();
 
     const upscaledImages = imageElements.filter((img) => classifyUpscaledImage(img, devicePixelRatio));
     const backgrounds = await ImageOptimizationAnalyzer.collectBackgrounds(chromePage);
@@ -173,16 +207,11 @@ class ImageOptimizationAnalyzer {
 
         imageAnalysis.totalImageSize += size;
 
-        // Check image format
-        const imgPath = img.src.toLowerCase().split('?')[0]; // strip query params
-        if (imgPath.endsWith('.webp') || imgPath.endsWith('.avif')) {
+        // Check image format (Content-Type first: image CDNs serve AVIF/WebP from extension-less URLs)
+        const format = imageFormat(img.src, imgRequest);
+        if (format === 'modern') {
           imageAnalysis.modernFormats++;
-        } else if (
-          imgPath.endsWith('.jpg') ||
-          imgPath.endsWith('.jpeg') ||
-          imgPath.endsWith('.png') ||
-          imgPath.endsWith('.gif')
-        ) {
+        } else if (format === 'legacy') {
           imageAnalysis.legacyFormats++;
         }
 
@@ -198,23 +227,10 @@ class ImageOptimizationAnalyzer {
           });
         }
 
-        // Check if image is scaled down significantly (wasting bandwidth)
-        if (img.naturalWidth && img.displayWidth) {
-          const widthRatio = img.naturalWidth / img.displayWidth;
-          const heightRatio = img.naturalHeight / img.displayHeight;
-
-          if (widthRatio > 2 || heightRatio > 2) {
-            imageAnalysis.issues.push({
-              severity: SEVERITY.MEDIUM,
-              message: `Some images are significantly larger than their display size`,
-              // Don't embed the raw image src: CDN URLs are opaque hashes that
-              // truncate badly and, as a second URL in the detail, make the
-              // curated report mis-cluster this single-page finding under a
-              // "Pages sharing this value" group. The page + dimensions are the
-              // actionable signal.
-              detail: `<a href="${url}">${url}</a> serves an image at ${img.naturalWidth}×${img.naturalHeight} but displays it at ${Math.round(img.displayWidth)}×${Math.round(img.displayHeight)} — downscaled in the browser, wasting bandwidth.`,
-            });
-          }
+        // Check if image is scaled down significantly (wasting bandwidth). Collected per
+        // unique src and reported once per page below.
+        if (isOversizedForDisplay(img, devicePixelRatio) && !downscaled.has(img.src)) {
+          downscaled.set(img.src, img);
         }
       }
 
@@ -328,12 +344,29 @@ class ImageOptimizationAnalyzer {
       });
     }
 
-    // Generate summary issues
-    if (imageAnalysis.totalImages >= THRESHOLDS.LAZY_LOAD_THRESHOLD && imageAnalysis.withLazyLoading === 0) {
+    if (downscaled.size > 0) {
+      // Don't embed raw image srcs: CDN URLs are opaque hashes that truncate badly and make the
+      // curated report mis-cluster this single-page finding. Dimensions are the actionable signal.
+      const examples = [...downscaled.values()]
+        .slice(0, 3)
+        .map((i) => `${i.naturalWidth}×${i.naturalHeight} shown at ${Math.round(i.displayWidth)}×${Math.round(i.displayHeight)}`)
+        .join('; ');
+      imageAnalysis.issues.push({
+        severity: SEVERITY.MEDIUM,
+        message: `Some images are significantly larger than their display size`,
+        detail: `<a href="${url}">${url}</a> serves ${downscaled.size} image(s) at more than twice the resolution needed at ${devicePixelRatio}× DPR (${examples}) — downscaled in the browser, wasting bandwidth.`,
+      });
+    }
+
+    // Generate summary issues. Only distinct raster images count: icons repeated in the header,
+    // footer and mobile menu, or SVGs, are not what lazy loading is for.
+    const rasterImages = new Set(imageElements.filter((i) => i.src && !isVectorOrInline(i.src)).map((i) => i.src));
+    const lazyRaster = imageElements.some((i) => i.src && !isVectorOrInline(i.src) && i.loading === 'lazy');
+    if (rasterImages.size >= THRESHOLDS.LAZY_LOAD_THRESHOLD && !lazyRaster) {
       imageAnalysis.issues.push({
         severity: SEVERITY.MEDIUM,
         message: `Some pages have many images but none use lazy loading`,
-        detail: `<a href="${url}">${url}</a> has ${imageAnalysis.totalImages} images but none use lazy loading`,
+        detail: `<a href="${url}">${url}</a> has ${rasterImages.size} images but none use lazy loading`,
       });
     }
 
@@ -361,7 +394,7 @@ class ImageOptimizationAnalyzer {
       imageAnalysis.issues.push({
         severity: SEVERITY.MEDIUM,
         message: `Pages serve images only as JPG/PNG instead of WebP/AVIF`,
-        detail: `<a href="${url}">${url}</a> has ${imageAnalysis.legacyFormats} images all in older formats (JPG/PNG). Modern formats (WebP/AVIF) are typically 30–50% smaller for the same quality`,
+        detail: `<a href="${url}">${url}</a> has ${imageAnalysis.legacyFormats} images all in older formats (JPG/PNG/GIF). Modern formats (WebP/AVIF) are typically 30–50% smaller for the same quality`,
       });
     }
 
@@ -375,13 +408,19 @@ class ImageOptimizationAnalyzer {
   private static async collectBackgrounds(chromePage: ChromePage): Promise<BackgroundImageInput[]> {
     return chromePage.evaluate(
       async ({ cap, perImageMs, totalMs }) => {
-        const targets: { url: string; el: Element; size: string; repeat: string }[] = [];
+        const targets: { url: string; el: Element; size: string; repeat: string; filter: string }[] = [];
         for (const el of Array.from(document.querySelectorAll('body *'))) {
           if (targets.length >= cap) break;
           const style = getComputedStyle(el);
           const match = /url\(["']?([^"')]+)["']?\)/.exec(style.backgroundImage);
           if (!match) continue;
-          targets.push({ url: match[1], el, size: style.backgroundSize, repeat: style.backgroundRepeat });
+          targets.push({
+            url: match[1],
+            el,
+            size: style.backgroundSize,
+            repeat: style.backgroundRepeat,
+            filter: style.filter,
+          });
         }
         const decoded: BackgroundImageInput[] = [];
         const decodeOne = (t: (typeof targets)[number]) =>
@@ -399,6 +438,7 @@ class ImageOptimizationAnalyzer {
                 elementHeight: rect.height,
                 backgroundSize: t.size,
                 backgroundRepeat: t.repeat,
+                filter: t.filter,
               });
               resolve();
             };

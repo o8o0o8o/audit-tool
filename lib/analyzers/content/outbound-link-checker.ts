@@ -7,6 +7,7 @@
 import { SEVERITY } from '../../constants';
 import { getHostname, shortenUrl } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
+import { LINK_CHECK_HEADERS, classifyLinkStatus, needsGetRetry, stripFragment } from '../../utils/link-status';
 import * as https from 'https';
 import * as http from 'http';
 
@@ -37,6 +38,8 @@ class OutboundLinkChecker {
     const info = {
       totalChecked: 0,
       broken: [] as { url: string; status: number }[],
+      /** Refused the check (403/429/999…): bot protection, not evidence the page is gone. */
+      blocked: [] as { url: string; status: number }[],
       redirected: [] as { url: string; redirectTo: string | null | undefined; status: number | undefined }[],
       timeouts: [] as string[],
       healthy: 0,
@@ -58,7 +61,7 @@ class OutboundLinkChecker {
       try {
         const linkUrl = new URL(href, url);
         if (linkUrl.hostname !== originHost && (linkUrl.protocol === 'http:' || linkUrl.protocol === 'https:')) {
-          externalLinks.push(linkUrl.href);
+          externalLinks.push(stripFragment(linkUrl.href));
         }
       } catch {
         // Invalid URL
@@ -100,9 +103,14 @@ class OutboundLinkChecker {
         continue;
       }
 
-      if (result.status >= 400) {
+      const verdict = classifyLinkStatus(result.status);
+      if (verdict === 'dead') {
         info.broken.push({ url: linkUrl, status: result.status });
-      } else if (result.redirected) {
+      } else if (verdict === 'blocked') {
+        info.blocked.push({ url: linkUrl, status: result.status });
+      } else if (verdict === 'unknown') {
+        info.timeouts.push(linkUrl);
+      } else if (result.redirected && result.status < 400) {
         info.redirected.push({ url: linkUrl, redirectTo: result.redirectTo, status: result.status });
       } else {
         info.healthy++;
@@ -188,16 +196,49 @@ class OutboundLinkChecker {
     }
     domainRequestTimes.set(hostname, Date.now());
 
+    // Follow up to 5 redirects so a link that 301s to a dead page is reported as dead.
+    let current = urlToCheck;
+    let firstLocation: string | null = null;
+    let result: Awaited<ReturnType<typeof OutboundLinkChecker.checkOnce>> = { status: 0, error: true };
+    for (let hop = 0; hop <= 5; hop++) {
+      result = await OutboundLinkChecker.checkOnce(current, timeoutMs);
+      if (!result.redirected || !result.redirectTo) break;
+      let next: string;
+      try {
+        next = new URL(result.redirectTo, current).href;
+      } catch {
+        break;
+      }
+      firstLocation ??= next;
+      if (next === current) break;
+      current = next;
+    }
+    const final = firstLocation ? { ...result, redirected: true, redirectTo: firstLocation } : result;
+    // Don't cache errors/timeouts — they may be transient (network blip, DNS)
+    if (final.status) urlCache.set(urlToCheck, final);
+    return final;
+  }
+
+  /** HEAD, confirmed with GET on any error: HEAD is often refused (405/501) or answered differently. */
+  static async checkOnce(urlToCheck: string, timeoutMs: number) {
+    const head = await OutboundLinkChecker.#request(urlToCheck, 'HEAD', timeoutMs);
+    return needsGetRetry(head.status) ? OutboundLinkChecker.#request(urlToCheck, 'GET', timeoutMs) : head;
+  }
+
+  static #request(
+    urlToCheck: string,
+    method: 'HEAD' | 'GET',
+    timeoutMs: number,
+  ): Promise<{ status: number; redirected?: boolean; redirectTo?: string | null; timeout?: boolean; error?: boolean }> {
     return new Promise((resolve) => {
       const protocol = urlToCheck.startsWith('https') ? https : http;
-      const req = protocol.request(urlToCheck, {
-        method: 'HEAD',
-        timeout: timeoutMs,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)',
-          Accept: '*/*',
-        },
-      });
+      let req: http.ClientRequest;
+      try {
+        req = protocol.request(urlToCheck, { method, timeout: timeoutMs, headers: LINK_CHECK_HEADERS });
+      } catch {
+        resolve({ status: 0, error: true });
+        return;
+      }
 
       // Outer watchdog uses the CONFIGURED timeout (not a hard-coded 5s) and
       // destroys the socket when it fires, so a hung connection can't linger.
@@ -208,25 +249,22 @@ class OutboundLinkChecker {
 
       req.on('response', (res) => {
         clearTimeout(timeout);
-        const result = {
-          status: res.statusCode,
+        res.destroy(); // status + headers are all we need; never download a GET body
+        resolve({
+          status: res.statusCode ?? 0,
           redirected: res.statusCode! >= 300 && res.statusCode! < 400,
           redirectTo: res.headers.location ?? null,
-        };
-        urlCache.set(urlToCheck, result);
-        resolve(result);
+        });
       });
 
       req.on('error', () => {
         clearTimeout(timeout);
-        // Don't cache errors — they may be transient (network blip, DNS)
         resolve({ status: 0, error: true });
       });
 
       req.on('timeout', () => {
         req.destroy();
         clearTimeout(timeout);
-        // Don't cache timeouts — they may be transient
         resolve({ status: 0, timeout: true });
       });
 

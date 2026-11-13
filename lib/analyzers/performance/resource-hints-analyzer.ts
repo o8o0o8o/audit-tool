@@ -5,7 +5,7 @@
 
 import { SEVERITY } from '../../constants';
 import { getOrigin, incrementCounter, getFileNameFromUrl } from '../../utils';
-import type { Issue, PageInfo } from '../../types';
+import type { Issue, PageInfo, ParsedPage, ResourceHintsCollected } from '../../types';
 
 interface ResourceHint {
   href?: string;
@@ -18,6 +18,32 @@ interface MissingHint {
   url: string;
   type: string;
   reason: string;
+}
+
+/** Read `<link rel=preload|prefetch|preconnect|dns-prefetch|modulepreload>` from the served HTML. */
+export function collectResourceHints(parsedPage: ParsedPage, pageUrl: string): ResourceHintsCollected {
+  const out: Required<ResourceHintsCollected> = { preload: [], prefetch: [], preconnect: [], dnsPrefetch: [], modulePreload: [] };
+  for (const link of parsedPage.querySelectorAll('link[rel][href]')) {
+    const raw = link.getAttribute('href') ?? '';
+    let href = raw;
+    try {
+      href = new URL(raw, pageUrl).href;
+    } catch {
+      // keep the raw value
+    }
+    const as = link.getAttribute('as') ?? undefined;
+    // Bare `crossorigin` is a valid attribute with an empty value (= anonymous).
+    const crossorigin = link.hasAttribute('crossorigin') ? link.getAttribute('crossorigin') || 'anonymous' : undefined;
+    const type = link.getAttribute('type') ?? undefined;
+    for (const rel of (link.getAttribute('rel') ?? '').toLowerCase().split(/\s+/)) {
+      if (rel === 'preload') out.preload.push({ href, as, type, crossorigin });
+      else if (rel === 'prefetch') out.prefetch.push({ href, as });
+      else if (rel === 'preconnect') out.preconnect.push({ href, crossorigin });
+      else if (rel === 'dns-prefetch') out.dnsPrefetch.push({ href });
+      else if (rel === 'modulepreload') out.modulePreload.push({ href });
+    }
+  }
+  return out;
 }
 
 class ResourceHintsAnalyzer {

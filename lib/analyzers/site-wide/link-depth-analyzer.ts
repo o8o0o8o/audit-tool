@@ -38,6 +38,8 @@ class LinkDepthAnalyzer {
 
     for (const url of pageUrls) {
       const page = pages[url];
+      // Redirect stubs, files and error pages have no links of their own to judge.
+      if (page.redirectOnly || page.nonHtml || (page.status !== undefined && page.status !== 200)) continue;
       const incomingCount = getIncomingLinkCount(incomingLinks as Record<string, unknown>, url);
 
       // Orphan page detection

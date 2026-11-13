@@ -54,25 +54,42 @@ class ColorContrastAnalyzer {
           tagName: string;
         }[] = [];
 
+        // Only visible elements that own text directly (a text-node child): counting a <li> and
+        // the <a>/<span> inside it reported the same string up to four times.
+        const ownsText = (el: Element) =>
+          Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent || '').trim());
+        const isVisible = (el: Element) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 1 || rect.height <= 1) return false;
+          const style = window.getComputedStyle(el);
+          return style.visibility !== 'hidden' && parseFloat(style.opacity) > 0;
+        };
+
         // Sample up to 200 elements for performance
-        const elements = Array.from(textElements).slice(0, 200);
+        const elements = Array.from(textElements)
+          .filter((el) => ownsText(el) || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')
+          .filter(isVisible)
+          .slice(0, 200);
 
         for (const el of elements) {
           const text = (el.textContent || '').trim();
           if (!text || text.length === 0) continue;
 
           const style = window.getComputedStyle(el);
-          const fg = style.color;
-          const bg = getEffectiveBackground(el);
+          const bgRgb = getEffectiveBackground(el);
+          if (!bgRgb) continue; // background image/gradient behind the text: contrast unknown
+          const fgRgb = blend(parseRgba(style.color), bgRgb);
+          if (!fgRgb) continue;
+          // Text drawn in exactly its background colour is deliberately invisible (or sits on a
+          // layer we cannot resolve); either way it is not a contrast defect a reader meets.
+          if (fgRgb.every((v, i) => v === bgRgb[i])) continue;
           const fontSize = parseFloat(style.fontSize);
           const fontWeight = parseInt(style.fontWeight, 10) || 400;
 
-          if (!fg || !bg) continue;
-
           findings.push({
             text: text.substring(0, 50),
-            fg,
-            bg,
+            fg: `rgb(${fgRgb.join(', ')})`,
+            bg: `rgb(${bgRgb.join(', ')})`,
             fontSize,
             fontWeight,
             tagName: el.tagName.toLowerCase(),
@@ -81,20 +98,41 @@ class ColorContrastAnalyzer {
 
         return findings;
 
-        function getEffectiveBackground(el: Element): string {
+        function parseRgba(c: string): [number, number, number, number] | null {
+          const m = /rgba?\(([^)]+)\)/.exec(c);
+          if (!m) return null;
+          const parts = m[1].split(/[\s,/]+/).filter(Boolean).map(parseFloat);
+          if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return null;
+          return [parts[0], parts[1], parts[2], parts[3] ?? 1];
+        }
+
+        /** Composite a possibly translucent colour over an opaque one. */
+        function blend(top: [number, number, number, number] | null, under: [number, number, number]) {
+          if (!top) return null;
+          const a = top[3];
+          return [0, 1, 2].map((i) => Math.round(top[i] * a + under[i] * (1 - a))) as [number, number, number];
+        }
+
+        /**
+         * Opaque background behind `el`, compositing translucent layers up the tree over the
+         * page's white canvas. Null when a background image or gradient sits in between.
+         */
+        function getEffectiveBackground(el: Element): [number, number, number] | null {
+          const layers: [number, number, number, number][] = [];
           let current: Element | null = el;
           while (current) {
             const style = window.getComputedStyle(current);
-            const bg = style.backgroundColor;
-
-            // If not transparent, return it
-            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-              return bg;
+            if (style.backgroundImage && style.backgroundImage !== 'none') return null;
+            const c = parseRgba(style.backgroundColor);
+            if (c && c[3] > 0) {
+              layers.push(c);
+              if (c[3] >= 1) break;
             }
             current = current.parentElement;
           }
-          // Default to white
-          return 'rgb(255, 255, 255)';
+          let rgb: [number, number, number] = [255, 255, 255];
+          for (const layer of layers.reverse()) rgb = blend(layer, rgb) ?? rgb;
+          return rgb;
         }
       });
 

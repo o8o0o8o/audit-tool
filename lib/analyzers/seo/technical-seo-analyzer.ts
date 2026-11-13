@@ -137,7 +137,7 @@ class TechnicalSEOAnalyzer {
     this.checkIframes(parsedPage, url, warnings);
 
     // 12. Check HTML document size
-    this.checkHTMLSize(pageData, url, issues, warnings);
+    this.checkHTMLSize(pageData, url, issues, warnings, parsedPage);
 
     // Store in pageData
     pageData.technical = technicalData;
@@ -369,8 +369,9 @@ class TechnicalSEOAnalyzer {
   /**
    * Check HTML document size
    */
-  static checkHTMLSize(pageData: PageInfo, url: string, issues: Issue[], warnings: Issue[]) {
-    const htmlSize = pageData.htmlSize ?? pageData.totalResponseSize;
+  static checkHTMLSize(pageData: PageInfo, url: string, issues: Issue[], warnings: Issue[], parsedPage?: ParsedPage) {
+    // The document itself — never totalResponseSize, which is the whole page weight (images, GIFs, scripts).
+    const htmlSize = pageData.htmlSize ?? (parsedPage ? Buffer.byteLength(parsedPage.toString(), 'utf8') : undefined);
     if (!htmlSize) return;
 
     // Tier-twin collapsed to ONE message (report-rules.md §5): a single

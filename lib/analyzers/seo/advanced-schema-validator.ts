@@ -92,6 +92,16 @@ function vocabFindingToIssue(f: VocabFinding, url: string): Issue {
   }
 }
 
+function dedupeIssues(list: Issue[]): Issue[] {
+  const seen = new Set<string>();
+  return list.filter((i) => {
+    const key = `${i.message}\u0000${i.detail ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 class AdvancedSchemaValidator {
   /**
    * Validate schema markup on a page
@@ -144,7 +154,9 @@ class AdvancedSchemaValidator {
       }
     }
 
-    return { issues, warnings, schemaData };
+    // Several blocks of one type (three office LocalBusiness entries) raise the same finding
+    // once each; one per page is the fact.
+    return { issues: dedupeIssues(issues), warnings: dedupeIssues(warnings), schemaData };
   }
 
   /**

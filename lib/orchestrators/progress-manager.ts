@@ -714,6 +714,10 @@ class ProgressManager {
         (page.internalLinksCount ?? 0) || page.links.filter((l: LinkData) => l.isInternal).length;
       page.externalLinksCount =
         (page.externalLinksCount ?? 0) || page.links.filter((l: LinkData) => !l.isInternal).length;
+      page.internalAnchors ??= page.links
+        .filter((l: LinkData) => l.isInternal && typeof l.href === 'string')
+        .slice(0, 400)
+        .map((l: LinkData) => ({ href: String(l.href), text: String(l.text ?? '').slice(0, 80) }));
       page.links = page.links.filter((l: LinkData) => !l.text || l.text.trim() === '').slice(0, 20);
     }
 

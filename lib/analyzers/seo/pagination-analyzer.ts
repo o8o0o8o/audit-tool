@@ -31,6 +31,17 @@ export function isSuspectedInfinitePagination(p: {
   return p.emptyAfterClick || !p.contentChanged || p.duplicateStreak >= 2;
 }
 
+/** True when every link a load-more button would reveal is already present in the served HTML. */
+export function isRevealOnly(hiddenHrefs: string[], servedHtml: string): boolean {
+  if (hiddenHrefs.length === 0) return false;
+  const served = new Set(
+    parse(servedHtml)
+      .querySelectorAll('a[href]')
+      .map((a) => a.getAttribute('href') ?? ''),
+  );
+  return hiddenHrefs.every((h) => served.has(h));
+}
+
 class PaginationAnalyzer {
   /**
    * Analyze pagination implementation
@@ -102,7 +113,9 @@ class PaginationAnalyzer {
 
     // 5. Detect "Load More" buttons
     const loadMore = await this.#detectLoadMore(chromePage);
-    if (loadMore.detected) {
+    // A "Show more" that only reveals items already in the served HTML hides nothing from crawlers.
+    const revealOnly = !!servedHtml && isRevealOnly(loadMore.hiddenHrefs ?? [], servedHtml);
+    if (loadMore.detected && !revealOnly) {
       paginationData.hasPagination = true;
       paginationData.loadMoreDetected = true;
       paginationData.type = paginationData.type ?? 'load-more';
@@ -490,21 +503,32 @@ class PaginationAnalyzer {
             text.includes('view more') ||
             text.includes('see more')
           ) {
-            return { detected: true, text: btn.textContent.trim() };
+            return { detected: true, text: btn.textContent.trim(), hiddenHrefs: hiddenSiblingLinks(btn) };
           }
         }
 
         // Check class-based selectors
         for (const selector of loadMoreSelectors.slice(4)) {
-          if (document.querySelector(selector)) {
-            return { detected: true };
+          const el = document.querySelector(selector);
+          if (el) {
+            return { detected: true, hiddenHrefs: hiddenSiblingLinks(el) };
           }
         }
 
-        return { detected: false };
+        return { detected: false, hiddenHrefs: [] as string[] };
+
+        /** Links in the button's section that are in the DOM but not shown yet (a "reveal" button). */
+        function hiddenSiblingLinks(btn: Element): string[] {
+          const section = btn.closest('section, main, [class*="list"], [class*="grid"]') ?? btn.parentElement;
+          if (!section) return [];
+          return Array.from(section.querySelectorAll('a[href]'))
+            .filter((a) => (a as HTMLElement).offsetParent === null && a.getAttribute('href') !== '#')
+            .map((a) => a.getAttribute('href') ?? '')
+            .filter(Boolean);
+        }
       });
     } catch {
-      return { detected: false };
+      return { detected: false, hiddenHrefs: [] as string[] };
     }
   }
 

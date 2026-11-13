@@ -7,13 +7,16 @@ import { SEVERITY } from '../../constants';
 import { hasRobotsDirective, shortenUrl } from '../../utils';
 import type { ChromePage, ParsedPage, Issue, PageInfo } from '../../types';
 
+/** Pages at least this long are real content; only their opening text is scanned for "not found". */
+const SOFT404_FULL_PAGE_WORDS = 300;
+const SOFT404_LEAD_CHARS = 400;
+
 class Soft404Analyzer {
   // Common patterns indicating a soft 404
   static #notFoundPatterns = [
     // English
     /page\s*(not|wasn't|could not be)\s*found/i,
     /404\s*(error|not found|page)/i,
-    /not\s*found/i,
     /doesn't\s*exist/i,
     /does\s*not\s*exist/i,
     /no\s*longer\s*(exists|available)/i,
@@ -23,7 +26,7 @@ class Soft404Analyzer {
     /cannot\s*be\s*found/i,
     /this\s*page\s*(is|has been)\s*(missing|removed|deleted)/i,
     /page\s*(has been|was)\s*(moved|removed|deleted)/i,
-    /nothing\s*(here|found)/i,
+    /nothing\s*found/i,
     /oops.*not\s*found/i,
     /sorry.*not\s*(found|exist)/i,
     /the\s*requested\s*(page|url|resource)\s*(was|is|could)\s*not/i,
@@ -126,11 +129,14 @@ class Soft404Analyzer {
       }
     }
 
-    // 2. Check body content for not found patterns
+    // 2. Check body content for not found patterns. On a full-length page only the opening
+    // text counts: an article that says "page not found" or quotes `throw new Error('… not found')`
+    // further down is not an error page.
     const bodyText = await this.#getBodyText(chromePage);
+    const scanText = wordCount >= SOFT404_FULL_PAGE_WORDS ? bodyText.slice(0, SOFT404_LEAD_CHARS) : bodyText;
     let contentMatches = 0;
     for (const pattern of this.#notFoundPatterns) {
-      if (pattern.test(bodyText)) {
+      if (pattern.test(scanText)) {
         contentMatches++;
         if (contentMatches === 1) {
           signals.push(`Content contains "not found" pattern`);

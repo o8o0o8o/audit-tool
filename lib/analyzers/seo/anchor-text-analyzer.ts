@@ -218,14 +218,36 @@ class AnchorTextAnalyzer {
 
     const targetAnchorMap = new Map(); // target URL -> anchor texts used
 
+    // `links` is slimmed to empty-text links at checkpoint; the full internal set is kept in
+    // `internalAnchors`. Without it, every site-wide stat here was computed on empty anchors only.
+    const linksOf = (pageData: PageInfo): PageLink[] =>
+      pageData.internalAnchors ?? (Array.isArray(pageData.links) ? (pageData.links as PageLink[]) : []);
+
+    // Navigation/footer links repeat on every page; they say nothing about editorial anchor
+    // choices, so (anchor, target) pairs found on most pages are left out of the distribution,
+    // diversity and over-optimization stats.
+    const pageList = Object.values(pages);
+    const pairPages = new Map<string, number>();
+    for (const pageData of pageList) {
+      const seen = new Set<string>();
+      for (const link of linksOf(pageData)) {
+        seen.add(`${(link.text ?? link.anchor ?? '').trim().toLowerCase()}\u0000${String(link.href ?? link.url ?? '')}`);
+      }
+      for (const k of seen) pairPages.set(k, (pairPages.get(k) ?? 0) + 1);
+    }
+    const templateThreshold = Math.max(5, pageList.length / 2);
+    const isTemplateLink = (anchor: string, href: string) =>
+      (pairPages.get(`${anchor}\u0000${href}`) ?? 0) >= templateThreshold;
+
     for (const [_url, pageData] of Object.entries(pages)) {
-      const links: PageLink[] = Array.isArray(pageData.links) ? (pageData.links as PageLink[]) : [];
+      const links = linksOf(pageData);
 
       for (const link of links) {
         const href = String(link.href ?? link.url ?? '');
         const anchor = (link.text ?? link.anchor ?? '').trim().toLowerCase();
 
         if (!href || !isInternalLink(href, origin)) continue;
+        if (isTemplateLink(anchor, href)) continue;
 
         stats.totalInternalLinks++;
 
@@ -300,7 +322,7 @@ class AnchorTextAnalyzer {
 
       for (const [anchor, count] of anchors.entries() as IterableIterator<[string, number]>) {
         const percentage = (count / totalLinks) * 100;
-        if (percentage > 80 && count > 5 && !(GENERIC_ANCHORS as readonly string[]).includes(anchor)) {
+        if (anchor && percentage > 80 && count > 5 && !(GENERIC_ANCHORS as readonly string[]).includes(anchor)) {
           overOptimizedTargets.push({ target, anchor, percentage: percentage.toFixed(0), count });
         }
       }

@@ -546,15 +546,20 @@ class VitalsCollector {
           // INP not supported
         }
 
-        // 6. Long Tasks / Long Animation Frames for TBT
+        // 6. Long Tasks for TBT. TBT is main-thread task time over 50 ms ('longtask'). A Long
+        // Animation Frame's `duration` also counts time spent waiting (e.g. on throttled network
+        // between tasks), so LoAF is only a fallback, and then via its own `blockingDuration`.
         try {
-          // Try Long Animation Frames first (newer, more accurate)
           longTaskObserver = new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
               const taskEntry = entry as PerformanceEntry & {
                 attribution?: Array<{ name: string; containerType: string; containerSrc?: string }>;
+                blockingDuration?: number;
               };
-              const blockingTime = Math.max(taskEntry.duration - 50, 0);
+              const blockingTime =
+                entry.entryType === 'long-animation-frame'
+                  ? Math.max(taskEntry.blockingDuration ?? 0, 0)
+                  : Math.max(taskEntry.duration - 50, 0);
               tbtTotal += blockingTime;
 
               longTasks.push({
@@ -573,11 +578,12 @@ class VitalsCollector {
             }
           });
 
-          // Try 'long-animation-frame' first, fall back to 'longtask'
-          try {
-            longTaskObserver.observe({ type: 'long-animation-frame', buffered: true });
-          } catch {
+          // 'longtask' first; 'long-animation-frame' only where longtask is unsupported
+          const supported = (PerformanceObserver as unknown as { supportedEntryTypes?: string[] }).supportedEntryTypes ?? [];
+          if (supported.includes('longtask')) {
             longTaskObserver.observe({ type: 'longtask', buffered: true });
+          } else {
+            longTaskObserver.observe({ type: 'long-animation-frame', buffered: true });
           }
         } catch {
           // Long task observation not supported

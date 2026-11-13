@@ -30,40 +30,33 @@ class AriaLiveAnalyzer {
 
     try {
       const result = await chromePage.evaluate(() => {
-        // Find all live region elements
-        const ariaLiveElements = document.querySelectorAll('[aria-live]');
-        const alertElements = document.querySelectorAll('[role="alert"]');
-        const statusElements = document.querySelectorAll('[role="status"]');
-        const logElements = document.querySelectorAll('[role="log"]');
-        const timerElements = document.querySelectorAll('[role="timer"]');
+        // One entry per element (an element with both aria-live and a role is one region), hidden
+        // regions skipped. Explicit aria-live wins over the role's implicit politeness.
+        const isHidden = (el: Element) => {
+          if (el.closest('[hidden], [aria-hidden="true"]')) return true;
+          const style = getComputedStyle(el);
+          return style.display === 'none' || style.visibility === 'hidden';
+        };
+        const regions = Array.from(
+          new Set(document.querySelectorAll('[aria-live], [role="alert"], [role="status"], [role="log"], [role="timer"]')),
+        ).filter((el) => !isHidden(el) && el.getAttribute('aria-live') !== 'off');
+        const ariaLiveElements = regions.filter((el) => el.hasAttribute('aria-live'));
+        const alertElements = regions.filter((el) => !el.hasAttribute('aria-live') && el.getAttribute('role') === 'alert');
+        const statusElements = regions.filter((el) => !el.hasAttribute('aria-live') && el.getAttribute('role') === 'status');
+        const logElements = regions.filter((el) => !el.hasAttribute('aria-live') && el.getAttribute('role') === 'log');
+        const timerElements = regions.filter((el) => !el.hasAttribute('aria-live') && el.getAttribute('role') === 'timer');
 
         let assertive = 0;
         let polite = 0;
         let empty = 0;
         let large = 0;
-
-        // Check aria-live elements
-        for (const el of ariaLiveElements) {
-          const value = el.getAttribute('aria-live');
+        for (const el of regions) {
+          const value = el.getAttribute('aria-live') ?? (el.getAttribute('role') === 'alert' ? 'assertive' : 'polite');
           if (value === 'assertive') assertive++;
-          else if (value === 'polite') polite++;
-
+          else polite++;
           const text = (el.textContent || '').trim();
           if (!text) empty++;
           if (text.length > 500) large++;
-        }
-
-        // Alert roles are implicitly aria-live="assertive"
-        for (const el of alertElements) {
-          const text = (el.textContent || '').trim();
-          if (!text) empty++;
-          if (text.length > 500) large++;
-        }
-
-        // Status roles are implicitly aria-live="polite"
-        for (const el of statusElements) {
-          const text = (el.textContent || '').trim();
-          if (!text) empty++;
         }
 
         return {
@@ -80,8 +73,8 @@ class AriaLiveAnalyzer {
       });
 
       info.totalLiveRegions = result.ariaLive + result.alerts + result.status + result.logs + result.timers;
-      info.assertiveRegions = result.assertive + result.alerts;
-      info.politeRegions = result.polite + result.status;
+      info.assertiveRegions = result.assertive;
+      info.politeRegions = result.polite;
       info.alertRoles = result.alerts;
       info.statusRoles = result.status;
       info.emptyLiveRegions = result.empty;
@@ -99,13 +92,8 @@ class AriaLiveAnalyzer {
       });
     }
 
-    if (info.emptyLiveRegions > 0) {
-      warnings.push({
-        message: 'Empty ARIA live regions detected',
-        detail: `${info.emptyLiveRegions} live region(s) have no text content. Empty live regions may cause confusion for screen reader users if content is dynamically inserted without proper announcements.`,
-        severity: SEVERITY.LOW,
-      });
-    }
+    // Empty live regions are not reported: a region must exist (empty) before content is
+    // injected for screen readers to announce it, so an empty region at load is the correct pattern.
 
     if (info.largeLiveRegions > 0) {
       warnings.push({

@@ -437,6 +437,17 @@ export function processLinkTags(
   return { isMultiLang };
 }
 
+const NON_PAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|tiff?|pdf|zip|gz|rar|7z|mp4|webm|mov|m4v|mp3|wav|ogg|docx?|xlsx?|pptx?|csv|json|xml|txt|woff2?|ttf|eot|css|js)$/i;
+
+/** Links to files (images, PDFs, videos…) are not pages: never queue them for page analysis. */
+export function isNonPageAsset(href: string): boolean {
+  try {
+    return NON_PAGE_EXTENSIONS.test(new URL(href).pathname);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Process redirect chain
  */
@@ -503,7 +514,12 @@ export function collectLinks(
 
   for (const link of parsedPage.querySelectorAll('a')) {
     const href = link.attributes.href;
-    const text = link.innerText || link.attributes['aria-label'];
+    const imgAlt = link
+      .querySelectorAll('img')
+      .map((img) => img.attributes.alt?.trim())
+      .find(Boolean);
+    // Accessible name: visible text, then aria-label, then a contained image's alt.
+    const text = link.innerText.trim() || link.attributes['aria-label']?.trim() || imgAlt || link.attributes.title?.trim() || '';
 
     // Skip links without a valid href string (e.g. <a href> with no value)
     if (typeof href !== 'string' || !href) continue;
@@ -576,7 +592,7 @@ export function collectLinks(
       // `normalizedHref` form so the report reflects the site's own convention.
       const frontierKey = normalizeUrlForComparison(normalizedHref);
 
-      if (addMissing && !paginationCapped) {
+      if (addMissing && !paginationCapped && !isNonPageAsset(normalizedHref)) {
         if (!crawlFrontierKeys.has(frontierKey) && !collectedURLs.has(normalizedHref)) {
           // Check limit before adding new URLs
           if (pagesToCrawl.length < maxDiscoveredUrls) {
@@ -591,7 +607,7 @@ export function collectLinks(
           }
           // Silently skip URLs beyond the limit to prevent OOM
         }
-      } else if (!paginationCapped && !crawlFrontierKeys.has(frontierKey)) {
+      } else if (!paginationCapped && !crawlFrontierKeys.has(frontierKey) && !isNonPageAsset(normalizedHref)) {
         // Only track in collectedURLs if under limit
         if (collectedURLs.size < maxDiscoveredUrls) {
           collectedURLs.add(normalizedHref);

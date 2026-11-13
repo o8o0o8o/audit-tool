@@ -214,16 +214,25 @@ class EEATAnalyzer {
     const bodyText = (parsedPage.text || '').toLowerCase();
 
     // URL patterns
+    // Whole path words only: a client slug like "quanthealth-case-study" or "marketfinance"
+    // is not a health or finance page.
     const ymylUrlPatterns = [
-      /health|medical|medicine|doctor|hospital|symptom|disease|treatment/i,
-      /finance|banking|invest|insurance|tax|credit|loan|mortgage/i,
-      /legal|lawyer|attorney|law|court/i,
-      /news|government|voting|election|civic/i,
-      /safety|emergency|disaster/i,
+      /^(health|medical|medicine|doctor|hospital|symptoms?|disease|treatment)$/,
+      /^(finance|banking|invest(ing|ment)?|insurance|tax(es)?|credit|loans?|mortgages?)$/,
+      /^(legal|lawyers?|attorneys?|law|court)$/,
+      /^(news|government|voting|elections?|civic)$/,
+      /^(safety|emergency|disaster)$/,
     ];
+    const pathWords = (() => {
+      try {
+        return new URL(urlLower).pathname.split(/[/\-_.]+/).filter(Boolean);
+      } catch {
+        return urlLower.split(/[/\-_.]+/).filter(Boolean);
+      }
+    })();
 
     for (const pattern of ymylUrlPatterns) {
-      if (pattern.test(urlLower)) {
+      if (pathWords.some((w) => pattern.test(w))) {
         return true;
       }
     }

@@ -71,22 +71,28 @@ class RedirectChainAnalyzer {
 
     // Check for redirect chain length
     const chainStr = redirectChain.map((r) => `${r.url} (${r.status})`).join(' → ');
-    if (redirectChain.length > 3) {
+    // The chain lists every URL visited, the final 2xx included: hops = 3xx entries.
+    const hops = redirectChain.filter((r) => {
+      const code = Number(r.status);
+      return code >= 300 && code < 400;
+    }).length;
+    info.redirectCount = hops;
+    if (hops > 3) {
       issues.push({
         message: 'Long redirect chain detected',
-        detail: `${redirectChain.length} redirects — each adds latency and wastes crawl budget. Chain: ${chainStr}`,
+        detail: `${hops} redirects — each adds latency and wastes crawl budget. Chain: ${chainStr}`,
         severity: SEVERITY.HIGH,
       });
-    } else if (redirectChain.length > 1) {
+    } else if (hops > 1) {
       warnings.push({
         message: 'Multiple redirects detected',
-        detail: `${redirectChain.length} redirects — consider reducing to a single redirect. Chain: ${chainStr}`,
+        detail: `${hops} redirects — consider reducing to a single redirect. Chain: ${chainStr}`,
         severity: SEVERITY.MEDIUM,
       });
     }
 
     // Check for separate HTTP→HTTPS and www redirects (should be combined)
-    if (info.hasHttpToHttps && info.hasWwwRedirect && redirectChain.length >= 2) {
+    if (info.hasHttpToHttps && info.hasWwwRedirect && hops >= 2) {
       issues.push({
         message: 'HTTP→HTTPS and www redirects not combined',
         detail: `Separate redirects for protocol and www. Configure server to redirect directly to final canonical URL in one hop.`,

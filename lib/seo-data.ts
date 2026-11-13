@@ -684,6 +684,14 @@ class SEOData {
       }
     }
 
+    // Site-level facts emitted once per page (missing headers, PWA, the footer form…) become one
+    // site-wide entry each instead of hundreds of identical per-page rows.
+    // totalWithoutError counts analysed HTML pages (redirect stubs and files are not counted);
+    // the pages map itself may be partly evicted to disk at this point.
+    const crawledPages = this.#results.pageData.totalWithoutError ?? 0;
+    const collapsed = this.#errorAggregator.collapseSiteLevelFindings(crawledPages);
+    if (collapsed.length > 0) console.log(`Collapsed ${collapsed.length} site-level finding(s) into site-wide entries.`);
+
     // Stop timing
     this.#stopTiming();
 

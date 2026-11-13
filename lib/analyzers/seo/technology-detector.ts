@@ -43,6 +43,16 @@ interface CategorySummary {
   technologies: string[];
 }
 
+/**
+ * Drop `<pre>`/`<code>`/`<textarea>` content and HTML comments before fingerprinting: a blog post
+ * quoting `'/_next/static'` or "webflow" in a code sample is not built with that stack.
+ */
+export function stripCodeBlocks(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(pre|code|textarea)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+}
+
 class TechnologyDetector {
   // Technology signatures organized by category
   static SIGNATURES: Record<string, TechSignature[]> = {
@@ -690,7 +700,7 @@ class TechnologyDetector {
    * Lighter alternative to the full detect()/detectFromHtml() methods.
    */
   static quickDetectFramework(html: string): string | null {
-    const lower = html.toLowerCase();
+    const lower = stripCodeBlocks(html).toLowerCase();
     for (const sig of this.SIGNATURES.frameworks) {
       if (sig.patterns.html?.some((p) => p.test(lower))) return sig.name;
     }
@@ -701,7 +711,7 @@ class TechnologyDetector {
    * Quick detection: return the first matching CMS name or null.
    */
   static quickDetectCMS(html: string): string | null {
-    const lower = html.toLowerCase();
+    const lower = stripCodeBlocks(html).toLowerCase();
     for (const sig of this.SIGNATURES.cms) {
       if (sig.patterns.html?.some((p) => p.test(lower))) return sig.name;
     }

@@ -24,6 +24,9 @@ interface StyleSheetInfo {
   length: number;
 }
 
+/** Typical gzip/brotli ratio for JS/CSS when the real one cannot be read. */
+const DEFAULT_TEXT_COMPRESSION = 0.3;
+
 class CodeCoverageAnalyzer {
   /**
    * Start coverage collection on a page
@@ -99,6 +102,12 @@ class CodeCoverageAnalyzer {
       return { info, issues, warnings };
     }
 
+    // Coverage offsets are in uncompressed characters, but what a visitor pays for is the
+    // compressed transfer. Scale every file by its own encoded/decoded ratio (Resource Timing);
+    // when unknown (cross-origin without Timing-Allow-Origin), assume typical gzip (~1/3).
+    const ratios = await CodeCoverageAnalyzer.#compressionRatios(chromePage);
+    const toWire = (fileUrl: string, bytes: number) => Math.round(bytes * (ratios[fileUrl] ?? DEFAULT_TEXT_COMPRESSION));
+
     try {
       // Collect JS coverage
       const jsCoverage = await client.send('Profiler.takePreciseCoverage');
@@ -129,19 +138,20 @@ class CodeCoverageAnalyzer {
             }
           }
 
-          const unusedBytes = CodeCoverageAnalyzer.#mergeAndSum(unusedRanges);
-          const usedBytes = Math.max(0, totalLength - unusedBytes);
+          const unusedBytes = toWire(scriptUrl, CodeCoverageAnalyzer.#mergeAndSum(unusedRanges));
+          const totalLengthWire = toWire(scriptUrl, totalLength);
+          const usedBytes = Math.max(0, totalLengthWire - unusedBytes);
 
-          info.js.total += totalLength;
+          info.js.total += totalLengthWire;
           info.js.used += usedBytes;
           info.js.unused += unusedBytes;
 
-          if (totalLength > 10000 && unusedBytes / totalLength > 0.5) {
+          if (totalLengthWire > 3000 && unusedBytes / totalLengthWire > 0.5) {
             info.js.files.push({
               url: scriptUrl,
-              total: totalLength,
+              total: totalLengthWire,
               unused: unusedBytes,
-              unusedPercent: calcPercent(unusedBytes, totalLength),
+              unusedPercent: calcPercent(unusedBytes, totalLengthWire),
             });
           }
         }
@@ -193,19 +203,20 @@ class CodeCoverageAnalyzer {
           // Use page URL for inline styles (empty sourceURL)
           if (!sheetUrl) sheetUrl = url;
 
-          const usedBytes = CodeCoverageAnalyzer.#mergeAndSumRanges(usage.used);
-          const unusedBytes = Math.max(0, textLength - usedBytes);
+          const usedBytes = toWire(sheetUrl, CodeCoverageAnalyzer.#mergeAndSumRanges(usage.used));
+          const textLengthWire = toWire(sheetUrl, textLength);
+          const unusedBytes = Math.max(0, textLengthWire - usedBytes);
 
-          info.css.total += textLength;
+          info.css.total += textLengthWire;
           info.css.used += usedBytes;
           info.css.unused += unusedBytes;
 
-          if (textLength > 5000 && unusedBytes / textLength > 0.5) {
+          if (textLengthWire > 1500 && unusedBytes / textLengthWire > 0.5) {
             info.css.files.push({
               url: sheetUrl,
-              total: textLength,
+              total: textLengthWire,
               unused: unusedBytes,
-              unusedPercent: calcPercent(unusedBytes, textLength),
+              unusedPercent: calcPercent(unusedBytes, textLengthWire),
             });
           }
         }
@@ -306,12 +317,31 @@ class CodeCoverageAnalyzer {
           : '';
       warnings.push({
         message: 'Large amount of unused code',
-        detail: `<a href="${url}">${url}</a>: ${formatBytes(info.totalUnusedBytes)} of unused code (${info.unusedRatio}% of total). This significantly impacts page load time.${fileList}`,
+        detail: `<a href="${url}">${url}</a>: ${formatBytes(info.totalUnusedBytes)} of unused code (${info.unusedRatio}% of total). Sizes are compressed transfer bytes. This significantly impacts page load time.${fileList}`,
         severity: SEVERITY.HIGH,
       });
     }
 
     return { info, issues, warnings };
+  }
+
+  /** encodedBodySize / decodedBodySize per resource URL (and the document), from Resource Timing. */
+  static async #compressionRatios(chromePage: ChromePage): Promise<Record<string, number>> {
+    try {
+      return await chromePage.evaluate(() => {
+        const out: Record<string, number> = {};
+        const entries = [
+          ...performance.getEntriesByType('navigation'),
+          ...performance.getEntriesByType('resource'),
+        ] as PerformanceResourceTiming[];
+        for (const e of entries) {
+          if (e.encodedBodySize > 0 && e.decodedBodySize > 0) out[e.name] = e.encodedBodySize / e.decodedBodySize;
+        }
+        return out;
+      });
+    } catch {
+      return {};
+    }
   }
 
   /**
@@ -365,7 +395,7 @@ class CodeCoverageAnalyzer {
     if (avgJSUnused > 60) {
       issues.push({
         message: 'High average unused JavaScript site-wide',
-        detail: `${avgJSUnused}% of JavaScript is unused on average. Across ${pagesWithData} pages, ${formatBytes(totalUnusedJS)} of JavaScript went unused. Consider tree-shaking, code splitting, or lazy loading.`,
+        detail: `${avgJSUnused}% of JavaScript is unused on average. That is about ${formatBytes(Math.round(totalUnusedJS / Math.max(1, pagesWithData)))} of unused JavaScript per page (compressed; shared bundles are cached after the first page). Consider tree-shaking, code splitting, or lazy loading.`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -373,7 +403,7 @@ class CodeCoverageAnalyzer {
     if (avgCSSUnused > 70) {
       issues.push({
         message: 'High average unused CSS site-wide',
-        detail: `${avgCSSUnused}% of CSS is unused on average. Across ${pagesWithData} pages, ${formatBytes(totalUnusedCSS)} of CSS went unused. Consider CSS purging or critical CSS extraction.`,
+        detail: `${avgCSSUnused}% of CSS is unused on average. That is about ${formatBytes(Math.round(totalUnusedCSS / Math.max(1, pagesWithData)))} of unused CSS per page (compressed; shared stylesheets are cached after the first page). Consider CSS purging or critical CSS extraction.`,
         severity: SEVERITY.MEDIUM,
       });
     }

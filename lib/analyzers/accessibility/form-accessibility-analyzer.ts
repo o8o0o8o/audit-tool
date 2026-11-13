@@ -35,6 +35,41 @@ interface FormAnalysis {
   selfPostGetDataForm: boolean;
 }
 
+/**
+ * True when script intercepts the form's submit: an `onsubmit` property/attribute, or a
+ * `submit` listener on the form (CDP `DOMDebugger.getEventListeners`). Such forms usually
+ * `preventDefault()` and send the data with fetch/XHR, so a missing action/method does not
+ * leak fields into the URL. Delegated listeners on `document` are not seen (rare for forms).
+ * Errors (closed page, no CDP) count as "no handler" so the finding still fires.
+ */
+export async function hasJsSubmitHandler(chromePage: ChromePage, index: number, id: string | null): Promise<boolean> {
+  try {
+    const handle = await chromePage.evaluateHandle(
+      ({ index, id }) => (id ? document.getElementById(id) : null) ?? document.querySelectorAll('form')[index] ?? null,
+      { index, id },
+    );
+    const el = handle.asElement();
+    if (!el) return false;
+    const hasProp = await el.evaluate((f) => typeof (f as HTMLFormElement).onsubmit === 'function');
+    if (hasProp) return true;
+    const client = await chromePage.context().newCDPSession(chromePage);
+    try {
+      const { result } = (await client.send('Runtime.evaluate', {
+        expression: id ? `document.getElementById(${JSON.stringify(id)})` : `document.querySelectorAll('form')[${index}]`,
+      })) as { result: { objectId?: string } };
+      if (!result.objectId) return false;
+      const { listeners } = (await client.send('DOMDebugger.getEventListeners', { objectId: result.objectId })) as {
+        listeners: { type: string }[];
+      };
+      return listeners.some((l) => l.type === 'submit');
+    } finally {
+      await client.detach().catch(() => {});
+    }
+  } catch {
+    return false;
+  }
+}
+
 class FormAccessibilityAnalyzer {
   /**
    * Analyze form accessibility
@@ -176,7 +211,7 @@ class FormAccessibilityAnalyzer {
    * Analyze a single form
    * @private
    */
-  static async #analyzeForm(form: ParsedPage, index: number, _chromePage: ChromePage): Promise<FormAnalysis> {
+  static async #analyzeForm(form: ParsedPage, index: number, chromePage: ChromePage): Promise<FormAnalysis> {
     const analysis: FormAnalysis = {
       index,
       hasAction: !!form.getAttribute('action'),
@@ -258,7 +293,11 @@ class FormAccessibilityAnalyzer {
         i.type === 'textarea' || // a free-text body is a contact/feedback signal, never a filter/search control
         (!!i.name && SENSITIVE_NAME_RE.test(i.name)),
     );
-    analysis.selfPostGetDataForm = isGetMethod && isNonNavigatingAction && hasSensitiveField;
+    analysis.selfPostGetDataForm =
+      isGetMethod &&
+      isNonNavigatingAction &&
+      hasSensitiveField &&
+      !(await hasJsSubmitHandler(chromePage, index, form.getAttribute('id') ?? null));
 
     return analysis;
   }

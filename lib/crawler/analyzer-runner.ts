@@ -69,7 +69,7 @@ import { MixedContentAnalyzer } from '../analyzers/security/mixed-content-analyz
 // New analyzers
 import { RedirectChainAnalyzer } from '../analyzers/performance/redirect-chain-analyzer';
 import { CompressionAnalyzer } from '../analyzers/performance/compression-analyzer';
-import { ResourceHintsAnalyzer } from '../analyzers/performance/resource-hints-analyzer';
+import { ResourceHintsAnalyzer, collectResourceHints } from '../analyzers/performance/resource-hints-analyzer';
 import { HTTPProtocolAnalyzer } from '../analyzers/performance/http-protocol-analyzer';
 import { PWAAnalyzer } from '../analyzers/performance/pwa-analyzer';
 import { AboveFoldAnalyzer } from '../analyzers/performance/above-fold-analyzer';
@@ -593,6 +593,8 @@ export async function runAnalyzers(
     { info: null, issues: [], warnings: [] }, // crossOriginResult
   ];
 
+  // ResourceHintsAnalyzer reads pageData.resourceHints; nothing else fills it.
+  pageData.resourceHints ??= collectResourceHints(parsedPage, url);
   const syncResultsSettled = await withTimeout(
     Promise.allSettled([
       UrlArchitectureAnalyzer.analyze(url, pageData, options.origin),

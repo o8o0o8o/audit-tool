@@ -56,11 +56,24 @@ class OpenRedirectAnalyzer {
     }
 
     // 2. Check links on the page for redirect parameters
+    // Only same-site links: an open redirect is a flaw in this site's endpoints. A third-party
+    // share intent (linkedin share-offsite?url=, x.com/intent/tweet?url=) is not.
+    const pageHost = (() => {
+      try {
+        return new URL(url).hostname.replace(/^www\./, '');
+      } catch {
+        return '';
+      }
+    })();
     const links = parsedPage.querySelectorAll('a[href]');
+    const seenHrefs = new Set<string>();
     for (const link of links) {
       const href = link.getAttribute('href') ?? '';
       try {
         const linkUrl = new URL(href, url);
+        if (linkUrl.hostname.replace(/^www\./, '') !== pageHost) continue;
+        if (seenHrefs.has(linkUrl.href)) continue;
+        seenHrefs.add(linkUrl.href);
         for (const [param, value] of linkUrl.searchParams.entries()) {
           if (this.isRedirectParam(param) && this.isUrlLikeValue(value)) {
             info.suspiciousLinks.push({ href: href.substring(0, 200), param });

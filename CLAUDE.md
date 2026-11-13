@@ -492,6 +492,12 @@ Site-wide, fetched once per audit (`favicon-manifest-validator.ts`); timeouts, n
 - Favicon returns error status / is not an image (MEDIUM); favicon smaller than 48px (LOW)
 - Web manifest failed to load, invalid manifest JSON, manifest icon returns 404 (MEDIUM)
 
+### Link Checks
+
+- Outbound/external links are checked with a browser user agent: HEAD, confirmed with GET on any error, redirects followed (`lib/utils/link-status.ts`). Only 404/410 and persistent 5xx are broken; 401/403/405/429/999 etc. are "blocked" (bot protection), kept in `blocked`, never reported as broken
+- A link's accessible name is its text, then `aria-label`, then a contained image's `alt`
+- Open-redirect checks only same-site links (third-party share intents are ignored)
+
 ### Privacy Issues
 
 - Tracking cookies without consent banner

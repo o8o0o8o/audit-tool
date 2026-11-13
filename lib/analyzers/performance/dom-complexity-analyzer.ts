@@ -85,7 +85,15 @@ class DOMComplexityAnalyzer {
           // <meta>/<link>/<script> children, but that is not the wide *content*
           // container this check targets, and the finding's fix ("virtualize or
           // paginate the long list") is nonsensical for head metadata.
-          if (tag !== 'head') {
+          // Also skip rich-text containers (an article body is a flat run of p/h2/ul siblings by
+          // design) and code blocks, where a highlighter wraps every token in a <span>.
+          const PROSE = /^(p|h[1-6]|ul|ol|dl|blockquote|figure|pre|table|img|picture|hr|br|div|section|aside|iframe|video)$/;
+          const isProse = () => {
+            const kids = Array.from(el.children);
+            const textKids = kids.filter((k) => /^(p|h[1-6]|ul|ol|blockquote|pre|figure|table)$/.test(k.tagName.toLowerCase()));
+            return kids.length > 0 && textKids.length / kids.length >= 0.5 && kids.every((k) => PROSE.test(k.tagName.toLowerCase()));
+          };
+          if (tag !== 'head' && !el.closest('pre, code') && !isProse()) {
             const childCount = el.children.length;
             if (childCount > maxChildren) {
               maxChildren = childCount;

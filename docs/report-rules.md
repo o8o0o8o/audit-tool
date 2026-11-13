@@ -142,15 +142,27 @@ vs `52 form inputs across site missing labels`). These must fold to one entry
 via `DEDUP_GROUPS` in `lib/phase2/consolidate.ts`; otherwise the same issue
 appears twice across summary sub-sections.
 
-**Redirect sources are not distinct pages.** A requested URL that redirected
-(e.g. the trailing-slash twin `/x` → `/x/`, or an old path → new path) is
-followed to its destination, so the stored `PageInfo` holds the _destination's_
-title/description/content keyed under the _requested_ URL. Site-wide validators
-that compare pages across the crawl (`duplicate-checker`, `content-similarity-analyzer`)
-must skip pages with `hasRedirects`, or the destination's own title/content
-registers as a "duplicate"/"near-duplicate" of itself — the classic
-trailing-slash inflation. The redirect itself is already surfaced as a per-page
-redirect finding.
+**Redirect sources are not distinct pages.** When a requested URL redirects to a
+_different_ same-site URL (an old path → new path), the crawler stores a stub under
+the requested URL (`redirectOnly: true`, `finalUrl`, the 3xx status and the chain),
+runs no analyzers on it, and queues the final URL to be crawled as its own page
+(`crawler-engine.ts`). A trailing-slash twin (`/x` → `/x/`) is the same resource and
+is still analysed under the requested URL with `hasRedirects`, so cross-page
+validators (`duplicate-checker`, `content-similarity-analyzer`) keep skipping
+`hasRedirects` pages. The redirect itself is surfaced by `processRedirects`.
+
+**Content checks only see real HTML pages.** Site-wide content validators in
+`runSiteWideValidation` receive `contentPages`: status 200, not `redirectOnly`, not
+`nonHtml` (an image/PDF linked from a post; also never queued — `isNonPageAsset`).
+Link-graph and crawl-budget validators still get every page. "Some URLs are not
+listed in sitemap" is reported after the crawl, for discovered 200 HTML pages only.
+
+**Site-level facts are one entry.** Per-page findings that describe one site-level
+fact (a missing response header, the PWA setup, cookies, the footer form, shared
+bundles — `SITE_LEVEL_FINDINGS` in `lib/utils/error-aggregator.ts`) are collapsed by
+`collapseSiteLevelFindings` when they hit at least half of the analysed pages: the
+examples become one "Site-wide: N of M pages" line plus a sample page, `siteWide` is
+set, and `count` keeps the affected-page number for scoring.
 
 **Tier-twin findings (one metric, two severity bands) must not exist.** A
 per-page analyzer measuring a single quantity must emit **one** message string

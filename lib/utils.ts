@@ -905,6 +905,9 @@ function detectImportantPageLinks(parsedPage: {
   for (const link of links) {
     const href = (link.getAttribute('href') ?? '').toLowerCase();
     const text = (link.textContent || '').toLowerCase();
+    // In-page anchors (an article's table of contents: "#15.-privacy,-consent…") are not links
+    // to a policy/about/contact page.
+    if (href.startsWith('#')) continue;
 
     if (/about|who.we.are|our.team|our.story/i.test(href) || /about|who we are/i.test(text)) {
       result.hasAboutPage = true;
@@ -991,6 +994,10 @@ function detectAuthorInfo(parsedPage: {
       '.post-author',
       '.article-author',
       '.entry-author',
+      '[class*="author-name"]',
+      '[class*="author-link"]',
+      '[class*="byline"]',
+      'a[href*="/author/"]',
     ];
 
     for (const selector of authorSelectors) {

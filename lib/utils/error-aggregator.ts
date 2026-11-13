@@ -38,6 +38,39 @@ function exampleCitesUrl(example: string, urls: Set<string>): boolean {
   return matches.some((u) => urls.has(u.replace(/&amp;/g, '&')));
 }
 
+/**
+ * Per-page findings that describe one site-level fact: a response header or server setting, the
+ * site's PWA setup, cookies, or a form/footer/script shared by every page through the template.
+ */
+const SITE_LEVEL_FINDINGS: (string | RegExp)[] = [
+  'Missing Permissions-Policy header',
+  'Missing cross-origin isolation headers',
+  'External scripts missing Subresource Integrity (SRI)',
+  'No web app manifest',
+  'No service worker detected',
+  'No theme-color meta tag',
+  'No Apple touch icon',
+  'App not installable',
+  'Cookies with excessive lifespan',
+  'Multiple tracking cookies set before consent',
+  'Tracking cookies without consent banner',
+  'Multiple analytics providers',
+  'No privacy policy link found',
+  'Form inputs missing autocomplete attribute',
+  'Radio/checkbox group without fieldset',
+  'Render-blocking third-party scripts',
+  'Large amount of unused code',
+  'High percentage of unused CSS',
+  'Link equity concentrated to few domains',
+  'Web fonts not preloaded',
+  /^(LocalBusiness|Organization|WebSite|WebPage) missing (recommended|required) field/,
+  /^Missing .* header$/,
+];
+
+export function isSiteLevelFinding(key: string): boolean {
+  return SITE_LEVEL_FINDINGS.some((k) => (typeof k === 'string' ? k === key : k.test(key)));
+}
+
 export interface AnalysisState {
   overall: Set<string>;
   details: Record<string, AnalysisDetail>;
@@ -234,6 +267,33 @@ class ErrorAggregator {
       if (kept.length === 0 && detail.count === 0) this.#dropFinding(key, detail.severity);
     }
     return removedTotal;
+  }
+
+  /**
+   * Collapse per-page restatements of one site-level fact into a single site-wide entry. Applies
+   * to the keys in `SITE_LEVEL_FINDINGS` that hit at least half of the crawled pages (min 5):
+   * the per-page examples are replaced by one line saying how many pages share it, plus one
+   * sample page. `count` keeps the affected-page number.
+   *
+   * @returns the keys that were collapsed.
+   */
+  collapseSiteLevelFindings(totalPages: number): string[] {
+    const collapsed: string[] = [];
+    if (totalPages <= 0) return collapsed;
+    for (const [key, detail] of Object.entries(this.#analysis.details)) {
+      if (!isSiteLevelFinding(key)) continue;
+      const pages = detail.count || detail.examples?.length || 0;
+      if (pages < Math.max(5, totalPages / 2)) continue;
+      const sample = [...(detail.examples ?? [])].sort(compareExamplesWorstFirst)[0];
+      detail.examples = [
+        `Site-wide: ${pages} of ${totalPages} crawled pages — one shared template, header or setting, so one fix covers every page.`,
+        ...(sample ? [sample] : []),
+      ];
+      detail.truncated = false;
+      detail.siteWide = { pages, totalPages };
+      collapsed.push(key);
+    }
+    return collapsed;
   }
 
   /**

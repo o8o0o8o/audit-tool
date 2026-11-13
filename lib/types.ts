@@ -52,6 +52,13 @@ export interface PageInfo {
   redirectChain?: Array<{ url: string; status: number | string; timing?: number }>;
   redirectCount?: number;
   hasRedirects?: boolean;
+  /**
+   * The requested URL redirected to another same-site URL, which is crawled and analysed as its
+   * own page. This entry only records the redirect; analyzers never ran on it.
+   */
+  redirectOnly?: boolean;
+  /** The response was not an HTML document (image, PDF, video…); no page analysis ran. */
+  nonHtml?: boolean;
   error?: string;
   issues?: Issue[];
 
@@ -129,6 +136,8 @@ export interface PageInfo {
   // Links
   links?: unknown;
   linksCount?: number;
+  /** Internal links (href + anchor text) kept when `links` is slimmed at checkpoint, for site-wide anchor analysis. */
+  internalAnchors?: { href: string; text: string }[];
   internalLinksCount?: number;
   externalLinksCount?: number;
   httpLinksCount?: number;
@@ -366,6 +375,12 @@ export interface AnalysisDetail {
   examples: string[];
   truncated?: boolean;
   countTruncated?: boolean;
+  /**
+   * A site-level fact (a missing response header, the shared footer form, the PWA setup…) that
+   * was emitted once per page. Examples are collapsed to one site-wide entry; `count` stays the
+   * number of affected pages.
+   */
+  siteWide?: { pages: number; totalPages: number };
 }
 
 export interface AnalysisData {

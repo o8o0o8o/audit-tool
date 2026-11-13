@@ -11,7 +11,7 @@ export interface PageCounts {
   failedToLoad: number;
 }
 
-type StoredPage = { status?: unknown; statusCode?: unknown } | null | undefined;
+type StoredPage = { status?: unknown; statusCode?: unknown; redirectOnly?: boolean; nonHtml?: boolean } | null | undefined;
 
 /**
  * Single definition of the page counts shown in every report. Derived from
@@ -23,7 +23,9 @@ export function computePageCounts(
   byError: Record<string, unknown> | null | undefined,
 ): PageCounts {
   const pageMap = pages ?? {};
-  const urls = Object.keys(pageMap);
+  // Redirect-source stubs and non-HTML files are records of a URL, not crawled pages: the
+  // redirect target is crawled (and counted) under its own URL.
+  const urls = Object.keys(pageMap).filter((u) => !pageMap[u]?.redirectOnly && !pageMap[u]?.nonHtml);
   let successful = 0;
   for (const url of urls) {
     const page = pageMap[url];
@@ -31,7 +33,7 @@ export function computePageCounts(
     if (code === 200) successful++;
   }
 
-  const stored = new Set(urls);
+  const stored = new Set(Object.keys(pageMap));
   const failed = new Set<string>();
   const errors = byError ?? {};
   for (const category of FAILURE_CATEGORIES) {

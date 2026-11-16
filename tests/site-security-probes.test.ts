@@ -66,7 +66,31 @@ void test('findSecrets: detects keys, grades AWS by nearby secret, skips placeho
   assert.equal(withSecret.find((f) => f.patternId === 'aws')?.severity, SEVERITY.HIGH);
   assert.equal(findSecrets('apiKey: "sk_' + 'live_xxxxxxxxxxxxxxxxxxxxxxxx"').length, 0);
   assert.equal(findSecrets('// your_api_key: AKIA' + 'IOSFODNN7EXAMPLE').length, 0);
-  assert.ok(findSecrets('-----BEGIN RSA PRIVATE KEY-----\nMIIE').some((f) => f.patternId === 'private-key'));
+  const KEY_BODY = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKjMzEfYyjiWA4R4';
+  const pem = findSecrets(`-----BEGIN RSA PRIVATE KEY-----\n${KEY_BODY}`);
+  assert.deepEqual(
+    pem.filter((f) => f.patternId === 'private-key').map((f) => f.secret),
+    ['-----BEGIN RSA PRIVATE KEY-----'],
+  );
+  // Escaped line breaks, as a key sits inside a JS string literal.
+  assert.ok(findSecrets(`k="-----BEGIN PRIVATE KEY-----\\n${KEY_BODY}"`).some((f) => f.patternId === 'private-key'));
+  // PGP armor headers before the body.
+  assert.ok(
+    findSecrets(`-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v2\n\n${KEY_BODY}`).some(
+      (f) => f.patternId === 'private-key',
+    ),
+  );
+  // A library that only looks for the header (jose's importPKCS8): no key follows, no finding.
+  assert.equal(
+    findSecrets(
+      'if(0!==e.indexOf("-----BEGIN PRIVATE KEY-----"))throw new TypeError(\'"pkcs8" must be PKCS#8 formatted string\')',
+    ).filter((f) => f.patternId === 'private-key').length,
+    0,
+  );
+  assert.equal(
+    findSecrets('-----BEGIN RSA PRIVATE KEY-----\nMIIE').filter((f) => f.patternId === 'private-key').length,
+    0,
+  );
 });
 
 void test('maskSecret / firebase / collectScriptUrls', () => {

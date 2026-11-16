@@ -83,7 +83,11 @@ export const SECRET_PATTERNS: SecretPattern[] = [
     id: 'private-key',
     message: 'Private key leaked in public JavaScript',
     severity: SEVERITY.CRITICAL,
-    re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----/g,
+    // The header alone is not a key: crypto libraries (jose's importPKCS8, node-forge…) carry it as a
+    // string they look for. A leak needs key material right after it: line breaks (real or written
+    // as \n), optional armor headers (PGP "Version: …"), then a long base64 run. Only the header is
+    // matched, so only the header is ever shown.
+    re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----(?=(?:\\[rn]|\s)+(?:[A-Za-z-]+: [^\n\\]*(?:\\[rn]|\s)+)*[A-Za-z0-9+/]{64})/g,
     why: 'A private key in a public file breaks every signature or TLS/SSH session it protects.',
   },
   {

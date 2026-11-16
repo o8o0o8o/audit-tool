@@ -1,23 +1,9 @@
 #!/usr/bin/env node
 
-// Load .env file if present
 import * as fs from 'fs';
 import * as path from 'path';
-const envFile = path.join(__dirname, '.env');
-if (fs.existsSync(envFile)) {
-  for (const line of fs.readFileSync(envFile, 'utf-8').split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed
-      .slice(eqIndex + 1)
-      .trim()
-      .replace(/^["']|["']$/g, '');
-    process.env[key] ??= value;
-  }
-}
+import { loadDotEnv } from './lib/utils/load-env';
+loadDotEnv(__dirname);
 
 import { spawn } from 'child_process';
 import * as zlib from 'zlib';

@@ -62,6 +62,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { chromium } from 'playwright';
 import { runPool } from '../lib/analyzers/site-checks/http-probe';
+import { loadDotEnv } from '../lib/utils/load-env';
 import {
   DEFAULT_COMPANIES_CSV,
   KEY_COLUMN,
@@ -100,6 +101,9 @@ import type { FingerprintResult, Track } from '../lib/leads/types';
 import { readLatestRun, runAuditProcess } from '../lib/leads/run-audit';
 import { DEFAULT_WEIGHTS_PATH, formatReasons, loadWeights, rank, type Ranked } from '../lib/leads/score';
 import { MAX_SCAN_RETRIES, SELECTABLE_STAGES, canMove, isStage, stageOf, stageValues } from '../lib/leads/stages';
+
+// The same .env that start.ts loads for each scan, so checks here see what the scans will see.
+loadDotEnv(path.join(__dirname, '..'));
 
 const argv = process.argv.slice(2);
 const command = argv.find((a) => !a.startsWith('--'));
@@ -456,7 +460,7 @@ async function scan() {
   }
   if (!process.env.CRUX_API_KEY) {
     console.log(
-      'Note: CRUX_API_KEY is not set in this shell. Unless the audit config supplies a key, scans will have no real-user performance data.',
+      'Note: CRUX_API_KEY is set neither in the shell nor in .env. Unless the audit config supplies a key, scans will have no real-user performance data.',
     );
   }
   console.log(

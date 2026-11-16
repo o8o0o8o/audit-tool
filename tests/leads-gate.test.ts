@@ -10,9 +10,13 @@ import {
   missingHreflangCandidates,
   noindexCandidates,
   sitemapDeadCandidates,
+  findingsNotOnAllowlist,
   templateTextCandidates,
+  trackingBeforeConsentCandidates,
+  unnamedControlsCandidates,
   vulnerableLibraryCandidates,
 } from '../lib/leads/sales-signals';
+import { describeTrackingCookies, trackingCookies, trackingVendor } from '../lib/leads/tracking-cookies';
 import { emptyProfile } from '../lib/leads/stack-profile';
 import {
   bannerVersion,
@@ -20,9 +24,11 @@ import {
   runControl,
   runGate,
   servedNoindex,
+  type FirstVisit,
   type GateBrowser,
   type GateIo,
   type Highlight,
+  type UnnamedControl,
 } from '../lib/leads/truth-gate';
 import type { EolHit, StackProfile } from '../lib/leads/types';
 
@@ -698,5 +704,183 @@ void describe('truth gate: root causes, threshold, disclosure', () => {
 
   void it('builds no candidate from a run with nothing wrong', () => {
     assert.deepEqual(buildCandidates(run([page('/', { siteHints: {} })]), null), []);
+  });
+});
+
+void describe('truth gate: tracking cookies before consent, unnamed controls', () => {
+  const bare = (path: string, extra: Partial<RunPage> = {}) => page(path, { siteHints: {}, ...extra });
+
+  void it('knows analytics and advertising cookies by name, and nothing else', () => {
+    assert.equal(trackingVendor('_ga'), 'Google Analytics');
+    assert.equal(trackingVendor('_ga_9N2P64WP07'), 'Google Analytics');
+    assert.equal(trackingVendor('_gcl_au'), 'Google Ads');
+    assert.equal(trackingVendor('_hjSessionUser_1501362'), 'Hotjar');
+    for (const other of [
+      'ABTasty',
+      'ASP.NET_SessionId',
+      'OptanonConsent',
+      'fr_vid',
+      '_abck',
+      'AWSALB',
+      'test_cookie',
+    ]) {
+      assert.equal(trackingVendor(other), null, other);
+    }
+    const found = trackingCookies(['_gcl_au', 'ABTasty', '_ga', '_ga_X1', '_fbp', '_hjSession_1', '_clck', '_ga']);
+    assert.equal(found.length, 6);
+    assert.equal(
+      describeTrackingCookies(found),
+      'Google Ads (_gcl_au), Google Analytics (_ga, _ga_X1), Meta (_fbp), Hotjar (_hjSession_1) and 1 more service',
+      'at most two names per service and four services',
+    );
+  });
+
+  const consentRun = (cookies: string[]) =>
+    run([
+      bare('/', {
+        consentData: { cookiesBeforeConsent: cookies, cookies: [{ name: 'ABTasty', domain: '.example.com' }] },
+      }),
+    ]);
+  const visiting = (visit: FirstVisit | null): GateBrowser & { visits: string[] } => {
+    const visits: string[] = [];
+    return { ...clicking({}), visits, firstVisit: async (url) => (visits.push(url), visit) };
+  };
+  const cookie = (name: string) => ({ name, domain: '.example.com' });
+
+  void it('tracking cookies pass when a first visit shows a banner with a way to refuse and the cookies already set', async () => {
+    const candidates = trackingBeforeConsentCandidates(consentRun(['_gcl_au', '_ga']));
+    assert.equal(candidates.length, 1);
+    assert.deepEqual(
+      candidates[0].cookies.map((c) => c.name),
+      ['_gcl_au', '_ga'],
+      'an A/B-test cookie is not tracking',
+    );
+    assert.deepEqual(trackingBeforeConsentCandidates(consentRun([])), [], 'no tracking cookie, no candidate');
+
+    const browser = visiting({
+      status: 200,
+      cookies: [cookie('_gcl_au'), cookie('_ga'), cookie('_fbp'), cookie('OptanonConsent')],
+      banner: { vendor: 'OneTrust', text: 'We use cookies', canRefuse: true },
+      screenshot: 'evidence/consent.png',
+    });
+    const pass = await runGate(consentRun(['_gcl_au', '_ga']), null, io({}, browser), { today: TODAY });
+    const h = pass.highlights.find((x) => x.type === 'tracking-before-consent');
+    assert.equal(
+      h?.fact,
+      'The cookie banner (OneTrust) lets visitors refuse tracking, but before anyone answers, the homepage has already set 3 analytics and advertising cookies: Google Ads (_gcl_au), Google Analytics (_ga) and Meta (_fbp)',
+    );
+    assert.equal(h?.evidence.screenshot, 'evidence/consent.png');
+    assert.deepEqual(browser.visits, [u('/')]);
+  });
+
+  void it('no banner, a notice without a way to refuse, or no cookies on a first visit: no claim', async () => {
+    const data = consentRun(['_gcl_au']);
+    const reasonFor = async (visit: FirstVisit | null) =>
+      (await runGate(data, null, io({}, visiting(visit)), { today: TODAY })).candidatesDropped.find(
+        (d) => d.type === 'tracking-before-consent',
+      )?.reason;
+    const base = { status: 200, cookies: [cookie('_gcl_au')], screenshot: null };
+    assert.equal(await reasonFor({ ...base, banner: null }), 'no-consent-prompt');
+    assert.equal(
+      await reasonFor({ ...base, banner: { vendor: null, text: 'We use cookies', canRefuse: false } }),
+      'no-consent-prompt',
+    );
+    assert.equal(
+      await reasonFor({ ...base, cookies: [], banner: { vendor: null, text: 'We use cookies', canRefuse: true } }),
+      'second-method-disagrees',
+    );
+    assert.equal(await reasonFor({ ...base, status: 403, banner: null }), 'blocked');
+    const noBrowser = await runGate(data, null, io({}, clicking({})), { today: TODAY });
+    assert.equal(
+      noBrowser.candidatesDropped.find((d) => d.type === 'tracking-before-consent')?.reason,
+      'no-second-method-available',
+    );
+  });
+
+  const SOCIAL = ['<a.social-link>'];
+  const unnamedRun = () =>
+    run([
+      bare('/', {
+        agentic: { checks: { interactiveNames: { passed: false, offenders: [...SOCIAL, '<button.slick-next>'] } } },
+      }),
+      bare('/pricing', { agentic: { checks: { interactiveNames: { passed: false, offenders: SOCIAL } } } }),
+      bare('/about', { agentic: { checks: { interactiveNames: { passed: false, offenders: SOCIAL } } } }),
+    ]);
+  const naming = (controls: UnnamedControl[], viewport: 'desktop' | 'phone' = 'desktop'): GateBrowser => ({
+    ...clicking({}),
+    unnamedControls: async () => ({ status: 200, viewport, controls, screenshot: 'evidence/unnamed.png' }),
+  });
+  const social = (href: string): UnnamedControl => ({
+    role: 'link',
+    label: '<a.social-link>',
+    region: 'footer',
+    href,
+    hint: 'social-link icon-x',
+  });
+
+  void it('unnamed controls: one candidate, from the page whose offenders recur on the most pages', () => {
+    const [c] = unnamedControlsCandidates(unnamedRun());
+    assert.equal(c.url, u('/'));
+    assert.deepEqual(c.offenders, ['<a.social-link>', '<button.slick-next>'], 'the most widespread first');
+    assert.deepEqual(c.pagesWith, { '<a.social-link>': 3, '<button.slick-next>': 1 });
+    assert.deepEqual(unnamedControlsCandidates(run([bare('/')])), []);
+  });
+
+  void it('unnamed controls pass when the accessibility tree gives them no name, and say what they are', async () => {
+    const browser = naming([
+      social('https://www.facebook.com/example'),
+      social('https://instagram.com/example'),
+      { role: 'button', label: '<button.slick-next>', region: 'main', href: null, hint: 'slick-next slick-arrow' },
+      { role: 'button', label: '<button.not-in-scan>', region: 'header', href: null, hint: 'x' },
+    ]);
+    const pass = await runGate(unnamedRun(), null, io({}, browser), { today: TODAY });
+    const h = pass.highlights.find((x) => x.type === 'unnamed-controls');
+    assert.equal(
+      h?.fact,
+      'The Facebook and Instagram links in the footer have no accessible name on all 3 pages scanned: a screen reader announces each one only as "link"; 1 more control on the page has no name either',
+    );
+    assert.deepEqual(h?.evidence.methods, ['scan-static-html', 'browser-accessibility-tree:desktop']);
+
+    const phone = await runGate(
+      run([
+        bare('/x', { agentic: { checks: { interactiveNames: { offenders: ['<button.menu-toggle>'] } } } }),
+        bare('/y'),
+      ]),
+      null,
+      io(
+        {},
+        naming(
+          [{ role: 'button', label: '<button.menu-toggle>', region: 'header', href: null, hint: 'menu-toggle' }],
+          'phone',
+        ),
+      ),
+      { today: TODAY },
+    );
+    assert.equal(
+      phone.highlights.find((x) => x.type === 'unnamed-controls')?.fact,
+      'On a phone-sized screen, the menu button in the header has no accessible name on /x: a screen reader announces it only as "button"',
+    );
+  });
+
+  void it('unnamed controls drop when the browser names them (an SVG title, an aria-label set by script)', async () => {
+    const result = await runGate(unnamedRun(), null, io({}, naming([])), { today: TODAY });
+    assert.equal(result.highlights.length, 0);
+    assert.equal(
+      result.candidatesDropped.find((d) => d.type === 'unnamed-controls')?.reason,
+      'second-method-disagrees',
+    );
+  });
+
+  void it('the findings these types are built from are not listed as left out', () => {
+    const data = run([bare('/')]);
+    data.findings = {
+      'Interactive elements without an accessible name': { count: 3 },
+      'Tracking cookies without consent banner': { count: 2 },
+      'Cookies with excessive lifespan': { count: 1 },
+    };
+    assert.deepEqual(
+      findingsNotOnAllowlist(data).map((f) => f.finding),
+      ['Cookies with excessive lifespan'],
+    );
   });
 });

@@ -11,6 +11,7 @@
 import type { LinkPosition } from '../analyzers/site-wide/crawl-graph-checks';
 import { LIBRARIES } from '../analyzers/security/js-library-analyzer';
 import { okPages, formatDateParts, type RunData, type RunPage } from './run-data';
+import { trackingCookies, type TrackingCookie } from './tracking-cookies';
 import type { EolHit, StackProfile } from './types';
 
 /** Finding types the truth gate knows how to confirm. Anything else stays in the full audit. */
@@ -22,6 +23,8 @@ export const ALLOWLIST = [
   'noindex',
   'sitemap-dead-urls',
   'poor-vitals',
+  'tracking-before-consent',
+  'unnamed-controls',
   'vulnerable-library',
   'end-of-life',
 ] as const;
@@ -32,7 +35,9 @@ export type Angle =
   | 'visitors hit broken things'
   | 'localisation gaps'
   | 'slow for real users'
-  | 'search visibility blockers';
+  | 'search visibility blockers'
+  | 'privacy and consent'
+  | 'accessibility';
 
 export interface DeadLinkCandidate {
   type: 'dead-nav-link';
@@ -147,7 +152,34 @@ export interface VulnerableLibraryCandidate {
   scripts: string[];
 }
 
+export interface TrackingBeforeConsentCandidate {
+  type: 'tracking-before-consent';
+  angle: Angle;
+  rootCause: 'tracking-before-consent';
+  /** The page the gate loads on a first visit: the homepage when the scan read it. */
+  url: string;
+  /** `url` is the homepage (the address a visitor types), not another scanned page. */
+  isHome: boolean;
+  /** Analytics and advertising cookies the scan saw there before anything was clicked. */
+  cookies: TrackingCookie[];
+}
+
+export interface UnnamedControlsCandidate {
+  type: 'unnamed-controls';
+  angle: Angle;
+  rootCause: 'unnamed-controls';
+  /** The page the gate opens: the scanned page that carries the most widespread offenders. */
+  url: string;
+  /** Offenders on that page as `<tag#id>` / `<tag.class>`, the most widespread first. */
+  offenders: string[];
+  /** Scanned pages carrying each offender. */
+  pagesWith: Record<string, number>;
+  pagesScanned: number;
+}
+
 export type Candidate =
+  | TrackingBeforeConsentCandidate
+  | UnnamedControlsCandidate
   | DeadLinkCandidate
   | NoindexCandidate
   | VitalsCandidate
@@ -166,10 +198,10 @@ export const NOT_ON_ALLOWLIST: Array<[RegExp, string]> = [
   [/duplicate (?:title|description|content)|near-duplicate/i, 'duplicate content'],
   [/anchor text/i, 'anchor-text findings'],
   [/security header|content-security-policy|x-frame-options|strict-transport/i, 'security-header checklist'],
-  [/accessib|aria|contrast|alt text|touch target/i, 'accessibility heuristics'],
+  [/accessib|aria|contrast|alt text|touch target/i, 'accessibility heuristics other than unnamed controls'],
   [/user-agent .*blocked|blocked from entire site|ai crawler/i, 'robots.txt bot rules'],
   [/redirect.* in sitemap|sitemap .*redirect/i, 'sitemap redirects'],
-  [/consent|cookie/i, 'cookie consent (allowlist candidate after a precision review)'],
+  [/consent|cookie/i, 'cookie checks other than tracking cookies before consent'],
   [/no ga4 hits|analytics installed but/i, 'tag installed, no hits (allowlist candidate after a precision review)'],
 ];
 
@@ -581,6 +613,80 @@ export function vulnerableLibraryCandidates(run: RunData, stack: StackProfile | 
   return [...byLib.values()];
 }
 
+/**
+ * Analytics or advertising cookies in the browser after the homepage loaded, before anything was
+ * clicked. The gate decides whether that is a fact worth stating: only when a first visit in a fresh
+ * browser shows a cookie banner and finds the cookies already set.
+ */
+export function trackingBeforeConsentCandidates(run: RunData): TrackingBeforeConsentCandidate[] {
+  const pages = okPages(run);
+  const home = run.metadata.leadScan?.home;
+  // The homepage, or the page it redirects to (`/` → `/en-eu`): the first page in scan order.
+  const page = (home ? pages.find((p) => key(p.url) === key(home)) : undefined) ?? pages[0];
+  if (!page?.consentData) return [];
+  const names = [
+    ...(page.consentData.cookiesBeforeConsent ?? []),
+    ...(page.consentData.cookies ?? []).map((c) => c.name),
+  ];
+  const cookies = trackingCookies(names);
+  if (!cookies.length) return [];
+  return [
+    {
+      type: 'tracking-before-consent',
+      angle: 'privacy and consent',
+      rootCause: 'tracking-before-consent',
+      // A first visit starts where a visitor types the address.
+      url: home ?? page.url,
+      isHome: Boolean(home),
+      cookies,
+    },
+  ];
+}
+
+/** Most offenders a candidate carries to the gate. */
+const MAX_UNNAMED_OFFENDERS = 12;
+
+/**
+ * Links and buttons without an accessible name. One candidate per site: the page whose offenders
+ * recur on the most scanned pages (a header or footer control is on all of them), homepage first on
+ * a tie. The gate asks the browser's own accessibility tree.
+ */
+export function unnamedControlsCandidates(run: RunData): UnnamedControlsCandidate[] {
+  const pages = okPages(run);
+  const offendersOf = (p: RunPage) => [...new Set(p.agentic?.checks?.interactiveNames?.offenders ?? [])];
+  const pagesWith: Record<string, number> = {};
+  for (const p of pages) for (const o of offendersOf(p)) pagesWith[o] = (pagesWith[o] ?? 0) + 1;
+  if (!Object.keys(pagesWith).length) return [];
+  const home = run.metadata.leadScan?.home;
+  const spread = (p: RunPage) => Math.max(0, ...offendersOf(p).map((o) => pagesWith[o]));
+  const best = [...pages]
+    .filter((p) => offendersOf(p).length)
+    .sort(
+      (a, b) =>
+        spread(b) - spread(a) || Number(home && key(b.url) === key(home)) - Number(home && key(a.url) === key(home)),
+    )[0];
+  const offenders = offendersOf(best)
+    .sort((a, b) => pagesWith[b] - pagesWith[a])
+    .slice(0, MAX_UNNAMED_OFFENDERS);
+  return [
+    {
+      type: 'unnamed-controls',
+      angle: 'accessibility',
+      rootCause: 'unnamed-controls',
+      url: best.url,
+      offenders,
+      pagesWith: Object.fromEntries(offenders.map((o) => [o, pagesWith[o]])),
+      pagesScanned: pages.length,
+    },
+  ];
+}
+
+/** Audit findings the candidates above are built from: not listed as left out. */
+const COVERED_FINDINGS = [
+  /^interactive elements without an accessible name/i,
+  /^tracking cookies without consent banner|^multiple tracking cookies set before consent/i,
+];
+
 export function buildCandidates(run: RunData, stack: StackProfile | null): Candidate[] {
   return [
     ...deadLinkCandidates(run),
@@ -590,6 +696,8 @@ export function buildCandidates(run: RunData, stack: StackProfile | null): Candi
     ...noindexCandidates(run),
     ...sitemapDeadCandidates(run),
     ...vitalsCandidates(run),
+    ...trackingBeforeConsentCandidates(run),
+    ...unnamedControlsCandidates(run),
     ...vulnerableLibraryCandidates(run, stack),
     ...eolCandidates(stack),
   ];
@@ -600,6 +708,7 @@ export function findingsNotOnAllowlist(run: RunData): Array<{ finding: string; r
   const out: Array<{ finding: string; reason: string }> = [];
   for (const message of Object.keys(run.findings)) {
     const plain = message.replace(/<[^>]*>/g, '');
+    if (COVERED_FINDINGS.some((re) => re.test(plain))) continue;
     const hit = NOT_ON_ALLOWLIST.find(([pattern]) => pattern.test(plain));
     if (hit) out.push({ finding: plain.slice(0, 120), reason: hit[1] });
   }

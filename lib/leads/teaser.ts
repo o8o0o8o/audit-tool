@@ -83,6 +83,10 @@ export function whyItMatters(h: Highlight): string {
       return 'The sitemap is the list of pages a site asks search engines to crawl; an address on it that is gone sends their crawl to an error page.';
     case 'vulnerable-libraries':
       return 'The advisory is public, and security scanners flag every site that still loads an affected version.';
+    case 'tracking-before-consent':
+      return "Where the GDPR and the ePrivacy rules apply, analytics and advertising cookies may be set only after the visitor agrees, so the banner's question comes after the fact.";
+    case 'unnamed-controls':
+      return 'Screen readers and voice control use these names; without one, a visitor who cannot see the page cannot tell what the control does. A missing name fails WCAG 2.1 criterion 4.1.2, the standard the European Accessibility Act refers to.';
     default:
       return 'It is visible to every visitor of the page.';
   }
@@ -109,6 +113,10 @@ export function shortLabel(h: Highlight): string {
       return 'language versions that search engines are not told about';
     case 'sitemap-dead-urls':
       return 'sitemap addresses that return an error';
+    case 'tracking-before-consent':
+      return 'tracking cookies set before the visitor answers the cookie banner';
+    case 'unnamed-controls':
+      return 'buttons or links a screen reader cannot name';
     case 'vulnerable-libraries':
       return `a script library with a published security advisory (${String(h.evidence.value ?? '')})`.replace(
         ' ()',
@@ -134,6 +142,16 @@ function whereLines(h: Highlight): string[] {
       return [`**Where:** <${h.url}>`, ...(target ? [`**The script file:** <${target}>`] : [])];
     case 'missing-hreflang':
       return [`**Where:** <${h.url}>`, ...(target ? [`**Another language version:** <${target}>`] : [])];
+    case 'tracking-before-consent':
+      return [
+        `**Where:** <${h.url}>`,
+        "**Check it yourself:** open the page in a private window, leave the cookie banner unanswered and look at the cookies in the browser's developer tools (Application → Cookies).",
+      ];
+    case 'unnamed-controls':
+      return [
+        `**Where:** <${h.url}>`,
+        '**Check it yourself:** in Chrome, right-click the control, choose Inspect and open the Accessibility pane: its Name is empty.',
+      ];
     case 'sitemap-dead-urls': {
       const more = (h.evidence.also ?? []).slice(0, 2);
       return [`**For example:** <${h.url}>`, ...more.map((u) => `**Also:** <${u}>`)];
@@ -149,7 +167,7 @@ function whereLines(h: Highlight): string[] {
  */
 export function stackLine(lead: LeadFile): string | null {
   const s = lead.stack;
-  if (!s || s.confidence !== 'high' || (!s.cms && !s.framework)) return null;
+  if (s?.confidence !== 'high' || (!s.cms && !s.framework)) return null;
   const cms = s.cms ? `${s.cms}${s.cmsVersion && s.cmsVersionConfirmed ? ` ${s.cmsVersion}` : ''}` : null;
   const parts = [cms, s.cmsSecondary].filter(Boolean).join(' and ');
   // The front end is named for headless and custom-built sites, where it is the stack.

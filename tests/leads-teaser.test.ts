@@ -151,6 +151,11 @@ void describe('teaser', () => {
     assert.equal(hasCausalWording(teaser.markdown), false);
     assert.equal(hasCausalWording(teaser.email), false);
     for (const x of HIGHLIGHTS) assert.equal(hasCausalWording(whyItMatters(x)), false, x.rootCause);
+    for (const cause of ['tracking-before-consent', 'unnamed-controls']) {
+      const x = { ...HIGHLIGHTS[0], rootCause: cause };
+      assert.equal(hasCausalWording(whyItMatters(x)), false, cause);
+      assert.notEqual(whyItMatters(x), whyItMatters({ ...x, rootCause: 'unknown' }), `${cause} has its own sentence`);
+    }
     assert.equal(hasCausalWording('The switch is broken because of the CMS theme'), true);
     assert.equal(hasCausalWording('Slow pages are caused by large images'), true);
     assert.throws(

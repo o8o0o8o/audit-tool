@@ -21,6 +21,7 @@ import { blockReason, type PageFetcher, type PageSnapshot } from './fingerprint'
 import { eolStatus } from './eol';
 import { PRODUCTS } from './versions';
 import { okPages, type RunData } from './run-data';
+import { describeTrackingCookies, trackingCookies } from './tracking-cookies';
 import {
   POOR_THRESHOLD,
   TEMPLATE_CODE,
@@ -34,6 +35,8 @@ import {
   type NoindexCandidate,
   type SitemapDeadCandidate,
   type TemplateTextCandidate,
+  type TrackingBeforeConsentCandidate,
+  type UnnamedControlsCandidate,
   type VitalsCandidate,
   type VulnerableLibraryCandidate,
 } from './sales-signals';
@@ -68,6 +71,43 @@ export interface GateBrowser {
   ): Promise<{ status: number | null; via: 'browser-click' | 'browser-navigation'; screenshot: string | null } | null>;
   /** Opens `url` in a fresh session and reports the status of the page that answers. */
   openPage(url: string): Promise<{ status: number | null } | null>;
+  /**
+   * A first visit in a fresh session: loads `url`, waits for tags to settle and clicks nothing. Reports
+   * the cookies the browser then holds and the cookie banner on screen, if any (with a screenshot).
+   */
+  firstVisit?(url: string, evidenceName: string): Promise<FirstVisit | null>;
+  /**
+   * Opens `url` in a fresh session and lists the visible links and buttons whose name in the browser's
+   * accessibility tree is empty. Controls in `expected` are outlined on the screenshot. Desktop first;
+   * a phone-sized screen when the desktop shows none of `expected`.
+   */
+  unnamedControls?(url: string, expected: string[], evidenceName: string): Promise<UnnamedControlsResult | null>;
+}
+
+export interface FirstVisit {
+  status: number | null;
+  cookies: Array<{ name: string; domain: string }>;
+  /** The consent prompt on screen: the consent tool when it is known, and the start of its text. */
+  banner: { vendor: string | null; text: string; canRefuse: boolean } | null;
+  screenshot: string | null;
+}
+
+export interface UnnamedControl {
+  /** Role in the accessibility tree: `link`, `button`, … */
+  role: string;
+  /** `<tag#id>` / `<tag.class>`, the same form the scan reports. */
+  label: string;
+  region: 'header' | 'nav' | 'footer' | 'main';
+  href: string | null;
+  /** Words that say what the control is for: id, class, aria-controls, icon name, image file. */
+  hint: string;
+}
+
+export interface UnnamedControlsResult {
+  status: number | null;
+  viewport: 'desktop' | 'phone';
+  controls: UnnamedControl[];
+  screenshot: string | null;
 }
 
 export interface GateIo {
@@ -124,6 +164,7 @@ export interface DroppedCandidate {
     | 'upstream-version-only'
     | 'type-suspended'
     | 'below-threshold'
+    | 'no-consent-prompt'
     | 'same-root-cause';
   rootCause?: string;
   detail?: string;
@@ -249,7 +290,7 @@ function positionWords(position: DeadLinkCandidate['position']): string {
 
 function pagesWords(n: number, total: number): string {
   if (n >= total && total > 1) return `on all ${total} pages scanned`;
-  if (n === 1) return 'on the page scanned';
+  if (n === 1 && total <= 1) return 'on the page scanned';
   return `on ${n} of ${total} pages scanned`;
 }
 
@@ -862,6 +903,207 @@ async function checkVulnerableLibrary(c: VulnerableLibraryCandidate, ctx: CheckC
 }
 
 /**
+ * Analytics or advertising cookies set before the visitor answers the cookie banner.
+ * Second method: a first visit in a fresh browser session that clicks nothing. It must show a
+ * cookie banner with a way to refuse on it AND hold tracking cookies already. No such banner, no
+ * claim: a site without one, or with a notice only, is not asking, and whether it has to depends on
+ * where it operates.
+ */
+async function checkTrackingBeforeConsent(
+  c: TrackingBeforeConsentCandidate,
+  ctx: CheckContext,
+): Promise<Highlight | null> {
+  const names = c.cookies.map((k) => k.name).join(', ');
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: names });
+    return null;
+  }
+  if (!ctx.io.browser?.firstVisit) {
+    ctx.dropped.push({ type: c.type, reason: 'no-second-method-available', rootCause: c.rootCause, detail: names });
+    return null;
+  }
+  ctx.requests.n++;
+  const visit = await ctx.io.browser.firstVisit(c.url, 'tracking-before-consent');
+  if (!visit || visit.status === null || visit.status < 200 || visit.status >= 300) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: visit && [401, 403, 429].includes(visit.status ?? 0) ? 'blocked' : 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${c.url}: the first visit answered ${visit?.status ?? 'nothing'}`,
+    });
+    return null;
+  }
+  if (!visit.banner?.canRefuse) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'no-consent-prompt',
+      rootCause: c.rootCause,
+      detail: visit.banner
+        ? `${names} set on arrival; the banner is a notice with no way to refuse on it ("${visit.banner.text.slice(0, 80)}…")`
+        : `${names} set on arrival, but no cookie banner was on screen, so the site does not ask`,
+    });
+    return null;
+  }
+  const found = trackingCookies(visit.cookies.map((k) => k.name));
+  if (!found.length) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `the scan saw ${names}; a first visit set none of them before the banner was answered`,
+    });
+    return null;
+  }
+  const n = found.length;
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `The cookie banner${visit.banner.vendor ? ` (${visit.banner.vendor})` : ''} lets visitors refuse tracking, but before anyone answers, ${c.isHome ? 'the homepage' : pathOf(c.url)} has already set ${n === 1 ? 'an analytics or advertising cookie' : `${n} analytics and advertising cookies`}: ${describeTrackingCookies(found)}`,
+    url: c.url,
+    evidence: {
+      value: found.map((k) => k.name).join(', '),
+      status: visit.status,
+      methods: ['scan-cookie-jar', 'fresh-browser-first-visit'],
+      screenshot: visit.screenshot,
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+const SOCIAL: Array<[RegExp, string]> = [
+  [/(?:^|\.)facebook\.com$|(?:^|\.)fb\.com$/, 'Facebook'],
+  [/(?:^|\.)instagram\.com$/, 'Instagram'],
+  [/(?:^|\.)(?:twitter|x)\.com$/, 'X'],
+  [/(?:^|\.)linkedin\.com$/, 'LinkedIn'],
+  [/(?:^|\.)youtube\.com$|(?:^|\.)youtu\.be$/, 'YouTube'],
+  [/(?:^|\.)tiktok\.com$/, 'TikTok'],
+  [/(?:^|\.)pinterest\.[a-z.]+$/, 'Pinterest'],
+  [/(?:^|\.)threads\.net$/, 'Threads'],
+  [/(?:^|\.)vimeo\.com$/, 'Vimeo'],
+  [/(?:^|\.)wa\.me$|(?:^|\.)whatsapp\.com$/, 'WhatsApp'],
+];
+const PURPOSE: Array<[RegExp, string]> = [
+  [/search|zoek|suche|recherche/i, 'search'],
+  [/cart|basket|bag|minicart|warenkorb|panier/i, 'cart'],
+  [/hamburger|burger|menu|nav-?toggle|navbar-toggler|drawer/i, 'menu'],
+  [/close|dismiss/i, 'close'],
+  [/account|login|log-in|sign-?in|profile|user/i, 'account'],
+  [/wishlist|favou?rite/i, 'wishlist'],
+  [/prev|next|arrow|slick|swiper|carousel|slider/i, 'slider arrow'],
+  [/play|video/i, 'video play'],
+  [/lang|locale|country|region/i, 'language'],
+];
+
+/** What a group of unnamed controls is: the social sites they link to, or what their markup says they do. */
+function controlSubject(group: UnnamedControl[]): string | null {
+  const social = new Set<string>();
+  for (const ctl of group) {
+    try {
+      const host = new URL(ctl.href ?? '').hostname.toLowerCase();
+      const hit = SOCIAL.find(([re]) => re.test(host));
+      if (hit) social.add(hit[1]);
+    } catch {
+      /* not a link */
+    }
+  }
+  const role = group[0].role;
+  if (social.size) {
+    const names = [...social];
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    return `The ${list} ${role}${group.length > 1 ? 's' : ''}`;
+  }
+  const purposes = [...new Set(group.map((ctl) => PURPOSE.find(([re]) => re.test(ctl.hint))?.[1]).filter(Boolean))];
+  if (purposes.length && purposes.length <= 3) {
+    const list =
+      purposes.length > 1 ? `${purposes.slice(0, -1).join(', ')} and ${purposes[purposes.length - 1]}` : purposes[0];
+    return `The ${list} ${role}${group.length > 1 ? 's' : ''}`;
+  }
+  return null;
+}
+
+const REGION_WORDS: Record<UnnamedControl['region'], string> = {
+  header: 'in the header',
+  nav: 'in the navigation',
+  footer: 'in the footer',
+  main: '',
+};
+
+/**
+ * Links and buttons without an accessible name.
+ * Second method: the browser's own accessibility tree in a fresh session (the scan read static HTML).
+ * A control passes when the browser shows it, gives it no name, and the scan reported it on that page.
+ */
+async function checkUnnamedControls(c: UnnamedControlsCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: c.url });
+    return null;
+  }
+  if (!ctx.io.browser?.unnamedControls) {
+    ctx.dropped.push({ type: c.type, reason: 'no-second-method-available', rootCause: c.rootCause, detail: c.url });
+    return null;
+  }
+  ctx.requests.n++;
+  const seen = await ctx.io.browser.unnamedControls(c.url, c.offenders, 'unnamed-controls');
+  if (!seen || seen.status === null || seen.status < 200 || seen.status >= 300) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: seen && [401, 403, 429].includes(seen.status ?? 0) ? 'blocked' : 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${c.url}: the page answered ${seen?.status ?? 'nothing'}`,
+    });
+    return null;
+  }
+  const expected = new Set(c.offenders);
+  const confirmed = seen.controls.filter((ctl) => expected.has(ctl.label));
+  if (!confirmed.length) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `the browser names every control the scan reported on ${c.url} (${c.offenders.slice(0, 4).join(', ')}), or does not show them`,
+    });
+    return null;
+  }
+  // The group to state: the most widespread control's role and region, with its siblings.
+  const spread = (ctl: UnnamedControl) => c.pagesWith[ctl.label] ?? 0;
+  const lead = [...confirmed].sort((a, b) => spread(b) - spread(a))[0];
+  const group = confirmed.filter((ctl) => ctl.role === lead.role && ctl.region === lead.region);
+  const subject = controlSubject(group) ?? (group.length > 1 ? `${group.length} ${lead.role}s` : `A ${lead.role}`);
+  const pages = Math.max(...group.map(spread), 1);
+  // Site-wide controls are counted over the scanned pages; a control on one page names that page.
+  const where =
+    pages > 1 ? pagesWords(pages, c.pagesScanned) : `on ${pathOf(c.url) === '/' ? 'the homepage' : pathOf(c.url)}`;
+  const region = lead.region === 'main' ? '' : ` ${REGION_WORDS[lead.region]}`;
+  const opener =
+    seen.viewport === 'phone'
+      ? `On a phone-sized screen, ${subject.charAt(0).toLowerCase()}${subject.slice(1)}`
+      : subject;
+  const others = confirmed.length - group.length;
+  const fact =
+    `${opener}${region} ${group.length > 1 ? 'have' : 'has'} no accessible name ${where}: a screen reader announces ${group.length > 1 ? 'each one' : 'it'} only as "${lead.role}"` +
+    (others > 0
+      ? `; ${others} more control${others === 1 ? '' : 's'} on the page ${others === 1 ? 'has' : 'have'} no name either`
+      : '');
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact,
+    url: c.url,
+    evidence: {
+      value: group.map((ctl) => ctl.label).join(', '),
+      status: seen.status,
+      methods: ['scan-static-html', `browser-accessibility-tree:${seen.viewport}`],
+      screenshot: seen.screenshot,
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/**
  * Teaser order: what a visitor runs into first, then language and search problems, then real-user
  * speed, then outdated software. The platform is never the lead (design revision 3).
  */
@@ -874,6 +1116,8 @@ const CAUSE_ORDER = [
   'noindex',
   'sitemap-dead-urls',
   'real-user-performance',
+  'tracking-before-consent',
+  'unnamed-controls',
   'vulnerable-libraries',
   'end-of-life',
 ];
@@ -997,6 +1241,12 @@ export async function runGate(
         break;
       case 'vulnerable-library':
         highlight = await checkVulnerableLibrary(candidate, ctx);
+        break;
+      case 'tracking-before-consent':
+        highlight = await checkTrackingBeforeConsent(candidate, ctx);
+        break;
+      case 'unnamed-controls':
+        highlight = await checkUnnamedControls(candidate, ctx);
         break;
     }
     if (highlight) passed.push(highlight);

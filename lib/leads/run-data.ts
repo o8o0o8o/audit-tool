@@ -29,6 +29,15 @@ export interface RunPage {
   textIntegrityData?: { templateTokens?: string[]; placeholderText?: boolean };
   internationalSEO?: { langAttribute?: string | null; hasHreflang?: boolean };
   visualShots?: Array<{ kind: string; file: string }>;
+  /** Cookies in the browser after the page loaded, before anything was clicked. */
+  consentData?: {
+    cookiesBeforeConsent?: string[];
+    hasConsentBanner?: boolean;
+    consentPlatform?: string | null;
+    cookies?: Array<{ name: string; domain: string }>;
+  };
+  /** Controls without an accessible name, as `<tag#id>` / `<tag.class>` (static HTML check). */
+  agentic?: { checks?: { interactiveNames?: { passed?: boolean; offenders?: string[] } } };
 }
 
 export interface RunCruxMetric {

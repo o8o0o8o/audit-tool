@@ -21,8 +21,6 @@ export type StackKind = 'legacy' | 'hybrid' | 'builder' | 'headless' | 'custom' 
 
 export type StackConfidence = 'high' | 'low';
 
-export type Track = 'migrate' | 'optimise';
-
 /** One observation of a version, from one place. */
 export interface VersionFinding {
   /** Product slug; where the public end-of-life dataset covers the product, it is that dataset's slug. */

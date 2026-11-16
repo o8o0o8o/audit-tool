@@ -48,18 +48,18 @@ const h = (
 });
 
 const HIGHLIGHTS: Highlight[] = [
-  h(
-    'end-of-life',
-    'end-of-life:drupal',
-    'The site runs on Drupal 7, which stopped receiving fixes on 2025-01-05',
-    { value: 'Drupal 7', source: 'endoflife.date' },
-    'https://endoflife.date/drupal',
-  ),
   h('dead-nav-link', 'language-switch', 'The "عربي" link in the header returns 404 on all 23 pages scanned', {
     target: 'https://example.com/tools/locale?_lcl=ar_AE',
     status: 404,
     screenshot: 'evidence/dead-nav-link-5.png',
   }),
+  h(
+    'noindex',
+    'noindex',
+    '/pricing, linked from the main navigation, tells search engines not to index it (meta robots: noindex)',
+    {},
+    'https://example.com/pricing',
+  ),
   h(
     'poor-vitals',
     'real-user-performance',
@@ -72,11 +72,11 @@ const HIGHLIGHTS: Highlight[] = [
     'https://pagespeed.web.dev/analysis?url=https%3A%2F%2Fexample.com&form_factor=mobile',
   ),
   h(
-    'noindex',
-    'noindex',
-    '/pricing, linked from the main navigation, tells search engines not to index it (meta robots: noindex)',
-    {},
-    'https://example.com/pricing',
+    'end-of-life',
+    'end-of-life:drupal',
+    'The site runs on Drupal 7, which stopped receiving fixes on 2025-01-05',
+    { value: 'Drupal 7', source: 'endoflife.date' },
+    'https://endoflife.date/drupal',
   ),
 ];
 
@@ -103,7 +103,6 @@ const lead = (overrides: Partial<LeadFile> = {}): LeadFile => ({
     signals: ['meta:Drupal', 'header:Drupal'],
   },
   fitScore: 71,
-  track: 'migrate',
   control: { homepage: 200, randomMissing: 404, blocked: false, statusUnreliable: false, note: null },
   highlights: HIGHLIGHTS,
   causes: HIGHLIGHTS.map((x) => x.rootCause),
@@ -129,15 +128,16 @@ void describe('teaser', () => {
     const md = teaser.markdown;
     assert.match(md, /^# Example Ltd website: three things we noticed/);
     assert.match(md, /2026-11-20 · Based on 23 public pages of example\.com\. No login, no forms submitted\./);
-    assert.match(md, /## 1\. The site runs on Drupal 7, which stopped receiving fixes on 2025-01-05\./);
-    assert.match(md, /## 2\. The "عربي" link in the header returns 404 on all 23 pages scanned\./);
+    assert.match(md, /## 1\. The "عربي" link in the header returns 404 on all 23 pages scanned\./);
+    assert.match(md, /## 2\. \/pricing, linked from the main navigation, tells search engines not to index it/);
+    assert.match(md, /## 3\. For real visitors on phones/);
     assert.match(md, /\*\*The link goes to:\*\* <https:\/\/example\.com\/tools\/locale\?_lcl=ar_AE>/);
     assert.match(md, /!\[Screenshot: [^\]]+\]\(evidence\/dead-nav-link-5\.png\)/);
     assert.match(md, /\*\*Check it yourself:\*\* <https:\/\/pagespeed\.web\.dev/);
-    assert.match(md, /\*\*What your site runs:\*\* Drupal 7/);
+    assert.doesNotMatch(md, /What your site runs/, 'the teaser never names the platform');
     assert.match(md, /walk you through it in 20 minutes: <https:\/\/cal\.example\/fr>/);
     assert.match(md, /Each point above was checked again on 2026-11-20\./);
-    assert.equal(md.includes('noindex'), false, 'the fourth cause is not shown');
+    assert.equal(md.includes('Drupal'), false, 'the fourth cause (end of life) is not shown, and no stack line');
   });
 
   void it('has no score and no count of further issues', () => {
@@ -162,7 +162,7 @@ void describe('teaser', () => {
     );
   });
 
-  void it('the stack line is gated: high confidence only, a version only when two kinds agree', () => {
+  void it('the stack line (review card only) is gated: high confidence only, a version only when two kinds agree', () => {
     assert.equal(stackLine(lead()), 'Drupal 7');
     const base = lead().stack!;
     assert.equal(stackLine(lead({ stack: { ...base, cmsVersionConfirmed: false } })), 'Drupal');
@@ -181,8 +181,9 @@ void describe('teaser', () => {
       'Contentful with a Next.js front end',
     );
     assert.equal(
-      buildTeaser(lead({ stack: { ...base, confidence: 'low' } })).markdown.includes('What your site runs'),
+      buildTeaser(lead()).markdown.includes('What your site runs'),
       false,
+      'not in the teaser, even at high confidence',
     );
   });
 
@@ -203,7 +204,7 @@ void describe('teaser', () => {
     assert.match(email, /We looked at 23 public pages of example\.com and noticed three things/);
     assert.match(
       email,
-      /software past its end of life \(Drupal 7\), a language link that returns an error and real-user experience figures/,
+      /a language link that returns an error, a key page hidden from search engines and real-user experience figures/,
     );
     assert.match(email, /reply "no thanks" and we will not write again/);
     assert.match(email, /https:\/\/cal\.example\/fr/);
@@ -264,7 +265,8 @@ void describe('review page', () => {
   void it('shows each highlight with its evidence, the dropped candidates and the commands', () => {
     const html = buildReviewPage([{ lead: lead(), stage: 'teaser_ready', disclosed: '' }], '/tmp');
     assert.match(html, /<h2>Example Ltd <small>example\.com<\/small><\/h2>/);
-    assert.match(html, /1\. The site runs on Drupal 7/);
+    assert.match(html, /1\. The .{1,12}عربي/);
+    assert.match(html, /Stack, for the call only \(not in the teaser\): <strong>Drupal 7<\/strong>/);
     assert.match(html, /Confirmed by<\/th><td>http-get \+ browser-click/);
     assert.match(html, /homepage 200, random missing URL 404/);
     assert.match(html, /<img src="run\/lead\/evidence\/dead-nav-link-5\.png"/);

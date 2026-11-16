@@ -13,15 +13,7 @@
 import type { DetectedTechnology, DetectionMethod } from '../analyzers/seo/technology-detector';
 import { eolHits } from './eol';
 import { LIBRARY_PRODUCTS, PRODUCTS, TECH_TO_PRODUCT, frameworkVariants, type FrameworkVariant } from './versions';
-import type {
-  SignalKind,
-  StackConfidence,
-  StackKind,
-  StackProfile,
-  StackSignal,
-  Track,
-  VersionEvidence,
-} from './types';
+import type { SignalKind, StackConfidence, StackKind, StackProfile, StackSignal, VersionEvidence } from './types';
 
 /** Server-rendered, theme-based CMSs and the enterprise suites. */
 export const LEGACY_CMS = new Set([
@@ -307,13 +299,6 @@ export function buildStackProfile(input: ProfileInput): StackProfile {
     signals,
     notes,
   };
-}
-
-/** Migrate: the site is on a stack we would move it off. Optimise: already headless or custom-built. */
-export function trackOf(kind: StackKind): Track | null {
-  if (kind === 'legacy' || kind === 'hybrid' || kind === 'builder') return 'migrate';
-  if (kind === 'headless' || kind === 'custom' || kind === 'unknown') return 'optimise';
-  return null;
 }
 
 /** `cookie:set-cookie ~ /…/` → compact `kind:detail` strings for the CSV and `stack.json`. */

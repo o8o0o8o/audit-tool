@@ -147,6 +147,20 @@ export class PlaywrightGateBrowser implements GateBrowser {
     }
   }
 
+  async openPage(url: string): Promise<{ status: number | null } | null> {
+    let context: BrowserContext | null = null;
+    try {
+      context = await this.#context();
+      const page = await context.newPage();
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      return { status: response?.status() ?? null };
+    } catch {
+      return null;
+    } finally {
+      await context?.close().catch(() => undefined);
+    }
+  }
+
   async close(): Promise<void> {
     await this.#browser?.close().catch(() => undefined);
     this.#browser = null;

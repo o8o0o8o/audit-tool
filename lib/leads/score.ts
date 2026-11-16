@@ -1,6 +1,10 @@
 /**
- * Stage 2 of the lead pipeline: a fit score from 0 to 100 and a track per prospect.
+ * Stage 2 of the lead pipeline: a fit score from 0 to 100 per prospect.
  * Pure: reads one CSV row and the weights, makes no request.
+ *
+ * The score ranks by how much the site matters and how likely it is to show problems, never by its
+ * platform: the pitch is the site's issues as they are, not a migration (design revision 3). The
+ * stack kind earns no points; outdated software does, as an issue in its own right.
  *
  * The weights live in `docs/gtm/lead-weights.json` so that sales can change them without touching
  * code. A signal the row has no data for scores zero and is listed in `missing`, so a low score can
@@ -9,24 +13,18 @@
 
 import * as fs from 'node:fs';
 import type { CompanyRecord } from './csv-store';
-import { trackOf } from './stack-profile';
-import type { StackKind, Track } from './types';
+import type { StackKind } from './types';
 
 export const DEFAULT_WEIGHTS_PATH = 'docs/gtm/lead-weights.json';
 
 export interface LeadWeights {
   weights: {
-    stack: number;
     endOfLife: number;
     traffic: number;
     languages: number;
     jobKeywords: number;
     blogVelocity: number;
   };
-  /** Share of the stack points per stack kind (kinds not listed earn nothing). */
-  stackShare: Partial<Record<StackKind, number>>;
-  /** Multiplier on the stack points when the stack is known at low confidence only. */
-  lowConfidenceShare: number;
   /** Multiplier on the end-of-life points when the only hit is a PHP version from a header. */
   phpOnlyEndOfLifeShare: number;
   traffic: { floor: number; ceiling: number };
@@ -34,9 +32,7 @@ export interface LeadWeights {
 }
 
 export const DEFAULT_WEIGHTS: LeadWeights = {
-  weights: { stack: 30, endOfLife: 15, traffic: 20, languages: 10, jobKeywords: 15, blogVelocity: 10 },
-  stackShare: { legacy: 1, hybrid: 1, builder: 0.5 },
-  lowConfidenceShare: 0.7,
+  weights: { endOfLife: 15, traffic: 35, languages: 15, jobKeywords: 20, blogVelocity: 15 },
   phpOnlyEndOfLifeShare: 0.5,
   traffic: { floor: 1000, ceiling: 1_000_000 },
   languages: { minimum: 2 },
@@ -44,10 +40,22 @@ export const DEFAULT_WEIGHTS: LeadWeights = {
 
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
+/** Keys of the revision 2 weights file that scored the platform. Refused, so an old file is not read as if it still counted. */
+const RETIRED_KEYS = ['stackShare', 'lowConfidenceShare'];
+
 /** Reads the weights file; a missing key falls back to the default, a wrong type is an error. */
 export function loadWeights(file: string = DEFAULT_WEIGHTS_PATH): LeadWeights {
   if (!fs.existsSync(file)) return DEFAULT_WEIGHTS;
   const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+  const retired = [
+    ...RETIRED_KEYS.filter((k) => raw[k] !== undefined),
+    ...((raw.weights as Record<string, unknown> | undefined)?.stack !== undefined ? ['weights.stack'] : []),
+  ];
+  if (retired.length) {
+    throw new Error(
+      `${file}: ${retired.join(', ')} no longer exist${retired.length === 1 ? 's' : ''}: the platform earns no points (design revision 3). Remove ${retired.length === 1 ? 'it' : 'them'}.`,
+    );
+  }
   const pick = <T extends object>(section: string, defaults: T): T => {
     const given = (raw[section] ?? {}) as Record<string, unknown>;
     const out = { ...defaults } as Record<string, unknown>;
@@ -58,7 +66,7 @@ export function loadWeights(file: string = DEFAULT_WEIGHTS_PATH): LeadWeights {
     }
     return out as T;
   };
-  const scalar = (key: 'lowConfidenceShare' | 'phpOnlyEndOfLifeShare') => {
+  const scalar = (key: 'phpOnlyEndOfLifeShare') => {
     if (raw[key] === undefined) return DEFAULT_WEIGHTS[key];
     if (!isNumber(raw[key])) throw new Error(`${file}: "${key}" must be a number of 0 or more`);
     return raw[key];
@@ -72,11 +80,6 @@ export function loadWeights(file: string = DEFAULT_WEIGHTS_PATH): LeadWeights {
   }
   return {
     weights,
-    stackShare: pick('stackShare', { legacy: 1, hybrid: 1, builder: 0.5 } as Record<
-      string,
-      number
-    >) as LeadWeights['stackShare'],
-    lowConfidenceShare: scalar('lowConfidenceShare'),
     phpOnlyEndOfLifeShare: scalar('phpOnlyEndOfLifeShare'),
     traffic,
     languages: pick('languages', DEFAULT_WEIGHTS.languages),
@@ -84,7 +87,7 @@ export function loadWeights(file: string = DEFAULT_WEIGHTS_PATH): LeadWeights {
 }
 
 export interface ScoreLine {
-  signal: 'stack' | 'endOfLife' | 'traffic' | 'languages' | 'jobKeywords' | 'blogVelocity';
+  signal: 'endOfLife' | 'traffic' | 'languages' | 'jobKeywords' | 'blogVelocity';
   points: number;
   max: number;
   note: string;
@@ -92,7 +95,6 @@ export interface ScoreLine {
 
 export interface FitScore {
   score: number;
-  track: Track | null;
   lines: ScoreLine[];
   /** Signals the row has no data for. */
   missing: string[];
@@ -140,21 +142,6 @@ export function scoreCompany(record: CompanyRecord, config: LeadWeights = DEFAUL
   else if (kind === 'unreadable') blocker = 'site could not be read';
   else if (/\brobots:disallow-all\b/.test(record.stack_signals ?? '')) blocker = 'robots.txt disallows the whole site';
   else if (/\bredirect:/.test(record.stack_signals ?? '')) blocker = 'homepage redirects to another site';
-
-  // Stack
-  const share = kind ? (config.stackShare[kind] ?? 0) : 0;
-  const lowConfidence = record.stack_confidence === 'low';
-  const stackPoints = w.stack * share * (lowConfidence ? config.lowConfidenceShare : 1);
-  const stackLabel = [record.cms_detected, record.cms_secondary].filter(Boolean).join(' + ');
-  lines.push({
-    signal: 'stack',
-    points: round1(stackPoints),
-    max: w.stack,
-    note: kind
-      ? `${kind}${stackLabel ? ` (${stackLabel})` : ''}${lowConfidence && share ? ', low confidence' : ''}`
-      : 'unknown',
-  });
-  if (!kind) missing.push('stack');
 
   // End of life
   const eolEntries = (record.eol ?? '')
@@ -206,13 +193,12 @@ export function scoreCompany(record: CompanyRecord, config: LeadWeights = DEFAUL
   }
 
   const score = Math.round(lines.reduce((sum, l) => sum + l.points, 0));
-  return { score, track: kind ? trackOf(kind) : null, lines, missing, blocker };
+  return { score, lines, missing, blocker };
 }
 
-/** `stack 30; eol 15; traffic 12.4; lang 10` — the reasons column, non-zero lines only. */
+/** `eol 15; traffic 21.7; lang 15` — the reasons column, non-zero lines only. */
 export function formatReasons(fit: FitScore): string {
   const short: Record<ScoreLine['signal'], string> = {
-    stack: 'stack',
     endOfLife: 'eol',
     traffic: 'traffic',
     languages: 'lang',

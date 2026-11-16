@@ -39,7 +39,7 @@ void describe('lead score', () => {
     );
   });
 
-  void it('a legacy stack at high confidence with end-of-life software, traffic and languages', () => {
+  void it('end-of-life software, traffic and languages', () => {
     const fit = scoreCompany(
       row({
         stack_kind: 'legacy',
@@ -50,47 +50,44 @@ void describe('lead score', () => {
         languages: '3',
       }),
     );
-    assert.equal(fit.score, 30 + 15 + 20 + 10);
-    assert.equal(fit.track, 'migrate');
+    assert.equal(fit.score, 15 + 35 + 15);
     assert.equal(fit.blocker, null);
     assert.deepEqual(fit.missing, ['job_keywords', 'blog_velocity']);
-    assert.equal(formatReasons(fit), 'stack 30; eol 15; traffic 20; lang 10');
+    assert.equal(formatReasons(fit), 'eol 15; traffic 35; lang 15');
   });
 
-  void it('low confidence, builder stacks and a PHP-only end-of-life hit earn a share', () => {
-    assert.equal(scoreCompany(row({ stack_kind: 'legacy', stack_confidence: 'low' })).lines[0].points, 21);
-    assert.equal(scoreCompany(row({ stack_kind: 'builder', stack_confidence: 'high' })).lines[0].points, 15);
-    assert.equal(scoreCompany(row({ stack_kind: 'headless', stack_confidence: 'high' })).lines[0].points, 0);
-    assert.equal(scoreCompany(row({ eol: 'PHP 7.4.33 (ended 2022-11-28)' })).lines[1].points, 7.5);
-    assert.equal(
-      scoreCompany(row({ eol: 'PHP 7.4.33 (ended 2022-11-28); Drupal 7 (ended 2025-01-05)' })).lines[1].points,
-      15,
+  void it('the platform earns no points: the pitch is the site, not a migration', () => {
+    const same = { traffic: '50000', languages: '2' };
+    const scores = ['legacy', 'hybrid', 'builder', 'headless', 'custom', 'unknown'].map(
+      (kind) => scoreCompany(row({ ...same, stack_kind: kind, stack_confidence: 'high' })).score,
     );
+    assert.equal(new Set(scores).size, 1, `every stack kind scores the same: ${scores.join(', ')}`);
+    assert.ok(!scoreCompany(row({})).lines.some((l) => (l.signal as string) === 'stack'));
+  });
+
+  void it('a PHP-only end-of-life hit earns a share', () => {
+    const eol = (value: string) =>
+      scoreCompany(row({ eol: value })).lines.find((l) => l.signal === 'endOfLife')?.points;
+    assert.equal(eol('PHP 7.4.33 (ended 2022-11-28)'), 7.5);
+    assert.equal(eol('PHP 7.4.33 (ended 2022-11-28); Drupal 7 (ended 2025-01-05)'), 15);
   });
 
   void it('traffic is on a log scale between the floor and the ceiling', () => {
-    const points = (traffic: string) => scoreCompany(row({ traffic })).lines[2].points;
+    const points = (traffic: string) =>
+      scoreCompany(row({ traffic })).lines.find((l) => l.signal === 'traffic')?.points;
     assert.equal(points('500'), 0);
     assert.equal(points('1000'), 0);
-    assert.equal(points('31623'), 10); // halfway on a log scale between 1e3 and 1e6
-    assert.equal(points('5000000'), 20);
+    assert.equal(points('31623'), 17.5); // halfway on a log scale between 1e3 and 1e6
+    assert.equal(points('5000000'), 35);
     assert.equal(points(''), 0);
     assert.ok(scoreCompany(row({ traffic: '' })).missing.includes('traffic'));
   });
 
   void it('signal-sheet columns score once they exist', () => {
     const fit = scoreCompany(row({ job_keywords: 'yes', blog_velocity: '50%' }));
-    assert.equal(fit.lines.find((l) => l.signal === 'jobKeywords')?.points, 15);
-    assert.equal(fit.lines.find((l) => l.signal === 'blogVelocity')?.points, 5);
+    assert.equal(fit.lines.find((l) => l.signal === 'jobKeywords')?.points, 20);
+    assert.equal(fit.lines.find((l) => l.signal === 'blogVelocity')?.points, 7.5);
     assert.deepEqual(fit.missing, []);
-  });
-
-  void it('tracks follow the stack kind', () => {
-    assert.equal(scoreCompany(row({ stack_kind: 'hybrid' })).track, 'migrate');
-    assert.equal(scoreCompany(row({ stack_kind: 'builder' })).track, 'migrate');
-    assert.equal(scoreCompany(row({ stack_kind: 'headless' })).track, 'optimise');
-    assert.equal(scoreCompany(row({ stack_kind: 'custom' })).track, 'optimise');
-    assert.equal(scoreCompany(row({ stack_kind: 'unreadable' })).track, null);
   });
 
   void it('names the reason a row must not be scanned', () => {
@@ -105,26 +102,33 @@ void describe('lead score', () => {
 
   void it('ranks by score, then by traffic', () => {
     const ranked = rank([
-      row({ website: 'small.example', stack_kind: 'legacy', stack_confidence: 'high', traffic: '2000' }),
-      row({ website: 'big.example', stack_kind: 'legacy', stack_confidence: 'high', traffic: '900000' }),
-      row({ website: 'headless.example', stack_kind: 'headless', stack_confidence: 'high', traffic: '900000' }),
+      row({ website: 'small.example', stack_kind: 'legacy', traffic: '2000', languages: '2' }),
+      row({ website: 'big.example', stack_kind: 'headless', traffic: '900000', languages: '2' }),
+      row({ website: 'tie-bigger.example', stack_kind: 'legacy', traffic: '900000', languages: '2' }),
     ]);
-    assert.deepEqual(
-      ranked.map((r) => r.record.website),
-      ['big.example', 'small.example', 'headless.example'],
-    );
+    assert.deepEqual(ranked.map((r) => r.record.website).slice(2), ['small.example']);
+    assert.equal(ranked[0].fit.score, ranked[1].fit.score, 'same traffic and languages, any stack: same score');
   });
 
   void it('rejects a weights file that adds up to more than 100 or has a wrong type', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-weights-'));
     const file = path.join(dir, 'w.json');
-    fs.writeFileSync(file, JSON.stringify({ weights: { stack: 90, traffic: 30 } }));
+    fs.writeFileSync(file, JSON.stringify({ weights: { traffic: 90, endOfLife: 30 } }));
     assert.throws(() => loadWeights(file), /add up to/);
-    fs.writeFileSync(file, JSON.stringify({ weights: { stack: 'lots' } }));
+    fs.writeFileSync(file, JSON.stringify({ weights: { traffic: 'lots' } }));
     assert.throws(() => loadWeights(file), /must be a number/);
-    fs.writeFileSync(file, JSON.stringify({ weights: { stack: 40, endOfLife: 0 } }));
-    assert.equal(loadWeights(file).weights.stack, 40);
-    assert.equal(loadWeights(file).weights.traffic, 20, 'missing keys keep their default');
+    fs.writeFileSync(file, JSON.stringify({ weights: { endOfLife: 0 } }));
+    assert.equal(loadWeights(file).weights.endOfLife, 0);
+    assert.equal(loadWeights(file).weights.traffic, 35, 'missing keys keep their default');
+  });
+
+  void it('refuses a revision 2 weights file that still scores the platform', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lead-weights-'));
+    const file = path.join(dir, 'w.json');
+    fs.writeFileSync(file, JSON.stringify({ weights: { stack: 30, traffic: 20 } }));
+    assert.throws(() => loadWeights(file), /weights\.stack .*no points/);
+    fs.writeFileSync(file, JSON.stringify({ stackShare: { legacy: 1 } }));
+    assert.throws(() => loadWeights(file), /stackShare/);
   });
 });
 

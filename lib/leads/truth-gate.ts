@@ -16,20 +16,26 @@
  */
 
 import { isChallengeResponse } from '../utils/blocked-fetch';
+import { advisoryFor, compareVersions } from '../analyzers/security/js-library-analyzer';
 import { blockReason, type PageFetcher, type PageSnapshot } from './fingerprint';
 import { eolStatus } from './eol';
 import { PRODUCTS } from './versions';
 import { okPages, type RunData } from './run-data';
 import {
   POOR_THRESHOLD,
+  TEMPLATE_CODE,
   buildCandidates,
   findingsNotOnAllowlist,
   type BrokenImageCandidate,
   type DeadLinkCandidate,
   type EolCandidate,
   type FindingType,
+  type MissingHreflangCandidate,
   type NoindexCandidate,
+  type SitemapDeadCandidate,
+  type TemplateTextCandidate,
   type VitalsCandidate,
+  type VulnerableLibraryCandidate,
 } from './sales-signals';
 import type { SignalKind, StackProfile } from './types';
 
@@ -38,12 +44,14 @@ export interface GateOptions {
   minCauses?: number;
   /** How far inside the "poor" band a real-user metric must be: 0.1 = 10% beyond the threshold. */
   vitalsMargin?: number;
+  /** Dead sitemap URLs (404/410, confirmed in a browser) needed before the sitemap is a highlight. */
+  minDeadSitemapUrls?: number;
   today?: string;
   /** Finding types taken off the allowlist after a factual rejection (see `review-log.ts`). */
   suspendedTypes?: string[];
 }
 
-export const GATE_DEFAULTS = { minCauses: 3, vitalsMargin: 0.1 } as const;
+export const GATE_DEFAULTS = { minCauses: 3, vitalsMargin: 0.1, minDeadSitemapUrls: 2 } as const;
 
 /** What the gate's own browser session can do. Injected, so tests need no browser. */
 export interface GateBrowser {
@@ -58,6 +66,8 @@ export interface GateBrowser {
     targetUrl: string,
     evidenceName: string,
   ): Promise<{ status: number | null; via: 'browser-click' | 'browser-navigation'; screenshot: string | null } | null>;
+  /** Opens `url` in a fresh session and reports the status of the page that answers. */
+  openPage(url: string): Promise<{ status: number | null } | null>;
 }
 
 export interface GateIo {
@@ -113,6 +123,7 @@ export interface DroppedCandidate {
     | 'version-not-confirmed-by-two-kinds'
     | 'upstream-version-only'
     | 'type-suspended'
+    | 'below-threshold'
     | 'same-root-cause';
   rootCause?: string;
   detail?: string;
@@ -209,7 +220,7 @@ interface CheckContext {
   io: GateIo;
   control: ControlResult;
   checkedAt: string;
-  options: Required<Pick<GateOptions, 'minCauses' | 'vitalsMargin'>> & { today: string };
+  options: Required<Pick<GateOptions, 'minCauses' | 'vitalsMargin' | 'minDeadSitemapUrls'>> & { today: string };
   dropped: DroppedCandidate[];
   requests: { n: number };
   runtime: Record<string, string> | null;
@@ -501,14 +512,370 @@ async function checkBrokenImage(c: BrokenImageCandidate, ctx: CheckContext): Pro
   };
 }
 
-/** Teaser order: stack-related first, then what a visitor sees, then what only tools see. */
+/** Served HTML reduced to the text a visitor reads: no scripts, styles, templates, comments or tags. */
+export function visibleText(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style|template|noscript|textarea)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#123;/g, '{')
+    .replace(/&#125;/g, '}')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
+}
+
+const LOREM = /\blorem ipsum\b/i;
+
+/**
+ * Unfilled template code or lorem ipsum. The scan saw it in the rendered page; the second method is
+ * a plain GET whose served HTML must show the same text outside scripts and templates. Text that
+ * only JavaScript writes is not eligible in this version.
+ */
+async function checkTemplateText(c: TemplateTextCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: c.url });
+    return null;
+  }
+  const res = await get(ctx, c.url);
+  if (!res || blockReason(res.status, res.headers, res.body)) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'blocked',
+      rootCause: c.rootCause,
+      detail: `${c.url}: ${res?.status ?? 'no answer'}`,
+    });
+    return null;
+  }
+  const text = visibleText(res.body);
+  const tokens = c.tokens.filter((t) => TEMPLATE_CODE.test(t) && text.includes(t));
+  const lorem = c.placeholder && LOREM.test(text);
+  if (!tokens.length && !lorem) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${c.url}: the served HTML does not show ${[...c.tokens, ...(c.placeholder ? ['lorem ipsum'] : [])].join(', ')}`,
+    });
+    return null;
+  }
+  const where = pathOf(c.url) === '/' ? 'The homepage' : pathOf(c.url);
+  const shown = tokens.length
+    ? `raw template code (${tokens
+        .slice(0, 3)
+        .map((t) => `"${t.length > 40 ? `${t.slice(0, 40)}…` : t}"`)
+        .join(', ')}) where content should be`
+    : 'placeholder text ("Lorem ipsum")';
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `${where} shows ${shown}${tokens.length && lorem ? ', and placeholder text ("Lorem ipsum")' : ''}`,
+    url: c.url,
+    evidence: {
+      value: [...tokens, ...(lorem ? ['lorem ipsum'] : [])].join(' | '),
+      status: res.status,
+      methods: ['browser-render', 'http-get-served-html'],
+      screenshot: c.shot,
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/** Does this served page or response carry any hreflang annotation? */
+function hasHreflang(res: PageSnapshot): boolean {
+  if (/hreflang/i.test(res.headers['link'] ?? '')) return true;
+  return /<link\b[^>]*\bhreflang\s*=/i.test(res.body);
+}
+
+const servedLanguage = (html: string) => {
+  const tag = /<html\b[^>]*>/i.exec(html)?.[0] ?? '';
+  const m = /\blang\s*=\s*["']?([a-z]{2,3})(?:[-_][a-z0-9]+)?["'\s>]/i.exec(tag);
+  return m ? m[1].toLowerCase() : null;
+};
+
+const languageName = (code: string) => {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
+
+/** Child sitemaps of a sitemap index that are read when looking for hreflang. */
+const MAX_CHILD_SITEMAPS = 5;
+
+/**
+ * Pages in several languages and no hreflang anywhere. The scan read the rendered pages; the second
+ * method is a plain GET of one page per language (served `<html lang>` must differ, and neither the
+ * HTML nor the `Link` header may carry hreflang), plus the sitemap files, which must not carry it
+ * either. A sitemap that cannot be read drops the candidate: absence is only claimed where we looked.
+ */
+async function checkMissingHreflang(c: MissingHreflangCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause });
+    return null;
+  }
+  const served = new Set<string>();
+  for (const { url } of c.pages.slice(0, 2)) {
+    const res = await get(ctx, url);
+    if (!res || blockReason(res.status, res.headers, res.body)) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'blocked',
+        rootCause: c.rootCause,
+        detail: `${url}: ${res?.status ?? 'no answer'}`,
+      });
+      return null;
+    }
+    if (hasHreflang(res)) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'second-method-disagrees',
+        rootCause: c.rootCause,
+        detail: `${url}: the served page carries hreflang`,
+      });
+      return null;
+    }
+    const lang = servedLanguage(res.body);
+    if (lang) served.add(lang);
+  }
+  if (served.size < 2) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `the served pages declare ${[...served].join(', ') || 'no language'}, not two different ones`,
+    });
+    return null;
+  }
+  const files = [...c.sitemaps];
+  for (let i = 0; i < files.length && i < c.sitemaps.length + MAX_CHILD_SITEMAPS; i++) {
+    const res = await get(ctx, files[i]);
+    // A sitemap is XML, so the HTML page test does not apply: it must be a 200 sitemap document.
+    const readable =
+      res?.status === 200 &&
+      !isChallengeResponse(res.status, res.headers) &&
+      /<(?:urlset|sitemapindex)\b/i.test(res.body);
+    if (!res || !readable) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'blocked',
+        rootCause: c.rootCause,
+        detail: `${files[i]}: ${res?.status ?? 'no answer'}; the sitemap could not be checked for hreflang`,
+      });
+      return null;
+    }
+    if (/hreflang/i.test(res.body)) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'second-method-disagrees',
+        rootCause: c.rootCause,
+        detail: `${files[i]} carries hreflang`,
+      });
+      return null;
+    }
+    if (/<sitemapindex\b/i.test(res.body)) {
+      const children = [...res.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1].replace(/&amp;/g, '&'));
+      for (const child of children.slice(0, MAX_CHILD_SITEMAPS)) if (!files.includes(child)) files.push(child);
+    }
+  }
+  const names = c.languages.map(languageName);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `The site has pages in ${list}, but none of them tells search engines about its other language versions: no hreflang in the ${c.pagesScanned} pages scanned${files.length ? ', their HTTP headers or the sitemap' : ' or their HTTP headers'}`,
+    url: c.pages[0].url,
+    evidence: {
+      target: c.pages[1].url,
+      value: c.languages.join(', '),
+      methods: ['browser-crawl', 'http-get-served-html', ...(files.length ? ['sitemap-read'] : [])],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/**
+ * Dead URLs in the sitemap. A plain GET of an even sample of sitemap URLs the scan did not load;
+ * each 404/410 is then opened in a fresh browser session, and only URLs both methods see as gone
+ * count. The teaser says "x of n sampled", never "the sitemap is full of".
+ */
+async function checkSitemapDead(c: SitemapDeadCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked || ctx.control.statusUnreliable) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause });
+    return null;
+  }
+  const gone: Array<{ url: string; status: number }> = [];
+  let answered = 0;
+  let refused = 0;
+  for (const url of c.sample) {
+    const res = await get(ctx, url);
+    if (!res) continue;
+    if ([401, 403, 429].includes(res.status) || isChallengeResponse(res.status, res.headers)) {
+      refused++;
+      continue;
+    }
+    answered++;
+    if (GONE(res.status)) gone.push({ url, status: res.status });
+  }
+  if (refused > c.sample.length / 4) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'blocked',
+      rootCause: c.rootCause,
+      detail: `${refused} of ${c.sample.length} sitemap URLs refused`,
+    });
+    return null;
+  }
+  if (gone.length < ctx.options.minDeadSitemapUrls) {
+    if (gone.length)
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'below-threshold',
+        rootCause: c.rootCause,
+        detail: `${gone.length} of ${answered} sampled sitemap URLs gone; ${ctx.options.minDeadSitemapUrls} needed`,
+      });
+    return null;
+  }
+  if (!ctx.io.browser) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'no-second-method-available',
+      rootCause: c.rootCause,
+      detail: 'no browser session',
+    });
+    return null;
+  }
+  const confirmed: Array<{ url: string; status: number }> = [];
+  for (const g of gone) {
+    ctx.requests.n++;
+    const opened = await ctx.io.browser.openPage(g.url);
+    if (GONE(opened?.status)) confirmed.push(g);
+  }
+  if (confirmed.length < ctx.options.minDeadSitemapUrls) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${gone.length} sitemap URLs returned 404/410 to a plain GET, ${confirmed.length} in the browser`,
+    });
+    return null;
+  }
+  const statuses = [...new Set(confirmed.map((g) => g.status))].sort().join(' or ');
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `${confirmed.length} of ${answered} sitemap addresses we sampled return ${statuses} (the sitemap lists ${c.sitemapTotal.toLocaleString('en-US')} addresses)`,
+    url: confirmed[0].url,
+    evidence: {
+      status: confirmed[0].status,
+      value: `${confirmed.length}/${answered}`,
+      methods: ['http-get', 'browser-navigation'],
+      also: confirmed.slice(1).map((g) => g.url),
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/** Version banners at the top of each library's published files. */
+const BANNERS: Record<string, RegExp[]> = {
+  jquery: [/jQuery(?: JavaScript Library)? v(\d+\.\d+\.\d+)/, /jquery:\s*["'](\d+\.\d+\.\d+)["']/],
+  'jquery-ui': [/jQuery UI(?: - v| v|\s+)(\d+\.\d+\.\d+)/, /version:\s*["'](\d+\.\d+\.\d+)["']/],
+  bootstrap: [/Bootstrap v(\d+\.\d+\.\d+)/],
+  angularjs: [/AngularJS v(\d+\.\d+\.\d+)/],
+  lodash: [/lodash[^\n]{0,60}?(\d+\.\d+\.\d+)/i, /VERSION\s*=\s*["'](\d+\.\d+\.\d+)["']/],
+  underscore: [/Underscore\.js (\d+\.\d+\.\d+)/],
+  moment: [/version\s*:\s*(\d+\.\d+\.\d+)/],
+  handlebars: [/handlebars v(\d+\.\d+\.\d+)/i],
+  dompurify: [/DOMPurify (\d+\.\d+\.\d+)/],
+  vue: [/Vue\.js v(\d+\.\d+\.\d+)/],
+};
+
+/** The library version a file's banner states, from its first 4 KB. */
+export function bannerVersion(lib: string, body: string): string | null {
+  const head = body.slice(0, 4096);
+  for (const re of BANNERS[lib] ?? []) {
+    const m = re.exec(head);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/**
+ * A library version with a published advisory. The scan read the version from a runtime global or
+ * the file name; the second method downloads the script file and reads the version from its banner.
+ * The two must agree, and the advisory must apply to that version.
+ */
+async function checkVulnerableLibrary(c: VulnerableLibraryCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (!c.scripts.length) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'no-second-method-available',
+      rootCause: c.rootCause,
+      detail: `${c.label} ${c.version}: no script file of its own on ${c.page} (bundled), so no banner to read`,
+    });
+    return null;
+  }
+  const seen: string[] = [];
+  for (const script of c.scripts) {
+    const res = await get(ctx, script);
+    if (res?.status !== 200) continue;
+    const version = bannerVersion(c.lib, res.body);
+    if (!version) continue;
+    seen.push(`${version} in ${script}`);
+    if (compareVersions(version, c.version) !== 0 || !advisoryFor(c.lib, version)) continue;
+    return {
+      type: c.type,
+      rootCause: c.rootCause,
+      angle: c.angle,
+      fact: `The site loads ${c.label} ${version}, a version with a published security advisory (${c.advisory}); it is fixed from version ${c.fixedIn}`,
+      url: c.page,
+      evidence: {
+        target: script,
+        value: `${c.label} ${version}`,
+        status: res.status,
+        methods: [`scan:${c.version}`, 'http-get-file-banner'],
+        ...evidenceBase(ctx),
+      },
+      gate: 'pass',
+    };
+  }
+  ctx.dropped.push({
+    type: c.type,
+    reason: seen.length ? 'second-method-disagrees' : 'no-second-method-available',
+    rootCause: c.rootCause,
+    detail: seen.length
+      ? `${c.label}: the scan saw ${c.version}, the file banner says ${seen.join('; ')}`
+      : `${c.label} ${c.version}: no readable version banner in ${c.scripts.join(', ')}`,
+  });
+  return null;
+}
+
+/**
+ * Teaser order: what a visitor runs into first, then language and search problems, then real-user
+ * speed, then outdated software. The platform is never the lead (design revision 3).
+ */
 const CAUSE_ORDER = [
-  'end-of-life',
   'language-switch',
   'dead-navigation-links',
   'broken-images',
-  'real-user-performance',
+  'template-text',
+  'missing-hreflang',
   'noindex',
+  'sitemap-dead-urls',
+  'real-user-performance',
+  'vulnerable-libraries',
+  'end-of-life',
 ];
 const causeRank = (cause: string) => {
   const i = CAUSE_ORDER.findIndex((c) => cause === c || cause.startsWith(`${c}:`));
@@ -535,10 +902,14 @@ export function groupByRootCause(passed: Highlight[], dropped: DroppedCandidate[
   for (const h of grouped) {
     const more = h.evidence.also?.length ?? 0;
     if (!more) continue;
-    if (h.type === 'dead-nav-link') h.fact += `; ${more} more navigation link${more === 1 ? '' : 's'} do the same`;
+    if (h.type === 'dead-nav-link') h.fact += `; ${more} more navigation link${more === 1 ? ' does' : 's do'} the same`;
     if (h.type === 'broken-image')
-      h.fact += `; ${more} more image${more === 1 ? '' : 's'} on the scanned pages do the same`;
-    if (h.type === 'noindex') h.fact += `; ${more} more key page${more === 1 ? '' : 's'} carry the same instruction`;
+      h.fact += `; ${more} more image${more === 1 ? '' : 's'} on the scanned pages ${more === 1 ? 'does' : 'do'} the same`;
+    if (h.type === 'noindex')
+      h.fact += `; ${more} more key page${more === 1 ? ' carries' : 's carry'} the same instruction`;
+    if (h.type === 'template-text') h.fact += `; ${more} more page${more === 1 ? ' shows' : 's show'} the same`;
+    if (h.type === 'vulnerable-library')
+      h.fact += `; ${more} more librar${more === 1 ? 'y' : 'ies'} on the site ${more === 1 ? 'has' : 'have'} a published advisory too`;
   }
   return grouped;
 }
@@ -553,6 +924,7 @@ export async function runGate(
   const opts = {
     minCauses: options.minCauses ?? GATE_DEFAULTS.minCauses,
     vitalsMargin: options.vitalsMargin ?? GATE_DEFAULTS.vitalsMargin,
+    minDeadSitemapUrls: options.minDeadSitemapUrls ?? GATE_DEFAULTS.minDeadSitemapUrls,
     today: options.today ?? checkedAt.slice(0, 10),
   };
   const dropped: DroppedCandidate[] = findingsNotOnAllowlist(run).map((f) => ({
@@ -613,6 +985,18 @@ export async function runGate(
         break;
       case 'noindex':
         highlight = await checkNoindex(candidate, ctx);
+        break;
+      case 'template-text':
+        highlight = await checkTemplateText(candidate, ctx);
+        break;
+      case 'missing-hreflang':
+        highlight = await checkMissingHreflang(candidate, ctx);
+        break;
+      case 'sitemap-dead-urls':
+        highlight = await checkSitemapDead(candidate, ctx);
+        break;
+      case 'vulnerable-library':
+        highlight = await checkVulnerableLibrary(candidate, ctx);
         break;
     }
     if (highlight) passed.push(highlight);

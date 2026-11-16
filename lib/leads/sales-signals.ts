@@ -1,21 +1,34 @@
 /**
- * Stage 4 of the lead pipeline: turn the stack profile and the scan into candidate highlights.
+ * Stage 4 of the lead pipeline: turn the scan into candidate highlights — problems on the site as
+ * it is today. The stack profile is read only for outdated software, which is an issue in its own
+ * right; the platform is never the pitch (design revision 3).
  *
  * This stage decides nothing about truth. It only says "this might be worth telling the prospect,
  * and here is what would have to be confirmed". The truth gate (`truth-gate.ts`) does the confirming.
- * Facts are placed side by side with the stack; a cause is never claimed.
+ * A cause is never claimed.
  */
 
 import type { LinkPosition } from '../analyzers/site-wide/crawl-graph-checks';
+import { LIBRARIES } from '../analyzers/security/js-library-analyzer';
 import { okPages, formatDateParts, type RunData, type RunPage } from './run-data';
-import type { EolHit, StackProfile, Track } from './types';
+import type { EolHit, StackProfile } from './types';
 
 /** Finding types the truth gate knows how to confirm. Anything else stays in the full audit. */
-export const ALLOWLIST = ['end-of-life', 'dead-nav-link', 'broken-image', 'poor-vitals', 'noindex'] as const;
+export const ALLOWLIST = [
+  'dead-nav-link',
+  'broken-image',
+  'template-text',
+  'missing-hreflang',
+  'noindex',
+  'sitemap-dead-urls',
+  'poor-vitals',
+  'vulnerable-library',
+  'end-of-life',
+] as const;
 export type FindingType = (typeof ALLOWLIST)[number];
 
 export type Angle =
-  | 'end-of-life platform'
+  | 'outdated software'
   | 'visitors hit broken things'
   | 'localisation gaps'
   | 'slow for real users'
@@ -83,7 +96,67 @@ export interface BrokenImageCandidate {
   shot: string | null;
 }
 
-export type Candidate = DeadLinkCandidate | NoindexCandidate | VitalsCandidate | EolCandidate | BrokenImageCandidate;
+export interface TemplateTextCandidate {
+  type: 'template-text';
+  angle: Angle;
+  rootCause: 'template-text';
+  url: string;
+  /** Raw template code the scan saw in the rendered text, e.g. `{{ product.title }}`. */
+  tokens: string[];
+  /** The page shows lorem ipsum. */
+  placeholder: boolean;
+  shot: string | null;
+}
+
+export interface MissingHreflangCandidate {
+  type: 'missing-hreflang';
+  angle: Angle;
+  rootCause: 'missing-hreflang';
+  /** Primary language codes seen in the scanned pages' `<html lang>`, e.g. `nl`, `en`, `fr`. */
+  languages: string[];
+  /** One scanned page per language, the homepage's language first. */
+  pages: Array<{ lang: string; url: string }>;
+  pagesScanned: number;
+  /** Sitemap files the scan read; the gate looks for hreflang there too. */
+  sitemaps: string[];
+}
+
+export interface SitemapDeadCandidate {
+  type: 'sitemap-dead-urls';
+  angle: Angle;
+  rootCause: 'sitemap-dead-urls';
+  /** Sitemap URLs to request, spread over the sitemap. */
+  sample: string[];
+  sitemapTotal: number;
+}
+
+export interface VulnerableLibraryCandidate {
+  type: 'vulnerable-library';
+  angle: Angle;
+  rootCause: 'vulnerable-libraries';
+  /** Key in `LIBRARIES` (js-library-analyzer.ts), e.g. `jquery`. */
+  lib: string;
+  label: string;
+  version: string;
+  /** The advisory as the scan reported it, e.g. `XSS in … (CVE-2020-11022)`. */
+  advisory: string;
+  fixedIn: string;
+  /** A scanned page that loads it. */
+  page: string;
+  /** Script files on that page that may be the library; the gate reads the version from their banner. */
+  scripts: string[];
+}
+
+export type Candidate =
+  | DeadLinkCandidate
+  | NoindexCandidate
+  | VitalsCandidate
+  | EolCandidate
+  | BrokenImageCandidate
+  | TemplateTextCandidate
+  | MissingHreflangCandidate
+  | SitemapDeadCandidate
+  | VulnerableLibraryCandidate;
 
 /** Audit findings that are deliberately not candidates, whatever their severity. */
 export const NOT_ON_ALLOWLIST: Array<[RegExp, string]> = [
@@ -195,7 +268,9 @@ export function deadLinkCandidates(run: RunData): DeadLinkCandidate[] {
       byTarget.set(k, c);
     }
     if (POSITION_RANK[position] < POSITION_RANK[c.position]) c.position = position;
-    if (!c.text && text.trim()) c.text = text.trim();
+    // Screen-reader hints such as "(opens in a new tab)" are not part of what a visitor reads.
+    const label = text.replace(/\s*\((?:opens|open) in (?:a )?new (?:tab|window)\)\s*/gi, ' ').trim();
+    if (!c.text && label) c.text = label;
     if (!c.pages.includes(page.url)) c.pages.push(page.url);
   };
 
@@ -300,7 +375,7 @@ export function eolCandidates(stack: StackProfile | null): EolCandidate[] {
     const family = EOL_FAMILY[hit.product];
     return {
       type: 'end-of-life' as const,
-      angle: 'end-of-life platform' as const,
+      angle: 'outdated software' as const,
       rootCause: `end-of-life:${family && products.has(family) ? family : hit.product}`,
       hit,
     };
@@ -343,13 +418,180 @@ export function brokenImageCandidates(run: RunData): BrokenImageCandidate[] {
     .slice(0, 10);
 }
 
+/**
+ * Template code that was not filled in (`{{ name }}`, `[object Object]`) or lorem ipsum on a scanned
+ * page. Bare words such as `undefined` or `NaN` are left out: they also occur in real text, and the
+ * served-HTML re-check could not tell them apart.
+ */
+export function templateTextCandidates(run: RunData): TemplateTextCandidate[] {
+  const home = run.metadata.leadScan?.home;
+  const out: TemplateTextCandidate[] = [];
+  for (const page of okPages(run)) {
+    const data = page.textIntegrityData;
+    if (!data) continue;
+    const tokens = (data.templateTokens ?? []).filter((t) => TEMPLATE_CODE.test(t));
+    if (!tokens.length && !data.placeholderText) continue;
+    const shot = page.visualShots?.find((s) => /template tokens|lorem ipsum/i.test(s.kind))?.file ?? null;
+    out.push({
+      type: 'template-text',
+      angle: 'visitors hit broken things',
+      rootCause: 'template-text',
+      url: page.url,
+      tokens,
+      placeholder: data.placeholderText === true,
+      shot,
+    });
+  }
+  return out
+    .sort((a, b) => Number(home && key(b.url) === key(home)) - Number(home && key(a.url) === key(home)))
+    .slice(0, 5);
+}
+
+/** Template syntax that a renderer should have replaced. */
+export const TEMPLATE_CODE = /\{\{|\}\}|\{%|%\}|\$\{[^}]*\}|\[object Object\]/;
+
+const primaryLanguage = (lang: string | null | undefined) => {
+  const m = /^\s*([a-z]{2,3})(?:[-_]|$)/i.exec(lang ?? '');
+  return m ? m[1].toLowerCase() : null;
+};
+
+/**
+ * Pages in two or more languages (by their `<html lang>`), and not one scanned page with hreflang.
+ * The gate checks the served pages, the `Link` header and the sitemap before anything is claimed.
+ */
+export function missingHreflangCandidates(run: RunData): MissingHreflangCandidate[] {
+  const scanned = okPages(run);
+  if (scanned.some((p) => p.internationalSEO?.hasHreflang !== false)) return [];
+  const home = run.metadata.leadScan?.home;
+  const ordered = [...scanned].sort(
+    (a, b) => Number(home && key(b.url) === key(home)) - Number(home && key(a.url) === key(home)),
+  );
+  const byLang = new Map<string, string>();
+  for (const page of ordered) {
+    const lang = primaryLanguage(page.internationalSEO?.langAttribute);
+    if (lang && !byLang.has(lang)) byLang.set(lang, page.url);
+  }
+  if (byLang.size < 2) return [];
+  const sitemaps = Object.keys(run.metadata.sitemaps ?? {}).filter((k) => /^https?:/i.test(k));
+  return [
+    {
+      type: 'missing-hreflang',
+      angle: 'localisation gaps',
+      rootCause: 'missing-hreflang',
+      languages: [...byLang.keys()],
+      pages: [...byLang.entries()].map(([lang, url]) => ({ lang, url })),
+      pagesScanned: scanned.length,
+      sitemaps,
+    },
+  ];
+}
+
+/** Sitemap URLs the gate requests, and how few of the sampled URLs make a candidate worth checking. */
+export const SITEMAP_SAMPLE_SIZE = 20;
+const SITEMAP_SAMPLE_MINIMUM = 5;
+
+/**
+ * An even spread of sitemap URLs the scan did not load (the ones it loaded answered). The scan
+ * stores up to 200 sitemap URLs spread over the whole sitemap; this takes 20 of them.
+ */
+export function sitemapDeadCandidates(run: RunData): SitemapDeadCandidate[] {
+  const info = run.metadata.leadScan;
+  if (!info?.sitemapSample?.length) return [];
+  const loaded = new Set(okPages(run).map((p) => key(p.url)));
+  const pool = info.sitemapSample.filter((u) => /^https?:/i.test(u) && !loaded.has(key(u)));
+  if (pool.length < SITEMAP_SAMPLE_MINIMUM) return [];
+  const n = Math.min(SITEMAP_SAMPLE_SIZE, pool.length);
+  const sample = Array.from({ length: n }, (_, i) => pool[Math.floor((i * pool.length) / n)]);
+  return [
+    {
+      type: 'sitemap-dead-urls',
+      angle: 'search visibility blockers',
+      rootCause: 'sitemap-dead-urls',
+      sample,
+      sitemapTotal: info.sitemapTotal ?? info.sitemapSample.length,
+    },
+  ];
+}
+
+/** The audit's finding for outdated libraries; its examples carry `<Label> <version>: <advisory>; upgrade to <v> or later — <a href="page">`. */
+export const VULNERABLE_LIBRARY_FINDING = 'Outdated JavaScript library with known vulnerabilities';
+
+/** Words a library's file name may carry, per `LIBRARIES` key. */
+const LIBRARY_FILE_WORDS: Record<string, RegExp> = {
+  jquery: /jquery(?!-?ui)/i,
+  'jquery-ui': /jquery-?ui/i,
+  bootstrap: /bootstrap/i,
+  angularjs: /angular/i,
+  lodash: /lodash/i,
+  underscore: /underscore/i,
+  moment: /moment/i,
+  handlebars: /handlebars/i,
+  dompurify: /purify/i,
+  vue: /\bvue/i,
+};
+
+/** CMSs that ship their own patched copy of a library: its banner keeps the old version number. */
+const PATCHED_BY_CMS: Array<{ cms: RegExp; lib: RegExp }> = [{ cms: /drupal/i, lib: /^jquery/ }];
+
+/**
+ * Libraries with a published advisory, read from the audit's finding. Left out: a library a CMS
+ * patches in place, and a library whose end of life is already a candidate (one fact, not two).
+ */
+export function vulnerableLibraryCandidates(run: RunData, stack: StackProfile | null): VulnerableLibraryCandidate[] {
+  const finding = run.findings[VULNERABLE_LIBRARY_FINDING];
+  if (!finding?.examples?.length) return [];
+  const eolProducts = new Set((stack?.eol ?? []).map((h) => h.product));
+  const byLib = new Map<string, VulnerableLibraryCandidate>();
+  for (const example of finding.examples) {
+    const page = /href="([^"]+)"/.exec(example)?.[1]?.replace(/&amp;/g, '&');
+    if (!page) continue;
+    const text = example.replace(/<[^>]*>/g, '');
+    for (const [lib, entry] of Object.entries(LIBRARIES)) {
+      if (byLib.has(lib)) continue;
+      const label = entry.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const m = new RegExp(`(?:^|\\. )${label} (\\d+\\.\\d+(?:\\.\\d+)?): (.+?); upgrade to (\\S+) or later`).exec(
+        text,
+      );
+      if (!m) continue;
+      if (stack?.cms && PATCHED_BY_CMS.some((p) => p.cms.test(stack.cms ?? '') && p.lib.test(lib))) continue;
+      if (eolProducts.has(lib) || (lib === 'angularjs' && eolProducts.has('angular'))) continue;
+      const pageData = run.pages[page] ?? okPages(run).find((p) => key(p.url) === key(page));
+      const words = LIBRARY_FILE_WORDS[lib];
+      const scripts = (pageData?.siteHints?.scripts ?? []).filter((s) => {
+        try {
+          return words?.test(decodeURIComponent(new URL(s).pathname)) ?? false;
+        } catch {
+          return false;
+        }
+      });
+      byLib.set(lib, {
+        type: 'vulnerable-library',
+        angle: 'outdated software',
+        rootCause: 'vulnerable-libraries',
+        lib,
+        label: entry.label,
+        version: m[1],
+        advisory: m[2],
+        fixedIn: m[3],
+        page,
+        scripts: scripts.slice(0, 3),
+      });
+    }
+  }
+  return [...byLib.values()];
+}
+
 export function buildCandidates(run: RunData, stack: StackProfile | null): Candidate[] {
   return [
-    ...eolCandidates(stack),
     ...deadLinkCandidates(run),
     ...brokenImageCandidates(run),
-    ...vitalsCandidates(run),
+    ...templateTextCandidates(run),
+    ...missingHreflangCandidates(run),
     ...noindexCandidates(run),
+    ...sitemapDeadCandidates(run),
+    ...vitalsCandidates(run),
+    ...vulnerableLibraryCandidates(run, stack),
+    ...eolCandidates(stack),
   ];
 }
 
@@ -363,6 +605,3 @@ export function findingsNotOnAllowlist(run: RunData): Array<{ finding: string; r
   }
   return out;
 }
-
-/** The pitch track a stack kind puts a prospect on (re-exported here for the teaser). */
-export type { Track };

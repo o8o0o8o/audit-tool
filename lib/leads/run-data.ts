@@ -24,8 +24,10 @@ export interface RunPage {
   foundIn?: 'sitemap' | 'discovered';
   title?: string;
   indexability?: { hasNoindexTag?: boolean; metaRobots?: string | null; xRobotsTag?: string | null };
-  siteHints?: { navLinks?: RunLink[]; ctaLinks?: RunLink[] };
+  siteHints?: { navLinks?: RunLink[]; ctaLinks?: RunLink[]; scripts?: string[] };
   brokenMediaData?: { brokenImages?: string[]; failedRequests?: Array<{ url: string; status: number }> };
+  textIntegrityData?: { templateTokens?: string[]; placeholderText?: boolean };
+  internationalSEO?: { langAttribute?: string | null; hasHreflang?: boolean };
   visualShots?: Array<{ kind: string; file: string }>;
 }
 
@@ -44,7 +46,8 @@ export interface RunMetadata {
   leadScan?: LeadScanInfo;
   passive?: boolean;
   siteChecks?: { checks?: Array<{ id: string; status: string; note?: string }> } | null;
-  sitemaps?: { urls?: Record<string, unknown>; total?: number };
+  /** `urls` and `total`, plus one key per sitemap file read (its URL). */
+  sitemaps?: { urls?: Record<string, unknown>; total?: number; [sitemapFile: string]: unknown };
 }
 
 interface DateParts {

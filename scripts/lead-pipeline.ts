@@ -15,11 +15,10 @@
  *                 --kinds=<a,b>        redo rows whose stack kind is one of these (after a rule change)
  *                 --no-browser         do not retry refused sites in headless Chromium
  *   summary       Counts per stack kind, confidence and end-of-life hits (the Gate 1 numbers).
- *   score         Stage 2: write fit_score, track and fit_reasons for every fingerprinted row.
+ *   score         Stage 2: write fit_score and fit_reasons for every fingerprinted row.
  *                 --weights=<path>     weights file (default docs/gtm/lead-weights.json)
  *   select        Stage 2: score, then mark the top rows `selected` and the rest `parked`.
  *                 --top=<n>            how many to select (required)
- *                 --track=migrate|optimise   only rows on this track; the other track's selection is kept
  *                 --min-score=<n>      only rows with at least this score
  *                 --dry-run            print the choice, write nothing
  *   scan          Stage 3: lead scan (`start.ts --lead`) of every `selected` row, one site at a time.
@@ -95,9 +94,10 @@ import { buildReviewPage, type ReviewCard } from '../lib/leads/review-page';
 import { TEASER_CSS, TeaserError, buildTeaser, loadTeaserConfig } from '../lib/leads/teaser';
 import { renderMarkdownToPdf } from '../lib/reports/pdf-renderer';
 import { LEAD_RESULTS_DIR, stackJsonPath } from '../lib/leads/paths';
+import { chooseScanOrigin } from '../lib/leads/scan-origin';
 import { loadRun } from '../lib/leads/run-data';
 import { GATE_DEFAULTS, runGate } from '../lib/leads/truth-gate';
-import type { FingerprintResult, Track } from '../lib/leads/types';
+import type { FingerprintResult } from '../lib/leads/types';
 import { readLatestRun, runAuditProcess } from '../lib/leads/run-audit';
 import { DEFAULT_WEIGHTS_PATH, formatReasons, loadWeights, rank, type Ranked } from '../lib/leads/score';
 import { MAX_SCAN_RETRIES, SELECTABLE_STAGES, canMove, isStage, stageOf, stageValues } from '../lib/leads/stages';
@@ -271,12 +271,6 @@ function summary() {
     withEol.length,
   );
 
-  const traffic = (r: CompanyRecord) => Number(r.traffic) || 0;
-  const migrate = readable.filter((r) => ['legacy', 'hybrid'].includes(r.stack_kind));
-  console.log(`\nMigrate track (legacy or hybrid): ${migrate.length}`);
-  console.log(`  with traffic of 10k or more:    ${migrate.filter((r) => traffic(r) >= 10_000).length}`);
-  console.log(`  at high confidence:             ${migrate.filter((r) => r.stack_confidence === 'high').length}`);
-
   const tagChanged = readable.filter(
     (r) =>
       r.cms?.trim() &&
@@ -291,7 +285,8 @@ function summary() {
 const scoreValues = (r: Ranked): Record<string, string> => ({
   fit_score:
     r.fit.blocker === 'not fingerprinted yet' || r.record.stack_kind === 'unreadable' ? '' : String(r.fit.score),
-  track: r.fit.track ?? '',
+  // The track column of design revision 2 is cleared: the pitch no longer depends on the platform.
+  track: '',
   fit_reasons: formatReasons(r.fit),
 });
 
@@ -304,7 +299,7 @@ function printRanked(rows: Ranked[]) {
   for (const [i, r] of rows.entries()) {
     const rec = r.record;
     console.log(
-      `  ${String(i + 1).padStart(3)}. ${String(r.fit.score).padStart(3)}  ${(r.fit.track ?? '-').padEnd(8)} ${domainOf(rec[KEY_COLUMN]).padEnd(30)} ${formatReasons(r.fit)}`,
+      `  ${String(i + 1).padStart(3)}. ${String(r.fit.score).padStart(3)}  ${domainOf(rec[KEY_COLUMN]).padEnd(30)} ${formatReasons(r.fit)}`,
     );
   }
 }
@@ -332,14 +327,6 @@ function score() {
   );
   console.log(`Scored ${ranked.length} row(s). Top 20:`);
   printRanked(ranked.filter((r) => !r.fit.blocker).slice(0, 20));
-  printTable(
-    'Track',
-    count(
-      ranked.filter((r) => r.fit.track),
-      (r) => r.fit.track ?? '',
-    ),
-    ranked.length,
-  );
   printMissing(ranked);
 }
 
@@ -349,9 +336,8 @@ function select() {
     console.error('select needs --top=<n>');
     process.exit(1);
   }
-  const track = option('track');
-  if (track && track !== 'migrate' && track !== 'optimise') {
-    console.error('--track must be migrate or optimise');
+  if (option('track')) {
+    console.error('--track no longer exists: prospects are not split by platform (design revision 3).');
     process.exit(1);
   }
   const minScore = numberOption('min-score', 0);
@@ -359,15 +345,11 @@ function select() {
 
   const ranked = rankAll();
   const selectable = ranked.filter((r) => SELECTABLE_STAGES.includes(stageOf(r.record)));
-  const eligible = selectable.filter(
-    (r) => !r.fit.blocker && (!track || r.fit.track === track) && r.fit.score >= minScore,
-  );
+  const eligible = selectable.filter((r) => !r.fit.blocker && r.fit.score >= minScore);
   const chosen = eligible.slice(0, top);
   const chosenSites = new Set(chosen.map((r) => r.record[KEY_COLUMN]));
 
-  console.log(
-    `${dryRun ? 'Would select' : 'Selected'} ${chosen.length} of ${eligible.length} eligible row(s)${track ? ` on the ${track} track` : ''}:`,
-  );
+  console.log(`${dryRun ? 'Would select' : 'Selected'} ${chosen.length} of ${eligible.length} eligible row(s):`);
   printRanked(chosen);
   const blocked = count(
     selectable.filter((r) => r.fit.blocker),
@@ -384,9 +366,7 @@ function select() {
   const updates: RowUpdate[] = ranked.map((r) => {
     const values = scoreValues(r);
     const current = stageOf(r.record);
-    // With --track, only rows on that track are re-picked; a selection made for the other track stays.
-    const inScope = !track || r.fit.track === track;
-    if (SELECTABLE_STAGES.includes(current) && inScope) {
+    if (SELECTABLE_STAGES.includes(current)) {
       const next = chosenSites.has(r.record[KEY_COLUMN]) ? 'selected' : 'parked';
       if (r.record.stage !== next) Object.assign(values, stageValues(next, now));
     } else if (!r.record.stage?.trim()) {
@@ -395,21 +375,19 @@ function select() {
     return { website: r.record[KEY_COLUMN], values };
   });
   updateCompanies(csvPath, updates);
-  console.log(`\nWrote fit_score, track, fit_reasons and stage to ${csvPath}.`);
+  console.log(`\nWrote fit_score, fit_reasons and stage to ${csvPath}.`);
 }
 
-/** The origin to scan: where the fingerprint landed (www host, https), else the listed website. */
-function scanOrigin(record: CompanyRecord): string {
+/** The origin to scan: see `chooseScanOrigin` (the fingerprint's landing page, or the www host). */
+async function scanOrigin(record: CompanyRecord): Promise<{ origin: string; note: string | null }> {
+  const domain = domainOf(record[KEY_COLUMN]);
+  let landing: { finalUrl?: string | null; redirectedTo?: string | null } | null = null;
   try {
-    const stack = JSON.parse(fs.readFileSync(stackJsonPath(domainOf(record[KEY_COLUMN]), outDir), 'utf8')) as {
-      finalUrl?: string | null;
-      redirectedTo?: string | null;
-    };
-    if (stack.finalUrl && !stack.redirectedTo) return new URL(stack.finalUrl).origin;
+    landing = JSON.parse(fs.readFileSync(stackJsonPath(domain, outDir), 'utf8'));
   } catch {
     // no fingerprint file: fall back to the listed website
   }
-  return originOf(record[KEY_COLUMN]);
+  return chooseScanOrigin(domain, originOf(record[KEY_COLUMN]), landing);
 }
 
 const SCAN_LOG_HEADER = [
@@ -476,10 +454,11 @@ async function scan() {
 
     const website = record[KEY_COLUMN];
     const domain = domainOf(website);
-    const origin = scanOrigin(record);
+    const { origin, note: originNote } = await scanOrigin(record);
     const startedAt = new Date();
     const logFile = path.join(outDir, domain, 'scan.log');
     console.log(`\n[${++done}/${todo.length}] ${domain} → ${origin}`);
+    if (originNote) console.log(`    (${originNote})`);
 
     const args = [`--origin=${origin}`, '--lead', ...(pageLimit ? [`--limit=${pageLimit}`] : [])];
     const run = await runAuditProcess(args, { timeoutMs: timeoutMin * 60_000, logFile });
@@ -593,7 +572,6 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
       stack,
       gate,
       fitScore: record.fit_score ? Number(record.fit_score) : null,
-      track: (record.track as Track) || null,
       scannedAt: record.stage_at ?? null,
     });
   } finally {

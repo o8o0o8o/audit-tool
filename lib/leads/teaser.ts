@@ -6,7 +6,8 @@
  *  - three highlights, three different root causes, in the gate's order;
  *  - every highlight carries its evidence: an address to open, and a screenshot where one shows it;
  *  - the page count is the number of pages really read;
- *  - the stack line appears only at high confidence, a version only when two kinds of signal agree;
+ *  - no stack line: the teaser is about the site's problems, not its platform (the stack stays on
+ *    the review card for the reviewer and the call);
  *  - no score, and no count of "further issues";
  *  - facts are stated side by side; no sentence claims a cause.
  *
@@ -74,6 +75,14 @@ export function whyItMatters(h: Highlight): string {
       return 'Google records this from real Chrome users and uses it in its page experience assessment; it is also what visitors on phones feel.';
     case 'noindex':
       return "A page that carries this instruction is left out of Google's results.";
+    case 'template-text':
+      return 'Every visitor of the page sees it where the real content should be.';
+    case 'missing-hreflang':
+      return 'Hreflang tags tell Google which language version to show to whom; without them a visitor can land on a page in the wrong language.';
+    case 'sitemap-dead-urls':
+      return 'The sitemap is the list of pages a site asks search engines to crawl; an address on it that is gone sends their crawl to an error page.';
+    case 'vulnerable-libraries':
+      return 'The advisory is public, and security scanners flag every site that still loads an affected version.';
     default:
       return 'It is visible to every visitor of the page.';
   }
@@ -94,6 +103,17 @@ export function shortLabel(h: Highlight): string {
       return 'real-user experience figures in Google\'s "poor" range';
     case 'noindex':
       return 'a key page hidden from search engines';
+    case 'template-text':
+      return 'placeholder text or raw template code on a live page';
+    case 'missing-hreflang':
+      return 'language versions that search engines are not told about';
+    case 'sitemap-dead-urls':
+      return 'sitemap addresses that return an error';
+    case 'vulnerable-libraries':
+      return `a script library with a published security advisory (${String(h.evidence.value ?? '')})`.replace(
+        ' ()',
+        '',
+      );
     default:
       return h.type;
   }
@@ -110,12 +130,23 @@ function whereLines(h: Highlight): string[] {
       return [`**Check it yourself:** <${h.url}>`, ...(h.evidence.source ? [`**Source:** ${h.evidence.source}`] : [])];
     case 'end-of-life':
       return [`**Reference:** <${h.url}>`];
+    case 'vulnerable-library':
+      return [`**Where:** <${h.url}>`, ...(target ? [`**The script file:** <${target}>`] : [])];
+    case 'missing-hreflang':
+      return [`**Where:** <${h.url}>`, ...(target ? [`**Another language version:** <${target}>`] : [])];
+    case 'sitemap-dead-urls': {
+      const more = (h.evidence.also ?? []).slice(0, 2);
+      return [`**For example:** <${h.url}>`, ...more.map((u) => `**Also:** <${u}>`)];
+    }
     default:
       return [`**Where:** <${h.url}>`];
   }
 }
 
-/** `Concrete CMS and Contentful`, `Contentful with a Next.js front end`; null unless confidence is high. */
+/**
+ * `Concrete CMS and Contentful`, `Contentful with a Next.js front end`; null unless confidence is high.
+ * For the review card only: the teaser never names the platform.
+ */
 export function stackLine(lead: LeadFile): string | null {
   const s = lead.stack;
   if (!s || s.confidence !== 'high' || (!s.cms && !s.framework)) return null;
@@ -176,8 +207,6 @@ export function buildTeaser(lead: LeadFile, config: TeaserConfig = DEFAULT_TEASE
     md.push(`**Why it matters:** ${whyItMatters(h)}`, '');
   });
   md.push('---', '');
-  const stack = stackLine(lead);
-  if (stack) md.push(`**What your site runs:** ${stack}`, '');
   const call = `There is more in the full audit. Happy to walk you through it in ${config.callMinutes} minutes`;
   md.push(config.calendarUrl ? `${call}: <${config.calendarUrl}>` : `${call}.`, '');
   md.push(

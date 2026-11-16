@@ -60,8 +60,8 @@ function card({ lead, stage, disclosed }: ReviewCard, pageDir: string): string {
 
   return `<article id="${esc(lead.domain)}">
     <header><h2>${esc(lead.company)} <small>${esc(lead.domain)}</small></h2>
-      <p>${esc(stage)} · fit ${esc(lead.fitScore ?? '–')} · ${esc(lead.track ?? '–')} · ${esc(lead.pagesScanned)} pages read · ${esc(lead.requestsSent.scan ?? '?')} + ${esc(lead.requestsSent.gate)} requests · ${esc(lead.runKind)} run</p>
-      <p>${stack ? `Stack line on the teaser: <strong>${esc(stack)}</strong>` : `No stack line (confidence ${esc(lead.stack?.confidence ?? 'n/a')}): ${esc([lead.stack?.cms, lead.stack?.framework].filter(Boolean).join(', ') || 'unknown')}`}</p>
+      <p>${esc(stage)} · fit ${esc(lead.fitScore ?? '–')} · ${esc(lead.pagesScanned)} pages read · ${esc(lead.requestsSent.scan ?? '?')} + ${esc(lead.requestsSent.gate)} requests · ${esc(lead.runKind)} run</p>
+      <p>Stack, for the call only (not in the teaser): ${stack ? `<strong>${esc(stack)}</strong>` : `${esc([lead.stack?.cms, lead.stack?.framework].filter(Boolean).join(', ') || 'unknown')} (confidence ${esc(lead.stack?.confidence ?? 'n/a')})`}</p>
     </header>${warning}
     <ol>${highlights}</ol>
     <details><summary>Checked and dropped (${dropped.length})</summary><ul>${dropped.map((d) => `<li><code>${esc(d.type)}</code> ${esc(d.reason)}${d.detail ? ` — ${esc(d.detail)}` : ''}</li>`).join('') || '<li>none</li>'}</ul></details>

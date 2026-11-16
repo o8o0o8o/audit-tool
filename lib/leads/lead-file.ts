@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { okPages, type RunData } from './run-data';
 import type { DroppedCandidate, GateResult, Highlight } from './truth-gate';
-import type { StackProfile, Track } from './types';
+import type { StackProfile } from './types';
 import { TECH_TO_PRODUCT } from './versions';
 
 export interface LeadFile {
@@ -37,7 +37,6 @@ export interface LeadFile {
     signals: string[];
   } | null;
   fitScore: number | null;
-  track: Track | null;
   control: GateResult['control'];
   highlights: Highlight[];
   causes: string[];
@@ -78,7 +77,6 @@ export interface LeadFileInput {
   stack: StackProfile | null;
   gate: GateResult;
   fitScore: number | null;
-  track: Track | null;
   scannedAt: string | null;
 }
 
@@ -109,7 +107,6 @@ export function buildLeadFile(input: LeadFileInput): LeadFile {
         }
       : null,
     fitScore: input.fitScore,
-    track: input.track,
     control: gate.control,
     highlights: localiseEvidence(run.runDir, gate.highlights),
     causes: gate.causes,

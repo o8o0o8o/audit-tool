@@ -2,9 +2,20 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PageSnapshot } from '../lib/leads/fingerprint';
 import type { RunData, RunPage } from '../lib/leads/run-data';
-import { buildCandidates, deadLinkCandidates, isLanguageSwitch, noindexCandidates } from '../lib/leads/sales-signals';
+import {
+  VULNERABLE_LIBRARY_FINDING,
+  buildCandidates,
+  deadLinkCandidates,
+  isLanguageSwitch,
+  missingHreflangCandidates,
+  noindexCandidates,
+  sitemapDeadCandidates,
+  templateTextCandidates,
+  vulnerableLibraryCandidates,
+} from '../lib/leads/sales-signals';
 import { emptyProfile } from '../lib/leads/stack-profile';
 import {
+  bannerVersion,
   groupByRootCause,
   runControl,
   runGate,
@@ -45,10 +56,16 @@ function io(routes: Record<string, PageSnapshot | null>, browser?: GateBrowser |
 const clicking = (
   statusFor: Record<string, number | null>,
   runtime: Record<string, string> = {},
-): GateBrowser & { clicks: string[] } => {
+): GateBrowser & { clicks: string[]; opened: string[] } => {
   const clicks: string[] = [];
+  const opened: string[] = [];
   return {
     clicks,
+    opened,
+    openPage: async (url) => {
+      opened.push(url);
+      return { status: statusFor[url] ?? 200 };
+    },
     readRuntime: async () => ({ status: 200, runtime }),
     followLink: async (source, target, name) => {
       clicks.push(`${source} -> ${target}`);
@@ -389,6 +406,228 @@ void describe('truth gate: noindex, vitals, end of life, images', () => {
   });
 });
 
+void describe('truth gate: template text, hreflang, sitemap, libraries', () => {
+  const bare = (path: string, extra: Partial<RunPage> = {}) => page(path, { siteHints: {}, ...extra });
+
+  void it('template code passes only when the served HTML shows it outside scripts and templates', async () => {
+    const pages = [
+      bare('/', {
+        textIntegrityData: { templateTokens: ['{{ product.title }}', 'undefined'], placeholderText: false },
+      }),
+      bare('/about', { textIntegrityData: { templateTokens: ['undefined'], placeholderText: false } }),
+    ];
+    const candidates = templateTextCandidates(run(pages));
+    assert.equal(candidates.length, 1, 'a bare "undefined" is not template code');
+    assert.deepEqual(candidates[0].tokens, ['{{ product.title }}']);
+
+    const served = '<html><body><h1>{{ product.title }}</h1><script>var t = "{{ x }}"</script></body></html>';
+    const pass = await runGate(run(pages), null, io({ [u('/')]: snap(200, served) }), { today: TODAY });
+    assert.equal(pass.highlights[0]?.type, 'template-text');
+    assert.equal(
+      pass.highlights[0].fact,
+      'The homepage shows raw template code ("{{ product.title }}") where content should be',
+    );
+
+    const onlyInScript = '<html><body><h1>Shoes</h1><script>var t = "{{ product.title }}"</script></body></html>';
+    const drop = await runGate(run(pages), null, io({ [u('/')]: snap(200, onlyInScript) }), { today: TODAY });
+    assert.equal(drop.highlights.length, 0, 'text that only JavaScript shows is not eligible');
+    assert.ok(drop.candidatesDropped.some((d) => d.type === 'template-text' && d.reason === 'second-method-disagrees'));
+
+    const lorem = [bare('/', { textIntegrityData: { templateTokens: [], placeholderText: true } })];
+    const loremGate = await runGate(
+      run(lorem),
+      null,
+      io({ [u('/')]: snap(200, '<html><body><p>Lorem ipsum dolor sit amet</p></body></html>') }),
+      { today: TODAY },
+    );
+    assert.equal(loremGate.highlights[0]?.fact, 'The homepage shows placeholder text ("Lorem ipsum")');
+  });
+
+  const intl = (lang: string) => ({ internationalSEO: { langAttribute: lang, hasHreflang: false } });
+  const SITEMAP = u('/sitemap.xml');
+  const multilingual = () =>
+    run([bare('/', intl('nl')), bare('/en/', intl('en-GB')), bare('/fr/', intl('fr'))], {
+      sitemaps: { urls: {}, total: 3, [SITEMAP]: {} },
+    });
+  const servedLang = (lang: string, head = '') =>
+    snap(200, `<html lang="${lang}"><head>${head}</head><body>x</body></html>`);
+
+  void it('several languages and no hreflang passes when pages, headers and sitemap all lack it', async () => {
+    const c = missingHreflangCandidates(multilingual());
+    assert.deepEqual(c[0]?.languages, ['nl', 'en', 'fr']);
+    assert.equal(
+      missingHreflangCandidates(run([bare('/', intl('nl')), bare('/en/', intl('nl'))])).length,
+      0,
+      'one language',
+    );
+    assert.equal(
+      missingHreflangCandidates(
+        run([bare('/', intl('nl')), bare('/en/', { internationalSEO: { langAttribute: 'en', hasHreflang: true } })]),
+      ).length,
+      0,
+      'a page with hreflang',
+    );
+
+    const routes = {
+      [u('/')]: servedLang('nl'),
+      [u('/en/')]: servedLang('en'),
+      [SITEMAP]: snap(200, `<urlset><url><loc>${u('/')}</loc></url></urlset>`, { 'content-type': 'application/xml' }),
+    };
+    const pass = await runGate(multilingual(), null, io(routes), { today: TODAY });
+    assert.equal(pass.highlights[0]?.type, 'missing-hreflang');
+    assert.match(
+      pass.highlights[0].fact,
+      /^The site has pages in Dutch, English and French, but none of them tells search engines/,
+    );
+    assert.match(pass.highlights[0].fact, /no hreflang in the 3 pages scanned, their HTTP headers or the sitemap$/);
+
+    const inSitemap = await runGate(
+      multilingual(),
+      null,
+      io({ ...routes, [SITEMAP]: snap(200, '<urlset><xhtml:link rel="alternate" hreflang="en" href="x"/></urlset>') }),
+      { today: TODAY },
+    );
+    assert.equal(inSitemap.highlights.length, 0, 'hreflang in the sitemap counts');
+
+    const index = await runGate(
+      multilingual(),
+      null,
+      io({
+        ...routes,
+        [SITEMAP]: snap(200, `<sitemapindex><sitemap><loc>${u('/pages.xml')}</loc></sitemap></sitemapindex>`),
+        [u('/pages.xml')]: snap(200, '<urlset><xhtml:link hreflang="fr" href="y"/></urlset>'),
+      }),
+      { today: TODAY },
+    );
+    assert.equal(index.highlights.length, 0, 'child sitemaps of an index are read too');
+
+    const inHeader = await runGate(
+      multilingual(),
+      null,
+      io({
+        ...routes,
+        [u('/en/')]: snap(200, '<html lang="en"></html>', {
+          link: '<https://example.com/>; rel="alternate"; hreflang="nl"',
+        }),
+      }),
+      { today: TODAY },
+    );
+    assert.equal(inHeader.highlights.length, 0, 'hreflang in a Link header counts');
+
+    const unreadable = await runGate(multilingual(), null, io({ ...routes, [SITEMAP]: snap(403, 'no') }), {
+      today: TODAY,
+    });
+    assert.equal(unreadable.highlights.length, 0, 'absence is claimed only where we could look');
+    assert.ok(unreadable.candidatesDropped.some((d) => d.type === 'missing-hreflang' && d.reason === 'blocked'));
+  });
+
+  const withSample = (sample: string[]) =>
+    run([bare('/')], {
+      leadScan: {
+        cap: 25,
+        home: u('/'),
+        selected: [{ url: u('/'), reason: 'homepage', template: '/' }],
+        disallowedByRobots: [],
+        languages: [],
+        sitemapTotal: 900,
+        sitemapSample: sample,
+      },
+    });
+
+  void it('dead sitemap URLs pass when a plain GET and a browser both see them gone, and are counted as a sample', async () => {
+    const sample = Array.from({ length: 30 }, (_, i) => u(`/p/${i}`));
+    const c = sitemapDeadCandidates(withSample([u('/'), ...sample]));
+    assert.equal(c[0]?.sample.length, 20);
+    assert.ok(!c[0].sample.includes(u('/')), 'pages the scan loaded are not re-requested');
+
+    const routes = Object.fromEntries(c[0].sample.map((url, i) => [url, snap(i < 3 ? 404 : 200, 'x', {}, url)]));
+    const browser = clicking(Object.fromEntries(c[0].sample.slice(0, 3).map((url) => [url, 404])));
+    const pass = await runGate(withSample([u('/'), ...sample]), null, io(routes, browser), { today: TODAY });
+    const hl = pass.highlights.find((x) => x.type === 'sitemap-dead-urls');
+    assert.equal(hl?.fact, '3 of 20 sitemap addresses we sampled return 404 (the sitemap lists 900 addresses)');
+    assert.equal(hl?.evidence.also?.length, 2);
+    assert.equal(browser.opened.length, 3);
+
+    const oneDead = Object.fromEntries(c[0].sample.map((url, i) => [url, snap(i < 1 ? 404 : 200, 'x', {}, url)]));
+    const below = await runGate(withSample([u('/'), ...sample]), null, io(oneDead, clicking({})), { today: TODAY });
+    assert.ok(below.candidatesDropped.some((d) => d.type === 'sitemap-dead-urls' && d.reason === 'below-threshold'));
+
+    const browserSays200 = await runGate(withSample([u('/'), ...sample]), null, io(routes, clicking({})), {
+      today: TODAY,
+    });
+    assert.equal(browserSays200.highlights.length, 0, 'the browser must agree');
+
+    const refused = Object.fromEntries(c[0].sample.map((url) => [url, snap(429, 'slow down', {}, url)]));
+    const blocked = await runGate(withSample([u('/'), ...sample]), null, io(refused, browser), { today: TODAY });
+    assert.ok(blocked.candidatesDropped.some((d) => d.type === 'sitemap-dead-urls' && d.reason === 'blocked'));
+
+    assert.equal(sitemapDeadCandidates(withSample([u('/a'), u('/b')])).length, 0, 'too small a sample');
+  });
+
+  const JQUERY_FINDING = {
+    [VULNERABLE_LIBRARY_FINDING]: {
+      count: 1,
+      examples: [
+        `jQuery 1.12.4: XSS in htmlPrefilter / DOM manipulation (CVE-2020-11022, CVE-2020-11023); upgrade to 3.5.0 or later. Bootstrap 4.1.3: XSS in tooltip/popover data-template (CVE-2019-8331); upgrade to 4.3.1 or later — <a href="${u('/')}">${u('/')}</a>`,
+      ],
+    },
+  };
+  const withScripts = (scripts: string[]) => {
+    const data = run([page('/', { siteHints: { scripts } })]);
+    data.findings = JQUERY_FINDING;
+    return data;
+  };
+
+  void it('a library advisory passes when the downloaded file banner states the same version', async () => {
+    const data = withScripts([u('/js/jquery.min.js'), u('/js/app.js'), u('/js/bootstrap.bundle.js')]);
+    const c = vulnerableLibraryCandidates(data, null);
+    assert.deepEqual(
+      c.map((x) => `${x.lib} ${x.version} ${x.fixedIn} ${x.scripts.join(',')}`),
+      [`jquery 1.12.4 3.5.0 ${u('/js/jquery.min.js')}`, `bootstrap 4.1.3 4.3.1 ${u('/js/bootstrap.bundle.js')}`],
+    );
+
+    const routes = {
+      [u('/js/jquery.min.js')]: snap(200, '/*! jQuery v1.12.4 | (c) jQuery Foundation | jquery.org/license */'),
+      [u('/js/bootstrap.bundle.js')]: snap(200, '/*!\n  * Bootstrap v4.1.3 (https://getbootstrap.com/)'),
+    };
+    const pass = await runGate(data, null, io(routes), { today: TODAY });
+    const hl = pass.highlights.find((x) => x.type === 'vulnerable-library');
+    assert.equal(
+      hl?.fact,
+      'The site loads jQuery 1.12.4, a version with a published security advisory (XSS in htmlPrefilter / DOM manipulation (CVE-2020-11022, CVE-2020-11023)); it is fixed from version 3.5.0; 1 more library on the site has a published advisory too',
+    );
+    assert.equal(hl?.evidence.target, u('/js/jquery.min.js'));
+
+    const otherVersion = await runGate(
+      data,
+      null,
+      io({
+        [u('/js/jquery.min.js')]: snap(200, '/*! jQuery v3.6.0 */'),
+        [u('/js/bootstrap.bundle.js')]: snap(200, ''),
+      }),
+      { today: TODAY },
+    );
+    assert.equal(otherVersion.highlights.length, 0, 'the banner must agree with the scan');
+    assert.ok(
+      otherVersion.candidatesDropped.some(
+        (d) => d.type === 'vulnerable-library' && d.reason === 'second-method-disagrees',
+      ),
+    );
+
+    const bundled = await runGate(withScripts([u('/js/app.js')]), null, io({}), { today: TODAY });
+    assert.ok(bundled.candidatesDropped.some((d) => d.reason === 'no-second-method-available'));
+
+    const drupal = { ...emptyProfile('legacy'), cms: 'Drupal' };
+    assert.deepEqual(
+      vulnerableLibraryCandidates(data, drupal).map((x) => x.lib),
+      ['bootstrap'],
+      'Drupal patches its own jQuery in place',
+    );
+    assert.equal(bannerVersion('jquery-ui', '/*! jQuery UI - v1.12.1 - 2016-09-14 */'), '1.12.1');
+    assert.equal(bannerVersion('jquery', '/*! jQuery UI - v1.12.1 */'), null);
+  });
+});
+
 void describe('truth gate: root causes, threshold, disclosure', () => {
   const h = (type: Highlight['type'], rootCause: string, target: string): Highlight => ({
     type,
@@ -414,10 +653,11 @@ void describe('truth gate: root causes, threshold, disclosure', () => {
     );
     assert.deepEqual(
       grouped.map((g) => g.rootCause),
-      ['end-of-life:drupal', 'dead-navigation-links', 'noindex'],
+      ['dead-navigation-links', 'noindex', 'end-of-life:drupal'],
+      'what a visitor runs into first; outdated software last',
     );
-    assert.deepEqual(grouped[1].evidence.also, ['c', 'd']);
-    assert.equal(grouped[1].fact, 'fact b; 2 more navigation links do the same');
+    assert.deepEqual(grouped[0].evidence.also, ['c', 'd']);
+    assert.equal(grouped[0].fact, 'fact b; 2 more navigation links do the same');
     assert.equal(dropped.filter((d) => d.reason === 'same-root-cause').length, 2);
   });
 
@@ -439,10 +679,10 @@ void describe('truth gate: root causes, threshold, disclosure', () => {
     });
 
     assert.deepEqual(result.causes, [
-      'end-of-life:drupal',
       'language-switch',
       'dead-navigation-links',
       'broken-images',
+      'end-of-life:drupal',
     ]);
     assert.equal(result.teaserReady, true);
     assert.deepEqual(result.disclosure, [{ check: 'js-secrets', note: '1 finding' }]);

@@ -15,7 +15,7 @@ import {
   type PageFetcher,
   type PageSnapshot,
 } from '../lib/leads/fingerprint';
-import { buildStackProfile, trackOf } from '../lib/leads/stack-profile';
+import { buildStackProfile } from '../lib/leads/stack-profile';
 import { extractVersions, frameworkVariants, mergeVersions, versionsCompatible } from '../lib/leads/versions';
 
 const TODAY = '2026-11-13';
@@ -50,7 +50,6 @@ void describe('stack profile: kinds', () => {
     assert.equal(p.cms, 'Concrete CMS');
     assert.equal(p.cmsSecondary, 'Contentful');
     assert.equal(p.confidence, 'high', 'cookie + page source are two kinds');
-    assert.equal(trackOf(p.kind), 'migrate');
   });
 
   void it('an asset host alone never makes a site headless', () => {
@@ -72,7 +71,6 @@ void describe('stack profile: kinds', () => {
     assert.equal(p.framework, 'Next.js');
     assert.equal(p.frameworkVersion, 'Pages Router');
     assert.equal(p.confidence, 'high');
-    assert.equal(trackOf(p.kind), 'optimise');
   });
 
   void it('a headless CMS asset host next to a plain React bundle stays low confidence', () => {
@@ -117,7 +115,6 @@ void describe('stack profile: kinds', () => {
     );
     assert.equal(webflow.kind, 'builder');
     assert.equal(webflow.confidence, 'high');
-    assert.equal(trackOf(webflow.kind), 'migrate');
 
     const custom = profile(
       html('<script src="/_next/static/chunks/main.js"></script><script>self.__next_f.push([1,"x"])</script>'),
@@ -137,7 +134,6 @@ void describe('stack profile: kinds', () => {
     assert.equal(wpOnly.kind, 'headless');
     assert.equal(wpOnly.cms, 'WordPress');
     assert.equal(wpOnly.confidence, 'low');
-    assert.equal(trackOf(wpOnly.kind), 'optimise');
     assert.match(wpOnly.notes.join(' '), /not the system that renders the site/);
 
     const withHeadless = profile(

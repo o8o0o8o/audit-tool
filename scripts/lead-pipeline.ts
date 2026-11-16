@@ -60,6 +60,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { chromium } from 'playwright';
 import { runPool } from '../lib/analyzers/site-checks/http-probe';
 import {
   DEFAULT_COMPANIES_CSV,
@@ -444,6 +445,15 @@ async function scan() {
     console.log('Nothing to scan. Run `select --top=<n>` first, or use --only=<domain>.');
     return;
   }
+  // Every lead scan starts Chromium the way the crawler does. If it cannot start here, every
+  // scan would crash the same way and each row would lose a retry, so stop before touching any row.
+  const browserError = await browserLaunchError();
+  if (browserError) {
+    console.error(`Chromium cannot start, so no site was scanned and no row was changed.\n${browserError}`);
+    console.error('\nInstall the browser this Playwright version needs: npx playwright install chromium');
+    process.exitCode = 1;
+    return;
+  }
   if (!process.env.CRUX_API_KEY) {
     console.log(
       'Note: CRUX_API_KEY is not set in this shell. Unless the audit config supplies a key, scans will have no real-user performance data.',
@@ -525,6 +535,18 @@ async function scan() {
     outcomes.length,
   );
   console.log(`\nPer-scan measurements: ${path.join(outDir, 'scan-log.csv')}`);
+}
+
+/** Why Chromium cannot be launched with the crawler's defaults, or undefined when it starts. */
+async function browserLaunchError(): Promise<string | undefined> {
+  try {
+    const browser = await chromium.launch();
+    await browser.close();
+    return undefined;
+  } catch (error) {
+    // Playwright's message ends in a large boxed install hint; the first line names the cause.
+    return ((error as Error).message ?? String(error)).split('\n')[0];
+  }
 }
 
 const gateBrowserEnabled = () => !flag('no-browser');

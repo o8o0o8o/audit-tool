@@ -9,7 +9,10 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { readRuntimeVersions } from '../analyzers/security/js-library-analyzer';
 import { LINK_CHECK_HEADERS } from '../utils/link-status';
 import { installNamePolyfill } from './fingerprint';
-import type { FirstVisit, GateBrowser, UnnamedControl, UnnamedControlsResult } from './truth-gate';
+import { isEmptyStub } from '../analyzers/analytics/gtm-container-analyzer';
+import { decodeGa4Events, type TagRequest } from '../analyzers/analytics/tag-runtime-analyzer';
+import { analyticsConsentDenied, brandSiblingHosts } from '../analyzers/site-checks/tag-behavior-probe';
+import type { FirstVisit, GateBrowser, TagSession, UnnamedControl, UnnamedControlsResult } from './truth-gate';
 
 /** Words on a consent prompt's buttons, in the languages of the prospect list. */
 const CONSENT_BUTTON =
@@ -525,6 +528,149 @@ export class PlaywrightGateBrowser implements GateBrowser {
       }
     }
     return last;
+  }
+
+  async tagSession(url: string, gtmIds: string[]): Promise<TagSession | null> {
+    let context: BrowserContext | null = null;
+    try {
+      context = await this.#context();
+      const page = await context.newPage();
+      const hits: Record<string, TagRequest> = {};
+      const record = (p: Page, into: Record<string, TagRequest>) =>
+        p.on('request', (r) => {
+          if (/\/g\/collect\b/.test(r.url()))
+            into[`${r.url()}#${Object.keys(into).length}`] = { postData: r.postData() ?? undefined };
+        });
+      record(page, hits);
+      const gtm = new Map<string, { requested: boolean; status: number | null; empty: boolean }>(
+        gtmIds.map((id) => [id, { requested: false, status: null, empty: false }]),
+      );
+      const bodies: Array<Promise<void>> = [];
+      page.on('response', (res) => {
+        const m = /googletagmanager\.com\/gtm\.js\?(?:.*&)?id=(GTM-[A-Z0-9]+)/i.exec(res.url());
+        const entry = m ? gtm.get(m[1].toUpperCase()) : undefined;
+        if (!entry || entry.requested) return;
+        entry.requested = true;
+        entry.status = res.status();
+        bodies.push(
+          res
+            .text()
+            .then((body) => {
+              entry.empty = res.status() >= 400 || !body.trim() || /^\s*</.test(body) || isEmptyStub(body);
+            })
+            .catch(() => {
+              entry.empty = res.status() >= 400;
+            }),
+        );
+      });
+      const response = await page.goto(url, { waitUntil: 'load', timeout: 30_000 });
+      const status = response?.status() ?? null;
+      await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+      await page.waitForTimeout(6000); // gtag sends its first hits a few seconds after load
+      await Promise.all(bodies);
+      const arrival = decodeGa4Events(hits);
+      const pageViews = [...new Set(arrival.filter((e) => e.en === 'page_view').map((e) => e.tid))];
+      const consentDenied = analyticsConsentDenied(arrival[0]?.params.gcs);
+
+      // Links to the brand's other domains: does a mousedown (where the GA4 linker decorates) add _gl?
+      const host = new URL(page.url()).hostname;
+      const anchors = await page
+        .evaluate(() => Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')).map((a) => a.href))
+        .catch(() => [] as string[]);
+      const hostOf = (h: string) => {
+        try {
+          return new URL(h).hostname.toLowerCase();
+        } catch {
+          return '';
+        }
+      };
+      const siblings = brandSiblingHosts(host, anchors.map(hostOf).filter(Boolean)).slice(0, 2);
+      const decorated = siblings.length
+        ? await page
+            .evaluate((hosts: string[]) => {
+              const out: Array<{ href: string; host: string; decorated: string }> = [];
+              for (const h of hosts) {
+                const a = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')).find(
+                  (el) => el.hostname.toLowerCase() === h,
+                );
+                if (!a) continue;
+                const before = a.href;
+                a.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                a.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' }));
+                out.push({ href: before, host: h, decorated: a.href });
+              }
+              return out;
+            }, siblings)
+            .catch(() => [])
+        : [];
+
+      // A same-site link in a single-page app: does the page change without a reload, and is a page view sent?
+      let spa: TagSession['spa'] = null;
+      const before = Object.keys(hits).length;
+      const to = await page
+        .evaluate(() => {
+          const w = window as unknown as Record<string, unknown>;
+          w.__leadGateMarker = 1;
+          const here = location.href.split('#')[0];
+          const a = Array.from(
+            document.querySelectorAll<HTMLAnchorElement>('header a[href], nav a[href], a[href]'),
+          ).find(
+            (l) =>
+              l.origin === location.origin &&
+              l.href.split('#')[0] !== here &&
+              !l.target &&
+              !l.hasAttribute('download') &&
+              l.getClientRects().length > 0,
+          );
+          if (!a) return null;
+          a.click();
+          return a.href;
+        })
+        .catch(() => null);
+      if (to) {
+        await page.waitForTimeout(5000);
+        const soft = await page
+          .evaluate(() => (window as unknown as Record<string, unknown>).__leadGateMarker === 1)
+          .catch(() => false);
+        const changed = page.url().split('#')[0] !== url.split('#')[0];
+        const after = Object.fromEntries(Object.entries(hits).slice(before));
+        spa = {
+          to: page.url(),
+          soft: soft && changed,
+          pageViewsAfter: decodeGa4Events(after).filter((e) => e.en === 'page_view').length,
+        };
+      }
+
+      // The GA4 property each linked sibling page reports to.
+      const linker: TagSession['linker'] = [];
+      for (const d of decorated) {
+        const other = await context.newPage();
+        const otherHits: Record<string, TagRequest> = {};
+        record(other, otherHits);
+        await other.goto(d.href, { waitUntil: 'load', timeout: 30_000 }).catch(() => null);
+        await other.waitForTimeout(6000);
+        linker.push({
+          href: d.href,
+          host: d.host,
+          decorated: /[?&#]_gl=/.test(d.decorated),
+          tids: [...new Set(decodeGa4Events(otherHits).map((e) => e.tid))],
+        });
+        await other.close().catch(() => undefined);
+      }
+
+      return {
+        status,
+        gtm: [...gtm.entries()].map(([id, g]) => ({ id, ...g })),
+        pageViews,
+        consentDenied,
+        linker,
+        spa,
+      };
+    } catch {
+      return null;
+    } finally {
+      await context?.close().catch(() => undefined);
+    }
   }
 
   async #shoot(page: Page, name: string): Promise<string | null> {

@@ -81,6 +81,7 @@ import {
   type BrowserReader,
 } from '../lib/leads/fingerprint';
 import { PlaywrightGateBrowser } from '../lib/leads/gate-browser';
+import { defaultDohResolvers } from '../lib/leads/doh';
 import { buildLeadFile, leadDir, readLeadFile, writeLeadFile, type LeadFile } from '../lib/leads/lead-file';
 import {
   appendReviewRows,
@@ -562,7 +563,7 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
     const gate = await runGate(
       run,
       stack,
-      { get: httpPageFetcher, browser },
+      { get: httpPageFetcher, browser, dns: defaultDohResolvers() },
       { minCauses: numberOption('min-causes', GATE_DEFAULTS.minCauses), suspendedTypes: Object.keys(readSuspended()) },
     );
     lead = buildLeadFile({

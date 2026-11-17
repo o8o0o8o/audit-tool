@@ -126,6 +126,23 @@ void test('EmailDnsAnalyzer: no MX skips mail-receiving checks; CAA falls back t
   });
 });
 
+void test('EmailDnsAnalyzer: a subdomain without mail records is checked on the organisational domain', async () => {
+  const res = await EmailDnsAnalyzer.analyze(
+    'pl.example.com',
+    fakeDns({
+      'example.com': ['v=spf1 include:_spf.example.net -all'],
+      '_dmarc.example.com': ['v=DMARC1; p=reject; rua=mailto:x@example.com'],
+    }),
+  );
+  assert.ok(!res.issues.some((i) => i.message === 'No SPF record'));
+  const spf = res.checks.find((c) => c.id === 'spf');
+  assert.equal(spf?.status, 'pass');
+  assert.match(spf?.note ?? '', /^example\.com: v=spf1/);
+  // A subdomain with its own SPF record keeps its own result.
+  const own = await EmailDnsAnalyzer.analyze('mail.example.com', fakeDns({ 'mail.example.com': ['v=spf1 -all'] }));
+  assert.equal(own.checks.find((c) => c.id === 'spf')?.note, 'v=spf1 -all (0 lookups)');
+});
+
 void test('EmailDnsAnalyzer: MX present reports DKIM, MTA-STS, TLS-RPT and CAA gaps', async () => {
   const res = await EmailDnsAnalyzer.analyze(
     'example.com',

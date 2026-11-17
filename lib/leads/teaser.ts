@@ -83,6 +83,10 @@ export function whyItMatters(h: Highlight): string {
       return 'The sitemap is the list of pages a site asks search engines to crawl; an address on it that is gone sends their crawl to an error page.';
     case 'vulnerable-libraries':
       return 'The advisory is public, and security scanners flag every site that still loads an affected version.';
+    case 'analytics-data-loss':
+      return 'Campaign reports, conversion figures and ad bidding are built from these numbers, and data that was never sent cannot be recovered later.';
+    case 'email-authentication':
+      return 'Gmail, Yahoo and Microsoft read SPF and DMARC to decide whether a message really comes from the domain it names, and since 2024 they require both from anyone sending mail in bulk.';
     case 'tracking-before-consent':
       return "Where the GDPR and the ePrivacy rules apply, analytics and advertising cookies may be set only after the visitor agrees, so the banner's question comes after the fact.";
     case 'unnamed-controls':
@@ -113,6 +117,10 @@ export function shortLabel(h: Highlight): string {
       return 'language versions that search engines are not told about';
     case 'sitemap-dead-urls':
       return 'sitemap addresses that return an error';
+    case 'analytics-data-loss':
+      return 'analytics data the site never sends';
+    case 'email-authentication':
+      return 'email authentication records (SPF/DMARC) that mail servers cannot rely on';
     case 'tracking-before-consent':
       return 'tracking cookies set before the visitor answers the cookie banner';
     case 'unnamed-controls':
@@ -142,6 +150,15 @@ function whereLines(h: Highlight): string[] {
       return [`**Where:** <${h.url}>`, ...(target ? [`**The script file:** <${target}>`] : [])];
     case 'missing-hreflang':
       return [`**Where:** <${h.url}>`, ...(target ? [`**Another language version:** <${target}>`] : [])];
+    case 'email-auth':
+      return [
+        `**Check it yourself:** look up the TXT records of ${target ?? 'the domain'} and _dmarc.${target ?? 'the domain'} in any DNS lookup tool.`,
+      ];
+    case 'analytics-gap':
+      return [
+        `**Where:** <${h.url}>`,
+        "**Check it yourself:** open the page with the browser's developer tools on the Network tab and filter for `collect` (Google Analytics hits) or `gtm.js` (Tag Manager).",
+      ];
     case 'tracking-before-consent':
       return [
         `**Where:** <${h.url}>`,

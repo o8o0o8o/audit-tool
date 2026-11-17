@@ -11,6 +11,8 @@ import {
   noindexCandidates,
   sitemapDeadCandidates,
   findingsNotOnAllowlist,
+  analyticsGapCandidates,
+  emailAuthCandidates,
   templateTextCandidates,
   trackingBeforeConsentCandidates,
   unnamedControlsCandidates,
@@ -20,7 +22,9 @@ import { describeTrackingCookies, trackingCookies, trackingVendor } from '../lib
 import { emptyProfile } from '../lib/leads/stack-profile';
 import {
   bannerVersion,
+  emailFact,
   groupByRootCause,
+  readMailRecords,
   runControl,
   runGate,
   servedNoindex,
@@ -28,8 +32,10 @@ import {
   type GateBrowser,
   type GateIo,
   type Highlight,
+  type TagSession,
   type UnnamedControl,
 } from '../lib/leads/truth-gate';
+import { txtChunks } from '../lib/leads/doh';
 import type { EolHit, StackProfile } from '../lib/leads/types';
 
 const ORIGIN = 'https://example.com';
@@ -882,5 +888,174 @@ void describe('truth gate: tracking cookies before consent, unnamed controls', (
       findingsNotOnAllowlist(data).map((f) => f.finding),
       ['Cookies with excessive lifespan'],
     );
+  });
+});
+
+void describe('truth gate: email authentication, analytics data loss', () => {
+  const absent = () => Object.assign(new Error('none'), { code: 'ENODATA' });
+  const resolver = (name: string, txt: Record<string, string[]>, mx: string[] = []) => ({
+    name,
+    resolveTxt: async (n: string) => {
+      if (n === '_dmarc.google.com') return [['v=DMARC1; p=reject']];
+      if (n in txt) return txt[n].map((r) => [r]);
+      throw absent();
+    },
+    resolveMx: async (n: string) => {
+      if (mx.includes(n)) return [{ exchange: 'mx.example.net', priority: 10 }];
+      throw absent();
+    },
+    resolveCaa: async () => [],
+  });
+  const checks = (spf: string, dmarc: string, status = 'fail') => ({
+    siteChecks: {
+      domain: 'example.com',
+      checks: [
+        { id: 'spf', status, note: spf },
+        { id: 'dmarc', status: 'warn', note: dmarc },
+      ],
+    },
+  });
+  const emailRun = (spf: string, dmarc: string, status = 'fail') =>
+    run([page('/', { siteHints: {} })], checks(spf, dmarc, status));
+
+  void it('reads DoH TXT answers and a subdomain on its organisational domain', async () => {
+    assert.deepEqual(txtChunks('"v=spf1 include:a" " -all"'), ['v=spf1 include:a', ' -all']);
+    const dns = resolver('a', { 'example.com': ['v=spf1 -all'], '_dmarc.example.com': ['v=DMARC1; p=none'] });
+    assert.deepEqual(await readMailRecords(dns, 'pl.example.com'), {
+      domain: 'example.com',
+      spf: ['v=spf1 -all'],
+      lookups: 0,
+      dmarc: 'none',
+    });
+  });
+
+  void it('states only the gaps worth stating', () => {
+    const v = { domain: 'example.com', spf: [] as string[], lookups: 0, dmarc: null as string | null };
+    assert.match(emailFact(v)!, /^example\.com publishes no SPF record and no DMARC policy, so mail servers/);
+    assert.match(emailFact({ ...v, dmarc: 'none' })!, /only a report-only DMARC policy \(p=none\)/);
+    assert.equal(emailFact({ ...v, dmarc: 'reject' }), null, 'DMARC enforced: no SPF alone is not stated');
+    assert.equal(emailFact({ ...v, spf: ['v=spf1 -all'], dmarc: 'none' }), null, 'p=none alone is too common');
+    assert.match(
+      emailFact({ ...v, spf: ['v=spf1 …'], lookups: 18, dmarc: 'reject' })!,
+      /^example\.com has an SPF record that needs 18 DNS lookups where the email standard \(RFC 7208\) allows 10/,
+    );
+    assert.match(
+      emailFact({ ...v, spf: ['v=spf1 -all'], lookups: 14 })!,
+      /no DMARC policy, .*; it also has an SPF record that needs 14/,
+    );
+  });
+
+  void it('email passes when two resolvers agree, and not otherwise', async () => {
+    const r = emailRun('no record', 'no valid record');
+    assert.equal(emailAuthCandidates(r).length, 1);
+    assert.deepEqual(emailAuthCandidates(emailRun('v=spf1 -all (0 lookups)', 'p=reject', 'pass')), []);
+    const empty = {};
+    const both = [resolver('cloudflare', empty), resolver('google', empty)];
+    const pass = await runGate(r, null, { ...io({}), dns: both }, { minCauses: 1 });
+    const h = pass.highlights.find((x) => x.type === 'email-auth');
+    assert.ok(h);
+    assert.match(h.fact, /^example\.com publishes no SPF record and no DMARC policy/);
+    assert.deepEqual(h.evidence.methods, [
+      'scan-system-resolver',
+      'dns-over-https:cloudflare',
+      'dns-over-https:google',
+    ]);
+
+    const split = [resolver('cloudflare', empty), resolver('google', { 'example.com': ['v=spf1 -all'] })];
+    const disagree = await runGate(r, null, { ...io({}), dns: split }, { minCauses: 1 });
+    assert.equal(disagree.highlights.length, 0);
+    assert.equal(disagree.candidatesDropped.find((d) => d.type === 'email-auth')?.reason, 'second-method-disagrees');
+
+    const none = await runGate(r, null, io({}), { minCauses: 1 });
+    assert.equal(none.candidatesDropped.find((d) => d.type === 'email-auth')?.reason, 'no-second-method-available');
+  });
+
+  const tagRun = (ids: Record<string, { status: string; note: string }>) =>
+    run([page('/', { siteHints: {} })], {
+      siteChecks: { domain: 'example.com', checks: Object.entries(ids).map(([id, c]) => ({ id, ...c })) },
+    });
+  const session = (s: Partial<TagSession>): GateBrowser & { sessions: number } => {
+    const b = {
+      ...clicking({}),
+      sessions: 0,
+      tagSession: async () => {
+        b.sessions++;
+        return { status: 200, gtm: [], pageViews: [], consentDenied: false, linker: [], spa: null, ...s };
+      },
+    };
+    return b;
+  };
+
+  void it('analytics candidates come from the failing tag checks', () => {
+    const r = tagRun({
+      'gtm-container': { status: 'fail', note: 'GTM-ABC123: fails to load; GTM-OK: 3 tags' },
+      'spa-pageview': { status: 'fail', note: '0 page_view after client-side navigation' },
+      'ga4-linker': { status: 'pass', note: '1 sibling-domain link tested' },
+    });
+    const c = analyticsGapCandidates(r);
+    assert.deepEqual(
+      c.map((x) => x.kind),
+      ['gtm-missing', 'spa-pageview'],
+    );
+    assert.deepEqual(c[0].containerIds, ['GTM-ABC123']);
+  });
+
+  void it('analytics gaps pass only when the browser sees them, in one session, folded into one cause', async () => {
+    const r = tagRun({
+      'gtm-container': { status: 'fail', note: 'GTM-ABC123: fails to load' },
+      'spa-pageview': { status: 'fail', note: '0 page_view after client-side navigation' },
+      'ga4-linker': { status: 'fail', note: '1 sibling-domain link tested' },
+    });
+    const browser = session({
+      gtm: [{ id: 'GTM-ABC123', requested: true, status: 200, empty: true }],
+      pageViews: ['G-1'],
+      spa: { to: u('/shop'), soft: true, pageViewsAfter: 0 },
+      linker: [{ href: 'https://example-shop.de/', host: 'example-shop.de', decorated: false, tids: ['G-1'] }],
+    });
+    const gate = await runGate(r, null, io({}, browser), { minCauses: 1 });
+    assert.equal(browser.sessions, 1, 'one tag session for all three');
+    assert.equal(gate.highlights.length, 1);
+    const h = gate.highlights[0];
+    assert.equal(h.rootCause, 'analytics-data-loss');
+    assert.match(
+      h.fact,
+      /^The homepage loads the Google Tag Manager container GTM-ABC123, but Google sends back an empty container/,
+    );
+    assert.match(h.fact, /; the homepage loses analytics data in 2 more ways too$/);
+
+    const quiet = session({
+      gtm: [{ id: 'GTM-ABC123', requested: false, status: null, empty: false }],
+      pageViews: [],
+      spa: { to: u('/shop'), soft: true, pageViewsAfter: 0 },
+      linker: [{ href: 'https://example-shop.de/', host: 'example-shop.de', decorated: false, tids: ['G-2'] }],
+    });
+    const none = await runGate(r, null, io({}, quiet), { minCauses: 1 });
+    assert.equal(none.highlights.length, 0, 'not requested, no page view on arrival, another property');
+    assert.equal(none.candidatesDropped.filter((d) => d.type === 'analytics-gap').length, 3);
+  });
+
+  void it('the SPA and linker facts name the page and the property', async () => {
+    const r = tagRun({
+      'spa-pageview': { status: 'fail', note: '' },
+      'ga4-linker': { status: 'fail', note: '' },
+    });
+    const gate = await runGate(
+      r,
+      null,
+      io(
+        {},
+        session({
+          pageViews: ['G-1'],
+          spa: { to: u('/shop'), soft: true, pageViewsAfter: 0 },
+          linker: [{ href: 'https://example-shop.de/', host: 'example-shop.de', decorated: false, tids: ['G-1'] }],
+        }),
+      ),
+      { minCauses: 1 },
+    );
+    assert.match(
+      gate.highlights[0].fact,
+      /following the site's own link to \/shop changes the page without a reload and sends no page view/,
+    );
+    assert.match(gate.candidatesDropped.find((d) => d.reason === 'same-root-cause')?.detail ?? '', /example-shop\.de/);
   });
 });

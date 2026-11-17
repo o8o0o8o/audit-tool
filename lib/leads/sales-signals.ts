@@ -16,6 +16,8 @@ import type { EolHit, StackProfile } from './types';
 
 /** Finding types the truth gate knows how to confirm. Anything else stays in the full audit. */
 export const ALLOWLIST = [
+  'analytics-gap',
+  'email-auth',
   'dead-nav-link',
   'broken-image',
   'template-text',
@@ -37,7 +39,9 @@ export type Angle =
   | 'slow for real users'
   | 'search visibility blockers'
   | 'privacy and consent'
-  | 'accessibility';
+  | 'accessibility'
+  | 'analytics data loss'
+  | 'email trust';
 
 export interface DeadLinkCandidate {
   type: 'dead-nav-link';
@@ -177,7 +181,39 @@ export interface UnnamedControlsCandidate {
   pagesScanned: number;
 }
 
+export interface EmailAuthCandidate {
+  type: 'email-auth';
+  angle: Angle;
+  rootCause: 'email-authentication';
+  /** The host the scan checked (the gate picks the mail domain itself). */
+  domain: string;
+  /** The page the teaser points to: the homepage. */
+  url: string;
+  /** What the scan's system resolver saw, for the reviewer. */
+  scan: { spf: string | null; dmarc: string | null };
+}
+
+export interface AnalyticsGapCandidate {
+  type: 'analytics-gap';
+  angle: Angle;
+  rootCause: 'analytics-data-loss';
+  /**
+   * `gtm-missing`: a Tag Manager container the site loads is empty or missing at Google.
+   * `spa-pageview`: changing page without a reload sends no page view.
+   * `cross-domain`: links to the brand's other domains lose the analytics session.
+   */
+  kind: 'gtm-missing' | 'spa-pageview' | 'cross-domain';
+  /** The homepage: every tag check of the scan ran there. */
+  url: string;
+  /** For `gtm-missing`: the container IDs the scan found failing. */
+  containerIds: string[];
+  /** The scan's check note, for the reviewer. */
+  note: string;
+}
+
 export type Candidate =
+  | EmailAuthCandidate
+  | AnalyticsGapCandidate
   | TrackingBeforeConsentCandidate
   | UnnamedControlsCandidate
   | DeadLinkCandidate
@@ -681,6 +717,61 @@ export function unnamedControlsCandidates(run: RunData): UnnamedControlsCandidat
   ];
 }
 
+const siteCheck = (run: RunData, id: string) => run.metadata.siteChecks?.checks?.find((c) => c.id === id);
+
+/**
+ * SPF or DMARC gaps the scan's DNS check saw: no SPF record, more than 10 SPF lookups, no DMARC
+ * record or a report-only DMARC policy. The gate asks two other resolvers and decides which of these
+ * is a fact worth stating (a report-only policy alone is too common to lead with).
+ */
+export function emailAuthCandidates(run: RunData): EmailAuthCandidate[] {
+  const spf = siteCheck(run, 'spf');
+  const dmarc = siteCheck(run, 'dmarc');
+  const domain = run.metadata.siteChecks?.domain;
+  const home = run.metadata.leadScan?.home ?? okPages(run)[0]?.url;
+  if (!domain || !home || (!spf && !dmarc)) return [];
+  // SPF `fail`: no record, several records, `+all` or more than 10 lookups.
+  const weak = spf?.status === 'fail' || dmarc?.note === 'no valid record' || dmarc?.note === 'p=none';
+  if (!weak) return [];
+  return [
+    {
+      type: 'email-auth',
+      angle: 'email trust',
+      rootCause: 'email-authentication',
+      domain,
+      url: home,
+      scan: { spf: spf?.note ?? null, dmarc: dmarc?.note ?? null },
+    },
+  ];
+}
+
+/**
+ * Analytics data the site never sends: a Tag Manager container that fails to load, a single-page
+ * app that sends no page view on route change, links to the brand's other domains without the GA4
+ * linker. From the scan's tag checks on the homepage; the gate repeats each in its own browser.
+ */
+export function analyticsGapCandidates(run: RunData): AnalyticsGapCandidate[] {
+  const home = run.metadata.leadScan?.home ?? okPages(run)[0]?.url;
+  if (!home) return [];
+  const out: AnalyticsGapCandidate[] = [];
+  const base = {
+    type: 'analytics-gap',
+    angle: 'analytics data loss',
+    rootCause: 'analytics-data-loss',
+    url: home,
+  } as const;
+  const gtm = siteCheck(run, 'gtm-container');
+  if (gtm?.status === 'fail') {
+    const ids = [...(gtm.note ?? '').matchAll(/(GTM-[A-Z0-9]+): fails to load/g)].map((m) => m[1]);
+    if (ids.length) out.push({ ...base, kind: 'gtm-missing', containerIds: ids, note: gtm.note ?? '' });
+  }
+  const spa = siteCheck(run, 'spa-pageview');
+  if (spa?.status === 'fail') out.push({ ...base, kind: 'spa-pageview', containerIds: [], note: spa.note ?? '' });
+  const linker = siteCheck(run, 'ga4-linker');
+  if (linker?.status === 'fail') out.push({ ...base, kind: 'cross-domain', containerIds: [], note: linker.note ?? '' });
+  return out;
+}
+
 /** Audit findings the candidates above are built from: not listed as left out. */
 const COVERED_FINDINGS = [
   /^interactive elements without an accessible name/i,
@@ -689,6 +780,8 @@ const COVERED_FINDINGS = [
 
 export function buildCandidates(run: RunData, stack: StackProfile | null): Candidate[] {
   return [
+    ...analyticsGapCandidates(run),
+    ...emailAuthCandidates(run),
     ...deadLinkCandidates(run),
     ...brokenImageCandidates(run),
     ...templateTextCandidates(run),

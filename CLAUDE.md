@@ -255,7 +255,7 @@ On by default; `--no-agentic` (or `agentic: false` in `.seoauditrc`) turns it of
 
 Site-level checks run once after the crawl (`site-probes.ts`, called from `SEOData` after site-wide validation, so a WAF that blocks the probes cannot affect the crawl). Results go to `metadata.json.gz` as `siteChecks` and render as the **Domain & Exposure** block (status table + findings) in the HTML report's Issues tab (`lib/reports/sections/domain-exposure.ts`). Phase 3 never refutes these findings. DNS checks are skipped for IP / local origins.
 
-- **email-dns-analyzer.ts**: SPF, DMARC (falls back to the org domain), DKIM at common selectors, MTA-STS + policy file, TLS-RPT, CAA
+- **email-dns-analyzer.ts**: SPF (a subdomain with no SPF and no MX record is checked on the org domain), DMARC (falls back to the org domain), DKIM at common selectors, MTA-STS + policy file, TLS-RPT, CAA
 - **exposed-files-probe.ts**: `.git`, `.svn`, `.env`, `.DS_Store`, `.htpasswd`, backups / SQL dumps, `phpinfo.php`, directory listings; every hit confirmed by body magic/syntax; stops after repeated 403/429
 - **not-found-probe.ts**: requests a random missing URL; flags 200, 3xx and 5xx instead of 404/410
 - **subdomain-takeover.ts**: dangling CNAMEs (origin + same-site link hosts) to GitHub Pages, Heroku, S3, Azure, Shopify, … via NXDOMAIN or the service's "unclaimed" page

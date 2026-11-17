@@ -99,7 +99,7 @@ export async function evaluateSpf(dns: DnsLookup, domain: string, records: strin
       detail: `SPF for ${domain} ends in "${all[0].trim()}", which authorises every server on the internet: "${record}".`,
       severity: SEVERITY.HIGH,
     });
-  } else if (all && all[1] === '?') {
+  } else if (all?.[1] === '?') {
     issues.push({
       message: 'SPF record is neutral (?all)',
       detail: `SPF for ${domain} ends in "?all", which gives receivers no instruction for unauthorised senders. Use "~all" or "-all": "${record}".`,
@@ -215,40 +215,66 @@ const defaultPolicyFetcher: PolicyFetcher = async (url) => {
 
 export class EmailDnsAnalyzer {
   static async analyze(
-    domain: string,
+    host: string,
     dns: DnsLookup = defaultDnsLookup(),
     fetchPolicy: PolicyFetcher = defaultPolicyFetcher,
   ): Promise<SiteProbeResult> {
     const issues: Issue[] = [];
     const checks: SiteCheckResult[] = [];
-    if (!domain) return { issues, checks };
+    if (!host) return { issues, checks };
+    let domain = host;
     const add = (id: string, label: string, found: Issue[], note?: string, unknown = false) => {
       issues.push(...found);
       const worst = found.some((i) => i.severity !== SEVERITY.LOW) ? 'fail' : found.length ? 'warn' : 'pass';
       checks.push({ id, label, status: unknown ? 'skipped' : worst, note });
     };
 
-    let hasMx: boolean | null;
-    try {
-      hasMx = (await dns.resolveMx(domain)).length > 0;
-    } catch (e) {
-      hasMx = isAbsentError(e) ? false : null;
+    const mx = async (name: string): Promise<boolean | null> => {
+      try {
+        return (await dns.resolveMx(name)).length > 0;
+      } catch (e) {
+        return isAbsentError(e) ? false : null;
+      }
+    };
+    let hasMx = await mx(domain);
+    let rootTxt = await txt(dns, domain);
+
+    // A site served from a subdomain (shop.example.com, pl.example.com) that neither sends nor
+    // receives mail: the company's mail domain is the organisational domain, so check that instead.
+    const org = orgDomain(domain);
+    let via = '';
+    if (
+      org !== domain &&
+      hasMx === false &&
+      rootTxt !== null &&
+      !rootTxt.some((r) => /^v=spf1(\s|$)/i.test(r.trim()))
+    ) {
+      const orgTxt = await txt(dns, org);
+      if (orgTxt !== null) {
+        via = `${org}: `;
+        domain = org;
+        rootTxt = orgTxt;
+        hasMx = await mx(org);
+      }
     }
 
     // SPF
-    const rootTxt = await txt(dns, domain);
     if (rootTxt === null) add('spf', 'SPF', [], 'DNS lookup failed', true);
     else {
       const spf = await evaluateSpf(dns, domain, rootTxt);
       const record = rootTxt.find((r) => /^v=spf1/i.test(r));
-      add('spf', 'SPF', spf.issues, record ? `${record.slice(0, 120)} (${spf.lookups} lookups)` : 'no record');
+      add(
+        'spf',
+        'SPF',
+        spf.issues,
+        `${via}${record ? `${record.slice(0, 120)} (${spf.lookups} lookups)` : 'no record'}`,
+      );
     }
 
     // DMARC (falls back to the organisational domain, RFC 7489 §6.6.3)
     let dmarcTxt = await txt(dns, `_dmarc.${domain}`);
-    const org = orgDomain(domain);
-    if (dmarcTxt && !dmarcTxt.some((r) => /^v=DMARC1/i.test(r)) && org !== domain) {
-      dmarcTxt = await txt(dns, `_dmarc.${org}`);
+    if (dmarcTxt && !dmarcTxt.some((r) => /^v=DMARC1/i.test(r)) && orgDomain(domain) !== domain) {
+      dmarcTxt = await txt(dns, `_dmarc.${orgDomain(domain)}`);
     }
     if (dmarcTxt === null) add('dmarc', 'DMARC', [], 'DNS lookup failed', true);
     else {

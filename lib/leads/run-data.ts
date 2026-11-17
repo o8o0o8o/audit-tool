@@ -54,7 +54,7 @@ export interface RunMetadata {
   } | null;
   leadScan?: LeadScanInfo;
   passive?: boolean;
-  siteChecks?: { checks?: Array<{ id: string; status: string; note?: string }> } | null;
+  siteChecks?: { domain?: string; checks?: Array<{ id: string; status: string; note?: string }> } | null;
   /** `urls` and `total`, plus one key per sitemap file read (its URL). */
   sitemaps?: { urls?: Record<string, unknown>; total?: number; [sitemapFile: string]: unknown };
 }

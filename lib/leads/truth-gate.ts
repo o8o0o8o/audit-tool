@@ -16,6 +16,13 @@
  */
 
 import { isChallengeResponse } from '../utils/blocked-fetch';
+import {
+  countSpfLookups,
+  isAbsentError,
+  parseTagList,
+  type DnsLookup,
+} from '../analyzers/site-checks/email-dns-analyzer';
+import { orgDomain } from '../analyzers/site-checks/site-checks-types';
 import { advisoryFor, compareVersions } from '../analyzers/security/js-library-analyzer';
 import { blockReason, type PageFetcher, type PageSnapshot } from './fingerprint';
 import { eolStatus } from './eol';
@@ -27,7 +34,9 @@ import {
   TEMPLATE_CODE,
   buildCandidates,
   findingsNotOnAllowlist,
+  type AnalyticsGapCandidate,
   type BrokenImageCandidate,
+  type EmailAuthCandidate,
   type DeadLinkCandidate,
   type EolCandidate,
   type FindingType,
@@ -82,6 +91,27 @@ export interface GateBrowser {
    * a phone-sized screen when the desktop shows none of `expected`.
    */
   unnamedControls?(url: string, expected: string[], evidenceName: string): Promise<UnnamedControlsResult | null>;
+  /**
+   * Loads `url` in a fresh session, clicks nothing that leaves the site, and reports what its tags
+   * send: the Tag Manager containers in `gtmIds` as Google answered them, GA4 page views on arrival,
+   * links to the brand's other domains (with the GA4 property each linked page reports to) and a
+   * change of page without a reload in a single-page app.
+   */
+  tagSession?(url: string, gtmIds: string[]): Promise<TagSession | null>;
+}
+
+export interface TagSession {
+  status: number | null;
+  /** Each container in `gtmIds`: whether the page asked for it and what Google sent back. */
+  gtm: Array<{ id: string; requested: boolean; status: number | null; empty: boolean }>;
+  /** GA4 properties that received a page_view when the page loaded. */
+  pageViews: string[];
+  /** The GA4 hits carry "analytics storage denied" (Consent Mode): the linker stays off then. */
+  consentDenied: boolean;
+  /** Links to the brand's other domains: whether a click adds `_gl`, and the GA4 properties the linked page reports to. */
+  linker: Array<{ href: string; host: string; decorated: boolean; tids: string[] }>;
+  /** A click on a same-site link: `soft` when the page changed without a reload. */
+  spa: { to: string; soft: boolean; pageViewsAfter: number } | null;
 }
 
 export interface FirstVisit {
@@ -113,6 +143,8 @@ export interface UnnamedControlsResult {
 export interface GateIo {
   get: PageFetcher;
   browser?: GateBrowser | null;
+  /** Two public DNS resolvers (DNS over HTTPS) for the email re-check; none, no email highlight. */
+  dns?: Array<DnsLookup & { name: string }> | null;
   /** A random path that cannot exist on the site; injectable for tests. */
   randomPath?: () => string;
 }
@@ -265,6 +297,8 @@ interface CheckContext {
   dropped: DroppedCandidate[];
   requests: { n: number };
   runtime: Record<string, string> | null;
+  /** One tag session per gate run, shared by the analytics candidates. */
+  tagSession?: Promise<TagSession | null>;
 }
 
 const evidenceBase = (ctx: CheckContext) => ({
@@ -1103,11 +1137,267 @@ async function checkUnnamedControls(c: UnnamedControlsCandidate, ctx: CheckConte
   };
 }
 
+// ─── Email authentication ───────────────────────────────────────────────────
+
+/** What one resolver says about a domain's mail records. `null`: the resolver could not answer. */
+export interface MailView {
+  domain: string;
+  spf: string[];
+  lookups: number;
+  /** The DMARC `p=` value, `invalid` for a record without one, `null` for no record. */
+  dmarc: string | null;
+}
+
+async function txtRecords(dns: DnsLookup, name: string): Promise<string[] | null> {
+  try {
+    return (await dns.resolveTxt(name)).map((parts) => parts.join(''));
+  } catch (e) {
+    return isAbsentError(e) ? [] : null;
+  }
+}
+
 /**
- * Teaser order: what a visitor runs into first, then language and search problems, then real-user
+ * The mail records of `host` as one resolver sees them. A host without SPF and MX records (a shop or
+ * country subdomain) is read on its organisational domain, the company's mail domain.
+ */
+export async function readMailRecords(dns: DnsLookup, host: string): Promise<MailView | null> {
+  const isSpf = (r: string) => /^v=spf1(\s|$)/i.test(r.trim());
+  let domain = host.toLowerCase().replace(/^www\./, '');
+  let txt = await txtRecords(dns, domain);
+  if (txt === null) return null;
+  const org = orgDomain(domain);
+  if (!txt.some(isSpf) && org !== domain) {
+    let mx: boolean | null;
+    try {
+      mx = (await dns.resolveMx(domain)).length > 0;
+    } catch (e) {
+      mx = isAbsentError(e) ? false : null;
+    }
+    if (mx === null) return null;
+    if (!mx) {
+      const orgTxt = await txtRecords(dns, org);
+      if (orgTxt === null) return null;
+      domain = org;
+      txt = orgTxt;
+    }
+  }
+  const spf = txt.filter(isSpf).map((r) => r.trim());
+  const lookups = spf.length === 1 ? await countSpfLookups(dns, spf[0]) : 0;
+  let dmarcTxt = await txtRecords(dns, `_dmarc.${domain}`);
+  if (dmarcTxt && !dmarcTxt.some((r) => /^v=DMARC1/i.test(r.trim())) && orgDomain(domain) !== domain) {
+    dmarcTxt = await txtRecords(dns, `_dmarc.${orgDomain(domain)}`);
+  }
+  if (dmarcTxt === null) return null;
+  const record = dmarcTxt.find((r) => /^v=DMARC1\s*(;|$)/i.test(r.trim()));
+  const p = record ? parseTagList(record).p?.toLowerCase() : undefined;
+  const dmarc = record ? (p && /^(none|quarantine|reject)$/.test(p) ? p : 'invalid') : null;
+  return { domain, spf, lookups, dmarc };
+}
+
+/** The fact a mail view supports, or null when nothing in it is worth stating. */
+export function emailFact(v: MailView): string | null {
+  const d = v.domain;
+  const noDmarc = v.dmarc === null || v.dmarc === 'invalid';
+  const dmarcWords =
+    v.dmarc === null ? 'no DMARC policy' : v.dmarc === 'invalid' ? 'a DMARC record without a valid policy' : '';
+  const spfError =
+    v.spf.length > 1
+      ? `publishes ${v.spf.length} SPF records where the email standard (RFC 7208) allows one, and receiving mail servers then treat its SPF check as failed`
+      : v.lookups > 10
+        ? `has an SPF record that needs ${v.lookups} DNS lookups where the email standard (RFC 7208) allows 10, and receiving mail servers then treat its SPF check as failed`
+        : null;
+  if (!v.spf.length && (noDmarc || v.dmarc === 'none')) {
+    return `${d} publishes no SPF record and ${noDmarc ? dmarcWords : 'only a report-only DMARC policy (p=none)'}, so mail servers have no published rule for rejecting email that someone else sends from an @${d} address`;
+  }
+  if (noDmarc) {
+    return `${d} publishes ${dmarcWords}, so mail servers have no published rule for rejecting email that someone else sends from an @${d} address${spfError ? `; it also ${spfError}` : ''}`;
+  }
+  if (spfError) return `${d} ${spfError}`;
+  return null;
+}
+
+/**
+ * SPF and DMARC gaps. Second method: two public resolvers over HTTPS (not the system resolver the
+ * scan used) must return the same records. Control: both must read a known DMARC record. DNS asks
+ * nothing of the site itself, so the site's own control does not apply.
+ */
+async function checkEmailAuth(c: EmailAuthCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  const scanSaw = `scan: SPF ${c.scan.spf ?? '?'}; DMARC ${c.scan.dmarc ?? '?'}`;
+  const resolvers = ctx.io.dns ?? [];
+  if (resolvers.length < 2) {
+    ctx.dropped.push({ type: c.type, reason: 'no-second-method-available', rootCause: c.rootCause, detail: scanSaw });
+    return null;
+  }
+  for (const r of resolvers) {
+    const known = await txtRecords(r, '_dmarc.google.com');
+    if (!known?.some((t) => /^v=DMARC1/i.test(t))) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'control-failed',
+        rootCause: c.rootCause,
+        detail: `${r.name} could not read a known DMARC record`,
+      });
+      return null;
+    }
+  }
+  const views = await Promise.all(resolvers.map((r) => readMailRecords(r, c.domain).catch(() => null)));
+  if (views.some((v) => v === null)) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'no-second-method-available',
+      rootCause: c.rootCause,
+      detail: `a resolver did not answer for ${c.domain}`,
+    });
+    return null;
+  }
+  const comparable = (v: MailView) => JSON.stringify({ ...v, lookups: v.lookups > 10 ? v.lookups : 'ok' });
+  if (new Set(views.map((v) => comparable(v!))).size > 1) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `the resolvers disagree: ${views.map((v) => comparable(v!)).join(' | ')}`,
+    });
+    return null;
+  }
+  const view = views[0]!;
+  const fact = emailFact(view);
+  if (!fact) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: view.spf.length && view.dmarc === 'none' ? 'below-threshold' : 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${view.domain}: SPF ${view.spf[0] ?? 'none'} (${view.lookups} lookups); DMARC p=${view.dmarc ?? 'no record'} — ${scanSaw}`,
+    });
+    return null;
+  }
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact,
+    url: c.url,
+    evidence: {
+      target: view.domain,
+      value: `SPF: ${view.spf.join(' | ') || 'none'}; DMARC: ${view.dmarc ?? 'no record'}`,
+      methods: ['scan-system-resolver', ...resolvers.map((r) => `dns-over-https:${r.name}`)],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+// ─── Analytics data loss ────────────────────────────────────────────────────
+
+/**
+ * Analytics data the site never sends. Second method: the gate's own browser session, reading the
+ * network log (the scan read Google's answer with a plain HTTP request, or ran its own tag probe).
+ *  - gtm-missing: the page must ask for the container AND Google must answer empty or with an error.
+ *  - spa-pageview: a page view on arrival (so analytics works and is not waiting for consent), then
+ *    a change of page without a reload and no page view.
+ *  - cross-domain: the linked page reports to the same GA4 property, and a click adds no `_gl`.
+ */
+async function checkAnalyticsGap(c: AnalyticsGapCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  const drop = (reason: DroppedCandidate['reason'], detail: string) => {
+    ctx.dropped.push({ type: c.type, reason, rootCause: c.rootCause, detail: `${c.kind}: ${detail}` });
+    return null;
+  };
+  if (ctx.control.blocked) return drop('control-failed', c.note);
+  const browser = ctx.io.browser;
+  if (!browser?.tagSession) return drop('no-second-method-available', c.note);
+  if (!ctx.tagSession) {
+    ctx.requests.n++;
+    ctx.tagSession = browser.tagSession(c.url, c.containerIds).catch(() => null);
+  }
+  const s = await ctx.tagSession;
+  if (!s || s.status === null || s.status < 200 || s.status >= 300) {
+    return drop(
+      s && [401, 403, 429].includes(s.status ?? 0) ? 'blocked' : 'second-method-disagrees',
+      `the page answered ${s?.status ?? 'nothing'}`,
+    );
+  }
+  const base = { type: c.type, rootCause: c.rootCause, angle: c.angle, url: c.url, gate: 'pass' as const };
+
+  if (c.kind === 'gtm-missing') {
+    const bad = s.gtm.filter((g) => c.containerIds.includes(g.id) && g.requested && g.empty);
+    if (!bad.length) {
+      return drop(
+        'second-method-disagrees',
+        s.gtm.map((g) => `${g.id} requested=${g.requested} status=${g.status} empty=${g.empty}`).join('; ') ||
+          'container not requested',
+      );
+    }
+    const g = bad[0];
+    const answer =
+      g.status !== null && g.status >= 400
+        ? `Google answers with an error (HTTP ${g.status})`
+        : 'Google sends back an empty container, with no tags in it (what it serves for an ID that does not exist or was never published)';
+    return {
+      ...base,
+      fact: `The homepage loads the Google Tag Manager container ${g.id}, but ${answer}, so no tag set up in that container runs on the page`,
+      evidence: {
+        target: `https://www.googletagmanager.com/gtm.js?id=${g.id}`,
+        status: g.status,
+        value: g.id,
+        methods: ['scan-http-fetch', 'browser-network-response'],
+        ...evidenceBase(ctx),
+      },
+    };
+  }
+
+  if (c.kind === 'spa-pageview') {
+    if (!s.pageViews.length)
+      return drop('second-method-disagrees', 'no GA4 page view on arrival (consent pending or no GA4)');
+    if (!s.spa?.soft)
+      return drop(
+        'second-method-disagrees',
+        s.spa ? `the link to ${s.spa.to} reloaded the page` : 'no same-site link changed the page',
+      );
+    if (s.spa.pageViewsAfter > 0)
+      return drop('second-method-disagrees', `${s.spa.pageViewsAfter} page view(s) after the change of page`);
+    return {
+      ...base,
+      fact: `Google Analytics records a page view when the homepage loads, but following the site's own link to ${pathOf(s.spa.to)} changes the page without a reload and sends no page view, so pages a visitor reaches this way are missing from the analytics reports`,
+      evidence: {
+        target: s.spa.to,
+        value: s.pageViews.join(', '),
+        methods: ['scan-tag-probe', 'browser-network-log'],
+        ...evidenceBase(ctx),
+      },
+    };
+  }
+
+  if (s.consentDenied)
+    return drop('second-method-disagrees', 'analytics consent is denied by default, so the linker stays off');
+  const broken = s.linker.find((l) => !l.decorated && l.tids.some((t) => s.pageViews.includes(t)));
+  if (!broken) {
+    return drop(
+      'second-method-disagrees',
+      s.linker.map((l) => `${l.host} decorated=${l.decorated} tids=${l.tids.join('/') || 'none'}`).join('; ') ||
+        'no sibling-domain link',
+    );
+  }
+  const tid = broken.tids.find((t) => s.pageViews.includes(t))!;
+  return {
+    ...base,
+    fact: `The homepage links to ${broken.host}, which reports to the same Google Analytics property (${tid}), but the link does not get Google's cross-domain parameter (_gl) when clicked, so a visitor who follows it arrives there as a new session and the source of the original visit is lost`,
+    evidence: {
+      target: broken.href,
+      value: tid,
+      methods: ['scan-tag-probe', 'browser-network-log'],
+      ...evidenceBase(ctx),
+    },
+  };
+}
+
+/**
+ * Teaser order: data the company is losing (analytics) and email anyone can forge in its name first,
+ * then what a visitor runs into, then language and search problems, then real-user
  * speed, then outdated software. The platform is never the lead (design revision 3).
  */
 const CAUSE_ORDER = [
+  'analytics-data-loss',
+  'email-authentication',
   'language-switch',
   'dead-navigation-links',
   'broken-images',
@@ -1152,6 +1442,8 @@ export function groupByRootCause(passed: Highlight[], dropped: DroppedCandidate[
     if (h.type === 'noindex')
       h.fact += `; ${more} more key page${more === 1 ? ' carries' : 's carry'} the same instruction`;
     if (h.type === 'template-text') h.fact += `; ${more} more page${more === 1 ? ' shows' : 's show'} the same`;
+    if (h.type === 'analytics-gap')
+      h.fact += `; the homepage loses analytics data in ${more} more way${more === 1 ? '' : 's'} too`;
     if (h.type === 'vulnerable-library')
       h.fact += `; ${more} more librar${more === 1 ? 'y' : 'ies'} on the site ${more === 1 ? 'has' : 'have'} a published advisory too`;
   }
@@ -1247,6 +1539,12 @@ export async function runGate(
         break;
       case 'unnamed-controls':
         highlight = await checkUnnamedControls(candidate, ctx);
+        break;
+      case 'email-auth':
+        highlight = await checkEmailAuth(candidate, ctx);
+        break;
+      case 'analytics-gap':
+        highlight = await checkAnalyticsGap(candidate, ctx);
         break;
     }
     if (highlight) passed.push(highlight);

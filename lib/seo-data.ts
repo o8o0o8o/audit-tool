@@ -33,6 +33,16 @@ import { parse } from 'node-html-parser';
  * On `--proceed` the checkpoint's pages decide whether agentic checks keep running,
  * so every page in one audit is checked the same way; an empty checkpoint keeps the requested value.
  */
+/**
+ * Total page loads the crawler may make. A lead scan's cap is the limit itself. In a full audit
+ * `--limit=N` allows N sitemap pages plus N pages found through links, so the total is at most 2N;
+ * without it, the links found on discovered pages kept growing the queue to thousands of pages.
+ */
+export function crawlPageBudget(limit: number | null | undefined, lead: boolean): number | null {
+  if (!limit) return null;
+  return lead ? limit : limit * 2;
+}
+
 export function resolveResumeAgentic(requested: boolean, pages: Record<string, unknown> | undefined): boolean {
   const restored = Object.values(pages ?? {});
   if (restored.length === 0) return requested;
@@ -55,6 +65,8 @@ class SEOData {
   #open: boolean;
   #exclude: string[];
   #limit: number | null;
+  /** Sitemap URLs `--limit` cut before the crawl; a sample is checked for 404s after it. */
+  #sitemapUrlsBeyondLimit: string[] = [];
   #dryRun: boolean;
   #cruxApiKey: string | null;
   #screenshots: boolean;
@@ -223,7 +235,7 @@ class SEOData {
         visual: this.#visual,
         agentic: this.#agentic,
         lead: this.#lead,
-        maxPages: this.#lead ? this.#limit : null,
+        maxPages: crawlPageBudget(this.#limit, this.#lead),
         requestObserver: this.#lead ? (this.#requestCounter ??= new RequestCounter(this.domainName)).observeBrowser : undefined,
       },
       {
@@ -513,6 +525,7 @@ class SEOData {
 
       if (this.#limit && filtered.length > this.#limit) {
         console.log(`  Limiting to first ${this.#limit} of ${filtered.length} URLs`);
+        this.#sitemapUrlsBeyondLimit = filtered.slice(this.#limit);
         filtered = filtered.slice(0, this.#limit);
       }
 
@@ -697,6 +710,7 @@ class SEOData {
       this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[3],
       this.#results.sitemaps?.urls ?? {},
       this.#results.siteTextFiles,
+      { probeUncrawledSitemapUrls: !this.#lead, sitemapUrlsBeyondLimit: this.#sitemapUrlsBeyondLimit },
     );
 
     // Site-level Domain & Exposure checks: email/DNS, exposed files, missing-page

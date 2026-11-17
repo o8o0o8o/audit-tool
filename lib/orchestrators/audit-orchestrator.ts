@@ -47,7 +47,7 @@ interface AnalyzeContext {
   };
   incomingLinksTracking: Map<string, Set<string>>;
   saveError: SaveErrorFn;
-  /** `--limit`: also caps the "missing from sitemap" pass. */
+  /** `--limit`: also caps the "missing from sitemap" pass; the crawler's page budget (2N) caps the total. */
   limit?: number | null;
   /** Site origin; when the sitemap yields no URLs the crawl is seeded from its homepage. */
   origin?: string | null;
@@ -97,6 +97,7 @@ const VALIDATOR_TIMEOUT_MS = CRAWL_SETTINGS.VALIDATOR_TIMEOUT_MS;
 // Site-wide validators
 import { DuplicateChecker } from '../analyzers/site-wide/duplicate-checker';
 import { StructuredDataValidator } from '../analyzers/site-wide/structured-data-validator';
+import { probeUncrawledSitemapUrls } from './sitemap-url-probe';
 import { LinkStructureAnalyzer } from '../analyzers/site-wide/link-structure-analyzer';
 import { SocialMediaValidator } from '../analyzers/site-wide/social-media-validator';
 import { AnalyticsValidator } from '../analyzers/site-wide/analytics-validator';
@@ -529,13 +530,16 @@ class AuditOrchestrator {
    * would falsely land in the notCrawled bucket.
    * @private
    */
-  static #reconcileSitemapStatusCodes(
+  static async #reconcileSitemapStatusCodes(
     pages: Record<string, PageInfo>,
     sitemapUrlsRecord: Record<string, unknown>,
     saveError: SaveErrorFn,
+    origin: string,
+    probeUncrawled: boolean,
+    beyondLimit: string[] = [],
   ) {
     const sitemapUrls = Object.keys(sitemapUrlsRecord);
-    if (sitemapUrls.length === 0) return;
+    if (sitemapUrls.length === 0 && beyondLimit.length === 0) return;
 
     const buckets = {
       redirect: [] as string[], // 3xx
@@ -557,6 +561,18 @@ class AuditOrchestrator {
       else if (status >= 500) buckets.serverError.push(url);
     }
 
+    // Sitemap URLs the crawl never reached: check a sample directly, so a confirmed 404 is
+    // reported as one instead of hiding in "not crawled".
+    let probeNote = '';
+    if (probeUncrawled && (buckets.notCrawled.length || beyondLimit.length)) {
+      const probe = await probeUncrawledSitemapUrls([...buckets.notCrawled, ...beyondLimit], origin);
+      if (probe.missing.size) {
+        buckets.notFound.push(...probe.missing.keys());
+        buckets.notCrawled = buckets.notCrawled.filter((u) => !probe.missing.has(u));
+        probeNote = ` ${probe.missing.size} of them were not crawled; a direct check of ${probe.checked} uncrawled sitemap URL(s) found them returning 404/410.`;
+      }
+    }
+
     const formatExamples = (urls: string[], limit = 5) => {
       const list = urls.slice(0, limit).map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`).join('');
       const more = urls.length > limit ? ` (showing ${limit} of ${urls.length})` : '';
@@ -567,7 +583,7 @@ class AuditOrchestrator {
       const { list, more } = formatExamples(buckets.notFound);
       saveError(
         `Sitemap contains URLs that return 4xx`,
-        `${buckets.notFound.length} URL(s) in the sitemap return a 4xx status${more}. The sitemap should not include broken pages — it wastes crawl budget and signals low quality:<ul>${list}</ul>`,
+        `${buckets.notFound.length} URL(s) in the sitemap return a 4xx status${more}. The sitemap should not include broken pages — it wastes crawl budget and signals low quality.${probeNote}<ul>${list}</ul>`,
         SEVERITY.HIGH,
       );
     }
@@ -678,6 +694,9 @@ class AuditOrchestrator {
     saveError: SaveErrorFn,
     sitemapUrls: Record<string, unknown> = {},
     siteTextFiles?: SiteTextFilesData,
+    /** `probeUncrawledSitemapUrls`: check a sample of sitemap URLs the crawl never reached (not in lead scans). */
+    /** `sitemapUrlsBeyondLimit`: sitemap URLs `--limit` cut before the crawl, probed with the rest. */
+    options: { probeUncrawledSitemapUrls?: boolean; sitemapUrlsBeyondLimit?: string[] } = {},
   ) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
@@ -908,7 +927,14 @@ class AuditOrchestrator {
     // they read the fully-reloaded page set, not a partially-evicted one.
     AuditOrchestrator.#reportOrphanedPages(pageData.pages, saveError);
     AuditOrchestrator.#reportPagesMissingFromSitemap(pageData.pages, sitemapUrls, saveError);
-    AuditOrchestrator.#reconcileSitemapStatusCodes(pageData.pages, sitemapUrls, saveError);
+    await AuditOrchestrator.#reconcileSitemapStatusCodes(
+      pageData.pages,
+      sitemapUrls,
+      saveError,
+      origin,
+      options.probeUncrawledSitemapUrls ?? false,
+      options.sitemapUrlsBeyondLimit ?? [],
+    );
 
     await AuditOrchestrator.checkAdsTxtGate(pageData.pages, origin, saveError, siteTextFiles);
 

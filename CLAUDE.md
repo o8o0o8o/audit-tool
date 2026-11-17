@@ -443,6 +443,7 @@ audit-results/
 - `changefreq=always`+`priority=1.0` abuse (>80% of URLs)
 - 4xx / 5xx URLs in sitemap (reconciled post-crawl against actual status codes)
 - 3xx redirects in sitemap
+- Sitemap URLs the crawl never reached (incl. those cut by `--limit`): an even sample of up to 50 is checked directly; a 404/410 confirmed by GET joins the 4xx finding (main audit only)
 - Incorrect origin
 - Exceeds 50,000 URLs
 - Missing in robots.txt
@@ -461,6 +462,7 @@ audit-results/
 - Self-referential hreflang missing
 - Bidirectional hreflang reciprocity violations
 - Duplicate hreflang assignments within a language group
+- A site whose pages declare two or more languages in `<html lang>` counts as multilanguage even with no hreflang, so missing hreflang is reported
 
 ### Visual Issues
 
@@ -502,6 +504,7 @@ Site-wide, fetched once per audit (`favicon-manifest-validator.ts`); timeouts, n
 
 - Outbound/external links are checked with a browser user agent: HEAD, confirmed with GET on any error, redirects followed (`lib/utils/link-status.ts`). Only 404/410 and persistent 5xx are broken; 401/403/405/429/999 etc. are "blocked" (bot protection), kept in `blocked`, never reported as broken
 - A link's accessible name is its text, then `aria-label`, then a contained image's `alt`
+- Internal links point to a missing page (HIGH): a crawled page answering 404/410 that working pages link to, grouped by path
 - Open-redirect checks only same-site links (third-party share intents are ignored)
 
 ### Privacy Issues

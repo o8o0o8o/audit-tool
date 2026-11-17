@@ -489,9 +489,9 @@ void describe('truth gate: template text, hreflang, sitemap, libraries', () => {
     assert.equal(pass.highlights[0]?.type, 'missing-hreflang');
     assert.match(
       pass.highlights[0].fact,
-      /^The site has pages in Dutch, English and French, but none of them tells search engines/,
+      /^The site has pages in Dutch, English and French, but none of the 3 pages we scanned tells search engines/,
     );
-    assert.match(pass.highlights[0].fact, /no hreflang in the 3 pages scanned, their HTTP headers or the sitemap$/);
+    assert.match(pass.highlights[0].fact, /no hreflang in those pages, their HTTP headers or the sitemap$/);
 
     const inSitemap = await runGate(
       multilingual(),

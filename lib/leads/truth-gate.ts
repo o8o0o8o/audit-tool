@@ -766,7 +766,8 @@ async function checkMissingHreflang(c: MissingHreflangCandidate, ctx: CheckConte
     type: c.type,
     rootCause: c.rootCause,
     angle: c.angle,
-    fact: `The site has pages in ${list}, but none of them tells search engines about its other language versions: no hreflang in the ${c.pagesScanned} pages scanned${files.length ? ', their HTTP headers or the sitemap' : ' or their HTTP headers'}`,
+    // Scoped to what was scanned: a site can carry hreflang on pages outside the sample.
+    fact: `The site has pages in ${list}, but none of the ${c.pagesScanned} pages we scanned tells search engines about its other language versions: no hreflang in those pages${files.length ? ', their HTTP headers or the sitemap' : ' or their HTTP headers'}`,
     url: c.pages[0].url,
     evidence: {
       target: c.pages[1].url,

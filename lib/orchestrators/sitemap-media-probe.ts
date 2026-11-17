@@ -13,7 +13,7 @@ export type SitemapMediaFetch = (url: string, timeout: number, options?: Request
 type SaveError = (message: string, detail: string, severity: string) => void;
 
 type MediaKind = 'image' | 'video';
-type Outcome = { kind: 'ok' } | { kind: 'blocked' } | { kind: '4xx' | '5xx'; status: number } | { kind: 'unreachable' };
+export type Outcome = { kind: 'ok' } | { kind: 'blocked' } | { kind: '4xx' | '5xx'; status: number } | { kind: 'unreachable' };
 type FailureBucket = '4xx' | '5xx' | 'unreachable';
 
 const MAX_REDIRECTS = 5;
@@ -33,7 +33,7 @@ const BUCKET_SEVERITY: Record<FailureBucket, string> = {
 };
 
 /** Follows redirects by hand so every hop passes the SSRF guard; returns the final status. */
-async function requestFollowing(
+export async function requestFollowing(
   url: string,
   method: 'HEAD' | 'GET',
   originHost: string | undefined,
@@ -61,7 +61,7 @@ async function probeOnce(url: string, originHost: string | undefined, fetchFn: S
   return requestFollowing(url, 'GET', originHost, fetchFn);
 }
 
-async function probeUrl(url: string, originHost: string | undefined, fetchFn: SitemapMediaFetch): Promise<Outcome> {
+export async function probeUrl(url: string, originHost: string | undefined, fetchFn: SitemapMediaFetch): Promise<Outcome> {
   let status: number | undefined;
   for (let attempt = 0; attempt < 2 && status === undefined; attempt++) {
     status = await probeOnce(url, originHost, fetchFn).catch(() => undefined);
@@ -73,7 +73,7 @@ async function probeUrl(url: string, originHost: string | undefined, fetchFn: Si
   return { kind: 'ok' };
 }
 
-async function runLimited<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+export async function runLimited<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   let next = 0;
   const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) await worker(items[next++]);

@@ -42,6 +42,9 @@ export function isRevealOnly(hiddenHrefs: string[], servedHtml: string): boolean
   return hiddenHrefs.every((h) => served.has(h));
 }
 
+/** Only small numbers, to avoid false positives on product/article IDs. */
+const BARE_NUMBER = /\/(\d{1,4})\/?$/;
+
 class PaginationAnalyzer {
   /**
    * Analyze pagination implementation
@@ -83,7 +86,7 @@ class PaginationAnalyzer {
     paginationData.relNext = relLinks.next;
 
     // 2. Detect pagination patterns in URL
-    const urlPagination = this.#analyzeUrlPagination(url);
+    const urlPagination = this.analyzeUrlPagination(url);
     if (urlPagination.isPaginated) {
       paginationData.hasPagination = true;
       paginationData.currentPage = urlPagination.currentPage;
@@ -236,22 +239,23 @@ class PaginationAnalyzer {
   }
 
   /**
-   * Analyze URL for pagination patterns
-   * @private
+   * Analyze URL for pagination patterns. A bare trailing number that reads as a year (/draft/2026,
+   * /archive/1999) is a dated page, not page 2026 of a series.
    */
-  static #analyzeUrlPagination(url: string) {
+  static analyzeUrlPagination(url: string) {
     const patterns = [
       /[?&]page=(\d+)/i,
       /[?&]p=(\d+)/i,
       /\/page\/(\d+)/i,
       /\/p\/(\d+)/i,
-      /\/(\d{1,4})\/?$/, // Only match small numbers to avoid false-positives on product/article IDs
+      BARE_NUMBER,
       /-page-(\d+)/i,
       /_page_(\d+)/i,
     ];
 
     for (const pattern of patterns) {
       const match = url.match(pattern);
+      if (match && pattern === BARE_NUMBER && /^(19|20)\d\d$/.test(match[1])) continue;
       if (match) {
         return {
           isPaginated: true,

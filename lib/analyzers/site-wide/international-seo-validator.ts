@@ -6,6 +6,20 @@ import type { Issue, PageInfo } from '../../types';
  * Site-wide International SEO Validator
  * Checks international SEO and hreflang consistency across all pages.
  */
+/**
+ * Primary languages declared in `<html lang>` by pages that loaded (200), each on at least two
+ * pages so one stray page in another language does not make a site multilanguage.
+ */
+export function declaredLanguages(allPages: Record<string, PageInfo>): string[] {
+  const counts = new Map<string, number>();
+  for (const page of Object.values(allPages)) {
+    if ((page.status ?? page.statusCode) !== 200) continue;
+    const lang = String(page.internationalSEO?.langAttribute ?? '').trim().toLowerCase().split(/[-_]/)[0];
+    if (/^[a-z]{2,3}$/.test(lang)) counts.set(lang, (counts.get(lang) ?? 0) + 1);
+  }
+  return [...counts].filter(([, n]) => n >= 2).map(([lang]) => lang);
+}
+
 class InternationalSEOValidator {
   /**
    * Validate international SEO consistency across all pages.
@@ -15,6 +29,13 @@ class InternationalSEOValidator {
    * @returns {Object} { issues: [], warnings: [], stats: {} }
    */
   static validateInternationalSEOConsistency(allPages: Record<string, PageInfo>, isMultiLang: boolean) {
+    // No hreflang anywhere means hreflang-based detection says "one language". Pages that declare
+    // two languages in <html lang> are still a multilanguage site, and the missing hreflang is the
+    // finding (Report 7b), not a reason to skip.
+    if (!isMultiLang && declaredLanguages(allPages).length >= 2) {
+      console.log('\nPages declare several languages in <html lang> without hreflang; checking international SEO');
+      isMultiLang = true;
+    }
     if (!isMultiLang) {
       console.log('\nSite is not multilanguage, skipping international SEO analysis');
       return { issues: [], warnings: [], stats: {} };

@@ -45,6 +45,48 @@ class LinkStructureAnalyzer {
    * @param {Object} incomingLinks - Object with incoming link counts { url: count }
    * @returns {Object} { issues: [], hubPages: [], orphanedPages: [], mostLinkedPages: [] }
    */
+  /**
+   * One finding per crawled page that returned 404 or 410 and is linked from at least one crawled
+   * page that loaded. Largest number of linking pages first, at most 25 targets.
+   */
+  static linksToMissingPages(allPages: Record<string, PageInfo>, incomingLinks: Record<string, string[] | number>): Issue[] {
+    // Grouped by path: a link that carries the current page in its query (a language switch, say)
+    // is one dead target, not one per page.
+    const byPath = new Map<string, { url: string; status: number; from: Set<string>; variants: number }>();
+    for (const url in allPages) {
+      const status = allPages[url]?.status ?? allPages[url]?.statusCode;
+      if (status !== 404 && status !== 410) continue;
+      const incoming = incomingLinks[url];
+      const from = Array.isArray(incoming)
+        ? incoming.filter((src) => src !== url && (allPages[src]?.status ?? allPages[src]?.statusCode ?? 200) < 400)
+        : [];
+      if (!from.length) continue;
+      let key = url;
+      try {
+        const u = new URL(url);
+        key = u.origin + u.pathname;
+      } catch {
+        /* keep the raw URL */
+      }
+      const entry = byPath.get(key) ?? { url, status, from: new Set<string>(), variants: 0 };
+      entry.variants++;
+      from.forEach((src) => entry.from.add(src));
+      byPath.set(key, entry);
+    }
+    const targets = [...byPath.values()].map((t) => ({ ...t, from: [...t.from] }));
+    targets.sort((a, b) => b.from.length - a.from.length);
+    return targets.slice(0, 25).map(({ url, status, from, variants }) => ({
+      message: 'Internal links point to a missing page',
+      detail:
+        `<a href="${escapeHtml(url)}">${escapeHtml(shortenUrl(url))}</a>` +
+        (variants > 1 ? ` (${variants} query-string variants)` : '') +
+        ` returns HTTP ${status} and is linked from ${from.length} crawled page(s), e.g. ` +
+        from.slice(0, 3).map((src) => `<a href="${escapeHtml(src)}">${escapeHtml(shortenUrl(src))}</a>`).join(', ') +
+        '. Fix or remove the link; when it sits in the header or footer, one template change fixes every page.',
+      severity: SEVERITY.HIGH,
+    }));
+  }
+
   static analyzeLinkStructure(allPages: Record<string, PageInfo>, incomingLinks: Record<string, string[] | number>) {
     console.log('\nAnalyzing site-wide link structure...');
 
@@ -174,6 +216,11 @@ class LinkStructureAnalyzer {
         severity: SEVERITY.HIGH,
       });
     }
+
+    // Report 1b: crawled pages that answered 404/410 while other crawled pages link to them. The
+    // per-page broken-link count above only knows statuses seen before the page was analysed, so a
+    // dead target found later in the crawl (a footer or header link on every page) went unreported.
+    issues.push(...LinkStructureAnalyzer.linksToMissingPages(allPages, incomingLinks));
 
     // Report 2: Hub pages (potential link equity distribution issues)
     if (linkStats.hubPages.length > 10) {

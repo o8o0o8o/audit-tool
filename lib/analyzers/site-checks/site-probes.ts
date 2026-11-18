@@ -21,6 +21,7 @@ import { ExposedFilesProbe, candidateDirectories } from './exposed-files-probe';
 import { NotFoundProbe } from './not-found-probe';
 import { SubdomainTakeoverAnalyzer, collectSiteHosts } from './subdomain-takeover';
 import { JsSecretsScanner, collectScriptUrls } from './js-secrets-scanner';
+import { JsLibraryScan } from './js-library-scan';
 import { OpenBucketProbe } from './open-bucket-probe';
 import { CorsProbe, selectApiUrls } from './cors-probe';
 import { AbandonedScriptDomains } from './abandoned-script-domains';
@@ -256,9 +257,19 @@ export function siteProbeSteps(origin: string, pages: Record<string, PageInfo>, 
       : []),
     // Passive: the public scripts are still read for key patterns, but a Firebase database named in
     // them is not queried (that would be an unauthenticated read of a data store).
+    // The same downloads are read for libraries with a published advisory (`js-library-scan.ts`).
     [
       'JS secrets',
-      () => JsSecretsScanner.scan(collectScriptUrls(origin, hints.scripts), undefined, { checkFirebase: !passive }),
+      async () => {
+        const libraries = new JsLibraryScan();
+        for (const url of hints.scripts) libraries.addUrl(url);
+        const secrets = await JsSecretsScanner.scan(collectScriptUrls(origin, hints.scripts), undefined, {
+          checkFirebase: !passive,
+          onScript: (url, body) => libraries.addScript(url, body),
+        });
+        const found = libraries.result();
+        return { issues: [...secrets.issues, ...found.issues], checks: [...secrets.checks, ...found.checks] };
+      },
     ],
     ['open buckets', () => OpenBucketProbe.probe(allAssets)],
     ['CORS', () => CorsProbe.probe(origin, selectApiUrls(origin, hints.api))],

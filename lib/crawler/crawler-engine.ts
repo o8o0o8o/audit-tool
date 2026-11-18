@@ -113,6 +113,9 @@ import {
 } from './page-data-builder';
 import { installUnloadCounter } from '../analyzers/performance/bfcache-analyzer';
 import { runAnalyzers, ConsoleErrorAnalyzer, CodeCoverageAnalyzer } from './analyzer-runner';
+import { InteractionProbe } from '../analyzers/visual/interaction-probe';
+import { browserIssueFindings, trackBrowserIssues } from '../analyzers/seo/browser-issues-analyzer';
+import { axeIssues } from '../analyzers/accessibility/axe-findings';
 import { PaginationAnalyzer } from '../analyzers/seo/pagination-analyzer';
 import { RepresentativeSampler } from './representative-sampler';
 
@@ -410,6 +413,8 @@ class CrawlerEngine {
 
     // Set up console error tracking
     const consoleTracker = ConsoleErrorAnalyzer.createConsoleTracker(page);
+    // Chrome's own verdicts on the page (blocked requests, failed stylesheets, quirks mode).
+    const issueTracker = await trackBrowserIssues(page);
 
     // Define handlers so we can remove them later
     const requestHandler = async (request: PlaywrightRequest) => {
@@ -715,6 +720,8 @@ class CrawlerEngine {
     // Get console data and cleanup
     const consoleData = consoleTracker.getResults();
     consoleTracker.cleanup();
+    const browserIssues = issueTracker.results();
+    await issueTracker.cleanup();
 
     // Capture response headers for freshness analysis
     const responseHeaders: Record<string, string | undefined> = {};
@@ -753,6 +760,7 @@ class CrawlerEngine {
       redirectChain,
       responseHeaders,
       consoleData,
+      browserIssues,
       servedHtml,
       firstLoadShot,
     };
@@ -829,6 +837,7 @@ class CrawlerEngine {
       const discoveredLinksSource = new Map<string, string>();
       const paginationSeriesCounts = new Map<string, number>();
       PaginationAnalyzer.resetProbeState(); // reset per-audit JS-"next" probe budget
+      InteractionProbe.resetProbeState();
 
       let isMultiLang = false;
       let saveCounter = 0; // Track saves to reduce frequency
@@ -1414,6 +1423,7 @@ class CrawlerEngine {
       redirectChain,
       responseHeaders,
       consoleData,
+      browserIssues,
       servedHtml,
       firstLoadShot,
     } = page;
@@ -1669,20 +1679,41 @@ class CrawlerEngine {
       );
     }
 
+    // What the browser itself flagged while the page loaded.
+    if (browserIssues?.length) {
+      const flagged = browserIssueFindings(browserIssues, url);
+      if (flagged.length) pageData.browserIssues = browserIssues.slice(0, 60);
+      for (const issue of flagged) this.#reportIssue(issue.message ?? '', issue.detail ?? '', String(issue.severity));
+    }
+
     // Representative-page evidence capture (after analyzers so accessibility
     // data and the final request log are available).
     if (captureEvidence) {
-      await captureRepresentativeEvidence(chromePage, url, this.#options, requests, pageData.accessibility, {
-        firstLoadShot,
-        clsEntries: clsEntries as CLSEntry[] | undefined,
-        clsValue: CLS,
-        codeCoverage: pageData.codeCoverage,
-        lcp:
-          typeof LCP === 'number' && LCP > 0
-            ? { selector: lcpSelector ?? null, rect: lcpRect ?? null, value: LCP, subParts: lcpSubParts }
-            : undefined,
-        missingHeaders: (pageData.security as { missingHeaders?: string[] } | undefined)?.missingHeaders,
-      });
+      const captured = await captureRepresentativeEvidence(
+        chromePage,
+        url,
+        this.#options,
+        requests,
+        pageData.accessibility,
+        {
+          firstLoadShot,
+          clsEntries: clsEntries as CLSEntry[] | undefined,
+          clsValue: CLS,
+          codeCoverage: pageData.codeCoverage,
+          lcp:
+            typeof LCP === 'number' && LCP > 0
+              ? { selector: lcpSelector ?? null, rect: lcpRect ?? null, value: LCP, subParts: lcpSubParts }
+              : undefined,
+          missingHeaders: (pageData.security as { missingHeaders?: string[] } | undefined)?.missingHeaders,
+        },
+      );
+      // axe-core ran for this page: its rule violations are findings, each tied to a WCAG criterion.
+      if (captured?.axeViolations?.length) {
+        pageData.axeViolations = captured.axeViolations;
+        for (const issue of axeIssues(captured.axeViolations, url)) {
+          this.#reportIssue(issue.message ?? '', issue.detail ?? '', String(issue.severity));
+        }
+      }
     }
 
     // Update the broken-pagination streak using soft-404 detection from the
@@ -1723,6 +1754,24 @@ class CrawlerEngine {
     );
     const linkResult = processLinkTags(linkTags, pageData, url, sitemapUrls, this.#options.origin, this.#reportIssue);
     const isMultiLang = linkResult.isMultiLang;
+
+    // Click probes and the desktop layout pass (--visual). Last of all: they resize the window and
+    // click controls, and nothing reads the page after this.
+    if (
+      this.#visual &&
+      status >= 200 &&
+      status < 300 &&
+      InteractionProbe.shouldProbe(url, this.#options.lead === true)
+    ) {
+      const loadErrors = ((consoleData as { pageerrors?: Array<{ text?: string }> } | undefined)?.pageerrors ?? []).map(
+        (e) => e.text ?? '',
+      );
+      const { shots, ...probe } = await InteractionProbe.run(chromePage, url, this.#options.evidenceDir, loadErrors);
+      pageData.interactionData = probe;
+      if (shots?.length) pageData.visualShots = [...(pageData.visualShots ?? []), ...shots];
+      for (const issue of probe.issues)
+        this.#reportIssue(issue.message ?? '', issue.detail ?? '', String(issue.severity));
+    }
 
     results.pageData.processedPages.add(url);
 

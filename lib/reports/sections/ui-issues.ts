@@ -35,7 +35,12 @@ interface UiFinding {
 }
 
 function visualIssues(page: PageInfo): Issue[] {
-  return [...(page.brokenMediaData?.issues ?? []), ...(page.textIntegrityData?.issues ?? [])];
+  return [
+    ...(page.brokenMediaData?.issues ?? []),
+    ...(page.textIntegrityData?.issues ?? []),
+    ...(page.layoutData?.issues ?? []),
+    ...(page.interactionData?.issues ?? []),
+  ];
 }
 
 type AnalysisDetails = Record<string, { severity?: unknown; examples?: unknown } | undefined>;

@@ -227,7 +227,11 @@ export class JsSecretsScanner {
   static async scan(
     scriptUrls: string[],
     fetcher: HttpProbeFetcher = defaultHttpFetcher,
-    opts: { checkFirebase?: boolean } = {},
+    opts: {
+      checkFirebase?: boolean;
+      /** Called with every script that was downloaded, so other checks can read it without a second request. */
+      onScript?: (url: string, body: string) => void;
+    } = {},
   ): Promise<SiteProbeResult> {
     const checkFirebase = opts.checkFirebase !== false;
     const scripts = [...new Set(scriptUrls)].slice(0, MAX_SCRIPTS);
@@ -239,6 +243,11 @@ export class JsSecretsScanner {
       const res = await fetcher(url, { maxBytes: MAX_SCRIPT_BYTES, timeoutMs: 15000 });
       if (res?.status !== 200) return;
       fetched++;
+      try {
+        opts.onScript?.(url, res.body);
+      } catch {
+        // a reader of the script must not stop the secrets scan
+      }
       for (const db of findFirebaseDatabases(res.body)) firebase.add(db);
       for (const s of findSecrets(res.body)) {
         const p = SECRET_PATTERNS.find((x) => x.id === s.patternId)!;

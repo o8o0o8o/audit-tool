@@ -82,7 +82,14 @@ import {
 } from '../lib/leads/fingerprint';
 import { PlaywrightGateBrowser } from '../lib/leads/gate-browser';
 import { defaultDohResolvers } from '../lib/leads/doh';
-import { buildLeadFile, leadDir, readLeadFile, writeLeadFile, type LeadFile } from '../lib/leads/lead-file';
+import {
+  buildLeadFile,
+  gateRunStamp,
+  leadDir,
+  readLeadFile,
+  writeLeadFile,
+  type LeadFile,
+} from '../lib/leads/lead-file';
 import {
   appendReviewRows,
   precisionByType,
@@ -555,8 +562,10 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
     return null;
   }
   const stack = readStack(domain)?.profile ?? null;
+  // Each gate run keeps its evidence in its own folder, so a later run never overwrites it.
+  const runStamp = gateRunStamp(new Date().toISOString());
   const browser = useBrowser
-    ? new PlaywrightGateBrowser(path.join(leadDir(runDir), 'evidence'), leadDir(runDir))
+    ? new PlaywrightGateBrowser(path.join(leadDir(runDir), 'evidence', runStamp), leadDir(runDir))
     : null;
   let lead: LeadFile;
   try {
@@ -574,6 +583,7 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
       gate,
       fitScore: record.fit_score ? Number(record.fit_score) : null,
       scannedAt: record.stage_at ?? null,
+      runStamp,
     });
   } finally {
     await browser?.close();
@@ -601,6 +611,21 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
     `    gate: ${lead.causes.length} distinct cause(s)${lead.causes.length ? ` — ${lead.causes.join(', ')}` : ''} → ${next}${control}`,
   );
   for (const h of lead.highlights) console.log(`      • ${h.fact}`);
+  const moved = (lead.previous?.changes ?? []).filter((c) => c.change !== 'confirmed');
+  if (lead.previous) {
+    console.log(
+      `      since the run of ${lead.previous.checkedAt.slice(0, 16).replace('T', ' ')}: ${moved.length ? `${moved.length} change(s)` : 'every fact confirmed again'}`,
+    );
+    for (const c of moved) {
+      const what =
+        c.change === 'new'
+          ? `new: ${c.after}`
+          : c.change === 'gone'
+            ? `gone: ${c.before} (${c.reason})`
+            : `changed: ${c.before} → ${c.after}`;
+      console.log(`        ${c.rootCause} ${what}`.slice(0, 400));
+    }
+  }
   if (lead.disclosure.length) {
     console.log(
       `      ⚠️  Security exposure found (${lead.disclosure.map((d) => d.check).join(', ')}): disclose it before any outreach. Row marked disclosed=pending.`,

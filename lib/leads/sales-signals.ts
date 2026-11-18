@@ -12,10 +12,16 @@ import type { LinkPosition } from '../analyzers/site-wide/crawl-graph-checks';
 import { LIBRARIES } from '../analyzers/security/js-library-analyzer';
 import { okPages, formatDateParts, type RunData, type RunPage } from './run-data';
 import { trackingCookies, type TrackingCookie } from './tracking-cookies';
+import { isMoneyPath } from './page-selector';
+import { vendorOf } from './csp';
 import type { EolHit, StackProfile } from './types';
 
 /** Finding types the truth gate knows how to confirm. Anything else stays in the full audit. */
 export const ALLOWLIST = [
+  'blocked-by-policy',
+  'content-not-served',
+  'product-no-price',
+  'missing-page-status',
   'analytics-gap',
   'email-auth',
   'dead-nav-link',
@@ -154,6 +160,18 @@ export interface VulnerableLibraryCandidate {
   page: string;
   /** Script files on that page that may be the library; the gate reads the version from their banner. */
   scripts: string[];
+  /**
+   * Set when the scan read the library from a script's address or content against the full advisory
+   * table (`js-vulnerability-db.ts`): the gate downloads this script and reads the version from its
+   * content. `ids` and `advisories` are what the scan found for that version.
+   */
+  contentScript?: {
+    url: string;
+    via: 'uri' | 'filename' | 'filecontent';
+    ids: string;
+    advisories: number;
+    worst: string;
+  };
 }
 
 export interface TrackingBeforeConsentCandidate {
@@ -211,7 +229,53 @@ export interface AnalyticsGapCandidate {
   note: string;
 }
 
+/** A page whose text exists only after JavaScript runs: the HTML the server sends is close to empty. */
+export interface ContentNotServedCandidate {
+  type: 'content-not-served';
+  angle: Angle;
+  rootCause: 'content-needs-javascript';
+  url: string;
+  keyReason: 'homepage' | 'selling page' | 'main navigation';
+  /** Words in the page's text in the scan's browser, after JavaScript ran. */
+  renderedWords: number;
+}
+
+/** A product page whose schema.org Product data carries no offer. */
+export interface ProductNoPriceCandidate {
+  type: 'product-no-price';
+  angle: Angle;
+  rootCause: 'product-data';
+  url: string;
+}
+
+/** The audit's probe got `200` for an address that cannot exist. */
+export interface MissingPageStatusCandidate {
+  type: 'missing-page-status';
+  angle: Angle;
+  rootCause: 'missing-page-status';
+  origin: string;
+  note: string;
+}
+
+/** Something the page asks for that its own Content Security Policy blocks, on the pages where the scan saw it. */
+export interface BlockedByPolicyCandidate {
+  type: 'blocked-by-policy';
+  angle: Angle;
+  rootCause: 'blocked-by-own-policy';
+  /** The blocked address, and the directive the browser named (`script-src-elem`, `connect-src`…). */
+  blocked: string;
+  directive: string;
+  /** The tag at that address when it is one we know (`the Microsoft Advertising (Bing Ads) tag`), else null. */
+  vendor: string | null;
+  /** Scanned pages where the browser blocked it; the first is the one the gate reads. */
+  pages: string[];
+}
+
 export type Candidate =
+  | BlockedByPolicyCandidate
+  | ContentNotServedCandidate
+  | ProductNoPriceCandidate
+  | MissingPageStatusCandidate
   | EmailAuthCandidate
   | AnalyticsGapCandidate
   | TrackingBeforeConsentCandidate
@@ -229,7 +293,7 @@ export type Candidate =
 /** Audit findings that are deliberately not candidates, whatever their severity. */
 export const NOT_ON_ALLOWLIST: Array<[RegExp, string]> = [
   [/orphan/i, 'orphan pages'],
-  [/soft 404/i, 'soft 404s'],
+  [/soft 404/i, 'soft 404s (a missing page that answers 200 is a candidate of its own)'],
   [/crawl budget/i, 'crawl-budget estimates'],
   [/duplicate (?:title|description|content)|near-duplicate/i, 'duplicate content'],
   [/anchor text/i, 'anchor-text findings'],
@@ -607,10 +671,9 @@ const PATCHED_BY_CMS: Array<{ cms: RegExp; lib: RegExp }> = [{ cms: /drupal/i, l
  */
 export function vulnerableLibraryCandidates(run: RunData, stack: StackProfile | null): VulnerableLibraryCandidate[] {
   const finding = run.findings[VULNERABLE_LIBRARY_FINDING];
-  if (!finding?.examples?.length) return [];
   const eolProducts = new Set((stack?.eol ?? []).map((h) => h.product));
   const byLib = new Map<string, VulnerableLibraryCandidate>();
-  for (const example of finding.examples) {
+  for (const example of finding?.examples ?? []) {
     const page = /href="([^"]+)"/.exec(example)?.[1]?.replace(/&amp;/g, '&');
     if (!page) continue;
     const text = example.replace(/<[^>]*>/g, '');
@@ -646,8 +709,55 @@ export function vulnerableLibraryCandidates(run: RunData, stack: StackProfile | 
       });
     }
   }
-  return [...byLib.values()];
+  // Libraries the site-level script scan found against the full advisory table, bundled ones included.
+  const home = run.metadata.leadScan?.home ?? okPages(run)[0]?.url ?? '';
+  const taken = new Set([...byLib.keys()].map(libraryKey));
+  const rows = (siteCheck(run, 'js-libraries')?.details ?? []) as Array<{
+    library?: string;
+    version?: string;
+    via?: 'uri' | 'filename' | 'filecontent';
+    script?: string;
+    ids?: string;
+    advisories?: number;
+    worst?: string;
+    fixedIn?: string;
+  }>;
+  for (const r of rows) {
+    if (!r.library || !r.version || !r.script || !r.fixedIn) continue;
+    const k = libraryKey(r.library);
+    if (taken.has(k)) continue;
+    if (stack?.cms && PATCHED_BY_CMS.some((p) => p.cms.test(stack.cms ?? '') && p.lib.test(k))) continue;
+    if (eolProducts.has(k) || (k === 'angularjs' && eolProducts.has('angular'))) continue;
+    taken.add(k);
+    byLib.set(`db:${k}`, {
+      type: 'vulnerable-library',
+      angle: 'outdated software',
+      rootCause: 'vulnerable-libraries',
+      lib: r.library,
+      label: r.library,
+      version: r.version,
+      advisory: r.ids ?? '',
+      fixedIn: r.fixedIn,
+      page: home,
+      scripts: [],
+      contentScript: {
+        url: r.script,
+        via: r.via ?? 'filecontent',
+        ids: r.ids ?? '',
+        advisories: r.advisories ?? 1,
+        worst: r.worst ?? 'medium',
+      },
+    });
+  }
+  // Worst first, and at most a handful: each one costs the gate a download.
+  const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  return [...byLib.values()]
+    .sort((a, b) => (rank[a.contentScript?.worst ?? 'medium'] ?? 2) - (rank[b.contentScript?.worst ?? 'medium'] ?? 2))
+    .slice(0, 6);
 }
+
+/** `moment.js` and `Moment`, `DOMPurify` and `dompurify`: one library. */
+const libraryKey = (name: string) => name.toLowerCase().replace(/\.js$/, '');
 
 /**
  * Analytics or advertising cookies in the browser after the homepage loaded, before anything was
@@ -772,6 +882,150 @@ export function analyticsGapCandidates(run: RunData): AnalyticsGapCandidate[] {
   return out;
 }
 
+const MAX_BLOCKED_CANDIDATES = 4;
+
+/**
+ * Resources the scan's browser refused under the site's Content Security Policy, one candidate per
+ * blocked host, tags we can name first. Inline scripts and `eval` have no address to check a policy
+ * against, so they are not candidates.
+ */
+export function blockedByPolicyCandidates(run: RunData): BlockedByPolicyCandidate[] {
+  const byHost = new Map<string, BlockedByPolicyCandidate>();
+  for (const page of okPages(run)) {
+    for (const issue of page.browserIssues ?? []) {
+      if (issue.kind !== 'csp' || !/^https?:\/\//.test(issue.subject)) continue;
+      const directive = issue.reason.split(':').pop()?.trim() ?? '';
+      let host: string;
+      try {
+        host = new URL(issue.subject).hostname;
+      } catch {
+        continue;
+      }
+      const had = byHost.get(host);
+      if (had) {
+        if (!had.pages.includes(page.url)) had.pages.push(page.url);
+        continue;
+      }
+      byHost.set(host, {
+        type: 'blocked-by-policy',
+        angle: 'analytics data loss',
+        rootCause: 'blocked-by-own-policy',
+        blocked: issue.subject,
+        directive,
+        vendor: vendorOf(issue.subject),
+        pages: [page.url],
+      });
+    }
+  }
+  return [...byHost.values()]
+    .sort((a, b) => Number(b.vendor !== null) - Number(a.vendor !== null) || b.pages.length - a.pages.length)
+    .slice(0, MAX_BLOCKED_CANDIDATES);
+}
+
+/** Fewest words a rendered page must show before "the served HTML is empty" is worth checking. */
+export const CONTENT_MIN_RENDERED_WORDS = 200;
+const MAX_CONTENT_CANDIDATES = 6;
+const JS_CONTENT_FINDING = /^significant content rendered by javascript/i;
+
+/**
+ * Key pages with real text in the browser, for the gate to fetch without a browser: the homepage,
+ * selling pages and pages in the main navigation. A quiz, a map or a video page that is built by
+ * script is not a candidate. The scan keeps only the rendered word count per page, so the pages its
+ * own served-vs-rendered check named with a near-empty served HTML go first.
+ */
+export function contentNotServedCandidates(run: RunData): ContentNotServedCandidate[] {
+  const home = run.metadata.leadScan?.home;
+  const selected = run.metadata.leadScan?.selected ?? [];
+  const reasonOf = new Map(selected.map((p) => [key(p.url), p.reason]));
+  const named = new Set<string>();
+  for (const [message, detail] of Object.entries(run.findings)) {
+    if (!JS_CONTENT_FINDING.test(message.replace(/<[^>]*>/g, ''))) continue;
+    for (const example of detail.examples ?? []) {
+      const counts = /Raw HTML has (\d+) words/.exec(example);
+      const href = /href="([^"]+)"/.exec(example);
+      if (counts && href && Number(counts[1]) < 60) named.add(key(href[1]));
+    }
+  }
+  const out: Array<ContentNotServedCandidate & { rank: number }> = [];
+  for (const page of okPages(run)) {
+    const renderedWords = page.contentQuality?.wordCount ?? 0;
+    if (renderedWords < CONTENT_MIN_RENDERED_WORDS) continue;
+    let pathname: string;
+    try {
+      pathname = new URL(page.url).pathname;
+    } catch {
+      continue;
+    }
+    if (UTILITY.test(pathname)) continue;
+    const k = key(page.url);
+    const reason = reasonOf.get(k);
+    const keyReason: ContentNotServedCandidate['keyReason'] | null =
+      (home && k === key(home)) || reason === 'homepage'
+        ? 'homepage'
+        : reason === 'money' || isMoneyPath(pathname)
+          ? 'selling page'
+          : reason === 'navigation'
+            ? 'main navigation'
+            : null;
+    if (!keyReason) continue;
+    const rank = (named.has(k) ? 0 : 10) + { homepage: 0, 'selling page': 1, 'main navigation': 2 }[keyReason];
+    out.push({
+      type: 'content-not-served',
+      angle: 'search visibility blockers',
+      rootCause: 'content-needs-javascript',
+      url: page.url,
+      keyReason,
+      renderedWords,
+      rank,
+    });
+  }
+  return out
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, MAX_CONTENT_CANDIDATES)
+    .map(({ rank: _rank, ...c }) => c);
+}
+
+const MAX_PRODUCT_CANDIDATES = 3;
+
+/** Product pages whose schema.org Product, as the scan's browser saw it, has no `offers`. */
+export function productNoPriceCandidates(run: RunData): ProductNoPriceCandidate[] {
+  const out: ProductNoPriceCandidate[] = [];
+  for (const page of okPages(run)) {
+    const products = (page.structuredData?.jsonLdSchemas ?? []).filter((s) => s.type === 'Product');
+    if (!products.length) continue;
+    if (!products.every((s) => (s.warnings ?? []).some((w) => /\boffers\b/i.test(w)))) continue;
+    out.push({
+      type: 'product-no-price',
+      angle: 'search visibility blockers',
+      rootCause: 'product-data',
+      url: page.url,
+    });
+  }
+  return out.slice(0, MAX_PRODUCT_CANDIDATES);
+}
+
+/** The audit's missing-page probe (`not-found`) got `200 OK` for a random address. */
+export function missingPageStatusCandidates(run: RunData): MissingPageStatusCandidate[] {
+  const check = siteCheck(run, 'not-found');
+  const home = run.metadata.leadScan?.home ?? okPages(run)[0]?.url;
+  if (!check || check.status !== 'fail' || !/\b200\b/.test(check.note ?? '') || !home) return [];
+  let origin: string;
+  try {
+    origin = new URL(home).origin;
+  } catch {
+    return [];
+  }
+  return [
+    {
+      type: 'missing-page-status',
+      angle: 'search visibility blockers',
+      rootCause: 'missing-page-status',
+      origin,
+      note: check.note ?? '',
+    },
+  ];
+}
+
 /** Audit findings the candidates above are built from: not listed as left out. */
 const COVERED_FINDINGS = [
   /^interactive elements without an accessible name/i,
@@ -780,6 +1034,9 @@ const COVERED_FINDINGS = [
 
 export function buildCandidates(run: RunData, stack: StackProfile | null): Candidate[] {
   return [
+    ...blockedByPolicyCandidates(run),
+    ...contentNotServedCandidates(run),
+    ...productNoPriceCandidates(run),
     ...analyticsGapCandidates(run),
     ...emailAuthCandidates(run),
     ...deadLinkCandidates(run),
@@ -787,6 +1044,7 @@ export function buildCandidates(run: RunData, stack: StackProfile | null): Candi
     ...templateTextCandidates(run),
     ...missingHreflangCandidates(run),
     ...noindexCandidates(run),
+    ...missingPageStatusCandidates(run),
     ...sitemapDeadCandidates(run),
     ...vitalsCandidates(run),
     ...trackingBeforeConsentCandidates(run),

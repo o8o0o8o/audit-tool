@@ -47,7 +47,11 @@ const JPEG_QUALITY = 70;
 
 /** Filename-safe slug of a finding message; shot files are `<slug>-<n>.jpg` so on-disk counts work per kind. */
 export const kindSlug = (kind: string) =>
-  kind.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  kind
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
 
 export interface Band {
   kind: string;
@@ -66,7 +70,9 @@ export function planBands(highlights: VisualHighlight[], docHeight: number, maxB
   for (const h of sorted) {
     const top = Math.max(0, h.rect.y - BAND_PADDING_PX);
     const bottom = Math.min(docHeight || Infinity, h.rect.y + h.rect.height + BAND_PADDING_PX);
-    const same = bands.find((b) => b.kind === h.kind && Math.max(b.y + b.height, bottom) - Math.min(b.y, top) <= BAND_MAX_HEIGHT_PX);
+    const same = bands.find(
+      (b) => b.kind === h.kind && Math.max(b.y + b.height, bottom) - Math.min(b.y, top) <= BAND_MAX_HEIGHT_PX,
+    );
     if (same) {
       const end = Math.max(same.y + same.height, bottom);
       same.y = Math.min(same.y, top);
@@ -101,12 +107,43 @@ function countExistingShots(evidenceDir: string): { total: number; byKind: Map<s
   return { total, byKind };
 }
 
+/**
+ * Saves a screenshot the caller already took (the window before or after a click) as a visual shot
+ * of `kind`. Returns null when it cannot be written; evidence is best effort.
+ */
+export function saveVisualShot(
+  evidenceDir: string,
+  url: string,
+  kind: string,
+  name: string,
+  jpeg: Buffer,
+  size: { width: number; height: number },
+  boxes: VisualShotBox[],
+): VisualShot | null {
+  const dirName = `${createSafeFilename(url)}--visual`;
+  const dir = path.join(evidenceDir, dirName);
+  const file = `${kindSlug(kind)}-${name}.jpg`;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, file), jpeg);
+    fs.writeFileSync(
+      path.join(dir, '_meta.json'),
+      JSON.stringify({ url, capturedAt: new Date().toISOString(), kind: 'visual' }, null, 2),
+    );
+  } catch {
+    return null;
+  }
+  return { kind, file: `evidence/${dirName}/${file}`, width: size.width, height: size.height, boxes };
+}
+
 /** Screenshot the bands around a page's visual defects. Best effort: returns what it managed to capture. */
 export async function captureVisualShots(
   page: ChromePage,
   url: string,
   evidenceDir: string,
   highlights: VisualHighlight[],
+  /** Set for a second pass over the same page (`desktop`), so its files do not replace the first pass's. */
+  variant = '',
 ): Promise<VisualShot[]> {
   const existing = countExistingShots(evidenceDir);
   const budget = MAX_VISUAL_SHOTS_PER_AUDIT - existing.total;
@@ -132,7 +169,7 @@ export async function captureVisualShots(
     try {
       const buf = await page.screenshot({ clip, fullPage: true, type: 'jpeg', quality: JPEG_QUALITY, timeout: 5000 });
       fs.mkdirSync(dir, { recursive: true });
-      const file = `${kindSlug(band.kind)}-${i + 1}.jpg`;
+      const file = `${kindSlug(band.kind)}${variant ? `-${variant}` : ''}-${i + 1}.jpg`;
       fs.writeFileSync(path.join(dir, file), buf);
       shots.push({
         kind: band.kind,

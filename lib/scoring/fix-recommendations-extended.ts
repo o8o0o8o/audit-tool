@@ -2226,4 +2226,66 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     effort: '30 minutes',
     fix: 'Text overflows a box with overflow hidden and gets cut off. Let the container grow, allow wrapping, or use text-overflow: ellipsis deliberately.',
   },
+  'Requests blocked by the browser (CORS)': {
+    effort: '1 hour',
+    fix: 'A script on the page asks another origin for data and the browser discards the answer. Send Access-Control-Allow-Origin for this site from that server, or route the request through the site\'s own back end.',
+  },
+  "Resources blocked by the site's own Content Security Policy": {
+    effort: '2 hours',
+    fix: 'The policy forbids something the page itself loads, so that script, style or frame never runs. Add the source to the directive named, or remove the resource.',
+  },
+  'Stylesheet failed to load': {
+    effort: '30 minutes',
+    fix: 'A <link rel="stylesheet"> or @import points to a file that does not load. Fix the address or remove the reference.',
+  },
+  'Page renders in quirks mode': {
+    effort: '15 minutes',
+    fix: 'Put <!DOCTYPE html> on the very first line of the HTML, before any comment, whitespace or byte-order mark.',
+    example: '<!DOCTYPE html>',
+  },
+  'Page uses browser features that are deprecated': {
+    effort: '2 hours',
+    fix: 'Chrome has announced the removal of a feature the page calls. Replace it before the release that drops it; the feature is named in the finding.',
+  },
+  'Text overlaps other text': {
+    effort: '1 hour',
+    fix: 'Two blocks of text are drawn in the same place. Check absolute positioning, negative margins and fixed heights on the blocks named, at the screen width given.',
+  },
+  'Image stretched out of proportion': {
+    effort: '30 minutes',
+    fix: 'The image box has a width and a height that do not match the file. Set object-fit: cover or contain, or remove one of the two sizes so the browser keeps the ratio.',
+    example: 'img { width: 100%; height: auto; }',
+  },
+  'In-page link points to a missing section': {
+    effort: '15 minutes',
+    fix: 'The link goes to #name, and no element on the page has that id. Add the id to the section or correct the link.',
+  },
+  'Duplicate entries in a list': {
+    effort: '30 minutes',
+    fix: 'The same entry appears more than once in one list. Remove the duplicate in the CMS or de-duplicate the data before rendering.',
+  },
+  'Large empty area on page': {
+    effort: '1 hour',
+    fix: 'A block renders with nothing in it. Check that its component gets data and that its content is not hidden behind a failed request or a script error.',
+  },
+  'Page scrolls sideways on desktop': {
+    effort: '1 hour',
+    fix: 'An element is wider than the window. Find it in the browser dev tools (look for a box past the right edge) and constrain its width or let it wrap.',
+  },
+  'Menu button does not open a menu': {
+    effort: '2 hours',
+    fix: 'On a phone-sized screen the menu button reacts to nothing. Check that its click handler is attached after hydration and that no script error stops it.',
+  },
+  'Control does not respond to a click': {
+    effort: '1 hour',
+    fix: 'The control looks clickable and does nothing. Attach its handler, or render it as plain text if it is not meant to be used.',
+  },
+  'JavaScript error when a control is clicked': {
+    effort: '2 hours',
+    fix: 'The click handler throws. Reproduce it with the browser console open and fix the error named.',
+  },
+  'Site search does not work': {
+    effort: '2 hours',
+    fix: 'Searching for a word from the page returns an error or does nothing. Check the search form action, its handler and the search endpoint.',
+  },
 };

@@ -14,6 +14,8 @@ export interface SiteCheckResult {
   status: SiteCheckStatus;
   /** Short plain-text note shown next to the status (record value, reason skipped…). */
   note?: string;
+  /** Machine-readable rows behind the note, for checks whose result other code reads (the lead gate). */
+  details?: unknown[];
 }
 
 /** Persisted in `metadata.json.gz` as `siteChecks`; read by the HTML report section. */

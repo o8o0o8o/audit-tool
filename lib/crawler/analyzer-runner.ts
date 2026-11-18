@@ -60,6 +60,7 @@ import { AnalyticsTrackingAnalyzer } from '../analyzers/analytics/analytics-trac
 import { SecurityAnalyzer } from '../analyzers/security/security-analyzer';
 import { BrokenMediaAnalyzer } from '../analyzers/visual/broken-media-analyzer';
 import { TextIntegrityAnalyzer } from '../analyzers/visual/text-integrity-analyzer';
+import { LayoutIntegrityAnalyzer } from '../analyzers/visual/layout-integrity-analyzer';
 import { AgenticBrowsingAnalyzer } from '../analyzers/agentic/agentic-browsing-analyzer';
 import type { AgenticPageData } from '../analyzers/agentic/agentic-checks';
 import { captureVisualShots } from './visual-shot-capture';
@@ -479,7 +480,8 @@ export async function runAnalyzers(
         analyzerTimeout,
         `Visual screenshot timeout for ${url}`,
       ).catch((e) => {
-        if (options.verbose) console.warn(`[visual] screenshots failed for ${url}: ${e instanceof Error ? e.message : e}`);
+        if (options.verbose)
+          console.warn(`[visual] screenshots failed for ${url}: ${e instanceof Error ? e.message : e}`);
         return [];
       });
       if (shots.length > 0) pageData.visualShots = shots;
@@ -556,7 +558,8 @@ export async function runAnalyzers(
   // never eats that budget; uses its own isolated page. Bounded per-audit by
   // PaginationAnalyzer's probe budget. Only runs for JS-driven "next" controls
   // (static-href series are covered post-crawl by BrokenPaginationAnalyzer).
-  // A lead scan never clicks through a site's controls, so the probe is off there.
+  // A lead scan does not page through listings (each click loads more of the site), so this probe
+  // is off there; the interaction probe at the end of the page's crawl still clicks plain controls.
   if (!options.lead && pageData.paginationData?.nextIsJsControl && PaginationAnalyzer.shouldProbeNext(url)) {
     const probeResult = await withTimeout(
       PaginationAnalyzer.probeJsNext(chromePage, url, options.evidenceDir),
@@ -689,7 +692,9 @@ export async function runAnalyzers(
   try {
     reportIssues(
       {
-        issues: await capturePageHints(chromePage, parsedPage, url, pageData, requests, { navLinks: options.lead === true }),
+        issues: await capturePageHints(chromePage, parsedPage, url, pageData, requests, {
+          navLinks: options.lead === true,
+        }),
       } as AnalyzerResult,
       reportIssue,
       url,
@@ -704,9 +709,17 @@ export async function runAnalyzers(
     .filter(([, r]) => r.resourceType === 'script')
     .map(([u]) => u);
   const pageChecks = await Promise.allSettled([
-    withTimeout(BfcacheAnalyzer.analyze(chromePage, pageData.responseHeaders ?? {}), analyzerTimeout, `bfcache timeout for ${url}`),
+    withTimeout(
+      BfcacheAnalyzer.analyze(chromePage, pageData.responseHeaders ?? {}),
+      analyzerTimeout,
+      `bfcache timeout for ${url}`,
+    ),
     withTimeout(JsLibraryAnalyzer.analyze(chromePage, scriptUrls), analyzerTimeout, `JS library timeout for ${url}`),
-    withTimeout(ConsentModeAnalyzer.analyze(chromePage, Object.keys(requests)), analyzerTimeout, `Consent Mode timeout for ${url}`),
+    withTimeout(
+      ConsentModeAnalyzer.analyze(chromePage, Object.keys(requests)),
+      analyzerTimeout,
+      `Consent Mode timeout for ${url}`,
+    ),
   ]);
   for (const settled of pageChecks) {
     if (settled.status === 'fulfilled') reportIssues(settled.value as AnalyzerResult, reportIssue, url);
@@ -783,6 +796,30 @@ export async function runAnalyzers(
       reportIssues(await withTimeout(run(), analyzerTimeout, `${name} timeout for ${url}`), reportIssue, url);
     } catch {
       /* best-effort */
+    }
+  }
+
+  // Layout defects (--visual). After the analyzers above: it scrolls to the places it checks, and
+  // by now the scroll-loaded pass has brought lazy content in, so an empty block is really empty.
+  if (visual) {
+    try {
+      const layout = await withTimeout(
+        LayoutIntegrityAnalyzer.analyze(chromePage, url),
+        analyzerTimeout,
+        `layout integrity timeout for ${url}`,
+      );
+      pageData.layoutData = layout;
+      reportIssues(layout as unknown as AnalyzerResult, reportIssue, url);
+      if (options.evidenceDir && layout.highlights?.length) {
+        const shots = await withTimeout(
+          captureVisualShots(chromePage, url, options.evidenceDir, layout.highlights),
+          analyzerTimeout,
+          `Layout screenshot timeout for ${url}`,
+        ).catch(() => []);
+        if (shots.length > 0) pageData.visualShots = [...(pageData.visualShots ?? []), ...shots];
+      }
+    } catch (e) {
+      if (options.verbose) console.warn(`[layout] failed for ${url}: ${e instanceof Error ? e.message : e}`);
     }
   }
 

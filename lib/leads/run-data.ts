@@ -29,6 +29,11 @@ export interface RunPage {
   textIntegrityData?: { templateTokens?: string[]; placeholderText?: boolean };
   internationalSEO?: { langAttribute?: string | null; hasHreflang?: boolean };
   visualShots?: Array<{ kind: string; file: string }>;
+  /** What Chrome's Issues panel reported for the page (`browser-issues-analyzer.ts`). */
+  browserIssues?: Array<{ kind: string; subject: string; reason: string }>;
+  /** Words in the page's text after JavaScript ran. */
+  contentQuality?: { wordCount?: number };
+  structuredData?: { jsonLdSchemas?: Array<{ type?: string; warnings?: string[] }> };
   /** Cookies in the browser after the page loaded, before anything was clicked. */
   consentData?: {
     cookiesBeforeConsent?: string[];
@@ -54,7 +59,10 @@ export interface RunMetadata {
   } | null;
   leadScan?: LeadScanInfo;
   passive?: boolean;
-  siteChecks?: { domain?: string; checks?: Array<{ id: string; status: string; note?: string }> } | null;
+  siteChecks?: {
+    domain?: string;
+    checks?: Array<{ id: string; status: string; note?: string; details?: unknown[] }>;
+  } | null;
   /** `urls` and `total`, plus one key per sitemap file read (its URL). */
   sitemaps?: { urls?: Record<string, unknown>; total?: number; [sitemapFile: string]: unknown };
 }

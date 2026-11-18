@@ -605,11 +605,13 @@ function parseJsonLdSchemas(parsedPage: {
       const data = JSON.parse(script.textContent);
       const items = Array.isArray(data) ? data : [data];
       for (const item of items) {
+        // `null`, a string or a number is valid JSON but not a schema; callers read properties off each item.
+        if (!item || typeof item !== 'object') continue;
         schemas.push(item);
         // Also expand @graph items
         if (item['@graph'] && Array.isArray(item['@graph'])) {
           for (const graphItem of item['@graph']) {
-            schemas.push(graphItem);
+            if (graphItem && typeof graphItem === 'object') schemas.push(graphItem);
           }
         }
       }

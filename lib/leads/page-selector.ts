@@ -16,7 +16,7 @@ export interface HomeLink {
   position?: LinkPosition;
 }
 
-export type SelectionReason = 'homepage' | 'navigation' | 'language' | 'template' | 'fill';
+export type SelectionReason = 'homepage' | 'navigation' | 'language' | 'money' | 'template' | 'fill';
 
 export interface SelectedPage {
   url: string;
@@ -35,6 +35,8 @@ export interface SelectInput {
   cap: number;
   /** robots.txt check for a URL path; omitted means everything is allowed. */
   isAllowed?: (path: string) => boolean;
+  /** Seed for the sample taken inside a selling template; defaults to the homepage's host, so a rescan picks the same pages. */
+  seed?: string;
 }
 
 export interface Selection {
@@ -80,6 +82,54 @@ export function templateKey(url: string): string | null {
 const UTILITY_PATH =
   /\/(?:login|log-in|signin|sign-in|signup|sign-up|register|account|cart|basket|checkout|search|privacy|terms|legal|cookies?|imprint|impressum|sitemap|feed|rss|wp-admin|wp-login|cdn-cgi|unsubscribe|password)(?:[/._-]|$)/i;
 
+/**
+ * Pages where the site sells or takes a lead: products, shop listings, prices, booking, contact and
+ * demo forms. A defect there costs money, so these templates are scanned first and with more than
+ * one page each. Matched on a whole path segment, in the languages the prospect list covers.
+ */
+const MONEY_PATH =
+  /\/(?:products?|produkte?|produits?|productos?|prodotti|producten|p|pd|pdp|shop|store|boutique|tienda|collections?|catalog(?:ue)?|categor(?:y|ies)|kategorie|pricing|prices?|preise|tarifs?|precios|prezzi|plans?|buy|kaufen|order|book(?:ing)?|buchen|reserv(?:e|ation)s?|demo|request-demo|contact(?:-us|-sales)?|kontakt|contacto|quote|get-started|trial|free-trial)(?:[/._-]|$)/i;
+
+/** Pages that say little about how the site sells; they are taken after everything else but utility pages. */
+const LOW_VALUE_PATH =
+  /\/(?:careers?|jobs?|karriere|stellenangebote|emploi|press|presse|newsroom|media|investors?|investor-relations|ir|sustainability|esg|events?|webinars?|glossary|authors?|tags?)(?:[/._-]|$)/i;
+
+/** Most pages loaded from one selling template, and the share of the scan all selling templates may take. */
+const MONEY_PER_TEMPLATE = 3;
+const MONEY_SHARE = 0.4;
+
+/** Small seeded generator (mulberry32): the sample is random over the template, and the same on a rescan. */
+function seededRandom(seed: string): () => number {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A copy of `items` in random order (Fisher–Yates with the seeded generator). */
+function shuffled<T>(items: T[], random: () => number): T[] {
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** True for a selling page: product, listing, price, booking, contact or demo. */
+export function isMoneyPath(pathname: string): boolean {
+  return MONEY_PATH.test(pathname);
+}
+
 const NON_PAGE =
   /\.(?:pdf|zip|gz|jpe?g|png|gif|webp|avif|svg|ico|mp4|webm|mov|mp3|wav|css|js|json|xml|txt|csv|docx?|xlsx?|pptx?|woff2?|ttf|eot)$/i;
 
@@ -96,6 +146,8 @@ interface Candidate {
   position?: LinkPosition;
   fromHome: boolean;
   utility: boolean;
+  money: boolean;
+  lowValue: boolean;
   order: number;
 }
 
@@ -147,6 +199,8 @@ export function selectLeadPages(input: SelectInput): Selection {
       fromHome,
       // A query string usually means a filter, a search or a tracking variant of a page.
       utility: UTILITY_PATH.test(parsed.pathname) || parsed.search.length > 0,
+      money: MONEY_PATH.test(parsed.pathname),
+      lowValue: LOW_VALUE_PATH.test(parsed.pathname),
       order: order++,
     });
   };
@@ -173,7 +227,7 @@ export function selectLeadPages(input: SelectInput): Selection {
   for (const c of candidates) {
     if (navTaken >= navMax) break;
     const inNav = c.position === 'header' || c.position === 'nav';
-    if (inNav && !c.utility && c.language === homeLanguage && take(c, 'navigation')) navTaken++;
+    if (inNav && !c.utility && !c.lowValue && c.language === homeLanguage && take(c, 'navigation')) navTaken++;
   }
 
   // 2. The entry page of up to two other languages: localisation problems show there.
@@ -186,8 +240,6 @@ export function selectLeadPages(input: SelectInput): Selection {
     if (root) take(root, 'language');
   }
 
-  // 3. One page per template not seen yet, largest templates first (a blog or a catalogue matters
-  //    more than a one-off page), preferring a page the homepage links to.
   const groups = new Map<string, Candidate[]>();
   for (const c of candidates) {
     if (c.utility || c.language !== homeLanguage) continue;
@@ -197,19 +249,45 @@ export function selectLeadPages(input: SelectInput): Selection {
     (a, b) =>
       b[1].length - a[1].length || Math.min(...a[1].map((c) => c.order)) - Math.min(...b[1].map((c) => c.order)),
   );
+
+  // 3. Selling templates (products, prices, booking, contact): up to three pages of each, drawn at
+  //    random so a fact can say "2 of 3 product pages" and no page is favoured by its place in the
+  //    sitemap. Pages the navigation step already took count towards the three.
+  const random = seededRandom(input.seed ?? home.hostname.replace(/^www\./, ''));
+  const moneyMax = Math.max(1, Math.round(cap * MONEY_SHARE));
+  let moneyTaken = 0;
+  const moneyGroups = ranked.filter(([, members]) => members.some((c) => c.money));
+  for (let round = 0; round < MONEY_PER_TEMPLATE && moneyTaken < moneyMax; round++) {
+    for (const [template, members] of moneyGroups) {
+      if (moneyTaken >= moneyMax || !room()) break;
+      const have = selected.filter((s) => s.template === template).length;
+      if (have > round) continue;
+      const pick = shuffled(
+        members.filter((c) => c.money && !taken.has(c.key)),
+        random,
+      )[0];
+      if (pick && take(pick, 'money')) moneyTaken++;
+    }
+  }
+
+  // 4. One page per template not seen yet, largest templates first (a blog or a catalogue matters
+  //    more than a one-off page), preferring a page the homepage links to. Careers, press and the
+  //    like wait for step 5.
   for (const [template, members] of ranked) {
     if (!room()) break;
-    if (templates.has(template)) continue;
+    if (templates.has(template) || members.every((c) => c.lowValue)) continue;
     const pick = members.find((c) => c.fromHome) ?? members[0];
     take(pick, 'template');
   }
 
-  // 4. Fill what is left: pages the homepage links to first, then the sitemap, utility pages last.
+  // 5. Fill what is left: pages the homepage links to first, then the sitemap; careers and press
+  //    pages after those, utility pages last.
   const rest = candidates
     .filter((c) => !taken.has(c.key))
     .sort(
       (a, b) =>
         Number(a.utility) - Number(b.utility) ||
+        Number(a.lowValue) - Number(b.lowValue) ||
         Number(a.language !== homeLanguage) - Number(b.language !== homeLanguage) ||
         Number(b.fromHome) - Number(a.fromHome) ||
         a.order - b.order,

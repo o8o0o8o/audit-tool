@@ -159,6 +159,16 @@ export const VISUAL_FINDING_MESSAGES = [
   'Placeholder text (lorem ipsum) on page',
   'Garbled characters (mojibake) in page text',
   'Text clipped by its container',
+  'Text overlaps other text',
+  'Image stretched out of proportion',
+  'In-page link points to a missing section',
+  'Duplicate entries in a list',
+  'Large empty area on page',
+  'Page scrolls sideways on desktop',
+  'Menu button does not open a menu',
+  'Control does not respond to a click',
+  'JavaScript error when a control is clicked',
+  'Site search does not work',
 ] as const;
 
 const VISUAL_FINDING_SET: ReadonlySet<string> = new Set(VISUAL_FINDING_MESSAGES.map((m) => m.toLowerCase()));

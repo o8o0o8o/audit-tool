@@ -238,7 +238,7 @@ const CHECK_KEYWORDS: ReadonlyArray<[CheckName, RegExp]> = [
   ['analytics', /\b(analytics|ga4|gtm|tag manager|tracking|pixel)\b/i],
   [
     'visual',
-    /\b(broken image|failed image|upscaled|template token|placeholder text|lorem|mojibake|garbled|clipped)/i,
+    /\b(broken image|failed image|upscaled|template token|placeholder text|lorem|mojibake|garbled|clipped|overlaps other text|stretched out of proportion|missing section|duplicate entries|empty area|scrolls sideways|does not open a menu|does not respond to a click|control is clicked|site search does not work)/i,
   ],
   ['agentic', AGENTIC_FINDING_PATTERN],
 ];

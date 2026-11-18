@@ -24,7 +24,16 @@ import {
 } from '../analyzers/site-checks/email-dns-analyzer';
 import { orgDomain } from '../analyzers/site-checks/site-checks-types';
 import { advisoryFor, compareVersions } from '../analyzers/security/js-library-analyzer';
+import {
+  advisoryIds,
+  compareLibraryVersions,
+  detectLibrariesInContent,
+  fixWording,
+  libraryName,
+  vulnerabilitiesFor,
+} from '../analyzers/security/js-vulnerability-db';
 import { blockReason, type PageFetcher, type PageSnapshot } from './fingerprint';
+import { allows, enforcedPolicies, governing } from './csp';
 import { eolStatus } from './eol';
 import { PRODUCTS } from './versions';
 import { okPages, type RunData } from './run-data';
@@ -35,7 +44,11 @@ import {
   buildCandidates,
   findingsNotOnAllowlist,
   type AnalyticsGapCandidate,
+  type BlockedByPolicyCandidate,
   type BrokenImageCandidate,
+  type ContentNotServedCandidate,
+  type MissingPageStatusCandidate,
+  type ProductNoPriceCandidate,
   type EmailAuthCandidate,
   type DeadLinkCandidate,
   type EolCandidate,
@@ -159,6 +172,113 @@ export interface ControlResult {
   note: string | null;
 }
 
+/**
+ * One thing the gate saw while it checked a fact: a response, a browser result, a DNS answer or a
+ * value from the scan. Kept with the fact so a later re-check, a reviewer or a prospect's question
+ * can go back to what was observed and not only to what was concluded.
+ */
+export interface Observation {
+  /** `http-get`, `browser:followLink`, `dns:cloudflare:resolveTxt`, `scan:crux`… */
+  method: string;
+  at: string;
+  /** The address or name asked for. */
+  url?: string;
+  /** Where the request ended after redirects, when that differs. */
+  finalUrl?: string;
+  status?: number | null;
+  /** The response headers that matter for the checks. */
+  headers?: Record<string, string>;
+  /** The raw answer: a response body, or a result as JSON. Moved to `file` when the lead is saved. */
+  body?: string;
+  /** Path of the saved answer, relative to the lead folder, with its size and SHA-256. */
+  file?: string;
+  bytes?: number;
+  sha256?: string;
+}
+
+const OBSERVED_HEADERS = [
+  'content-type',
+  'content-security-policy',
+  'content-security-policy-report-only',
+  'x-robots-tag',
+  'link',
+  'location',
+  'cache-control',
+  'server',
+  'x-powered-by',
+  'content-language',
+  'last-modified',
+  'age',
+  'date',
+];
+const MAX_OBSERVED_BODY = 400_000;
+const MAX_OBSERVATIONS_PER_FACT = 60;
+
+const jsonBody = (value: unknown): string => {
+  try {
+    return (JSON.stringify(value, null, 1) ?? 'null').slice(0, MAX_OBSERVED_BODY);
+  } catch {
+    return String(value).slice(0, MAX_OBSERVED_BODY);
+  }
+};
+
+/** The same `io`, with every request, browser call and DNS lookup written to `trace` as it happens. */
+export function traceIo(io: GateIo, trace: Observation[]): GateIo {
+  const wrap = <T extends object>(target: T, prefix: string): T =>
+    new Proxy(target, {
+      get(obj, prop) {
+        const value = (obj as Record<string | symbol, unknown>)[prop];
+        if (typeof value !== 'function' || typeof prop !== 'string' || prop === 'close') {
+          return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(obj) : value;
+        }
+        return async (...args: unknown[]) => {
+          const at = new Date().toISOString();
+          const url = args.find((a): a is string => typeof a === 'string');
+          try {
+            const result = await (value as (...a: unknown[]) => unknown).apply(obj, args);
+            const status = (result as { status?: number | null } | null)?.status;
+            trace.push({
+              method: `${prefix}:${prop}`,
+              at,
+              url,
+              ...(status !== undefined ? { status } : {}),
+              body: jsonBody(result),
+            });
+            return result;
+          } catch (error) {
+            trace.push({ method: `${prefix}:${prop}`, at, url, body: jsonBody({ error: String(error) }) });
+            throw error;
+          }
+        };
+      },
+    });
+  return {
+    ...io,
+    get: async (url, opts) => {
+      const at = new Date().toISOString();
+      const res = await io.get(url, opts);
+      trace.push(
+        res
+          ? {
+              method: 'http-get',
+              at,
+              url,
+              ...(res.url && res.url !== url ? { finalUrl: res.url } : {}),
+              status: res.status,
+              headers: Object.fromEntries(
+                OBSERVED_HEADERS.filter((h) => res.headers[h]).map((h) => [h, res.headers[h]!]),
+              ),
+              body: res.body.slice(0, MAX_OBSERVED_BODY),
+            }
+          : { method: 'http-get', at, url, status: null },
+      );
+      return res;
+    },
+    browser: io.browser ? wrap(io.browser, 'browser') : io.browser,
+    dns: io.dns ? io.dns.map((resolver) => wrap(resolver, `dns:${resolver.name}`)) : io.dns,
+  };
+}
+
 export interface Highlight {
   type: FindingType;
   rootCause: string;
@@ -179,6 +299,8 @@ export interface Highlight {
     /** Other instances of the same fact (more dead links, more broken images). */
     also?: string[];
     source?: string;
+    /** What the gate saw while it checked this fact, in the order it happened. */
+    observations?: Observation[];
   };
   gate: 'pass';
 }
@@ -219,6 +341,8 @@ export interface GateResult {
   disclosure: DisclosureItem[];
   /** Requests the gate sent to the site's own hosts (the browser session's page loads count as one each). */
   requestsSent: number;
+  /** What the control requests returned. */
+  controlObservations?: Observation[];
 }
 
 const GONE = (status: number | null | undefined) => status === 404 || status === 410;
@@ -297,6 +421,8 @@ interface CheckContext {
   dropped: DroppedCandidate[];
   requests: { n: number };
   runtime: Record<string, string> | null;
+  /** Pages the scan read: the denominator of "x of n pages scanned". */
+  scanned: number;
   /** One tag session per gate run, shared by the analytics candidates. */
   tagSession?: Promise<TagSession | null>;
 }
@@ -457,6 +583,318 @@ async function checkNoindex(c: NoindexCandidate, ctx: CheckContext): Promise<Hig
       value: header ?? meta ?? '',
       status: res.status,
       methods: ['browser-crawl', header ? 'http-get-header' : 'http-get-served-html'],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/** Words in the body of served HTML, `<template>` and `<noscript>` content included: what a client that runs no JavaScript can read. */
+export function servedWordCount(html: string): number {
+  const text = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<head\b[\s\S]*?<\/head>/i, ' ')
+    .replace(/<(script|style|textarea|svg)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z#0-9]+;/gi, ' ');
+  return (text.match(/[\p{L}\p{N}]{2,}/gu) ?? []).length;
+}
+
+const samePath = (a: string, b: string) => {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return (
+      ua.hostname.replace(/^www\./, '') === ub.hostname.replace(/^www\./, '') &&
+      ua.pathname.replace(/\/+$/, '') === ub.pathname.replace(/\/+$/, '')
+    );
+  } catch {
+    return false;
+  }
+};
+
+/** Most words the served HTML may hold, and its largest share of the rendered text, to count as "not served". */
+export const CONTENT_SERVED_MAX_WORDS = 60;
+const CONTENT_SERVED_MAX_SHARE = 0.1;
+
+/**
+ * Content that exists only after JavaScript runs. The scan counted the words of the rendered page in
+ * a browser; the second method is a plain GET, which runs no script, counting the words of the HTML
+ * the server sent. `<noscript>` and `<template>` text counts as served, so a site with a no-script
+ * fallback or declarative shadow DOM does not pass. A redirect to another address is not compared,
+ * except for the homepage, which may send a visitor to its own language or country entry page.
+ */
+async function checkContentNotServed(c: ContentNotServedCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: c.url });
+    return null;
+  }
+  const res = await get(ctx, c.url);
+  if (!res || blockReason(res.status, res.headers, res.body)) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'blocked',
+      rootCause: c.rootCause,
+      detail: `${c.url}: ${res?.status ?? 'no answer'}`,
+    });
+    return null;
+  }
+  const sameAddress = samePath(res.url, c.url) || (c.keyReason === 'homepage' && originOf(res.url) === originOf(c.url));
+  if (res.status !== 200 || !sameAddress || !/html/i.test(res.headers['content-type'] ?? 'html')) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'no-second-method-available',
+      rootCause: c.rootCause,
+      detail: `${c.url}: a plain request got ${res.status} at ${pathOf(res.url)}, not the page the scan read`,
+    });
+    return null;
+  }
+  const served = servedWordCount(res.body);
+  if (served > CONTENT_SERVED_MAX_WORDS || served > c.renderedWords * CONTENT_SERVED_MAX_SHARE) {
+    // A page that is served with its text is the normal case, not a dropped suspicion: only a page
+    // that arrives with less than a third of its text is worth a line in the drop log.
+    if (served >= c.renderedWords / 3) return null;
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${c.url}: the served HTML holds ${served} words (${c.renderedWords} after JavaScript)`,
+    });
+    return null;
+  }
+  const where =
+    c.keyReason === 'homepage'
+      ? 'the homepage'
+      : c.keyReason === 'main navigation'
+        ? `${pathOf(c.url)}, linked from the main navigation,`
+        : pathOf(c.url);
+  const words = served === 0 ? 'no text at all' : `${served} word${served === 1 ? '' : 's'} of text`;
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `The HTML the server sends for ${where} holds ${words}; the page shows about ${c.renderedWords} words once JavaScript has run`,
+    url: c.url,
+    evidence: {
+      value: `${served} words served, ${c.renderedWords} rendered`,
+      status: res.status,
+      methods: ['browser-crawl', 'http-get-served-html'],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/**
+ * A resource the page asks for and its own Content Security Policy blocks. The scan's browser
+ * reported the block; the second method reads the policy from the response headers (and a `<meta>`
+ * policy) of a plain GET and works out, as a browser would, whether it allows that address. It
+ * passes only when an enforced policy is served, it has a directive that governs the load, and no
+ * source in it matches. A policy that decides by `'strict-dynamic'` cannot be read from a header and
+ * is dropped.
+ */
+async function checkBlockedByPolicy(c: BlockedByPolicyCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  const page = c.pages[0]!;
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: page });
+    return null;
+  }
+  const res = await get(ctx, page);
+  if (!res || blockReason(res.status, res.headers, res.body)) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'blocked',
+      rootCause: c.rootCause,
+      detail: `${page}: ${res?.status ?? 'no answer'}`,
+    });
+    return null;
+  }
+  const policies = enforcedPolicies(res.headers, res.body);
+  const verdicts = policies.map((p) => ({
+    rule: governing(p, c.directive),
+    allowed: allows(p, c.directive, c.blocked, res.url),
+  }));
+  const blocking = verdicts.find((v) => v.allowed === false && v.rule);
+  if (!blocking) {
+    const unknown = verdicts.some((v) => v.allowed === null);
+    ctx.dropped.push({
+      type: c.type,
+      reason: !policies.length || unknown ? 'no-second-method-available' : 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: !policies.length
+        ? `${page}: a plain request gets no enforced Content-Security-Policy`
+        : unknown
+          ? `${page}: the policy uses 'strict-dynamic', which a header alone does not settle`
+          : `${page}: the served policy allows ${c.blocked}`,
+    });
+    return null;
+  }
+  const host = new URL(c.blocked).hostname;
+  const what = c.vendor ?? `requests to ${host}`;
+  const scanned = ctx.scanned;
+  const where = c.pages.length > 1 ? pagesWords(c.pages.length, scanned) : `on ${pathOf(page)}`;
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `The site's own Content Security Policy blocks ${what} ${where}: its ${blocking.rule!.directive} list does not include ${host}, so the browser refuses the request`,
+    url: page,
+    evidence: {
+      target: c.blocked,
+      value: `${blocking.rule!.directive} ${blocking.rule!.sources.join(' ')}`.slice(0, 600),
+      status: res.status,
+      methods: ['browser-issues-panel', 'http-get-policy-header'],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/** Every JSON-LD node in served HTML, `@graph` members included; unparseable blocks are skipped. */
+export function servedJsonLd(html: string): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  const push = (node: unknown) => {
+    if (Array.isArray(node)) return node.forEach(push);
+    if (!node || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    out.push(record);
+    if (Array.isArray(record['@graph'])) record['@graph'].forEach(push);
+  };
+  const blocks = html.matchAll(/<script\b[^>]*type\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi);
+  for (const block of blocks) {
+    try {
+      push(JSON.parse(block[1]));
+    } catch {
+      // not valid JSON
+    }
+  }
+  return out;
+}
+
+const isProductNode = (node: Record<string, unknown>) =>
+  [node['@type']]
+    .flat()
+    .some((t) => typeof t === 'string' && /^(?:https?:\/\/schema\.org\/)?Product(?:Group)?$/.test(t));
+
+/** True when an offer or a price sits anywhere inside the node (variants and nested offers included). */
+function carriesPrice(node: unknown, depth = 0): boolean {
+  if (!node || typeof node !== 'object' || depth > 8) return false;
+  if (Array.isArray(node)) return node.some((n) => carriesPrice(n, depth + 1));
+  return Object.entries(node as Record<string, unknown>).some(
+    ([name, value]) =>
+      /^(?:offers|price|lowPrice|highPrice|priceSpecification)$/.test(name) || carriesPrice(value, depth + 1),
+  );
+}
+
+/** An amount with a currency, as a visitor reads it. */
+export const VISIBLE_PRICE =
+  /(?:[$€£¥₹]|\b(?:USD|EUR|GBP|CHF|CAD|AUD|SEK|NOK|DKK|PLN|AED)\b)\s?\d[\d.,\s]*\d|\d[\d.,]*\s?(?:[€£]|\b(?:USD|EUR|GBP|CHF|CAD|AUD|SEK|NOK|DKK|PLN|AED|kr|zł)\b)/;
+
+/**
+ * A product page that shows a price but gives search engines none. The scan read the page's
+ * schema.org Product in a browser; the second method parses the JSON-LD of the served HTML from a
+ * plain GET. Every Product there must lack an offer and a price, and also a rating or a review
+ * (Google accepts a Product with any one of the three, and sites use a rated Product for review
+ * stars on pages that sell nothing); the page must carry no price as microdata or as a
+ * `product:price:amount` tag, and its text must show an amount with a currency.
+ * Product data that only JavaScript adds is not eligible: the served page has nothing to parse.
+ */
+async function checkProductNoPrice(c: ProductNoPriceCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: c.url });
+    return null;
+  }
+  const res = await get(ctx, c.url);
+  if (!res || blockReason(res.status, res.headers, res.body)) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'blocked',
+      rootCause: c.rootCause,
+      detail: `${c.url}: ${res?.status ?? 'no answer'}`,
+    });
+    return null;
+  }
+  const products = res.status === 200 && samePath(res.url, c.url) ? servedJsonLd(res.body).filter(isProductNode) : [];
+  if (!products.length) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'no-second-method-available',
+      rootCause: c.rootCause,
+      detail: `${c.url}: the served HTML carries no schema.org Product to read`,
+    });
+    return null;
+  }
+  const elsewhere =
+    /\bitemprop\s*=\s*["']?(?:price|offers)\b/i.test(res.body) || /product:price:amount/i.test(res.body);
+  const shown = VISIBLE_PRICE.test(visibleText(res.body));
+  const rated = products.some((p) => 'aggregateRating' in p || 'review' in p);
+  if (products.some((p) => carriesPrice(p)) || elsewhere || rated || !shown) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: 'second-method-disagrees',
+      rootCause: c.rootCause,
+      detail: `${c.url}: ${!shown ? 'the served page shows no price' : rated ? 'the Product carries a rating or a review, which Google accepts without a price' : 'the served page carries a price for search engines'}`,
+    });
+    return null;
+  }
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `${pathOf(c.url)} shows a price to visitors, but the product data it publishes for search engines (schema.org Product) has no price, offer, rating or review`,
+    url: c.url,
+    evidence: {
+      status: res.status,
+      methods: ['browser-crawl', 'http-get-served-json-ld'],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/**
+ * Missing pages that answer "200 OK". The audit's probe asked for one random address; the gate asks
+ * for two more of its own, one of them nested, with a plain GET. Both must answer 200 at the address
+ * asked for: a redirect to the homepage or to an error page is a different behaviour and is not stated.
+ */
+async function checkMissingPageStatus(c: MissingPageStatusCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (ctx.control.blocked) {
+    ctx.dropped.push({ type: c.type, reason: 'control-failed', rootCause: c.rootCause, detail: c.origin });
+    return null;
+  }
+  const slug = ctx.io.randomPath?.() ?? `/lead-check-${Math.random().toString(36).slice(2, 12)}`;
+  const urls = [`${c.origin}${slug}`, `${c.origin}${slug}${slug}`];
+  for (const url of urls) {
+    const res = await get(ctx, url);
+    if (!res || (!GONE(res.status) && blockReason(res.status, res.headers, res.body))) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'blocked',
+        rootCause: c.rootCause,
+        detail: `${url}: ${res?.status ?? 'no answer'}`,
+      });
+      return null;
+    }
+    if (res.status !== 200 || !samePath(res.url, url)) {
+      ctx.dropped.push({
+        type: c.type,
+        reason: 'second-method-disagrees',
+        rootCause: c.rootCause,
+        detail: `${url}: ${res.status} at ${pathOf(res.url)}`,
+      });
+      return null;
+    }
+  }
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    fact: `An address that does not exist on the site (${slug}) answers "200 OK" where a missing page should answer "404 Not Found"`,
+    url: urls[0],
+    evidence: {
+      status: 200,
+      target: urls[1],
+      methods: ['audit-missing-page-probe', 'http-get-random-addresses'],
       ...evidenceBase(ctx),
     },
     gate: 'pass',
@@ -888,11 +1326,75 @@ export function bannerVersion(lib: string, body: string): string | null {
 }
 
 /**
+ * A library the scan found against the full advisory table, in a script it named. The gate downloads
+ * that script itself and reads the library and its version from the file's content with the table's
+ * own patterns; the version must be the one the scan saw and an advisory must still apply to it.
+ * For a library the scan knew only from the script's address, that is a second method. For one found
+ * in a file's content (a bundle), it is the same reading repeated by another client at another time:
+ * what makes the fact checkable is that the version string is in the file for anyone to search for.
+ */
+async function checkLibraryInScript(
+  c: VulnerableLibraryCandidate,
+  script: NonNullable<VulnerableLibraryCandidate['contentScript']>,
+  ctx: CheckContext,
+): Promise<Highlight | null> {
+  const res = await get(ctx, script.url);
+  if (!res || res.status !== 200) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: res && (res.status === 404 || res.status === 410) ? 'second-method-disagrees' : 'blocked',
+      rootCause: c.rootCause,
+      detail: `${c.label} ${c.version}: ${script.url} answered ${res?.status ?? 'nothing'}`,
+    });
+    return null;
+  }
+  const same = (name: string) => name.toLowerCase() === c.lib.toLowerCase();
+  const inFile = detectLibrariesInContent(res.body).filter((d) => same(d.library));
+  const hit = inFile.find((d) => compareLibraryVersions(d.version, c.version) === 0);
+  const vulnerable = hit ? vulnerabilitiesFor(hit) : null;
+  if (!hit || !vulnerable) {
+    ctx.dropped.push({
+      type: c.type,
+      reason: inFile.length ? 'second-method-disagrees' : 'no-second-method-available',
+      rootCause: c.rootCause,
+      detail: inFile.length
+        ? `${c.label}: the scan saw ${c.version}, the file's content says ${inFile.map((d) => d.version).join(', ')}`
+        : `${c.label} ${c.version}: the content of ${script.url} does not carry a readable version`,
+    });
+    return null;
+  }
+  const n = vulnerable.vulnerabilities.length;
+  const file = pathOf(script.url).split('?')[0]!.split('/').pop() || script.url;
+  const where =
+    originOf(script.url) === originOf(c.page)
+      ? `its own script ${file}`
+      : `the script ${file} from ${new URL(script.url).hostname}`;
+  const lib = libraryName(c.lib);
+  return {
+    type: c.type,
+    rootCause: c.rootCause,
+    angle: c.angle,
+    // A framework is what the site is built on, not a file it loads: say so, and where the version was read.
+    fact: `${lib.framework ? `The site runs on ${lib.name} ${hit.version} (the version is in ${where})` : `The site loads ${lib.name} ${hit.version} in ${where}`}: a version with ${n} published security advisor${n === 1 ? 'y' : 'ies'} (${advisoryIds(vulnerable)}); ${fixWording(vulnerable.fixedIn)}`,
+    url: c.page,
+    evidence: {
+      target: script.url,
+      value: `${c.label} ${hit.version}`,
+      status: res.status,
+      methods: [`scan:script-${script.via === 'filecontent' ? 'content' : 'address'}`, 'http-get-script-content'],
+      ...evidenceBase(ctx),
+    },
+    gate: 'pass',
+  };
+}
+
+/**
  * A library version with a published advisory. The scan read the version from a runtime global or
  * the file name; the second method downloads the script file and reads the version from its banner.
  * The two must agree, and the advisory must apply to that version.
  */
 async function checkVulnerableLibrary(c: VulnerableLibraryCandidate, ctx: CheckContext): Promise<Highlight | null> {
+  if (c.contentScript) return checkLibraryInScript(c, c.contentScript, ctx);
   if (!c.scripts.length) {
     ctx.dropped.push({
       type: c.type,
@@ -1397,6 +1899,9 @@ async function checkAnalyticsGap(c: AnalyticsGapCandidate, ctx: CheckContext): P
  * speed, then outdated software. The platform is never the lead (design revision 3).
  */
 const CAUSE_ORDER = [
+  'blocked-by-own-policy',
+  'content-needs-javascript',
+  'product-data',
   'analytics-data-loss',
   'email-authentication',
   'language-switch',
@@ -1405,6 +1910,7 @@ const CAUSE_ORDER = [
   'template-text',
   'missing-hreflang',
   'noindex',
+  'missing-page-status',
   'sitemap-dead-urls',
   'real-user-performance',
   'tracking-before-consent',
@@ -1431,6 +1937,12 @@ export function groupByRootCause(passed: Highlight[], dropped: DroppedCandidate[
     }
     const other = h.evidence.target ?? h.url;
     kept.evidence.also = [...(kept.evidence.also ?? []), other];
+    if (h.evidence.observations?.length) {
+      kept.evidence.observations = [...(kept.evidence.observations ?? []), ...h.evidence.observations].slice(
+        0,
+        MAX_OBSERVATIONS_PER_FACT,
+      );
+    }
     dropped.push({ type: h.type, reason: 'same-root-cause', rootCause: h.rootCause, detail: other });
   }
   const grouped = [...byCause.values()].sort((a, b) => causeRank(a.rootCause) - causeRank(b.rootCause));
@@ -1442,6 +1954,11 @@ export function groupByRootCause(passed: Highlight[], dropped: DroppedCandidate[
       h.fact += `; ${more} more image${more === 1 ? '' : 's'} on the scanned pages ${more === 1 ? 'does' : 'do'} the same`;
     if (h.type === 'noindex')
       h.fact += `; ${more} more key page${more === 1 ? ' carries' : 's carry'} the same instruction`;
+    if (h.type === 'blocked-by-policy')
+      h.fact += `; ${more} more address${more === 1 ? ' is' : 'es are'} blocked the same way`;
+    if (h.type === 'content-not-served')
+      h.fact += `; ${more} more scanned page${more === 1 ? ' is' : 's are'} served the same way`;
+    if (h.type === 'product-no-price') h.fact += `; ${more} more product page${more === 1 ? ' is' : 's are'} the same`;
     if (h.type === 'template-text') h.fact += `; ${more} more page${more === 1 ? ' shows' : 's show'} the same`;
     if (h.type === 'analytics-gap')
       h.fact += `; the homepage loses analytics data in ${more} more way${more === 1 ? '' : 's'} too`;
@@ -1451,13 +1968,53 @@ export function groupByRootCause(passed: Highlight[], dropped: DroppedCandidate[
   return grouped;
 }
 
+/**
+ * The observations behind one fact: what was asked while its check ran, plus what it relied on from
+ * a session shared with other checks (the tag session, the runtime read) or from the scan itself
+ * (Google's real-user figures, the versions the fingerprint found), which have no request of their own.
+ */
+function observationsFor(
+  h: Highlight,
+  own: Observation[],
+  all: Observation[],
+  run: RunData,
+  stack: StackProfile | null,
+): Observation[] {
+  const out = [...own];
+  const shared = (method: string) => {
+    const seen = all.find((o) => o.method === method);
+    if (seen && !out.includes(seen)) out.unshift(seen);
+  };
+  if (h.type === 'analytics-gap') shared('browser:tagSession');
+  if (h.type === 'end-of-life') {
+    shared('browser:readRuntime');
+    out.unshift({
+      method: 'scan:fingerprint',
+      at: h.evidence.checkedAt,
+      body: jsonBody({ eol: stack?.eol ?? [], versions: stack?.versions ?? [] }),
+    });
+  }
+  if (h.type === 'poor-vitals') {
+    out.unshift({
+      method: 'scan:crux',
+      at: h.evidence.checkedAt,
+      url: h.url,
+      body: jsonBody(run.metadata.cruxData ?? null),
+    });
+  }
+  return out.slice(0, MAX_OBSERVATIONS_PER_FACT);
+}
+
 export async function runGate(
   run: RunData,
   stack: StackProfile | null,
-  io: GateIo,
+  rawIo: GateIo,
   options: GateOptions = {},
 ): Promise<GateResult> {
   const checkedAt = new Date().toISOString();
+  // Everything the gate asks the site, the browser or DNS from here on is kept as an observation.
+  const trace: Observation[] = [];
+  const io = traceIo(rawIo, trace);
   const opts = {
     minCauses: options.minCauses ?? GATE_DEFAULTS.minCauses,
     vitalsMargin: options.vitalsMargin ?? GATE_DEFAULTS.vitalsMargin,
@@ -1503,11 +2060,34 @@ export async function runGate(
     }
   }
 
-  const ctx: CheckContext = { io, control, checkedAt, options: opts, dropped, requests, runtime };
+  const ctx: CheckContext = {
+    io,
+    control,
+    checkedAt,
+    options: opts,
+    dropped,
+    requests,
+    runtime,
+    scanned: scanned.length,
+  };
   const passed: Highlight[] = [];
+  const controlObservations = trace.filter((o) => o.method === 'http-get');
   for (const candidate of candidates) {
     let highlight: Highlight | null;
+    const start = trace.length;
     switch (candidate.type) {
+      case 'blocked-by-policy':
+        highlight = await checkBlockedByPolicy(candidate, ctx);
+        break;
+      case 'content-not-served':
+        highlight = await checkContentNotServed(candidate, ctx);
+        break;
+      case 'product-no-price':
+        highlight = await checkProductNoPrice(candidate, ctx);
+        break;
+      case 'missing-page-status':
+        highlight = await checkMissingPageStatus(candidate, ctx);
+        break;
       case 'end-of-life':
         highlight = checkEol(candidate, ctx);
         break;
@@ -1548,7 +2128,10 @@ export async function runGate(
         highlight = await checkAnalyticsGap(candidate, ctx);
         break;
     }
-    if (highlight) passed.push(highlight);
+    if (highlight) {
+      highlight.evidence.observations = observationsFor(highlight, trace.slice(start), trace, run, stack);
+      passed.push(highlight);
+    }
   }
 
   const highlights = groupByRootCause(passed, dropped);
@@ -1562,5 +2145,6 @@ export async function runGate(
     candidatesDropped: dropped,
     disclosure,
     requestsSent: requests.n,
+    controlObservations,
   };
 }

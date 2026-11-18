@@ -3,7 +3,17 @@
  * Shared across crawler-engine.ts, resilience.ts, page-data-builder.ts, analyzer-runner.ts
  */
 
-import type { PageInfo, ParsedPage, NetworkCondition, CpuCondition, CrawlProfile, SitemapUrl, Issue, ChromePage } from '../types';
+import type { BrowserIssue } from '../analyzers/seo/browser-issues-analyzer';
+import type {
+  PageInfo,
+  ParsedPage,
+  NetworkCondition,
+  CpuCondition,
+  CrawlProfile,
+  SitemapUrl,
+  Issue,
+  ChromePage,
+} from '../types';
 import type { CrUXFieldData } from './crux-api';
 import type { BrowserContext } from 'playwright';
 
@@ -122,6 +132,8 @@ export interface BasicTestResult {
   redirectChain: RedirectEntry[];
   responseHeaders: Record<string, string | undefined>;
   consoleData: unknown;
+  /** What Chrome's Issues panel reported while the page loaded (`browser-issues-analyzer.ts`). */
+  browserIssues?: BrowserIssue[];
   url?: string;
   blockers?: unknown;
   /** Served HTML (pre-JS response body), when capturable. */

@@ -113,7 +113,7 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 
 ### scripts/lead-pipeline.ts + lib/leads/
 
-Sales-audit pipeline for the prospect list `docs/gtm/companies.csv`: fingerprint → score/select → lead scan → truth gate → teaser → review. **Read `docs/gtm/sales-audit-system.md` and the "Lead pipeline" paragraph of `docs/architecture.md` before changing `lib/leads/`, `--lead` or `--passive`.** Rules that must hold: the full audit is unchanged without `--lead` (`tests/lead-mode-isolation.test.ts`); lead scans never write under `audit-results/`; prospect sites get passive checks only; a teaser fact needs a second-method re-check and a passing control; a blocked request is never evidence; teaser text never claims a cause; `do_not_contact` rows are never touched.
+Sales-audit pipeline for the prospect list `docs/gtm/companies.csv`: fingerprint → score/select → lead scan → truth gate → teaser → review. **Read `docs/gtm/sales-audit-system.md` and the "Lead pipeline" paragraph of `docs/architecture.md` before changing `lib/leads/`, `--lead` or `--passive`.** Every gate run is kept (`lead/gate-runs/<stamp>.json`, evidence under `lead/evidence/<stamp>/`); `lead.json` is the latest and records what changed since the run before. Rules that must hold: the full audit is unchanged without `--lead` (`tests/lead-mode-isolation.test.ts`); lead scans never write under `audit-results/`; prospect sites get passive checks only; a teaser fact needs a second-method re-check and a passing control; a blocked request is never evidence; teaser text never claims a cause; `do_not_contact` rows are never touched.
 
 ### lib/constants.ts
 
@@ -238,6 +238,10 @@ Opt-in via `--visual` (or `visual: true` in `.seoauditrc`; `--no-visual` overrid
 
 - **broken-media-analyzer.ts**: Broken `<img>` (loaded with naturalWidth 0) and failed 4xx/5xx image/media requests
 - **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`), lorem ipsum, mojibake, clipped text
+- **layout-integrity-analyzer.ts**: text printed over other text, images stretched out of proportion, in-page links to a missing section, the same entry twice in one list, large empty blocks. Runs after the scroll pass (it scrolls to what it checks); geometry is collected in the page, the rules are pure functions
+- **interaction-probe.ts**: runs last on a few pages per audit (one per URL template; 10, or 4 in a lead scan). Repeats the overlap check at desktop width and flags sideways scroll there, then clicks the phone menu button, collapsed sections and tabs, plain buttons and things that only look clickable (`cursor: pointer`), and searches the site for a word from the page. Reports a control that changes nothing, a click that throws, a search that errors or does nothing. With evidence on, each finding gets a screenshot: the desktop layout with the defect boxed, and the window before and after the click. Consent prompts are hidden with CSS, never clicked; nothing in a form, and no button that buys, books, sends, signs in or deletes, is clicked
+
+Try both on any page without a crawl: `npx tsx scripts/probe-ui.ts <url>` (fixture with planted defects: `tests/fixtures/ui-defects/broken.html`).
 
 Spike notes on screenshot diffing and an LLM vision pass: `docs/visual-checks-spike.md`.
 
@@ -267,6 +271,12 @@ Second wave (same runner, same never-refute rule):
 - **Crawl graph** (`lib/analyzers/site-wide/crawl-graph-checks.ts`): canonical loops/chains, canonical or hreflang to redirect/error/noindex/canonicalised URLs, faceted URL explosion, calendar URL traps, untrustworthy sitemap `lastmod`, CTA links to broken/login pages, JSON-LD telephone not shown on the page
 - Crawl-time inputs come from `crawl-hints.ts` (`pageData.siteHints`: capped script/asset/API URLs, third-party hosts, CTA anchors, replay vendors), because the request map and anchor texts are slimmed at checkpoint
 
+Checks added by comparing the audit with other tools (see "Tool comparison" below):
+
+- **js-vulnerability-db.ts** + **site-checks/js-library-scan.ts**: every script the crawl saw (by address) and every same-site script the secrets scan downloads (by content) is matched against the Retire.js advisory table (`lib/data/js-vulnerabilities.json`, 68 libraries; rebuild with `npx tsx scripts/build-js-vuln-data.ts`). Finds libraries bundled inside the site's own files. Check row `js-libraries`; its `details` feed the lead gate's `vulnerable-library` fact
+- **seo/browser-issues-analyzer.ts** (per page): Chrome's Issues panel over CDP — requests blocked by CORS, resources blocked by the site's own Content Security Policy (report-only policies ignored), stylesheets that fail to load, quirks mode, deprecated features
+- **accessibility/axe-findings.ts**: axe-core rule violations on evidence-sampled pages become findings (`Accessibility (axe): <rule>`), with the WCAG criterion; critical → HIGH, serious → MEDIUM, moderate → LOW; contrast is left to the audit's own finding
+
 Per-page checks reported in the same block: **head-integrity-analyzer.ts** (served HTML; invalid element in the head that pushes canonical/hreflang/robots into the body), **bfcache-analyzer.ts** (`Cache-Control: no-store`, `unload` handlers counted by an init script), **js-library-analyzer.ts** (curated Retire.js-style advisories for jQuery, jQuery UI, Bootstrap, AngularJS, Lodash, Underscore, Moment, Handlebars, DOMPurify, Vue 2), **consent-mode-analyzer.ts** (Google tags without Consent Mode, or without the v2 `ad_user_data` / `ad_personalization` signals).
 
 ### Analytics & Tags
@@ -285,6 +295,10 @@ Shown as the **Analytics & Tags** block (status table + findings) next to Domain
 ### Social
 
 - **social-media-analyzer.ts**: Open Graph tags, Twitter cards
+
+## Tool comparison
+
+Coverage grows by running other tools on pages the audit has crawled and closing each gap with a check of our own. Done so far (17 pages, 6 sites): Lighthouse, axe-core, html-validate, Chrome's Issues panel, retire.js. Still open from that round: HTML validity errors of the served page (invalid nesting, unreadable markup), old-browser JavaScript shipped to modern browsers, a lazy-loaded LCP image. The layout checks and click probes can be tried on any page with `scripts/probe-ui.ts`.
 
 ## Usage
 
@@ -470,6 +484,9 @@ audit-results/
 - Images / CSS background images upscaled beyond natural resolution (LOW/MEDIUM)
 - Unrendered template tokens in page text (HIGH); placeholder text (lorem ipsum) (MEDIUM)
 - Garbled characters (mojibake) in page text (MEDIUM); text clipped by its container (LOW)
+- Text overlaps other text (MEDIUM); image stretched out of proportion (MEDIUM); page scrolls sideways on desktop (MEDIUM)
+- In-page link points to a missing section, duplicate entries in a list, large empty area on page (LOW)
+- Menu button does not open a menu (HIGH); JavaScript error when a control is clicked (HIGH); site search does not work (HIGH); control does not respond to a click (MEDIUM)
 
 ### Site Text Files
 
@@ -488,7 +505,8 @@ audit-results/
 - Dangling CNAME, possible subdomain takeover (HIGH)
 - Invalid element in the HTML head hides canonical/hreflang/robots (HIGH), other SEO tags (MEDIUM), or closes it early (LOW)
 - Not bfcache-eligible: `no-store` or `unload` handler (LOW)
-- Outdated JavaScript library with known vulnerabilities (MEDIUM/LOW by advisory)
+- Outdated JavaScript library with known vulnerabilities (MEDIUM/LOW by advisory; HIGH when the advisory table rates one critical or high)
+- Requests blocked by the browser (CORS), resources blocked by the site's own Content Security Policy, stylesheet failed to load, page renders in quirks mode (MEDIUM); deprecated browser features (LOW)
 - Google tags without Consent Mode, or Consent Mode v2 signals missing (MEDIUM)
 DNS lookup failures, network errors and blocked probes give no finding (the check shows "Not checked").
 

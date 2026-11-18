@@ -65,6 +65,14 @@ export function whyItMatters(h: Highlight): string {
     return 'No security or compatibility fixes are released for this version any more, and each month adds known issues that will never be patched.';
   }
   switch (h.rootCause) {
+    case 'blocked-by-own-policy':
+      return 'Every current browser enforces this policy, so for every visitor the blocked tag or resource never loads: a tracking or advertising tag behind it receives nothing from the site, and nothing on the page says so.';
+    case 'content-needs-javascript':
+      return 'A client that runs no JavaScript gets only this near-empty page: that covers most AI assistants and the link previews of chat and social apps. Google has to render the page in a second step before it can read the content.';
+    case 'product-data':
+      return 'Google reads this data to show price and availability under a search result and in its free shopping listings; a product without a price, a rating or a review there is not eligible for either.';
+    case 'missing-page-status':
+      return 'Search engines treat an address that answers "200 OK" as a real page, so mistyped and outdated links are crawled and can be indexed as empty pages, and link checkers cannot tell a broken link from a working one.';
     case 'language-switch':
       return 'A visitor who chooses that language gets an error page and not the content.';
     case 'dead-navigation-links':
@@ -101,6 +109,14 @@ export function shortLabel(h: Highlight): string {
   if (h.rootCause.startsWith('end-of-life'))
     return `software past its end of life (${String(h.evidence.value ?? '')})`.replace(' ()', '');
   switch (h.rootCause) {
+    case 'blocked-by-own-policy':
+      return "tags or resources blocked by the site's own security policy";
+    case 'content-needs-javascript':
+      return 'pages whose content is missing from the HTML the server sends';
+    case 'product-data':
+      return 'product pages that give search engines no price';
+    case 'missing-page-status':
+      return 'missing pages that answer "200 OK"';
     case 'language-switch':
       return 'a language link that returns an error';
     case 'dead-navigation-links':
@@ -168,6 +184,27 @@ function whereLines(h: Highlight): string[] {
       return [
         `**Where:** <${h.url}>`,
         '**Check it yourself:** in Chrome, right-click the control, choose Inspect and open the Accessibility pane: its Name is empty.',
+      ];
+    case 'blocked-by-policy':
+      return [
+        `**Where:** <${h.url}>`,
+        ...(target ? [`**What is blocked:** <${target}>`] : []),
+        "**Check it yourself:** open the page with the browser's developer tools on the Console tab and reload: the refusal is printed in red, with the policy directive it names.",
+      ];
+    case 'content-not-served':
+      return [
+        `**Where:** <${h.url}>`,
+        '**Check it yourself:** open the page, choose View Page Source and search for a sentence you can read on the page; or turn JavaScript off in the browser and reload.',
+      ];
+    case 'product-no-price':
+      return [
+        `**Where:** <${h.url}>`,
+        "**Check it yourself:** paste the address into Google's Rich Results Test (search.google.com/test/rich-results) and look at the Product item.",
+      ];
+    case 'missing-page-status':
+      return [
+        `**Where:** <${h.url}>`,
+        "**Check it yourself:** open the address with the browser's developer tools on the Network tab and read the status of the first request.",
       ];
     case 'sitemap-dead-urls': {
       const more = (h.evidence.also ?? []).slice(0, 2);

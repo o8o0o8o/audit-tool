@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UI defects fixture</title>
+    <style>
+      body { font: 16px/1.4 sans-serif; margin: 0; }
+      header { display: flex; justify-content: space-between; padding: 12px; }
+      .burger { width: 40px; height: 40px; border: 0; background: #ddd; }
+      .stack { position: relative; height: 60px; margin: 20px; }
+      .stack p { position: absolute; top: 0; left: 0; margin: 0; }
+      .clamp { height: 22px; overflow: hidden; margin: 20px; }
+      .squash { width: 300px; height: 100px; }
+      .keep { width: 300px; height: 100px; object-fit: cover; }
+      .empty { height: 500px; }
+      .hand { cursor: pointer; padding: 12px; margin: 20px; border: 1px solid #999; }
+      .wide { width: 1700px; height: 20px; background: #eee; }
+      @media (max-width: 800px) { .wide { width: auto; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Fixture</strong>
+      <button class="burger" aria-label="Open menu"></button>
+    </header>
+    <main>
+      <h1>Page with layout and interaction defects</h1>
+      <div class="stack"><p>First paragraph printed here</p><p>Second paragraph on top of it</p></div>
+      <div class="clamp">One line shows and the rest of this long text is cut off on purpose by the box, which is not an overlap with what follows below it</div>
+      <p>Text right after the clamped box.</p>
+      <img class="squash" alt="squashed" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAUElEQVR4nO3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfgbiQAABY0vZ7AAAAABJRU5ErkJggg==" />
+      <img class="keep" alt="cropped" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAUElEQVR4nO3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfgbiQAABY0vZ7AAAAABJRU5ErkJggg==" />
+      <p><a href="#pricing">Jump to pricing</a> <a href="#faq">Jump to questions</a></p>
+      <div class="countries">
+        <div class="country"><a href="/de">Germany</a></div>
+        <div class="country"><a href="/no">Norway</a></div>
+        <div class="country"><a href="/de">Germany</a></div>
+        <div class="country"><a href="/fr">France</a></div>
+      </div>
+      <section class="empty"></section>
+      <section id="faq">
+        <h2>Questions</h2>
+        <button id="works" aria-expanded="false" aria-controls="answer">Does this open?</button>
+        <div id="answer" hidden>Yes.</div>
+        <button id="dead" type="button">Show more results</button>
+        <div class="hand" id="deadcard">Read the full story</div>
+        <button id="throws" type="button">Compare models</button>
+      </section>
+      <div class="wide"></div>
+    </main>
+    <script>
+      document.getElementById('works').addEventListener('click', (e) => {
+        const open = e.currentTarget.getAttribute('aria-expanded') === 'true';
+        e.currentTarget.setAttribute('aria-expanded', String(!open));
+        document.getElementById('answer').hidden = open;
+      });
+      document.getElementById('throws').addEventListener('click', () => {
+        window.compareModels.open();
+      });
+    </script>
+  </body>
+</html>

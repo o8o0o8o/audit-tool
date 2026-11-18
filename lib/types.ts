@@ -9,6 +9,10 @@ import type { TagRuntimeInfo } from './analyzers/analytics/tag-runtime-analyzer'
 import type { PresetName } from './presets';
 import type { BrokenMediaData } from './analyzers/visual/broken-media-analyzer';
 import type { TextIntegrityData } from './analyzers/visual/text-integrity-analyzer';
+import type { LayoutIntegrityData } from './analyzers/visual/layout-integrity-analyzer';
+import type { InteractionProbeData } from './analyzers/visual/interaction-probe';
+import type { BrowserIssue } from './analyzers/seo/browser-issues-analyzer';
+import type { AxeViolationSummary } from './analyzers/accessibility/axe-findings';
 import type { VisualShot } from './crawler/visual-shot-capture';
 
 // ─── Severity & Issues ───────────────────────────────────────────────────────
@@ -210,6 +214,14 @@ export interface PageInfo {
   imageOptimization?: ImageOptimizationData;
   brokenMediaData?: BrokenMediaData;
   textIntegrityData?: TextIntegrityData;
+  /** `--visual`: overlapping text, stretched images, dead in-page links, duplicate list entries, empty blocks. */
+  layoutData?: LayoutIntegrityData;
+  /** Chrome's Issues-panel entries behind this page's browser findings. */
+  browserIssues?: BrowserIssue[];
+  /** axe-core rule violations on this page (evidence-sampled pages only). */
+  axeViolations?: AxeViolationSummary[];
+  /** `--visual`: what the click probes did on this page (probed pages only). */
+  interactionData?: InteractionProbeData;
   /** `--visual`: screenshots of the page regions holding visual defects, with highlight boxes. */
   visualShots?: VisualShot[];
   consoleAnalysis?: ConsoleAnalysisData;

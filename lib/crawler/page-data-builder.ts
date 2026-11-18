@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { AxeBuilder } from '@axe-core/playwright';
+import { summariseAxeViolations, type AxeViolationSummary } from '../analyzers/accessibility/axe-findings';
 import type { Page as PlaywrightPage } from 'playwright';
 import type { PageInfo, SitemapUrl, Issue, HeadingAnalysis, UrlAnalysis, CodeCoverageData } from '../types';
 import type {
@@ -1286,9 +1287,10 @@ export async function captureRepresentativeEvidence(
     /** Security headers the analyzer found missing on this page. */
     missingHeaders?: string[] | null;
   },
-): Promise<void> {
+): Promise<{ axeViolations?: AxeViolationSummary[] } | void> {
   const evidenceDir = options.evidenceDir;
   if (!evidenceDir) return;
+  let axeViolations: AxeViolationSummary[] | undefined;
 
   const pageDir = path.join(evidenceDir, createSafeFilename(url));
   try {
@@ -1366,6 +1368,7 @@ export async function captureRepresentativeEvidence(
       console.warn(`axe-core scan timed out for ${url}`);
     }
     if (axeResults) {
+      axeViolations = summariseAxeViolations(axeResults.violations);
       for (const v of axeResults.violations) {
         if (v.id !== 'color-contrast' && v.id !== 'color-contrast-enhanced') continue;
         for (const node of v.nodes) {
@@ -1503,6 +1506,7 @@ export async function captureRepresentativeEvidence(
       }
     }
   }
+  return { axeViolations };
 }
 
 /**

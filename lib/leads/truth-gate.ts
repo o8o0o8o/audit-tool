@@ -63,6 +63,7 @@ import {
   type VulnerableLibraryCandidate,
 } from './sales-signals';
 import type { SignalKind, StackProfile } from './types';
+import { isTeaserReady, sortByWeight, weighFact, type FactWeight } from './fact-weight';
 
 export interface GateOptions {
   /** Distinct root causes needed before a teaser is built. */
@@ -303,6 +304,8 @@ export interface Highlight {
     observations?: Observation[];
   };
   gate: 'pass';
+  /** How much the fact weighs as a reason to hire developers (`fact-weight.ts`). Set once facts are grouped. */
+  weight?: FactWeight;
 }
 
 export interface DroppedCandidate {
@@ -1894,9 +1897,10 @@ async function checkAnalyticsGap(c: AnalyticsGapCandidate, ctx: CheckContext): P
 }
 
 /**
- * Teaser order: data the company is losing (analytics) and email anyone can forge in its name first,
- * then what a visitor runs into, then language and search problems, then real-user
- * speed, then outdated software. The platform is never the lead (design revision 3).
+ * Order between facts of the same weight (the weight comes first, see `fact-weight.ts`): data the
+ * company is losing (analytics) and email anyone can forge in its name first, then what a visitor
+ * runs into, then language and search problems, then real-user speed, then outdated software, so
+ * the platform leads a teaser only when it is the one heavy fact.
  */
 const CAUSE_ORDER = [
   'blocked-by-own-policy',
@@ -1965,7 +1969,18 @@ export function groupByRootCause(passed: Highlight[], dropped: DroppedCandidate[
     if (h.type === 'vulnerable-library')
       h.fact += `; ${more} more librar${more === 1 ? 'y' : 'ies'} on the site ${more === 1 ? 'has' : 'have'} a published advisory too`;
   }
-  return grouped;
+  // Weighed after the wording is complete.
+  return rankHighlights(grouped);
+}
+
+/**
+ * Sets each fact's weight and puts the facts in teaser order: heaviest first, the cause order
+ * between equals. Pure, so results on disk can be ranked again without asking the site anything.
+ */
+export function rankHighlights(highlights: Highlight[]): Highlight[] {
+  const inCauseOrder = [...highlights].sort((a, b) => causeRank(a.rootCause) - causeRank(b.rootCause));
+  for (const h of inCauseOrder) h.weight = weighFact(h);
+  return sortByWeight(inCauseOrder);
 }
 
 /**
@@ -2141,7 +2156,7 @@ export async function runGate(
     control,
     highlights,
     causes,
-    teaserReady: causes.length >= opts.minCauses,
+    teaserReady: isTeaserReady(highlights, opts.minCauses),
     candidatesDropped: dropped,
     disclosure,
     requestsSent: requests.n,

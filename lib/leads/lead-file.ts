@@ -51,6 +51,8 @@ export interface LeadFile {
   controlObservations?: Observation[];
   /** The gate run before this one, and what changed since: set when the lead is saved. */
   previous?: { checkedAt: string; file: string; changes: FactChange[] } | null;
+  /** Set when the facts were weighed and ordered again from this file, with no new request to the site. */
+  rerankedAt?: string;
 }
 
 /** One fact, compared between two gate runs of the same prospect. */
@@ -264,6 +266,19 @@ export function writeLeadFile(lead: LeadFile): string {
   fs.writeFileSync(path.join(runs, `${lead.runStamp ?? gateRunStamp(lead.checkedAt)}.json`), text);
   fs.writeFileSync(file, text);
   lead.previous = previous;
+  return file;
+}
+
+/**
+ * Saves a lead file whose facts were re-ordered but not re-checked: the same gate run, so it
+ * replaces lead.json and that run's own copy, and leaves `previous` as it was.
+ */
+export function rewriteLeadFile(lead: LeadFile): string {
+  const file = leadJsonPath(lead.runDir);
+  const text = JSON.stringify(lead, null, 2);
+  const own = path.join(gateRunsDir(lead.runDir), `${lead.runStamp ?? gateRunStamp(lead.checkedAt)}.json`);
+  if (fs.existsSync(own)) fs.writeFileSync(own, text);
+  fs.writeFileSync(file, text);
   return file;
 }
 

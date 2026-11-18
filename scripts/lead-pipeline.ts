@@ -34,6 +34,10 @@
  *                 --run=<dir>          use this run folder (a lead scan or a full audit), with --only
  *                 --min-causes=<n>     distinct root causes needed for a teaser (default 3)
  *                 --no-browser         skip the checks that need a browser click
+ *                 A teaser needs that many causes and at least one heavy fact (lib/leads/fact-weight.ts).
+ *   rerank        Weigh and order the facts already on disk again, with no request to any site; rows
+ *                 move between teaser_ready and no_teaser to match and changed teasers are rebuilt.
+ *                 --only=<domain>      one site
  *   disclosed <domain>   Record that a security disclosure was sent; outreach is blocked until then.
  *   teaser        Stage 6: write teaser.md, teaser.pdf and email.md for every teaser_ready row.
  *                 --only=<domain>      one site
@@ -87,6 +91,7 @@ import {
   gateRunStamp,
   leadDir,
   readLeadFile,
+  rewriteLeadFile,
   writeLeadFile,
   type LeadFile,
 } from '../lib/leads/lead-file';
@@ -104,7 +109,8 @@ import { renderMarkdownToPdf } from '../lib/reports/pdf-renderer';
 import { LEAD_RESULTS_DIR, stackJsonPath } from '../lib/leads/paths';
 import { chooseScanOrigin } from '../lib/leads/scan-origin';
 import { loadRun } from '../lib/leads/run-data';
-import { GATE_DEFAULTS, runGate } from '../lib/leads/truth-gate';
+import { GATE_DEFAULTS, rankHighlights, runGate } from '../lib/leads/truth-gate';
+import { isTeaserReady } from '../lib/leads/fact-weight';
 import type { FingerprintResult } from '../lib/leads/types';
 import { readLatestRun, runAuditProcess } from '../lib/leads/run-audit';
 import { DEFAULT_WEIGHTS_PATH, formatReasons, loadWeights, rank, type Ranked } from '../lib/leads/score';
@@ -914,6 +920,59 @@ async function gate() {
   }
 }
 
+/**
+ * Weighs and orders the facts already on disk again, with no request to any site, and moves rows
+ * between teaser_ready and no_teaser to match. A teaser whose facts changed order is rebuilt.
+ */
+async function rerank() {
+  const only = option('only');
+  const minCauses = numberOption('min-causes', GATE_DEFAULTS.minCauses);
+  const rows = actionable(readCompanies(csvPath)).filter((r) => {
+    if (only) return domainOf(r[KEY_COLUMN]) === domainOf(only);
+    return ['teaser_ready', 'no_teaser'].includes(stageOf(r)) && r.run_dir?.trim();
+  });
+  const results: string[] = [];
+  const moved: string[] = [];
+  for (const record of rows) {
+    const domain = domainOf(record[KEY_COLUMN]);
+    const lead = record.run_dir?.trim() ? readLeadFile(record.run_dir.trim()) : null;
+    if (!lead) continue;
+    const before = lead.highlights.map((h) => `${h.rootCause}:${h.weight ?? ''}`).join('|');
+    lead.highlights = rankHighlights(lead.highlights);
+    lead.causes = lead.highlights.map((h) => h.rootCause);
+    lead.teaserReady = isTeaserReady(lead.highlights, minCauses);
+    const changed = before !== lead.highlights.map((h) => `${h.rootCause}:${h.weight ?? ''}`).join('|');
+    if (changed) {
+      lead.rerankedAt = new Date().toISOString();
+      rewriteLeadFile(lead);
+    }
+    const stage = stageOf(record);
+    const next = lead.teaserReady ? 'teaser_ready' : 'no_teaser';
+    results.push(next);
+    const values: Record<string, string> = { gate_causes: lead.causes.join('; ') };
+    if (['teaser_ready', 'no_teaser'].includes(stage) && stage !== next) {
+      Object.assign(values, stageValues(next, new Date()));
+      moved.push(`${domain}: ${stage} → ${next}`);
+    }
+    updateCompanies(csvPath, [{ website: record[KEY_COLUMN], values }]);
+    const heavy = lead.highlights.filter((h) => h.weight === 'heavy').map((h) => h.rootCause);
+    console.log(
+      `${domain}: ${lead.causes.length} cause(s), heavy: ${heavy.length ? heavy.join(', ') : 'none'} → ${next}`,
+    );
+    if (lead.teaserReady && changed && !lead.disclosure.length && ['teaser_ready', 'no_teaser'].includes(stage)) {
+      await writeTeaser(lead);
+    }
+  }
+  if (moved.length) console.log(`\nMoved:\n  ${moved.join('\n  ')}`);
+  if (results.length > 1) {
+    printTable(
+      'After reranking',
+      count(results, (r) => r),
+      results.length,
+    );
+  }
+}
+
 function disclosed() {
   const domain = argv.filter((a) => !a.startsWith('--'))[1];
   const record = domain ? readCompanies(csvPath).find((r) => domainOf(r[KEY_COLUMN]) === domainOf(domain)) : null;
@@ -951,6 +1010,9 @@ async function main() {
       break;
     case 'gate':
       await gate();
+      break;
+    case 'rerank':
+      await rerank();
       break;
     case 'disclosed':
       disclosed();

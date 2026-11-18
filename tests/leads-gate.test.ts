@@ -665,15 +665,19 @@ void describe('truth gate: root causes, threshold, disclosure', () => {
     );
     assert.deepEqual(
       grouped.map((g) => g.rootCause),
-      ['dead-navigation-links', 'noindex', 'end-of-life:drupal'],
-      'what a visitor runs into first; outdated software last',
+      ['end-of-life:drupal', 'dead-navigation-links', 'noindex'],
+      'the heavy fact first; between equals, what a visitor runs into first',
     );
-    assert.deepEqual(grouped[0].evidence.also, ['c', 'd']);
-    assert.equal(grouped[0].fact, 'fact b; 2 more navigation links do the same');
+    assert.deepEqual(
+      grouped.map((g) => g.weight),
+      ['heavy', 'medium', 'medium'],
+    );
+    assert.deepEqual(grouped[1].evidence.also, ['c', 'd']);
+    assert.equal(grouped[1].fact, 'fact b; 2 more navigation links do the same');
     assert.equal(dropped.filter((d) => d.reason === 'same-root-cause').length, 2);
   });
 
-  void it('three distinct causes make a teaser; the security check and the allowlist are reported', async () => {
+  void it('three distinct causes with a heavy one make a teaser; the security check and the allowlist are reported', async () => {
     const pages = [page('/', { brokenMediaData: { brokenImages: [u('/img/gone.jpg')] } }), page('/pricing')];
     const data = run(pages, {
       siteChecks: {
@@ -693,9 +697,14 @@ void describe('truth gate: root causes, threshold, disclosure', () => {
     assert.deepEqual(result.causes, [
       'language-switch',
       'dead-navigation-links',
-      'broken-images',
       'end-of-life:drupal',
+      'broken-images',
     ]);
+    assert.deepEqual(
+      result.highlights.map((x) => x.weight),
+      ['heavy', 'heavy', 'heavy', 'medium'],
+      'links dead on every page and outdated software are heavy; one broken image is not',
+    );
     assert.equal(result.teaserReady, true);
     assert.deepEqual(result.disclosure, [{ check: 'js-secrets', note: '1 finding' }]);
     assert.ok(result.candidatesDropped.some((d) => d.reason === 'not-on-allowlist' && d.detail === 'orphan pages'));

@@ -53,6 +53,10 @@ on:
         description: Report sections for the custom preset (comma-separated)
         type: string
         default: ''
+      lead:
+        description: Quick scan (--lead) - 25 pages, passive, results in lead-results/
+        type: string
+        default: 'false'
 
 permissions:
   contents: read
@@ -75,6 +79,7 @@ jobs:
       IN_EVIDENCE_CAP: ${{ inputs.evidence_cap }}
       IN_PRESET: ${{ inputs.preset }}
       IN_SECTIONS: ${{ inputs.sections }}
+      IN_LEAD: ${{ inputs.lead }}
       # Either a legacy Blob read-write token, or Vercel credentials to pull OIDC Blob access
       # (see web/scripts/vercel-blob-env.sh).
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
@@ -97,11 +102,15 @@ jobs:
           if [ -n "$IN_SECTIONS" ] && ! printf '%s' "$IN_SECTIONS" | grep -Eq '^[a-z-]+(,[a-z-]+)*$'; then
             echo "::error::invalid sections"; exit 1
           fi
+          case "$IN_LEAD" in ''|true|false) ;; *) echo "::error::invalid lead"; exit 1 ;; esac
+          # A quick scan (--lead) writes to lead-results/, never audit-results/.
+          if [ "$IN_LEAD" = "true" ]; then results=lead-results; else results=audit-results; fi
+          echo "RESULTS_DIR=$results" >> "$GITHUB_ENV"
           echo "AUDIT_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           echo "AUDIT_OPTIONS=$(jq -cn --arg perf "$IN_PERF" --arg llm "$IN_LLM" --arg verify "$IN_VERIFY" \
             --arg contentResearch "$IN_CONTENT_RESEARCH" --arg visual "$IN_VISUAL" --arg concurrency "$IN_CONCURRENCY" \
             --arg limit "$IN_LIMIT" --arg evidenceCap "$IN_EVIDENCE_CAP" \
-            --arg preset "$IN_PRESET" --arg sections "$IN_SECTIONS" '$ARGS.named')" >> "$GITHUB_ENV"
+            --arg preset "$IN_PRESET" --arg sections "$IN_SECTIONS" --arg quickScan "$IN_LEAD" '$ARGS.named')" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
 
@@ -125,7 +134,7 @@ jobs:
       - name: Report running
         run: |
           source web/scripts/vercel-blob-env.sh
-          node web/scripts/upload-results.mjs --status=running
+          node web/scripts/upload-results.mjs --status=running --results="${RESULTS_DIR:-audit-results}"
 
       - name: Run audit
         env:
@@ -135,6 +144,7 @@ jobs:
         # Mirrors toCliArgs() in web/lib/audit-options.ts.
         run: |
           args=("--origin=$AUDIT_URL")
+          [ "$IN_LEAD" = "true" ] && args+=("--lead")
           [ -n "$IN_PRESET" ] && args+=("--preset=$IN_PRESET")
           [ -n "$IN_SECTIONS" ] && args+=("--sections=$IN_SECTIONS")
           [ "$IN_PERF" = "true" ] && args+=("--perf")
@@ -148,12 +158,12 @@ jobs:
           # Best-effort: progress plumbing must never block the audit.
           source web/scripts/vercel-blob-env.sh || echo "::warning::Blob credentials unavailable; live progress disabled"
           # Publish live page progress every ~20s while the audit runs.
-          ( while sleep 20; do node web/scripts/upload-results.mjs --progress || true; done ) &
+          ( while sleep 20; do node web/scripts/upload-results.mjs --progress --results="${RESULTS_DIR:-audit-results}" || true; done ) &
           progress_loop=$!
           rc=0
           npx tsx start.ts "${args[@]}" || rc=$?
           kill "$progress_loop" 2>/dev/null || true
-          node web/scripts/upload-results.mjs --progress || true
+          node web/scripts/upload-results.mjs --progress --results="${RESULTS_DIR:-audit-results}" || true
           exit "$rc"
 
       - name: Upload results to Blob
@@ -167,13 +177,13 @@ jobs:
             *) status=failed ;;
           esac
           source web/scripts/vercel-blob-env.sh
-          node web/scripts/upload-results.mjs --status="$status"
+          node web/scripts/upload-results.mjs --status="$status" --results="${RESULTS_DIR:-audit-results}"
 
       - name: Upload results artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: audit-${{ inputs.run_id }}
-          path: audit-results/
+          path: ${{ env.RESULTS_DIR || 'audit-results' }}/
           if-no-files-found: ignore
           retention-days: 14

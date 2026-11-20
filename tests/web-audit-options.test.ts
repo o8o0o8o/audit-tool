@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { LEAD_MODE, parseArgs } from '../lib/args-parser';
 import { ROLE_PRESETS, REPORT_SECTIONS } from '../lib/presets';
 import {
   WEB_PRESETS,
@@ -10,6 +14,7 @@ import {
   isValidRunId,
   newRunId,
   parseAuditRequest,
+  QUICK_SCAN,
   toCliArgs,
   toWorkflowInputs,
 } from '../web/lib/audit-options';
@@ -31,6 +36,7 @@ void describe('web audit options', () => {
       concurrency: 5,
       limit: null,
       evidenceCap: 10,
+      quickScan: false,
     });
   });
 
@@ -81,6 +87,7 @@ void describe('web audit options', () => {
       concurrency: '3',
       limit: '5',
       evidence_cap: '20',
+      lead: 'false',
     });
     assert.deepStrictEqual(toCliArgs(inputs), [
       '--origin=https://example.com',
@@ -93,6 +100,78 @@ void describe('web audit options', () => {
       '--limit=5',
       '--evidence-cap=20',
     ]);
+  });
+
+  void it('quick scan runs lead mode with its own settings, whatever else the form sent', () => {
+    const result = parseAuditRequest({
+      url: 'example.com/page',
+      preset: 'sales',
+      quickScan: 'on',
+      perf: true,
+      llm: true,
+      verify: true,
+      contentResearch: true,
+      concurrency: 20,
+      limit: 5000,
+      evidenceCap: 100,
+    });
+    assert.ok(result.ok);
+    if (!result.ok) return;
+    assert.deepStrictEqual(
+      { ...result.options },
+      {
+        url: 'https://example.com',
+        preset: 'sales',
+        sections: [],
+        perf: false,
+        llm: false,
+        verify: false,
+        contentResearch: false,
+        visual: true,
+        concurrency: QUICK_SCAN.concurrency,
+        limit: QUICK_SCAN.pages,
+        evidenceCap: QUICK_SCAN.evidenceCap,
+        quickScan: true,
+      },
+    );
+    const cli = toCliArgs(toWorkflowInputs(result.options, 'run-12345678'));
+    assert.deepStrictEqual(cli.slice(0, 3), ['--origin=https://example.com', '--lead', '--preset=sales']);
+    const args = parseArgs(cli);
+    assert.equal(args.passive, true);
+    assert.equal(args.limit, LEAD_MODE.pageCap);
+    assert.equal(args.evidenceCap, LEAD_MODE.evidenceCap);
+    assert.equal(args.phase2, false);
+    assert.deepStrictEqual(args.errors, []);
+  });
+
+  void it('quick scan settings match lead mode, and its estimate is fixed', () => {
+    assert.equal(QUICK_SCAN.pages, LEAD_MODE.pageCap);
+    assert.equal(QUICK_SCAN.concurrency, LEAD_MODE.concurrency);
+    assert.equal(QUICK_SCAN.evidenceCap, LEAD_MODE.evidenceCap);
+    const base: EstimateInput = {
+      url: '',
+      preset: null,
+      sections: [],
+      perf: true,
+      llm: false,
+      verify: false,
+      contentResearch: false,
+      concurrency: 1,
+      limit: 9000,
+      evidenceCap: 100,
+      quickScan: true,
+    };
+    const estimate = estimateAuditDuration(base);
+    assert.equal(estimate?.pages, QUICK_SCAN.pages);
+    assert.equal(estimate?.assumedPages, false);
+    assert.deepStrictEqual(estimateAuditDuration({ ...base, perf: false, limit: 1 }), estimate);
+  });
+
+  void it('the workflow passes --lead and reads lead-results/ for a quick scan', () => {
+    const yml = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'audit.yml'), 'utf8');
+    assert.match(yml, /\[ "\$IN_LEAD" = "true" \] && args\+=\("--lead"\)/);
+    assert.match(yml, /then results=lead-results; else results=audit-results; fi/);
+    assert.equal((yml.match(/upload-results\.mjs [^\n]*--results="\$\{RESULTS_DIR:-audit-results\}"/g) ?? []).length, 4);
   });
 
   void it('keeps presets and sections in lockstep with lib/presets.ts', () => {

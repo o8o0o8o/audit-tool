@@ -221,3 +221,9 @@
   cursor: not-allowed;
   border-color: var(--color-grey-200);
 }
+
+/* Fields fixed by Quick scan: show the value the run uses, clearly not editable. */
+.form-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -18,7 +18,7 @@ interface RunStatus {
   files?: RunFile[];
   ghRunUrl?: string;
   error?: string;
-  options?: { preset?: string; sections?: string };
+  options?: { preset?: string; sections?: string; quickScan?: string };
 }
 
 const POLL_MS = 15000;
@@ -80,6 +80,7 @@ export default function RunPage({ params }: { params: Promise<{ runId: string }>
                 <p data-testid="run-preset">
                   Preset: {status.options.preset || 'full audit'}
                   {status.options.sections ? ` (${status.options.sections.split(',').join(', ')})` : ''}
+                  {status.options.quickScan === 'true' ? ' · Quick scan (25 pages, passive)' : ''}
                 </p>
               )}
               {status.error && <p className="error">{status.error}</p>}

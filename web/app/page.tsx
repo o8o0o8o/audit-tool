@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
-import { estimateAuditDuration, formatEstimate, type AuditEstimate, type EstimateInput } from '../lib/audit-options';
+import {
+  QUICK_SCAN,
+  estimateAuditDuration,
+  formatEstimate,
+  type AuditEstimate,
+  type EstimateInput,
+} from '../lib/audit-options';
 import {
   computeEta,
   findMainReport,
@@ -102,6 +108,7 @@ export default function DispatchPage() {
   const [now, setNow] = useState(() => Date.now());
   const storedRun = useRef<StoredRun | null>(null);
   const [preset, setPreset] = useState<string>('full');
+  const [quickScan, setQuickScan] = useState(false);
   const isCustom = preset === 'custom';
   const summary = PRESETS.find((p) => p.value === preset)?.summary;
   const formRef = useRef<HTMLFormElement>(null);
@@ -121,10 +128,10 @@ export default function DispatchPage() {
     }),
   );
 
-  // The preset radio is controlled, so recompute after React commits the new preset.
+  // The preset radio and the quick scan switch are controlled, so recompute after React commits them.
   useEffect(() => {
     if (formRef.current) refreshEstimate(formRef.current);
-  }, [preset]);
+  }, [preset, quickScan]);
 
   useEffect(() => {
     const id = readRunParam(window.location.search);
@@ -202,6 +209,7 @@ export default function DispatchPage() {
         concurrency: String(form.get('concurrency') ?? ''),
         limit: String(form.get('limit') ?? ''),
         evidenceCap: String(form.get('evidenceCap') ?? ''),
+        quickScan: form.get('quickScan') === 'on',
       }),
     );
   }
@@ -221,6 +229,7 @@ export default function DispatchPage() {
       concurrency: form.get('concurrency'),
       limit: form.get('limit'),
       evidenceCap: form.get('evidenceCap'),
+      quickScan: form.get('quickScan') === 'on',
     };
     setSubmitting(true);
     setError(null);
@@ -245,6 +254,7 @@ export default function DispatchPage() {
           visual: body.visual,
           concurrency: String(body.concurrency ?? ''),
           evidenceCap: String(body.evidenceCap ?? ''),
+          quickScan: body.quickScan,
         };
         storedRun.current = { dispatchedAt: Date.now(), options };
         saveStoredRun(data.runId, storedRun.current);
@@ -482,20 +492,59 @@ export default function DispatchPage() {
                 </div>
 
                 <div className="contacts-form__item">
+                  <span className="contacts-form__label" id="audit-scan-label">
+                    Scan
+                  </span>
+                  <div className="contacts-form__checklist" role="group" aria-labelledby="audit-scan-label">
+                    <label className="checkbox-button" title="--lead">
+                      <input
+                        name="quickScan"
+                        type="checkbox"
+                        checked={quickScan}
+                        onChange={(e) => setQuickScan(e.target.checked)}
+                      />
+                      <span>Quick scan</span>
+                    </label>
+                  </div>
+                  <p className="contacts-form__hint">
+                    {quickScan
+                      ? 'Reads 25 published pages, 3 at a time, and nothing else: no probing of hidden files or hosts, no lab performance run (real-user data only), UI checks on, no PDF report. Use it for sites whose owner did not ask for an audit. Works with any preset.'
+                      : 'Full audit: every page in the sitemap, with the security probes. Switch on Quick scan for a short, read-only scan.'}
+                  </p>
+                </div>
+
+                <div className="contacts-form__item">
                   <span className="contacts-form__label" id="audit-options-label">
                     Options
                   </span>
                   <div className="contacts-form__checklist" role="group" aria-labelledby="audit-options-label">
-                    {OPTIONS.map((o) => (
-                      <label
-                        key={o.name}
-                        className={o.disabled ? 'checkbox-button checkbox-button--disabled' : 'checkbox-button'}
-                        title={o.disabled ? `${o.label} is not available yet` : o.flag}
-                      >
-                        <input name={o.name} type="checkbox" disabled={o.disabled} />
-                        <span>{o.label}</span>
-                      </label>
-                    ))}
+                    {OPTIONS.map((o) => {
+                      // A quick scan fixes these: no lab performance run, UI checks always on.
+                      const fixedByQuickScan = quickScan && (o.name === 'perf' || o.name === 'visual');
+                      const disabled = o.disabled || fixedByQuickScan;
+                      return (
+                        <label
+                          // Remount when Quick scan flips, so the input never switches between controlled and not.
+                          key={`${o.name}-${fixedByQuickScan}`}
+                          className={disabled ? 'checkbox-button checkbox-button--disabled' : 'checkbox-button'}
+                          title={
+                            o.disabled
+                              ? `${o.label} is not available yet`
+                              : fixedByQuickScan
+                                ? `Set by Quick scan`
+                                : o.flag
+                          }
+                        >
+                          <input
+                            name={o.name}
+                            type="checkbox"
+                            disabled={disabled}
+                            {...(fixedByQuickScan ? { checked: o.name === 'visual', readOnly: true } : {})}
+                          />
+                          <span>{o.label}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -506,10 +555,13 @@ export default function DispatchPage() {
                   <input
                     id="audit-concurrency"
                     name="concurrency"
+                    disabled={quickScan}
+                    // Remount on Quick scan so the field shows the value the run will use.
+                    key={`concurrency-${quickScan}`}
                     type="number"
                     min={1}
                     max={20}
-                    defaultValue={5}
+                    defaultValue={quickScan ? QUICK_SCAN.concurrency : 5}
                     placeholder="Concurrency (1–20)"
                     className="form-input"
                   />
@@ -521,10 +573,12 @@ export default function DispatchPage() {
                   <input
                     id="audit-evidence-cap"
                     name="evidenceCap"
+                    disabled={quickScan}
+                    key={`evidenceCap-${quickScan}`}
                     type="number"
                     min={1}
                     max={100}
-                    defaultValue={10}
+                    defaultValue={quickScan ? QUICK_SCAN.evidenceCap : 10}
                     placeholder="Evidence cap (1–100)"
                     className="form-input"
                   />
@@ -536,6 +590,9 @@ export default function DispatchPage() {
                   <input
                     id="audit-limit"
                     name="limit"
+                    disabled={quickScan}
+                    key={`limit-${quickScan}`}
+                    defaultValue={quickScan ? QUICK_SCAN.pages : undefined}
                     type="number"
                     min={1}
                     placeholder="Page limit (all pages when empty)"

@@ -33,7 +33,15 @@ export interface AuditOptions {
   concurrency: number;
   limit: number | null;
   evidenceCap: number;
+  /** `--lead`: the passive 25-page scan; works with any preset. */
+  quickScan: boolean;
 }
+
+/**
+ * Quick scan settings, the same as `LEAD_MODE` in lib/args-parser.ts (a test keeps them equal).
+ * A quick scan runs with these whatever the form says, so the estimate and the run agree.
+ */
+export const QUICK_SCAN = { pages: 25, concurrency: 3, evidenceCap: 5, probePages: 4 } as const;
 
 export type ParseResult = { ok: true; options: AuditOptions } | { ok: false; errors: string[] };
 
@@ -135,6 +143,26 @@ export function parseAuditRequest(body: unknown): ParseResult {
   const limit = parseInteger(b.limit, 'limit', 1, LIMIT_MAX, errors);
   const evidenceCap = parseInteger(b.evidenceCap, 'evidenceCap', EVIDENCE_CAP_MIN, EVIDENCE_CAP_MAX, errors);
   if (errors.length > 0) return { ok: false, errors };
+  if (parseBool(b.quickScan)) {
+    // Lead mode drops or caps these anyway; set them here so the request says what will run.
+    return {
+      ok: true,
+      options: {
+        url,
+        preset,
+        sections,
+        perf: false,
+        llm: false,
+        verify: false,
+        contentResearch: false,
+        visual: true,
+        concurrency: QUICK_SCAN.concurrency,
+        limit: QUICK_SCAN.pages,
+        evidenceCap: QUICK_SCAN.evidenceCap,
+        quickScan: true,
+      },
+    };
+  }
   return {
     ok: true,
     options: {
@@ -149,6 +177,7 @@ export function parseAuditRequest(body: unknown): ParseResult {
       concurrency: concurrency ?? CONCURRENCY_DEFAULT,
       limit,
       evidenceCap: evidenceCap ?? EVIDENCE_CAP_DEFAULT,
+      quickScan: false,
     },
   };
 }
@@ -177,12 +206,14 @@ export function toWorkflowInputs(opts: AuditOptions, runId: string): WorkflowInp
     concurrency: String(opts.concurrency),
     limit: opts.limit === null ? '' : String(opts.limit),
     evidence_cap: String(opts.evidenceCap),
+    lead: String(opts.quickScan),
   };
 }
 
 /** CLI flags for `start.ts`; `.github/workflows/audit.yml` builds the same list in shell. */
 export function toCliArgs(inputs: WorkflowInputs): string[] {
   const args = [`--origin=${inputs.url}`];
+  if (inputs.lead === 'true') args.push('--lead');
   if (inputs.preset) args.push(`--preset=${inputs.preset}`);
   if (inputs.sections) args.push(`--sections=${inputs.sections}`);
   if (inputs.perf === 'true') args.push('--perf');
@@ -212,6 +243,8 @@ export interface EstimateInput {
   concurrency: string | number | null;
   limit: string | number | null;
   evidenceCap: string | number | null;
+  /** Optional so runs stored before the option existed still estimate. */
+  quickScan?: boolean;
 }
 
 export interface AuditEstimate {
@@ -252,6 +285,7 @@ function clamp(value: number, min: number, max: number): number {
  */
 export function estimateAuditDuration(input: EstimateInput): AuditEstimate | null {
   if (input.preset === 'custom' && input.sections.length === 0) return null;
+  if (input.quickScan) return estimateQuickScan();
 
   const concurrency = clamp(toPositiveInt(input.concurrency, CONCURRENCY_DEFAULT) ?? CONCURRENCY_DEFAULT, CONCURRENCY_MIN, CONCURRENCY_MAX);
   const limit = toPositiveInt(input.limit, 0);
@@ -271,6 +305,20 @@ export function estimateAuditDuration(input: EstimateInput): AuditEstimate | nul
   if (!input.preset || input.preset === 'full' || input.preset === 'seo' || input.preset === 'custom') seconds += FULL_REPORT_SECONDS;
 
   return { minutes: Math.max(1, Math.ceil(seconds / 60)), pages, assumedPages };
+}
+
+/** Quick scan: fixed size, UI checks on, click probe on 4 pages, no Phase 2 report. */
+function estimateQuickScan(): AuditEstimate {
+  const { pages, concurrency, evidenceCap, probePages } = QUICK_SCAN;
+  const batches = Math.ceil(pages / concurrency);
+  const seconds =
+    SETUP_SECONDS +
+    REPORT_SECONDS +
+    batches * BATCH_SECONDS +
+    evidenceCap * EVIDENCE_SECONDS +
+    batches * VISUAL_PER_PAGE_SECONDS +
+    probePages * 20;
+  return { minutes: Math.max(1, Math.ceil(seconds / 60)), pages, assumedPages: false };
 }
 
 export function formatEstimate(estimate: AuditEstimate): string {

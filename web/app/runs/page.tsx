@@ -1,23 +1,60 @@
-import { list, type ListBlobResultBlob } from '@vercel/blob';
+import { list } from '@vercel/blob';
 
-export const dynamic = 'force-dynamic';
+import { isValidRunId } from '../../lib/audit-options';
+import { runIdStartedAt } from '../../lib/blob';
 
-async function listStatusBlobs(): Promise<ListBlobResultBlob[]> {
-  const statuses: ListBlobResultBlob[] = [];
+// Rebuilt at most every 30s, so Blob is listed at most twice per 30s however often the page is opened.
+export const revalidate = 30;
+
+interface RunEntry {
+  runId: string;
+  /** Last status upload; for older runs without a `runs/` entry, the start time from the run id. */
+  updatedAt: Date | null;
+}
+
+/** `runs/<runId>.json` holds one small status copy per run, so listing it never walks evidence files. */
+async function listIndexedRuns(): Promise<RunEntry[]> {
+  const runs: RunEntry[] = [];
   let cursor: string | undefined;
   do {
-    const page = await list({ prefix: 'audits/', cursor });
-    statuses.push(...page.blobs.filter((b) => /^audits\/[^/]+\/status\.json$/.test(b.pathname)));
+    const page = await list({ prefix: 'runs/', cursor });
+    for (const blob of page.blobs) {
+      const m = /^runs\/([^/]+)\.json$/.exec(blob.pathname);
+      if (m && isValidRunId(m[1])) runs.push({ runId: m[1], updatedAt: blob.uploadedAt });
+    }
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
-  return statuses.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+  return runs;
+}
+
+/** Runs uploaded before `runs/` existed: folded listing returns one folder per run, not its files. */
+async function listLegacyRuns(): Promise<RunEntry[]> {
+  const runs: RunEntry[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: 'audits/', mode: 'folded', cursor });
+    for (const folder of page.folders) {
+      const runId = folder.split('/')[1];
+      if (isValidRunId(runId)) runs.push({ runId, updatedAt: runIdStartedAt(runId) });
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  return runs;
+}
+
+async function listRuns(): Promise<RunEntry[]> {
+  const [indexed, legacy] = await Promise.all([listIndexedRuns(), listLegacyRuns()]);
+  const byId = new Map(legacy.map((r) => [r.runId, r]));
+  for (const r of indexed) byId.set(r.runId, r);
+  // Run ids start with a UTC timestamp, so newest first is reverse id order.
+  return [...byId.values()].sort((a, b) => (a.runId < b.runId ? 1 : a.runId > b.runId ? -1 : 0));
 }
 
 export default async function RunsPage() {
-  let runs: ListBlobResultBlob[] = [];
+  let runs: RunEntry[] = [];
   let error: string | null = null;
   try {
-    runs = await listStatusBlobs();
+    runs = await listRuns();
   } catch (err) {
     console.error('blob list failed', err);
     error =
@@ -34,15 +71,12 @@ export default async function RunsPage() {
       )}
       {!error && runs.length === 0 && <p className="muted">No runs yet.</p>}
       <ul className="run-list">
-        {runs.map((blob) => {
-          const runId = blob.pathname.split('/')[1];
-          return (
-            <li key={blob.pathname}>
-              <a href={`/runs/${runId}`}>{runId}</a>{' '}
-              <span className="muted">— updated {blob.uploadedAt.toISOString()}</span>
-            </li>
-          );
-        })}
+        {runs.map((run) => (
+          <li key={run.runId}>
+            <a href={`/runs/${run.runId}`}>{run.runId}</a>
+            {run.updatedAt && <span className="muted"> — updated {run.updatedAt.toISOString()}</span>}
+          </li>
+        ))}
       </ul>
     </main>
   );

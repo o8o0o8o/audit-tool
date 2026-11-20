@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Uploads an audit run folder to Vercel Blob under audits/<RUN_ID>/ and writes audits/<RUN_ID>/status.json.
+// Uploads an audit run folder to Vercel Blob under audits/<RUN_ID>/ and writes audits/<RUN_ID>/status.json
+// (plus a copy at runs/<RUN_ID>.json, which the /runs page lists).
 //
 // Usage: node web/scripts/upload-results.mjs --status=running|succeeded|failed|cancelled [--results=<audit-results dir>]
 //        node web/scripts/upload-results.mjs --progress   (uploads $AUDIT_PROGRESS_FILE to audits/<RUN_ID>/progress.json)
@@ -52,6 +53,21 @@ async function findRunFolder(resultsDir, startedAtMs) {
 }
 
 const blobOptions = { access: 'public', addRandomSuffix: false, allowOverwrite: true };
+const UPLOAD_CONCURRENCY = 8;
+
+/** Runs `fn` over `items` with at most `limit` in flight; results keep the input order. */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 /** Best-effort: a missing file or failed upload is logged, never fails the job. */
 async function uploadProgress(runId) {
@@ -112,12 +128,14 @@ async function main() {
       status = 'failed';
       error = 'no audit results produced';
     } else {
-      for (const file of await walk(runFolder)) {
+      const paths = await walk(runFolder);
+      const uploaded = await mapWithConcurrency(paths, UPLOAD_CONCURRENCY, async (file) => {
         const rel = path.relative(runFolder, file).split(path.sep).join('/');
         const blob = await put(`audits/${runId}/${rel}`, await readFile(file), blobOptions);
-        files.push({ name: rel, url: blob.url });
         console.log(`uploaded ${rel}`);
-      }
+        return { name: rel, url: blob.url };
+      });
+      files.push(...uploaded);
     }
   }
 
@@ -132,11 +150,11 @@ async function main() {
     ghRunUrl,
     ...(error ? { error } : {}),
   };
-  await put(`audits/${runId}/status.json`, JSON.stringify(statusDoc, null, 2), {
-    ...blobOptions,
-    contentType: 'application/json',
-    cacheControlMaxAge: 60,
-  });
+  const statusBody = JSON.stringify(statusDoc, null, 2);
+  const statusOptions = { ...blobOptions, contentType: 'application/json', cacheControlMaxAge: 60 };
+  // runs/<id>.json lets the /runs page list one small entry per run instead of every uploaded file.
+  await put(`runs/${runId}.json`, statusBody, statusOptions);
+  await put(`audits/${runId}/status.json`, statusBody, statusOptions);
   console.log(`status.json written: ${status}`);
 }
 

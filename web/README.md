@@ -5,7 +5,7 @@ Next.js app that dispatches SEO audits to GitHub Actions and shows their reports
 ## Pages
 
 - `/` — dispatch form (URL, perf, llm, verify, content research, concurrency, page limit, evidence cap), with an estimated audit duration next to "Start audit" that shows on load (before a URL is typed) and updates as options change (assumes ≈100 pages when no limit is set). After "Start audit" the page stays on `/` (as `/?run=<runId>`, so a reload resumes) and a blocking overlay shows `processed / total pages` and the time left (extrapolated from elapsed time once pages finish, else from the estimate with the current total). On success the main `<domain>.html` report is embedded in place with an open-in-new-tab link (or the file list when there is none); on failure the error and GitHub run link show; with no status/progress for 10 minutes the overlay turns into a "stalled" notice with "Stop waiting".
-- `/runs` — all runs, newest first (reads `audits/*/status.json` from Blob).
+- `/runs` — all runs, newest first (lists `runs/<runId>.json` from Blob; older runs without one come from the `audits/` folder names). Cached for 30s.
 - `/runs/<runId>` — status, report links and the GitHub Actions run link; polls while the run is in progress.
 
 ## API

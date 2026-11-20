@@ -185,3 +185,31 @@
 .run-list a:hover {
   border-bottom-color: var(--color-white);
 }
+
+/* /report/<run>/<file>: the report under the fixed site header, one screen high, footer below. */
+.report-page {
+  padding: calc(var(--headerHeight) + 16px) 0 48px;
+}
+
+.report-page-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+}
+
+.report-page-bar .muted {
+  margin-right: auto;
+  overflow-wrap: anywhere;
+}
+
+.report-page-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - var(--headerHeight) - 96px);
+  min-height: 480px;
+  border: 1px solid var(--color-grey-200);
+  border-radius: 24px;
+  background: var(--color-dark);
+}

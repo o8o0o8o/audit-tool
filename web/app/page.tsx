@@ -6,6 +6,8 @@ import { estimateAuditDuration, formatEstimate, type AuditEstimate, type Estimat
 import {
   computeEta,
   findMainReport,
+  reportHref,
+  viewHref,
   readRunParam,
   runViewState,
   type RunStatus,
@@ -344,12 +346,12 @@ export default function DispatchPage() {
 
     const main = findMainReport(status?.files);
     if (state === 'succeeded' && main) {
-      const src = `/view/${id}/${main.name}`;
+      const src = viewHref(id, main.name);
       return (
         <section className="run-result">
           <p className="run-result-actions">
             Audit finished.{' '}
-            <a className="link-accent" href={src} target="_blank" rel="noreferrer">
+            <a className="link-accent" href={reportHref(id, main.name)} target="_blank" rel="noreferrer">
               Open report in a new tab
             </a>{' '}
             {newAudit}
@@ -365,7 +367,7 @@ export default function DispatchPage() {
         <ul>
           {(status?.files ?? []).map((f) => (
             <li key={f.name}>
-              <a className="link-accent" href={`/view/${id}/${f.name}`} target="_blank" rel="noreferrer">
+              <a className="link-accent" href={reportHref(id, f.name)} target="_blank" rel="noreferrer">
                 {f.name}
               </a>
             </li>

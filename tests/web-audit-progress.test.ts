@@ -113,3 +113,15 @@ void describe('ProgressReporter progress file', () => {
     }
   });
 });
+
+void describe('report links', () => {
+  void it('opens HTML reports inside the site shell and other files raw', async () => {
+    const { reportHref, isReportPath } = await import('../web/lib/audit-progress');
+    assert.equal(reportHref('r1', 'example.com.html'), '/report/r1/example.com.html');
+    assert.equal(reportHref('r1', 'audit-report.pdf'), '/view/r1/audit-report.pdf');
+    assert.equal(reportHref('r1', 'audit-report.md'), '/view/r1/audit-report.md');
+    assert.equal(isReportPath(['..', 'x.html']), false);
+    assert.equal(isReportPath(['a b.html']), false);
+    assert.equal(isReportPath([]), false);
+  });
+});

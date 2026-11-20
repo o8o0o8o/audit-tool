@@ -73,6 +73,27 @@ export function computeEta(
   return { processed, total, percent, phaseLabel, remainingMinutes };
 }
 
+const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
+/** An HTML file of a run, as path segments (no `..`, nothing outside the run). */
+export function isReportPath(path: string[]): boolean {
+  return (
+    path.length > 0 &&
+    path.every((s) => PATH_SEGMENT.test(s) && s !== '.' && s !== '..') &&
+    /\.html$/i.test(path[path.length - 1])
+  );
+}
+
+/** The raw file, served sandboxed by the /view route. */
+export function viewHref(runId: string, name: string): string {
+  return `/view/${runId}/${name}`;
+}
+
+/** Where a report link goes: HTML reports open inside the site header and footer, other files raw. */
+export function reportHref(runId: string, name: string): string {
+  return isReportPath(name.split('/')) ? `/report/${runId}/${name}` : viewHref(runId, name);
+}
+
 export function findMainReport(files: RunFile[] | null | undefined): RunFile | null {
   return files?.find((f) => MAIN_REPORT_PATTERN.test(f.name)) ?? null;
 }

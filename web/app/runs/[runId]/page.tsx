@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from 'react';
 
+import { reportHref } from '../../../lib/audit-progress';
+
 interface RunFile {
   name: string;
   url: string;
@@ -85,7 +87,7 @@ export default function RunPage({ params }: { params: Promise<{ runId: string }>
                 <ul className="run-list">
                   {reports.map((f) => (
                     <li key={f.url}>
-                      <a data-testid="report-link" href={`/view/${runId}/${f.name}`} target="_blank" rel="noreferrer">
+                      <a data-testid="report-link" href={reportHref(runId, f.name)} target="_blank" rel="noreferrer">
                         {f.name}
                       </a>
                     </li>

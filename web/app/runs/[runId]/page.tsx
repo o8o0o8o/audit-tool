@@ -64,46 +64,51 @@ export default function RunPage({ params }: { params: Promise<{ runId: string }>
   const reports = (status?.files ?? []).filter((f) => isReport(f.name));
 
   return (
-    <main>
-      <h1>Run {runId}</h1>
-      {error && <p className="muted">{error}</p>}
-      {status && (
-        <>
-          <p data-testid="run-status">Status: {status.status}</p>
-          {status.url && <p>Site: {status.url}</p>}
-          {status.options && (
-            <p data-testid="run-preset">
-              Preset: {status.options.preset || 'full audit'}
-              {status.options.sections ? ` (${status.options.sections.split(',').join(', ')})` : ''}
-            </p>
-          )}
-          {status.error && <p className="error">{status.error}</p>}
-          {reports.length > 0 && (
-            <ul className="run-list">
-              {reports.map((f) => (
-                <li key={f.url}>
-                  <a data-testid="report-link" href={`/view/${runId}/${f.name}`} target="_blank" rel="noreferrer">
-                    {f.name}
+    <section className="section">
+      <div className="container">
+        <h1 className="section__title section__title--sm">Audit run</h1>
+        <div className="run-details">
+          <p className="muted">{runId}</p>
+          {error && <p className="muted">{error}</p>}
+          {status && (
+            <>
+              <p data-testid="run-status">Status: {status.status}</p>
+              {status.url && <p>Site: {status.url}</p>}
+              {status.options && (
+                <p data-testid="run-preset">
+                  Preset: {status.options.preset || 'full audit'}
+                  {status.options.sections ? ` (${status.options.sections.split(',').join(', ')})` : ''}
+                </p>
+              )}
+              {status.error && <p className="error">{status.error}</p>}
+              {reports.length > 0 && (
+                <ul className="run-list">
+                  {reports.map((f) => (
+                    <li key={f.url}>
+                      <a data-testid="report-link" href={`/view/${runId}/${f.name}`} target="_blank" rel="noreferrer">
+                        {f.name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {status.ghRunUrl && (
+                <p>
+                  <a
+                    className="link-accent"
+                    data-testid="gh-run-link"
+                    href={status.ghRunUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    GitHub Actions run
                   </a>
-                </li>
-              ))}
-            </ul>
+                </p>
+              )}
+            </>
           )}
-          {status.ghRunUrl && (
-            <p>
-              <a
-                className="link-accent"
-                data-testid="gh-run-link"
-                href={status.ghRunUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                GitHub Actions run
-              </a>
-            </p>
-          )}
-        </>
-      )}
-    </main>
+        </div>
+      </div>
+    </section>
   );
 }

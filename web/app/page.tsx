@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { estimateAuditDuration, formatEstimate, type AuditEstimate, type EstimateInput } from '../lib/audit-options';
-import { computeEta, findMainReport, readRunParam, runViewState, type RunStatus, type RunViewState } from '../lib/audit-progress';
+import {
+  computeEta,
+  findMainReport,
+  readRunParam,
+  runViewState,
+  type RunStatus,
+  type RunViewState,
+} from '../lib/audit-progress';
 
 const POLL_MS = 15_000;
 const RUN_STORAGE_PREFIX = 'audit-run:';
@@ -41,11 +48,27 @@ function formatRemaining(minutes: number | null): string {
 }
 
 const PRESETS = [
-  { value: 'full', label: 'Full audit', summary: 'Every report section, using the options you would get with no preset.' },
-  { value: 'sales', label: 'Sales', summary: 'Short executive summary, technology stack, CTAs/conversion and top issues.' },
+  {
+    value: 'full',
+    label: 'Full audit',
+    summary: 'Every report section, using the options you would get with no preset.',
+  },
+  {
+    value: 'sales',
+    label: 'Sales',
+    summary: 'Short executive summary, technology stack, CTAs/conversion and top issues.',
+  },
   { value: 'marketing', label: 'Marketing', summary: 'SEO, content, CTAs/conversion, UX, performance and privacy.' },
   { value: 'seo', label: 'SEO', summary: 'The full technical SEO set.' },
   { value: 'custom', label: 'Custom', summary: 'Pick the report sections yourself.' },
+] as const;
+
+const OPTIONS = [
+  { name: 'perf', label: 'Performance metrics', flag: '--perf' },
+  { name: 'llm', label: 'LLM passes', flag: '--llm' },
+  { name: 'verify', label: 'Live verification', flag: '--verify' },
+  { name: 'contentResearch', label: 'Content research', flag: '--content-research' },
+  { name: 'visual', label: 'UI defect checks', flag: '--visual' },
 ] as const;
 
 const SECTIONS: { value: string; label: string }[] = [
@@ -240,23 +263,45 @@ export default function DispatchPage() {
       </a>
     ) : null;
     const newAudit = (
-      <button type="button" className="btn btn-secondary" onClick={clearRun}>
+      <button type="button" className="btn btn--outline" onClick={clearRun}>
         New audit
       </button>
     );
 
     if (state === 'waiting' || state === 'running') {
-      const eta = computeEta(status?.progress, status?.startedAt ?? storedRun.current?.dispatchedAt, now, storedRun.current?.options ?? null);
+      const eta = computeEta(
+        status?.progress,
+        status?.startedAt ?? storedRun.current?.dispatchedAt,
+        now,
+        storedRun.current?.options ?? null,
+      );
       const hasProgress = eta.total > 0;
       return (
-        <div className="audit-overlay" data-testid="audit-overlay" role="dialog" aria-modal="true" aria-busy="true" aria-label="Audit in progress">
+        <div
+          className="audit-overlay"
+          data-testid="audit-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-busy="true"
+          aria-label="Audit in progress"
+        >
           <div className="audit-overlay-card card">
             <h2>{state === 'waiting' ? 'Starting the audit…' : 'Audit running'}</h2>
-            <p className="muted">Run {id} · {eta.phaseLabel}</p>
-            <div className="progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={eta.percent}>
+            <p className="muted">
+              Run {id} · {eta.phaseLabel}
+            </p>
+            <div
+              className="progress-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={eta.percent}
+            >
               <div className="progress-bar-fill" style={{ width: `${hasProgress ? eta.percent : 0}%` }} />
             </div>
-            <p className="progress-count">{hasProgress ? `${eta.processed} / ${eta.total} pages` : 'Waiting for the crawler to start'}</p>
+            <p className="progress-count">
+              {hasProgress ? `${eta.processed} / ${eta.total} pages` : 'Waiting for the crawler to start'}
+            </p>
             <p className="muted">{formatRemaining(eta.remainingMinutes)}</p>
             {ghLink && <p>{ghLink}</p>}
           </div>
@@ -266,7 +311,13 @@ export default function DispatchPage() {
 
     if (state === 'stalled') {
       return (
-        <div className="audit-overlay" data-testid="audit-overlay" role="dialog" aria-modal="true" aria-label="Audit stalled">
+        <div
+          className="audit-overlay"
+          data-testid="audit-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Audit stalled"
+        >
           <div className="audit-overlay-card card">
             <h2>The audit seems stalled</h2>
             <p className="muted">No progress for more than 10 minutes on run {id}.</p>
@@ -331,95 +382,180 @@ export default function DispatchPage() {
   }
 
   return (
-    <main>
-      <h1>Run an audit</h1>
-      <form
-        ref={formRef}
-        inert={polling || view === 'stalled'}
-        className="card"
-        onSubmit={onSubmit}
-        onChange={(e) => refreshEstimate(e.currentTarget)}
-        onInput={(e) => refreshEstimate(e.currentTarget)}
-      >
-        <label className="form-field">
-          Website URL
-          <input name="url" type="url" required placeholder="https://example.com" className="form-input" />
-        </label>
-        <label className="form-field">
-          Access key (only if the server requires one)
-          <input name="accessKey" type="password" autoComplete="current-password" className="form-input" />
-        </label>
-        <fieldset className="form-presets">
-          <legend>Preset</legend>
-          <div className="preset-row">
-            {PRESETS.map((p) => (
-              <label key={p.value} className="preset-choice">
-                <input
-                  name="preset"
-                  type="radio"
-                  value={p.value}
-                  checked={preset === p.value}
-                  onChange={() => setPreset(p.value)}
-                />
-                {p.label}
-              </label>
-            ))}
+    <section className="section contacts" aria-labelledby="audit-heading">
+      <div className="container">
+        <div className="contacts__wrap">
+          <div className="contacts__wrap-left">
+            <div className="contacts__header">
+              <h1 className="section__title section__title--sm" id="audit-heading">
+                Website Audit
+              </h1>
+              <p className="contacts__text">
+                Crawls the site and checks SEO, performance, accessibility, security and UX. The report opens here when
+                the run finishes.
+              </p>
+            </div>
+            <ul className="contacts__list list-arrow">
+              <li>Every page in the sitemap</li>
+              <li>Prioritised findings</li>
+              <li>PDF and HTML report</li>
+            </ul>
           </div>
-          <p className="muted preset-summary">{summary}</p>
-        </fieldset>
-        <fieldset className="form-options">
-          <legend>Options</legend>
-          <label className="form-check">
-            <input name="perf" type="checkbox" /> Performance metrics (--perf)
-          </label>
-          <label className="form-check">
-            <input name="llm" type="checkbox" /> LLM passes (--llm)
-          </label>
-          <label className="form-check">
-            <input name="verify" type="checkbox" /> Live verification (--verify)
-          </label>
-          <label className="form-check">
-            <input name="contentResearch" type="checkbox" /> Content research (--content-research)
-          </label>
-          <label className="form-check">
-            <input name="visual" type="checkbox" /> UI defect checks (--visual)
-          </label>
-          <p className="form-subhead" hidden={!isCustom}>Report sections</p>
-          <div className="section-grid" hidden={!isCustom}>
-            {SECTIONS.map((sec) => (
-              <label key={sec.value} className="form-check">
-                <input name="sections" type="checkbox" value={sec.value} defaultChecked /> {sec.label}
-              </label>
-            ))}
+
+          <div className="contacts__wrap-right">
+            <form
+              ref={formRef}
+              inert={polling || view === 'stalled'}
+              className="contacts-form"
+              aria-label="Audit form"
+              onSubmit={onSubmit}
+              onChange={(e) => refreshEstimate(e.currentTarget)}
+              onInput={(e) => refreshEstimate(e.currentTarget)}
+            >
+              <div className="contacts-form__wrap">
+                <div className="contacts-form__item">
+                  <label className="contacts-form__label" htmlFor="audit-url">
+                    Website URL
+                  </label>
+                  <input
+                    id="audit-url"
+                    name="url"
+                    type="url"
+                    required
+                    placeholder="Website URL (https://example.com)"
+                    className="form-input"
+                  />
+                </div>
+                <div className="contacts-form__item">
+                  <label className="contacts-form__label" htmlFor="audit-access-key">
+                    Access key
+                  </label>
+                  <input
+                    id="audit-access-key"
+                    name="accessKey"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="Access key (only if the server requires one)"
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="contacts-form__item">
+                  <span className="contacts-form__label" id="audit-preset-label">
+                    Preset
+                  </span>
+                  <div className="contacts-form__checklist" role="radiogroup" aria-labelledby="audit-preset-label">
+                    {PRESETS.map((p) => (
+                      <label key={p.value} className="checkbox-button">
+                        <input
+                          name="preset"
+                          type="radio"
+                          value={p.value}
+                          checked={preset === p.value}
+                          onChange={() => setPreset(p.value)}
+                        />
+                        <span>{p.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="contacts-form__hint">{summary}</p>
+                </div>
+
+                <div className="contacts-form__item" hidden={!isCustom}>
+                  <span className="contacts-form__label" id="audit-sections-label">
+                    Report sections
+                  </span>
+                  <div className="contacts-form__checklist" role="group" aria-labelledby="audit-sections-label">
+                    {SECTIONS.map((sec) => (
+                      <label key={sec.value} className="checkbox-button">
+                        <input name="sections" type="checkbox" value={sec.value} defaultChecked />
+                        <span>{sec.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="contacts-form__item">
+                  <span className="contacts-form__label" id="audit-options-label">
+                    Options
+                  </span>
+                  <div className="contacts-form__checklist" role="group" aria-labelledby="audit-options-label">
+                    {OPTIONS.map((o) => (
+                      <label key={o.name} className="checkbox-button" title={o.flag}>
+                        <input name={o.name} type="checkbox" />
+                        <span>{o.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="contacts-form__item contacts-form__item--span-1 contacts-form__item--keep-label">
+                  <label className="contacts-form__label" htmlFor="audit-concurrency">
+                    Concurrency (1–20)
+                  </label>
+                  <input
+                    id="audit-concurrency"
+                    name="concurrency"
+                    type="number"
+                    min={1}
+                    max={20}
+                    defaultValue={5}
+                    placeholder="Concurrency (1–20)"
+                    className="form-input"
+                  />
+                </div>
+                <div className="contacts-form__item contacts-form__item--span-1 contacts-form__item--keep-label">
+                  <label className="contacts-form__label" htmlFor="audit-evidence-cap">
+                    Evidence cap (1–100)
+                  </label>
+                  <input
+                    id="audit-evidence-cap"
+                    name="evidenceCap"
+                    type="number"
+                    min={1}
+                    max={100}
+                    defaultValue={10}
+                    placeholder="Evidence cap (1–100)"
+                    className="form-input"
+                  />
+                </div>
+                <div className="contacts-form__item">
+                  <label className="contacts-form__label" htmlFor="audit-limit">
+                    Page limit (optional)
+                  </label>
+                  <input
+                    id="audit-limit"
+                    name="limit"
+                    type="number"
+                    min={1}
+                    placeholder="Page limit (all pages when empty)"
+                    className="form-input"
+                  />
+                </div>
+
+                <div className="contacts-form__item">
+                  <button type="submit" className="btn btn--xl btn--block roll" disabled={submitting}>
+                    <span className="roll__box">
+                      <span data-text={submitting ? 'Dispatching…' : 'Start audit'}>
+                        {submitting ? 'Dispatching…' : 'Start audit'}
+                      </span>
+                    </span>
+                  </button>
+                  <p className="contacts-form__note" data-testid="audit-estimate">
+                    {estimate ? formatEstimate(estimate) : 'Pick a section to see an estimate'}
+                  </p>
+                  {error && (
+                    <p role="alert" className="form-error">
+                      {error}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </form>
           </div>
-        </fieldset>
-        <label className="form-field">
-          Concurrency (1–20)
-          <input name="concurrency" type="number" min={1} max={20} defaultValue={5} className="form-input" />
-        </label>
-        <label className="form-field">
-          Page limit (optional)
-          <input name="limit" type="number" min={1} placeholder="all pages" className="form-input" />
-        </label>
-        <label className="form-field">
-          Evidence cap (1–100)
-          <input name="evidenceCap" type="number" min={1} max={100} defaultValue={10} className="form-input" />
-        </label>
-        <div className="form-actions">
-          <button type="submit" className="btn" disabled={submitting}>
-            {submitting ? 'Dispatching…' : 'Start audit'}
-          </button>
-          <span className="muted estimate" data-testid="audit-estimate">
-            {estimate ? formatEstimate(estimate) : 'Pick a section to see an estimate'}
-          </span>
         </div>
-      </form>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {runId && view && renderRun(runId, view)}
-    </main>
+        {runId && view && renderRun(runId, view)}
+      </div>
+    </section>
   );
 }

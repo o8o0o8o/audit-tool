@@ -3,3 +3,5 @@ node_modules/
 audit-results/
 coverage/
 *.json.gz
+# Generated from focusreactive.com by web/scripts/sync-fr-ui.mjs
+web/app/fr-ui.css

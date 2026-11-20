@@ -1,33 +1,38 @@
 import type { ReactNode } from 'react';
+
+import { SiteFooter } from './components/SiteFooter';
+import { SiteHeader } from './components/SiteHeader';
+import './fr-ui.css';
 import './globals.css';
 
 export const metadata = {
-  title: 'Audit Dispatcher',
+  title: 'Website Audit | FocusReactive',
   description: 'Dispatch audits to GitHub Actions and view their reports',
 };
 
+// Same shell as focusreactive.com (src/_layouts/redesignPage.njk): main-wrapper > header, main, footer.
+// UI styles and assets come from that site via scripts/sync-fr-ui.mjs; favicon is app/favicon.ico.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-        />
+        {['SemiBold', 'Regular', 'Medium'].map((face) => (
+          <link
+            key={face}
+            rel="preload"
+            href={`/assets/fonts/InterDisplay-${face}.subset.woff2`}
+            as="font"
+            type="font/woff2"
+            crossOrigin=""
+          />
+        ))}
       </head>
       <body>
-        <header className="site-header">
-          <a className="wordmark" href="/">
-            Focus Reactive<span className="wordmark-dot">.</span>
-          </a>
-          <nav className="site-nav">
-            <a href="/">New audit</a>
-            <a href="/runs">Runs</a>
-          </nav>
-        </header>
-        <div className="page">{children}</div>
+        <div className="main-wrapper">
+          <SiteHeader />
+          <main className="main">{children}</main>
+          <SiteFooter />
+        </div>
       </body>
     </html>
   );

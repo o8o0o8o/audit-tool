@@ -62,22 +62,24 @@ export default async function RunsPage() {
   }
 
   return (
-    <main>
-      <h1>Audit runs</h1>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      {!error && runs.length === 0 && <p className="muted">No runs yet.</p>}
-      <ul className="run-list">
-        {runs.map((run) => (
-          <li key={run.runId}>
-            <a href={`/runs/${run.runId}`}>{run.runId}</a>
-            {run.updatedAt && <span className="muted"> — updated {run.updatedAt.toISOString()}</span>}
-          </li>
-        ))}
-      </ul>
-    </main>
+    <section className="section">
+      <div className="container">
+        <h1 className="section__title section__title--sm">Audit runs</h1>
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+        {!error && runs.length === 0 && <p className="muted run-details">No runs yet.</p>}
+        <ul className="run-list">
+          {runs.map((run) => (
+            <li key={run.runId}>
+              <a href={`/runs/${run.runId}`}>{run.runId}</a>
+              {run.updatedAt && <span className="muted"> — updated {run.updatedAt.toISOString()}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }

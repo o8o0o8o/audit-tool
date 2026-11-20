@@ -1,308 +1,125 @@
-:root {
-  --base-bg: #000;
-  --base-color: #fff;
-  --color-dark: #0e0e0e;
-  --color-grey-100: #171717;
-  --color-grey-200: #2c2c2c;
-  --color-grey-700: #727272;
-  --color-text-soft: #a3a3a3;
-  --color-accent: #00e56d;
-  --color-accent-light: #00ff79;
-  --color-error: #ff6b6b;
-  --container-px: 40px;
-  color-scheme: dark;
+/*
+ * Dispatcher-only styles. Header, footer, buttons, forms, fonts and tokens come from
+ * focusreactive.com in fr-ui.css (scripts/sync-fr-ui.mjs); only use its variables here.
+ */
+
+/* The site's header is fixed; its pages clear it with the first section's padding (.contacts:first-child). */
+.main > .section:first-child {
+  padding-top: 180px;
 }
 
-@media (max-width: 1024px) {
-  :root {
-    --container-px: 24px;
+@media screen and (max-width: 1024px) {
+  .main > .section:first-child {
+    padding-top: 140px;
   }
 }
 
-@media (max-width: 360px) {
-  :root {
-    --container-px: 16px;
-  }
+/* On the site, GSAP's transform on [data-timeline-item] is what anchors the arrow. */
+.list-arrow li {
+  position: relative;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--base-bg);
-  color: var(--base-color);
-  font-family: 'Inter', Helvetica, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-a {
-  color: var(--base-color);
-}
-
-a:hover {
-  color: var(--color-accent);
-}
-
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  min-height: 80px;
-  padding: 0 var(--container-px);
-  border-bottom: 1px solid var(--color-grey-200);
-}
-
-.wordmark {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-decoration: none;
-}
-
-.wordmark-dot {
-  color: var(--color-accent);
-}
-
-.site-nav {
-  display: flex;
-  gap: 32px;
-}
-
-.site-nav a {
-  font-weight: 500;
-  text-decoration: none;
-}
-
-.page {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 48px var(--container-px) 80px;
-}
-
-h1 {
-  font-size: clamp(32px, 6vw, 56px);
-  line-height: 1.05;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 32px;
-}
-
-.card {
-  background: var(--color-dark);
-  border: 1px solid var(--color-grey-200);
-  border-radius: 16px;
-  padding: 32px;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px;
-  font-weight: 500;
-}
-
-.form-input {
-  height: 50px;
-  width: 100%;
-  max-width: 100%;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--color-grey-200);
-  border-radius: 0;
-  color: var(--base-color);
-  font-family: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1;
-  outline: none;
-}
-
-.form-input::placeholder {
-  color: var(--color-text-soft);
-}
-
-.form-input:focus {
-  border-bottom-color: var(--color-grey-700);
-}
-
-.form-options {
-  border: 1px solid var(--color-grey-200);
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin: 0 0 24px;
-}
-
-.form-options legend {
-  padding: 0 8px;
-  font-weight: 500;
-}
-
-.form-options[hidden] {
-  display: none;
-}
-
-.form-presets {
-  border: 1px solid var(--color-grey-200);
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin: 0 0 24px;
-  min-width: 0;
-}
-
-.form-presets legend {
-  padding: 0 8px;
-  font-weight: 500;
-}
-
-.preset-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-}
-
-.preset-choice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-}
-
-.preset-choice input {
-  accent-color: var(--color-accent);
-  width: 18px;
-  height: 18px;
-}
-
-.preset-summary {
-  margin: 8px 0 0;
-}
-
-.form-subhead {
-  margin: 12px 0 4px;
-  font-weight: 500;
-}
-
-.section-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0 16px;
-}
-
-.section-grid[hidden] {
-  display: none;
-}
-
-.form-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 0;
-}
-
-.form-check input {
-  accent-color: var(--color-accent);
-  width: 18px;
-  height: 18px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 52px;
-  padding: 0 32px;
-  font-family: inherit;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1;
-  border: 1px solid var(--color-accent);
-  border-radius: 100px;
-  background: var(--color-accent);
-  color: #000;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    transform 0.15s ease;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--color-accent-light);
-  border-color: var(--color-accent-light);
-  transform: scale(0.98);
-}
-
-.btn:disabled {
-  background: var(--color-grey-200);
-  border-color: var(--color-grey-200);
-  color: var(--base-color);
-  cursor: default;
+.muted {
+  color: var(--color-grey-700);
 }
 
 .error {
   color: var(--color-error);
 }
 
-.muted {
-  color: var(--color-text-soft);
-}
-
-.run-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.run-list li {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--color-grey-200);
-}
-
-.run-list a {
-  font-weight: 500;
-}
-
 .link-accent {
   color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
-.form-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
+.link-accent:hover {
+  text-decoration: none;
 }
 
-.estimate {
-  font-size: 0.9rem;
+.contacts-form__hint {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-grey-700);
+}
+
+.contacts-form__note {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-grey-700);
+  text-align: center;
+}
+
+/* The site hides field labels on phones and lets placeholders name the field; a field with a
+   default value shows no placeholder, so its label has to stay. */
+@media screen and (max-width: 767px) {
+  .contacts-form__item--keep-label .contacts-form__label.contacts-form__label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .contacts-form__item--keep-label {
+    margin-top: 12px;
+  }
+}
+
+.contacts-form__checklist[hidden],
+.contacts-form__item[hidden] {
+  display: none;
+}
+
+/* Same surface as the site's .contacts-form. */
+.card {
+  padding: 40px 48px 48px;
+  background: var(--color-dark);
+  border-radius: 24px;
+}
+
+@media screen and (max-width: 767px) {
+  .card {
+    padding: 24px;
+  }
+}
+
+.card h2 {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+.card p + p,
+.card p + .btn {
+  margin-top: 12px;
 }
 
 .audit-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
   background: rgb(0 0 0 / 75%);
+  backdrop-filter: blur(10px);
 }
 
 .audit-overlay-card {
-  width: min(480px, 100%);
+  width: min(520px, 100%);
 }
 
 .progress-bar {
   height: 8px;
-  margin: 16px 0 8px;
+  margin: 24px 0 12px;
   border-radius: 100px;
   background: var(--color-grey-200);
   overflow: hidden;
@@ -318,20 +135,16 @@ h1 {
   font-weight: 500;
 }
 
-.btn-secondary {
-  background: transparent;
-  color: var(--color-accent);
-}
-
 .run-result {
-  margin-top: 24px;
+  margin-top: 40px;
 }
 
 .run-result-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .report-frame {
@@ -340,5 +153,35 @@ h1 {
   height: 85vh;
   min-height: 600px;
   border: 1px solid var(--color-grey-200);
-  border-radius: 8px;
+  border-radius: 24px;
+  background: var(--color-dark);
+}
+
+.run-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 40px;
+}
+
+.run-list {
+  list-style: none;
+  margin-top: 40px;
+  border-top: 1px solid var(--color-grey-200);
+}
+
+.run-list li {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--color-grey-200);
+  font-size: 16px;
+}
+
+.run-list a {
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s linear;
+}
+
+.run-list a:hover {
+  border-bottom-color: var(--color-white);
 }

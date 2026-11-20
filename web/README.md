@@ -2,6 +2,10 @@
 
 Next.js app that dispatches SEO audits to GitHub Actions and shows their reports from Vercel Blob. Setup is described in the root README under "Web dispatcher (Vercel)".
 
+## Look and feel
+
+The UI reuses focusreactive.com: header, footer, buttons, form fields, chips, fonts, logos and favicon. `yarn sync-fr-ui` compiles the site's SCSS partials (`src/sassNew` in the `focusreactive.com-front` repo) into `app/fr-ui.css` and copies its assets to `public/assets/` and `app/favicon.ico`. It reads from `origin/main` via `git archive`, so fetch that repo first; `--repo=<path>` and `--ref=<ref>` override the defaults (`../../focusreactive.com-front`, `origin/main`). Don't edit `fr-ui.css` by hand. The header and footer markup is ported in `app/components/` from the site's `_header.html` / `_footer.html`, and the dispatch form follows the site's migration-analysis form. Dispatcher-only styles live in `app/globals.css` and use only the site's CSS variables.
+
 ## Pages
 
 - `/` — dispatch form (URL, perf, llm, verify, content research, concurrency, page limit, evidence cap), with an estimated audit duration next to "Start audit" that shows on load (before a URL is typed) and updates as options change (assumes ≈100 pages when no limit is set). After "Start audit" the page stays on `/` (as `/?run=<runId>`, so a reload resumes) and a blocking overlay shows `processed / total pages` and the time left (extrapolated from elapsed time once pages finish, else from the estimate with the current total). On success the main `<domain>.html` report is embedded in place with an open-in-new-tab link (or the file list when there is none); on failure the error and GitHub run link show; with no status/progress for 10 minutes the overlay turns into a "stalled" notice with "Stop waiting".

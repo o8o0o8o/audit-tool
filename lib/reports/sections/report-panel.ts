@@ -5,7 +5,7 @@
  * sections a reader needs first (summary, issues) are open by default.
  */
 
-import { escapeHtml } from '../html-utils';
+import { escapeHtml, exampleHtml, renderExpandableList } from '../html-utils';
 
 export interface PanelOptions {
   /** Section id; the panel element gets `panel-<id>`, the body keeps its own `id` wrapper. */
@@ -65,17 +65,36 @@ export function findingChips(findings: Array<[string, { severity?: unknown }]>):
   return SEVS.map((s) => severityChip(s, counts[s])).join('');
 }
 
-/** One row per finding: severity label, message, affected count. */
-export function renderFindingList(
-  className: string,
-  findings: Array<[string, { severity?: unknown; count?: number }]>,
-): string {
+export interface FindingRowDetail {
+  severity?: unknown;
+  count?: number;
+  examples?: string[];
+}
+
+const EXAMPLES_VISIBLE = 5;
+
+/**
+ * One row per finding: severity label, message, affected count. A finding with
+ * examples opens to show them (the pages and the evidence), so the block never
+ * states a count without saying where.
+ */
+export function renderFindingList(className: string, findings: Array<[string, FindingRowDetail]>): string {
   return `<ul class="finding-list ${className}">${findings
-    .map(([message, d]) => {
+    .map(([message, d], i) => {
       const sev = asSev(d.severity);
-      return `<li><span class="sev-chip sev-chip--${sev}">${sev}</span><span>${escapeHtml(message)}</span>${
+      const head = `<span class="sev-chip sev-chip--${sev}">${sev}</span><span class="finding-message">${escapeHtml(message)}</span>${
         d.count ? `<span class="finding-count" title="Affected pages or instances">${d.count}</span>` : ''
-      }</li>`;
+      }`;
+      const examples = (d.examples ?? []).filter((e) => String(e).trim());
+      if (examples.length === 0) return `<li><div class="finding-row">${head}</div></li>`;
+      const list = renderExpandableList(
+        examples,
+        (ex) => `<div class="finding-example">${exampleHtml(ex)}</div>`,
+        `${className}-more-${i}`,
+        EXAMPLES_VISIBLE,
+        Math.max(d.count ?? 0, examples.length),
+      );
+      return `<li><details class="finding-details"><summary class="finding-row">${head}<span class="finding-toggle" aria-hidden="true"></span></summary><div class="finding-examples">${list}</div></details></li>`;
     })
     .join('')}</ul>`;
 }
@@ -294,15 +313,32 @@ export function getPanelStyles(): string {
           }
           .finding-list { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
           .finding-list li {
-              display: flex;
-              align-items: baseline;
-              gap: var(--space-3);
               padding: 8px 0;
               border-bottom: 1px solid rgba(255, 255, 255, 0.05);
               font-size: var(--font-size-sm);
           }
           .finding-list li:last-child { border-bottom: 0; }
+          .finding-list .finding-row { display: flex; align-items: baseline; gap: var(--space-3); }
+          .finding-list .finding-message { min-width: 0; overflow-wrap: anywhere; }
           .finding-list .finding-count { margin-left: auto; color: var(--color-text-muted); white-space: nowrap; }
+          .finding-list summary.finding-row { cursor: pointer; list-style: none; }
+          .finding-list summary.finding-row::-webkit-details-marker { display: none; }
+          .finding-list summary.finding-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+          .finding-list .finding-toggle::before { content: '+'; color: var(--color-text-muted); font-weight: 600; }
+          .finding-list details[open] .finding-toggle::before { content: '\\2212'; }
+          .finding-list .finding-examples {
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+              margin: 8px 0 4px;
+              padding-left: 12px;
+              border-left: 2px solid var(--color-border-default);
+          }
+          .finding-list .finding-example {
+              font-size: var(--font-size-xs);
+              color: var(--color-text-secondary);
+              overflow-wrap: anywhere;
+          }
           .subpanel-note { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--space-3); }
 
           @media (max-width: 640px) {

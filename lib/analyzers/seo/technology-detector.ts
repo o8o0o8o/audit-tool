@@ -143,7 +143,12 @@ class TechnologyDetector {
           headers: { 'x-hs-hub-id': /./i },
         },
       },
-      { name: 'BigCommerce', patterns: { html: [/bigcommerce/i], scripts: [/bigcommerce/i] } },
+      // Bare product names also appear in page text (an agency writing about BigCommerce), so
+      // HTML signals are the store's own CDN and theme markup, never the word itself.
+      {
+        name: 'BigCommerce',
+        patterns: { html: [/cdn\d*\.bigcommerce\.com|stencil-utils|data-bc-/i], scripts: [/bigcommerce\.com/i] },
+      },
       {
         // PHPSESSID is set by any PHP application, so it is not a Magento signal.
         name: 'Magento',
@@ -153,7 +158,10 @@ class TechnologyDetector {
           cookies: [/(?:^|[\s,;])(?:frontend|mage-cache-sessid|mage-messages)=/i],
         },
       },
-      { name: 'PrestaShop', patterns: { html: [/prestashop/i], meta: { generator: /prestashop/i } } },
+      {
+        name: 'PrestaShop',
+        patterns: { html: [/var prestashop\s*=|\/modules\/ps_[a-z]/i], meta: { generator: /prestashop/i } },
+      },
       {
         name: 'Concrete CMS',
         patterns: {
@@ -356,18 +364,21 @@ class TechnologyDetector {
     analytics: [
       {
         name: 'Google Analytics 4',
-        patterns: { html: [/gtag\(['"]/i, /G-[A-Z0-9]+/i], scripts: [/googletagmanager\.com\/gtag/i] },
+        patterns: {
+          html: [/gtag\(\s*['"]config['"]\s*,\s*['"]G-/i, /googletagmanager\.com\/gtag\/js\?id=G-/i],
+          scripts: [/googletagmanager\.com\/gtag/i],
+        },
       },
       {
         name: 'Google Universal Analytics',
-        patterns: { html: [/UA-\d+-\d+/i], scripts: [/google-analytics\.com\/analytics/i] },
+        patterns: { html: [/['"]UA-\d{4,}-\d+['"]/i], scripts: [/google-analytics\.com\/analytics/i] },
       },
       { name: 'Google Tag Manager', patterns: { html: [/GTM-[A-Z0-9]+/i], scripts: [/googletagmanager\.com\/gtm/i] } },
       {
         name: 'Facebook Pixel',
         patterns: { html: [/fbq\(/i, /connect\.facebook\.net\/.*fbevents/i], scripts: [/connect\.facebook\.net/i] },
       },
-      { name: 'Hotjar', patterns: { html: [/hotjar/i], scripts: [/hotjar\.com|static\.hotjar/i] } },
+      { name: 'Hotjar', patterns: { html: [/static\.hotjar\.com|_hjSettings/i], scripts: [/hotjar\.com|static\.hotjar/i] } },
       { name: 'Mixpanel', patterns: { scripts: [/mixpanel/i], globals: ['mixpanel'] } },
       { name: 'Amplitude', patterns: { scripts: [/amplitude/i], globals: ['amplitude'] } },
       { name: 'Segment', patterns: { scripts: [/segment\.com|segment\.io/i], globals: ['analytics'] } },
@@ -385,7 +396,10 @@ class TechnologyDetector {
     // Marketing & CRM
     marketing: [
       { name: 'HubSpot', patterns: { scripts: [/js\.hs-scripts\.com|hubspot/i] } },
-      { name: 'Mailchimp', patterns: { html: [/mailchimp/i], scripts: [/mailchimp|chimpstatic/i] } },
+      {
+        name: 'Mailchimp',
+        patterns: { html: [/\.list-manage\.com\/|chimpstatic\.com|id="mc_embed_signup/i], scripts: [/mailchimp|chimpstatic/i] },
+      },
       { name: 'Intercom', patterns: { scripts: [/widget\.intercom\.io|intercomcdn/i], globals: ['Intercom'] } },
       { name: 'Drift', patterns: { scripts: [/js\.driftt\.com|drift\.com\/include/i], globals: ['drift'] } },
       { name: 'Zendesk', patterns: { scripts: [/static\.zdassets\.com|zopim/i], globals: ['zE'] } },
@@ -430,7 +444,13 @@ class TechnologyDetector {
       { name: 'Gumroad', patterns: { scripts: [/gumroad/i] } },
       { name: 'Paddle', patterns: { scripts: [/paddle\.js|paddle\.com/i] } },
       { name: 'Shopify Buy Button', patterns: { scripts: [/sdks\.shopifycdn/i] } },
-      { name: 'WooCommerce', patterns: { html: [/woocommerce/i], scripts: [/woocommerce/i] } },
+      {
+        name: 'WooCommerce',
+        patterns: {
+          html: [/\/plugins\/woocommerce\/|class="[^"]*\bwoocommerce(?:-page|-no-js|-js)?\b/i],
+          scripts: [/\/woocommerce\//i],
+        },
+      },
     ],
 
     // Security & Performance
@@ -448,7 +468,7 @@ class TechnologyDetector {
       { name: 'Vimeo', patterns: { html: [/player\.vimeo\.com/i], scripts: [/vimeo/i] } },
       { name: 'Wistia', patterns: { scripts: [/wistia/i] } },
       { name: 'Vidyard', patterns: { scripts: [/vidyard/i] } },
-      { name: 'Cloudinary', patterns: { html: [/cloudinary\.com/i], scripts: [/cloudinary/i] } },
+      { name: 'Cloudinary', patterns: { html: [/res\.cloudinary\.com\//i], scripts: [/cloudinary/i] } },
       { name: 'imgix', patterns: { html: [/imgix\.net/i] } },
     ],
 
@@ -456,14 +476,20 @@ class TechnologyDetector {
     fonts: [
       { name: 'Google Fonts', patterns: { html: [/fonts\.googleapis\.com|fonts\.gstatic\.com/i] } },
       { name: 'Adobe Fonts', patterns: { html: [/use\.typekit\.net/i] } },
-      { name: 'Font Awesome', patterns: { html: [/fontawesome|font-awesome/i], scripts: [/fontawesome/i] } },
+      {
+        name: 'Font Awesome',
+        patterns: {
+          html: [/(?:kit|use)\.fontawesome\.com|font-?awesome[^"'\s>]*\.(?:css|js)|class="[^"]*\bfa[srlbd]? fa-[a-z]/i],
+          scripts: [/fontawesome/i],
+        },
+      },
     ],
 
     // SEO & Schema
     seo: [
-      { name: 'Yoast SEO', patterns: { html: [/yoast-schema|yoast seo/i] } },
+      { name: 'Yoast SEO', patterns: { html: [/yoast-schema-graph|optimized with the yoast seo/i] } },
       { name: 'Rank Math', patterns: { html: [/rank-math/i] } },
-      { name: 'All in One SEO', patterns: { html: [/all in one seo/i] } },
+      { name: 'All in One SEO', patterns: { html: [/<!--\s*all in one seo|aioseo-[a-z]/i] } },
       { name: 'Schema.org', patterns: { html: [/schema\.org/i, /application\/ld\+json/i] } },
     ],
 
@@ -660,8 +686,9 @@ class TechnologyDetector {
     // Check HTML patterns
     if (patterns.html) {
       for (const pattern of patterns.html) {
-        if (pattern.test(htmlLower)) {
-          methods.push({ type: 'html', pattern: pattern.source });
+        const hit = pattern.exec(htmlLower);
+        if (hit) {
+          methods.push({ type: 'html', pattern: pattern.source, matched: hit[0].substring(0, 60) });
           break; // One match per type is enough
         }
       }

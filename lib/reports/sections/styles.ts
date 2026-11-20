@@ -1714,19 +1714,24 @@ function getStyles() {
           .row-tooltip {
               position: fixed;
               z-index: 100;
-              background: var(--gray-800);
-              color: var(--color-border-default);
+              background: var(--color-bg-surface-alt);
+              color: var(--color-text-primary);
+              border: 1px solid var(--color-border-default);
               padding: 10px 14px;
               border-radius: var(--radius-lg);
               font-size: var(--font-size-xs);
               line-height: var(--line-height-normal);
-              box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+              box-shadow: 0 8px 24px rgba(0,0,0,0.4);
               pointer-events: none;
               opacity: 0;
               transition: opacity 0.15s;
-              max-width: 320px;
-              white-space: nowrap;
+              max-width: min(420px, calc(100vw - 24px));
+              white-space: normal;
+              overflow-wrap: anywhere;
           }
+
+          .row-tooltip .tt-gap { height: 8px; }
+          .row-tooltip .tt-url { color: var(--color-text-muted); }
 
           .row-tooltip.visible {
               opacity: 1;

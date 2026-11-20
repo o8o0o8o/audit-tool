@@ -1,6 +1,7 @@
 import type { Issue, PageInfo } from '../../types';
 import { SEVERITY } from '../../constants';
 import { calcPercent } from '../../utils';
+import { withPages } from '../../utils/page-links';
 
 interface StatusBreakdown {
   '2xx': number;
@@ -283,6 +284,11 @@ class PageSegmentAnalyzer {
   static generateSegmentIssues(segments: Record<string, SegmentData>, allPages: Record<string, PageInfo>) {
     const issues: SegmentIssue[] = [];
     const totalPages = Object.keys(allPages).length;
+    // The segments drop their page lists (too large to store), so each finding re-derives
+    // the pages it names from the URLs.
+    const pagesOf = (type: string, keep: (page: PageInfo) => boolean = () => true) =>
+      Object.keys(allPages).filter((u) => this.classifyUrl(u) === type && keep(allPages[u]));
+    const status = (page: PageInfo) => Number(page.status ?? page.statusCode ?? 200);
 
     // Issue 1: Search pages being indexed (potential duplicate content)
     if (segments.search && segments.search.count > 10) {
@@ -290,7 +296,10 @@ class PageSegmentAnalyzer {
       if (indexableSearchPages > 10) {
         issues.push({
           message: `Search pages may cause duplicate content`,
-          detail: `${indexableSearchPages} search result pages are returning 2xx status. Consider blocking search pages from indexing to prevent duplicate content issues.`,
+          detail: `${indexableSearchPages} search result pages are returning 2xx status. Consider blocking search pages from indexing to prevent duplicate content issues.${withPages(
+            'Pages',
+            pagesOf('search', (p) => status(p) < 300),
+          )}`,
           severity: SEVERITY.MEDIUM,
           segment: 'search',
         });
@@ -309,7 +318,7 @@ class PageSegmentAnalyzer {
       ) {
         issues.push({
           message: `${segment.label} have thin content`,
-          detail: `${segment.count} page(s) in ${segment.label} segment have an average of only ${segment.avgWordCount} words. Consider adding more content.`,
+          detail: `${segment.count} page(s) in ${segment.label} segment have an average of only ${segment.avgWordCount} words. Consider adding more content.${withPages('Pages', pagesOf(segment.type))}`,
           severity: SEVERITY.MEDIUM,
           segment: segment.type,
         });
@@ -326,7 +335,10 @@ class PageSegmentAnalyzer {
       if (errorRate > 20 && segment.count > 5) {
         issues.push({
           message: `High error rate in ${segment.label}`,
-          detail: `${errorRate.toFixed(0)}% of pages in ${segment.label} return 4xx/5xx errors (${segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']} pages). Investigate and fix these errors.`,
+          detail: `${errorRate.toFixed(0)}% of pages in ${segment.label} return 4xx/5xx errors (${segment.statusBreakdown['4xx'] + segment.statusBreakdown['5xx']} pages). Investigate and fix these errors.${withPages(
+            'Pages',
+            pagesOf(segment.type, (p) => status(p) >= 400),
+          )}`,
           severity: SEVERITY.HIGH,
           segment: segment.type,
         });
@@ -339,7 +351,7 @@ class PageSegmentAnalyzer {
     if (otherPercentage > 70 && totalPages > 20) {
       issues.push({
         message: `Unstructured URL patterns`,
-        detail: `${otherPercentage.toFixed(0)}% of pages don't follow standard URL patterns. Consider organizing pages into clear categories (blog, products, etc.) for better SEO.`,
+        detail: `${otherPercentage.toFixed(0)}% of pages don't follow standard URL patterns. Consider organizing pages into clear categories (blog, products, etc.) for better SEO.${withPages('For example', pagesOf('other'))}`,
         severity: SEVERITY.LOW,
         segment: 'other',
       });
@@ -351,7 +363,10 @@ class PageSegmentAnalyzer {
       if (indexableApi > 0) {
         issues.push({
           message: `API/technical pages may be indexed`,
-          detail: `${indexableApi} API or technical pages are returning 2xx status and may be indexed. These should typically return 404 or be blocked by robots.txt.`,
+          detail: `${indexableApi} API or technical pages are returning 2xx status and may be indexed. These should typically return 404 or be blocked by robots.txt.${withPages(
+            'Pages',
+            pagesOf('api', (p) => status(p) < 300),
+          )}`,
           severity: SEVERITY.MEDIUM,
           segment: 'api',
         });

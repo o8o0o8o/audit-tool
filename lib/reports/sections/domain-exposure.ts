@@ -39,7 +39,7 @@ interface BlockOptions {
 
 function renderChecksBlock(
   siteChecks: SiteChecksData | null | undefined,
-  details: Record<string, { severity?: string; count?: number }>,
+  details: Record<string, { severity?: string; count?: number; examples?: string[] }>,
   opts: BlockOptions,
 ): string {
   const checks = (siteChecks?.checks ?? []).filter((c) => opts.includeCheck(c.id));
@@ -68,7 +68,9 @@ function renderChecksBlock(
       </table>`
     : '';
 
-  const stripped = findings.map(([m, d]) => [strip(m), d] as [string, { severity?: string; count?: number }]);
+  const stripped = findings.map(
+    ([m, d]) => [strip(m), d] as [string, { severity?: string; count?: number; examples?: string[] }],
+  );
   const list = findings.length
     ? renderFindingList('domain-exposure-findings', stripped)
     : `<div class="domain-exposure-clean" style="border:1px solid var(--color-success);border-radius:var(--radius-lg);padding:10px 14px;font-size:var(--font-size-sm);"><strong>${escapeHtml(opts.cleanText)}</strong></div>`;
@@ -82,13 +84,13 @@ function renderChecksBlock(
     heading: `${escapeHtml(opts.title)}${domain}`,
     chips: findingChips(stripped),
     body: `${list}${table}
-      <p class="subpanel-note">Full details and affected pages for each finding are in the issues list above.</p>`,
+      <p class="subpanel-note">Open a finding to see the pages and evidence; the fix for each is in the issues list above.</p>`,
   });
 }
 
 export function getDomainExposureSection(
   siteChecks: SiteChecksData | null | undefined,
-  details: Record<string, { severity?: string; count?: number }>,
+  details: Record<string, { severity?: string; count?: number; examples?: string[] }>,
 ): string {
   return renderChecksBlock(siteChecks, details, {
     id: 'domain-exposure',
@@ -103,7 +105,7 @@ export const ANALYTICS_TAGS_TITLE = 'Analytics & Tags';
 
 export function getAnalyticsTagsSection(
   siteChecks: SiteChecksData | null | undefined,
-  details: Record<string, { severity?: string; count?: number }>,
+  details: Record<string, { severity?: string; count?: number; examples?: string[] }>,
 ): string {
   return renderChecksBlock(siteChecks, details, {
     id: 'analytics-tags',

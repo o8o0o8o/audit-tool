@@ -77,13 +77,16 @@ export function agenticMarkdownNote(state: AgenticReportState | null, findingCou
 /** HTML block for the report's Issues tab. Empty when the checks did not run. */
 export function getAgenticBrowsingSection(
   state: AgenticReportState | null,
-  details: Record<string, { severity?: string; count?: number }>,
+  details: Record<string, { severity?: string; count?: number; examples?: string[] }>,
   score?: number,
 ): string {
   if (!state?.enabled) return '';
   const findings = Object.entries(details)
     .filter(([m]) => isAgenticFinding(m.replace(/<[^>]*>/g, '')))
-    .map(([m, d]) => [m.replace(/<[^>]*>/g, ''), d] as [string, { severity?: string; count?: number }]);
+    .map(
+      ([m, d]) =>
+        [m.replace(/<[^>]*>/g, ''), d] as [string, { severity?: string; count?: number; examples?: string[] }],
+    );
   const notes = agenticCoverageNotes(state)
     .map((n) => `<p class="agentic-note subpanel-note">${escapeHtml(n)}</p>`)
     .join('');

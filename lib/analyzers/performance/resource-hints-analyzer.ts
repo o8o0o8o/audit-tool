@@ -6,6 +6,7 @@
 import { SEVERITY } from '../../constants';
 import { getOrigin, incrementCounter, getFileNameFromUrl } from '../../utils';
 import type { Issue, PageInfo, ParsedPage, ResourceHintsCollected } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 interface ResourceHint {
   href?: string;
@@ -286,8 +287,10 @@ class ResourceHintsAnalyzer {
     };
 
     const commonMissingHints = new Map();
+    const missingLcpPreloadUrls: string[] = [];
+    const pagesWithoutHintsUrls: string[] = [];
 
-    for (const [_url, pageData] of Object.entries(pages)) {
+    for (const [url, pageData] of Object.entries(pages)) {
       const hints = pageData.resourceHints ?? {};
       const hasHints =
         (hints.preload?.length ?? 0) +
@@ -304,6 +307,7 @@ class ResourceHintsAnalyzer {
         stats.totalDnsPrefetch += hints.dnsPrefetch?.length ?? 0;
       } else {
         stats.pagesWithoutHints++;
+        pagesWithoutHintsUrls.push(url);
       }
 
       // Check LCP preload
@@ -319,6 +323,7 @@ class ResourceHintsAnalyzer {
           stats.pagesWithLcpPreload++;
         } else if (/\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(lcpUrl)) {
           stats.pagesWithMissingLcpPreload++;
+          missingLcpPreloadUrls.push(url);
           // Track common missing hints
           const key = getFileNameFromUrl(lcpUrl);
           incrementCounter(commonMissingHints, key);
@@ -332,7 +337,7 @@ class ResourceHintsAnalyzer {
     if (stats.pagesWithoutHints > totalPages * 0.5) {
       warnings.push({
         message: 'Most pages lack resource hints',
-        detail: `${stats.pagesWithoutHints}/${totalPages} pages have no preload, prefetch, or preconnect hints. Consider adding hints for critical resources.`,
+        detail: `${stats.pagesWithoutHints}/${totalPages} pages have no preload, prefetch, or preconnect hints. Consider adding hints for critical resources.${withPages('Pages', pagesWithoutHintsUrls)}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -340,7 +345,7 @@ class ResourceHintsAnalyzer {
     if (stats.pagesWithMissingLcpPreload > 0) {
       issues.push({
         message: 'LCP images not preloaded across site',
-        detail: `${stats.pagesWithMissingLcpPreload} pages have LCP images that could benefit from preloading. This can significantly improve LCP scores.`,
+        detail: `${stats.pagesWithMissingLcpPreload} pages have LCP images that could benefit from preloading. This can significantly improve LCP scores.${withPages('Pages', missingLcpPreloadUrls)}`,
         severity: SEVERITY.HIGH,
       });
     }

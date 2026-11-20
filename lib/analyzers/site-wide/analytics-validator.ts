@@ -1,6 +1,7 @@
 import { SEVERITY } from '../../constants';
 import { calcPercent, incrementCounter } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 /**
  * Site-wide Analytics Validator
@@ -41,6 +42,9 @@ class AnalyticsValidator {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     let pagesAnalyzed = 0;
+    const pagesWithoutConsent: string[] = [];
+    const pagesWithPrivacy: string[] = [];
+    const pagesWithoutPrivacy: string[] = [];
 
     // Analyze each page's analytics data
     for (const url in allPages) {
@@ -63,6 +67,8 @@ class AnalyticsValidator {
       if (analytics.hasHotjar) analyticsStats.pagesWithHotjar++;
       if (analytics.hasMicrosoftClarity) analyticsStats.pagesWithClarity++;
 
+      if (!analytics.hasCookieConsent) pagesWithoutConsent.push(url);
+      (analytics.hasPrivacyPolicy ? pagesWithPrivacy : pagesWithoutPrivacy).push(url);
       if (analytics.hasCookieConsent) {
         analyticsStats.pagesWithCookieConsent++;
         if (analytics.consentTool) {
@@ -190,7 +196,7 @@ class AnalyticsValidator {
     } else if (hasTracking && consentCoverage < 80) {
       issues.push({
         message: `Inconsistent cookie consent implementation`,
-        detail: `Your site uses tracking but only ${consentCoverage}% of pages (${analyticsStats.pagesWithCookieConsent}/${totalPages}) have cookie consent. GDPR/CCPA requires consent on all pages with tracking.`,
+        detail: `Your site uses tracking but only ${consentCoverage}% of pages (${analyticsStats.pagesWithCookieConsent}/${totalPages}) have cookie consent. GDPR/CCPA requires consent on all pages with tracking.${withPages('Pages without it', pagesWithoutConsent)}`,
         severity: SEVERITY.CRITICAL,
       });
     }
@@ -230,7 +236,11 @@ class AnalyticsValidator {
       if (privacyCoverage < 80) {
         issues.push({
           message: `Privacy policy link missing on many pages`,
-          detail: `Your site uses tracking but only ${privacyCoverage}% of pages (${analyticsStats.pagesWithPrivacyPolicy}/${totalPages}) have a privacy policy link. Privacy policies are required by GDPR/CCPA.`,
+          detail: `Your site uses tracking but only ${privacyCoverage}% of pages (${analyticsStats.pagesWithPrivacyPolicy}/${totalPages}) have a privacy policy link. Privacy policies are required by GDPR/CCPA.${
+            pagesWithPrivacy.length > 0 && pagesWithPrivacy.length <= 10
+              ? withPages('Only these pages have one', pagesWithPrivacy)
+              : ''
+          }${withPages('Pages without it', pagesWithoutPrivacy)}`,
           severity: SEVERITY.HIGH,
         });
       }

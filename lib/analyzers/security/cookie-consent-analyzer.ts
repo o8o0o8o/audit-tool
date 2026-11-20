@@ -6,6 +6,7 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
 import { detectImportantPageLinks } from '../../utils';
 import type { Issue, ChromePage, ParsedPage, PageInfo, ConsentData, NetworkRequest } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 interface CookieInfo {
   name: string;
@@ -475,8 +476,11 @@ class CookieConsentAnalyzer {
     let pagesWithoutPrivacyPolicy = 0;
     const platformsUsed = new Set();
 
-    for (const [_url, page] of Object.entries(pages)) {
+    const withoutConsentUrls: string[] = [];
+    const withoutPrivacyUrls: string[] = [];
+    for (const [url, page] of Object.entries(pages)) {
       if (page.consentData) {
+        if (!page.consentData.hasConsentBanner) withoutConsentUrls.push(url);
         if (page.consentData.hasConsentBanner) {
           pagesWithConsent++;
           if (page.consentData.consentPlatform) {
@@ -486,6 +490,7 @@ class CookieConsentAnalyzer {
 
         if (!page.consentData.hasPrivacyPolicy) {
           pagesWithoutPrivacyPolicy++;
+          withoutPrivacyUrls.push(url);
         }
       }
     }
@@ -496,7 +501,7 @@ class CookieConsentAnalyzer {
     if (pagesWithConsent > 0 && pagesWithConsent < totalPages) {
       warnings.push({
         message: 'Inconsistent cookie consent implementation',
-        detail: `Only ${pagesWithConsent} of ${totalPages} pages have a consent banner. Ensure consistent implementation site-wide.`,
+        detail: `Only ${pagesWithConsent} of ${totalPages} pages have a consent banner. Ensure consistent implementation site-wide.${withPages('Pages without it', withoutConsentUrls)}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -514,7 +519,7 @@ class CookieConsentAnalyzer {
     if (pagesWithoutPrivacyPolicy > totalPages * 0.5) {
       warnings.push({
         message: 'Many pages lack privacy policy link',
-        detail: `${pagesWithoutPrivacyPolicy} of ${totalPages} pages have no visible privacy policy link.`,
+        detail: `${pagesWithoutPrivacyPolicy} of ${totalPages} pages have no visible privacy policy link.${withPages('Pages', withoutPrivacyUrls)}`,
         severity: SEVERITY.MEDIUM,
       });
     }

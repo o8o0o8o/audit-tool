@@ -1,6 +1,7 @@
 import { SEVERITY } from '../../constants';
-import { removeTrailingSlash, clampScore, getFileNameFromUrl } from '../../utils';
+import { removeTrailingSlash, clampScore } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
+import { pageLinks, withPages } from '../../utils/page-links';
 
 interface KeywordPageData {
   density: number;
@@ -340,7 +341,10 @@ class LinkingOpportunityAnalyzer {
       const highValueOpps = opportunities.filter((o) => o.relevanceScore >= 60);
       issues.push({
         message: 'Significant internal linking opportunities',
-        detail: `${opportunities.length} pages could benefit from additional internal links. ${highValueOpps.length} have high-value opportunities (score ≥60). Improving internal linking can boost page authority and help search engines discover content.`,
+        detail: `${opportunities.length} pages could benefit from additional internal links. ${highValueOpps.length} have high-value opportunities (score ≥60). Improving internal linking can boost page authority and help search engines discover content.${withPages(
+          'Highest-value pages',
+          [...opportunities].sort((x, y) => y.relevanceScore - x.relevanceScore).map((o) => o.sourcePage),
+        )}`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -348,10 +352,10 @@ class LinkingOpportunityAnalyzer {
     // Issue 2: Very high-value opportunities
     const excellentOpps = opportunities.filter((o) => o.relevanceScore >= 80);
     if (excellentOpps.length > 5) {
-      const topPages = excellentOpps
-        .slice(0, 3)
-        .map((o) => getFileNameFromUrl(o.sourcePage) || 'homepage')
-        .join(', ');
+      const topPages = pageLinks(
+        [...excellentOpps].sort((x, y) => y.relevanceScore - x.relevanceScore).map((o) => o.sourcePage),
+        5,
+      );
       issues.push({
         message: 'High-impact linking opportunities available',
         detail: `${excellentOpps.length} pages have excellent internal linking opportunities (score ≥80). Top pages: ${topPages}. These links would significantly improve content discoverability.`,

@@ -11,6 +11,7 @@
 import { SEVERITY, THRESHOLDS } from '../../constants';
 import { calcPercent, getFileNameFromUrl, formatBytes } from '../../utils';
 import type { Issue, ChromePage, PageInfo, NetworkRequest, CodeCoverageFile } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 interface CDPClient {
   send(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -353,6 +354,8 @@ class CodeCoverageAnalyzer {
     const issues: Issue[] = [];
     const warnings: Issue[] = [];
     const pages = Object.values(allPages) as PageInfo[];
+    // Bytes unused per page, to name the pages that waste the most.
+    const unusedByPage: Array<{ url: string; js: number; css: number }> = [];
 
     let totalJS = 0;
     let totalUnusedJS = 0;
@@ -368,6 +371,7 @@ class CodeCoverageAnalyzer {
       if (!coverage) continue;
 
       pagesWithData++;
+      unusedByPage.push({ url: page.url ?? '', js: coverage.js?.unused ?? 0, css: coverage.css?.unused ?? 0 });
       totalJS += coverage.js?.total ?? 0;
       totalUnusedJS += coverage.js?.unused ?? 0;
       totalCSS += coverage.css?.total ?? 0;
@@ -395,7 +399,11 @@ class CodeCoverageAnalyzer {
     if (avgJSUnused > 60) {
       issues.push({
         message: 'High average unused JavaScript site-wide',
-        detail: `${avgJSUnused}% of JavaScript is unused on average. That is about ${formatBytes(Math.round(totalUnusedJS / Math.max(1, pagesWithData)))} of unused JavaScript per page (compressed; shared bundles are cached after the first page). Consider tree-shaking, code splitting, or lazy loading.`,
+        detail: `${avgJSUnused}% of JavaScript is unused on average. That is about ${formatBytes(Math.round(totalUnusedJS / Math.max(1, pagesWithData)))} of unused JavaScript per page (compressed; shared bundles are cached after the first page). Consider tree-shaking, code splitting, or lazy loading.${withPages(
+          'Most unused JavaScript on',
+          [...unusedByPage].sort((a, b) => b.js - a.js).map((p) => p.url),
+          5,
+        )}`,
         severity: SEVERITY.HIGH,
       });
     }
@@ -403,7 +411,11 @@ class CodeCoverageAnalyzer {
     if (avgCSSUnused > 70) {
       issues.push({
         message: 'High average unused CSS site-wide',
-        detail: `${avgCSSUnused}% of CSS is unused on average. That is about ${formatBytes(Math.round(totalUnusedCSS / Math.max(1, pagesWithData)))} of unused CSS per page (compressed; shared stylesheets are cached after the first page). Consider CSS purging or critical CSS extraction.`,
+        detail: `${avgCSSUnused}% of CSS is unused on average. That is about ${formatBytes(Math.round(totalUnusedCSS / Math.max(1, pagesWithData)))} of unused CSS per page (compressed; shared stylesheets are cached after the first page). Consider CSS purging or critical CSS extraction.${withPages(
+          'Most unused CSS on',
+          [...unusedByPage].sort((a, b) => b.css - a.css).map((p) => p.url),
+          5,
+        )}`,
         severity: SEVERITY.MEDIUM,
       });
     }

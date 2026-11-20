@@ -337,7 +337,10 @@ export async function runSiteProbes(
     const cdnStates = Object.values(pages)
       .map((p) => p.cdnCache)
       .filter((s): s is 'hit' | 'miss' | 'none' => !!s);
-    cdnHtmlCacheIssues(cdnStates).forEach((i) => saveError(i.message ?? '', i.detail ?? '', i.severity));
+    const cdnMissUrls = Object.entries(pages)
+      .filter(([, p]) => p.cdnCache === 'miss')
+      .map(([u]) => u);
+    cdnHtmlCacheIssues(cdnStates, cdnMissUrls).forEach((i) => saveError(i.message ?? '', i.detail ?? '', i.severity));
   } catch (e) {
     console.log(`  ⚠️  crawl graph checks skipped: ${(e as Error).message}`);
   }

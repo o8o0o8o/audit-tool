@@ -50,8 +50,25 @@ void describe('report panels', () => {
     assert.match(findingChips([]), /No issues/);
     assert.match(
       renderFindingList('x', [['<b>', { severity: 'medium', count: 3 }]]),
-      /sev-chip--medium">medium<\/span><span>&lt;b&gt;<\/span>.*>3</,
+      /sev-chip--medium">medium<\/span><span class="finding-message">&lt;b&gt;<\/span>.*>3</,
     );
+  });
+
+  void it('a finding with examples opens to show its pages, with page text escaped', () => {
+    const html = renderFindingList('x', [
+      [
+        'Form inputs without a label',
+        {
+          severity: 'high',
+          count: 2,
+          examples: ['1 input — <a href="https://example.com/a">https://example.com/a</a>', '<img src=x onerror=1>'],
+        },
+      ],
+    ]);
+    assert.match(html, /<details class="finding-details"><summary class="finding-row">/);
+    assert.match(html, /<a href="https:\/\/example\.com\/a" target="_blank"[^>]*>https:\/\/example\.com\/a<\/a>/);
+    assert.ok(!html.includes('<img'), 'page text in an example must stay escaped');
+    assert.ok(!renderFindingList('x', [['m', { severity: 'low', count: 1 }]]).includes('<details'));
   });
 
   void it('opens only the summary and issues; every other section is folded with a summary line', () => {

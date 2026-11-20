@@ -6,6 +6,7 @@
 import { SEVERITY, STOP_WORDS } from '../../constants';
 import { shortenUrl, jaccardSimilarity, getHostname, getPathSegments, truncateText } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 interface TitleConflictPage {
   url: string;
@@ -198,7 +199,7 @@ class KeywordCannibalisationAnalyzer {
       if (urls.length > 5) {
         warnings.push({
           message: `Many pages on topic: "${topic}"`,
-          detail: `${urls.length} pages appear to cover "${topic}". Consider consolidating or creating a clear content hierarchy.`,
+          detail: `${urls.length} pages appear to cover "${topic}". Consider consolidating or creating a clear content hierarchy.${withPages('Pages', urls)}`,
           severity: SEVERITY.LOW,
         });
       }

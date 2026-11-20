@@ -7,6 +7,7 @@
 import { SEVERITY } from '../../constants';
 import { detectAuthorInfo, calcPercent } from '../../utils';
 import type { ParsedPage, ChromePage, Issue, PageInfo, AeoData } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 interface AeoInfo extends AeoData {
   hasFAQSchema?: boolean;
@@ -492,10 +493,12 @@ class AEOAnalyzer {
     let pagesWithDatetime = 0;
     let pagesWithMain = 0;
     let pagesAnalyzed = 0;
+    const semanticByPage: Array<{ url: string; ratio: number }> = [];
 
-    for (const [_url, page] of Object.entries(pages)) {
+    for (const [url, page] of Object.entries(pages)) {
       if (!page.aeo) continue;
       pagesAnalyzed++;
+      semanticByPage.push({ url, ratio: page.aeo.semanticHTMLRatio || 0 });
 
       totalSemanticRatio += page.aeo.semanticHTMLRatio || 0;
       totalContentScore += page.aeo.contentStructureScore || 0;
@@ -517,7 +520,11 @@ class AEOAnalyzer {
     if (avgSemanticRatio < 10) {
       issues.push({
         message: 'Site-wide low semantic HTML usage for AI readiness',
-        detail: `Average semantic HTML ratio is ${avgSemanticRatio}% across ${pagesAnalyzed} pages. Use semantic elements (<main>, <article>, <section>, <nav>) to help AI crawlers understand page structure.`,
+        detail: `Average semantic HTML ratio is ${avgSemanticRatio}% across ${pagesAnalyzed} pages. Use semantic elements (<main>, <article>, <section>, <nav>) to help AI crawlers understand page structure.${withPages(
+          'Lowest on',
+          [...semanticByPage].sort((a, b) => a.ratio - b.ratio).map((p) => p.url),
+          5,
+        )}`,
         severity: SEVERITY.MEDIUM,
       });
     }

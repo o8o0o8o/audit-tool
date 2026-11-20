@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml } from '../html-utils';
+import { TechnologyDetector } from '../../analyzers/seo/technology-detector';
 import { extractComparisonLabels } from '../comparison-helpers';
 import type { PageInfo, ReportSectionData, AuditSnapshot, ComparisonData } from '../../types';
 
@@ -13,21 +14,25 @@ import type { PageInfo, ReportSectionData, AuditSnapshot, ComparisonData } from 
  * @returns {string} Formatted detection method
  */
 function formatDetectionMethod(method: Record<string, string>) {
+  // `matched` is the text the pattern found on the page: the evidence, so it wins over the pattern.
+  const found = method.matched || method.pattern || '';
   switch (method.type) {
     case 'html':
-      return `HTML pattern: ${method.pattern}`;
+      return `Page HTML contains: ${found}`;
     case 'script':
-      return `Script: ${method.matched || method.pattern}`;
+      return `Script URL: ${found}`;
+    case 'asset-host':
+      return `Files served from: ${found}`;
     case 'meta':
-      return `Meta tag <${method.tag}>: "${method.value}"`;
+      return `Meta tag ${method.tag}: "${method.value}"`;
     case 'header':
       return `HTTP header ${method.header}: "${method.value}"`;
     case 'cookie':
-      return `Cookie pattern: ${method.pattern}`;
+      return `Cookie: ${found}`;
     case 'global':
       return `JavaScript global: window.${method.variable}`;
     default:
-      return JSON.stringify(method);
+      return found ? `${method.type}: ${found}` : String(method.type ?? 'Pattern match');
   }
 }
 
@@ -51,6 +56,24 @@ interface AggregatedTech {
   totalUnique: number;
 }
 
+/** Current HTML pattern sources per technology. */
+const CURRENT_HTML_PATTERNS: Map<string, Set<string>> = new Map(
+  Object.values(TechnologyDetector.SIGNATURES)
+    .flat()
+    .map((sig) => [sig.name, new Set((sig.patterns.html ?? []).map((p) => p.source))]),
+);
+
+/**
+ * A detection saved by an older run whose only evidence is an HTML pattern the
+ * detector has since dropped (a bare product name that also matched article
+ * text). The report does not repeat that claim.
+ */
+function isRetiredDetection(name: string, methods: Array<{ type?: string; pattern?: string }> | undefined): boolean {
+  const current = CURRENT_HTML_PATTERNS.get(name);
+  if (!current || !methods?.length) return false;
+  return methods.every((m) => m.type === 'html' && m.pattern !== undefined && !current.has(m.pattern));
+}
+
 function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
   const allTechs = new Map<string, TechEntry>();
   const byCategory: Record<string, Set<string>> = {};
@@ -60,6 +83,7 @@ function aggregateTechnologies(pages: PageInfo[]): AggregatedTech {
     const technologies = tech?.technologies ?? [];
 
     for (const t of technologies) {
+      if (isRetiredDetection(t.name, t.detectedBy as Array<{ type?: string; pattern?: string }> | undefined)) continue;
       if (!allTechs.has(t.name)) {
         allTechs.set(t.name, {
           name: t.name,
@@ -256,7 +280,10 @@ function getTechnologyStack(data: ReportSectionData) {
           }
 
           // Encode tooltip content as data attribute
-          const tooltipContent = `<strong>${escapeHtml(name)}</strong><br><span class="tt-label">${count} pages (${percentage}%)</span><br><br><span class="tt-label">Detected by:</span>${detectionHtml}`;
+          const examplePages = (tech?.pages ?? []).map((u) => `<div class="tt-url">${escapeHtml(u)}</div>`).join('');
+          const tooltipContent = `<strong>${escapeHtml(name)}</strong><br><span class="tt-label">${count} pages (${percentage}%)</span><div class="tt-gap"></div><span class="tt-label">Detected by:</span>${detectionHtml}${
+            examplePages ? `<div class="tt-gap"></div><span class="tt-label">For example on:</span>${examplePages}` : ''
+          }`;
 
           // Get detection type icons
           const detectionIcons = ((tech?.detectedBy ?? []) as string[])

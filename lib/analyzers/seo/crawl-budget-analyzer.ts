@@ -6,6 +6,7 @@
 import { SEVERITY } from '../../constants';
 import { getLetterGrade, hasRobotsDirective } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 class CrawlBudgetAnalyzer {
   /**
@@ -61,6 +62,7 @@ class CrawlBudgetAnalyzer {
     const duplicateTitles = new Map();
     const canonicalTargets = new Map();
     const blockedUrls: string[] = [];
+    const nonIndexableUrls: string[] = [];
 
     for (const [url, pageData] of pagesList) {
       // Check indexability
@@ -71,6 +73,7 @@ class CrawlBudgetAnalyzer {
         // Error and redirect URLs have their own findings below; counting them
         // here inflates "non-indexable" with broken links.
         stats.nonIndexablePages++;
+        nonIndexableUrls.push(url);
       }
 
       // Check redirects
@@ -166,7 +169,7 @@ class CrawlBudgetAnalyzer {
     if (stats.redirects > stats.totalPages * 0.1) {
       issues.push({
         message: 'High number of redirects wasting crawl budget',
-        detail: `${stats.redirects} URLs (${((stats.redirects / stats.totalPages) * 100).toFixed(1)}%) redirect. Update internal links to point directly to final URLs.`,
+        detail: `${stats.redirects} URLs (${((stats.redirects / stats.totalPages) * 100).toFixed(1)}%) redirect. Update internal links to point directly to final URLs.${withPages('Redirecting URLs', redirectedUrls)}`,
         severity: SEVERITY.MEDIUM,
       });
       stats.recommendations.push('Update internal links to use final destination URLs instead of redirecting URLs');
@@ -176,7 +179,10 @@ class CrawlBudgetAnalyzer {
     if (stats.errors.total > 0) {
       issues.push({
         message: 'Error pages wasting crawl budget',
-        detail: `${stats.errors.total} pages return errors (${stats.errors['4xx']} 4xx, ${stats.errors['5xx']} 5xx, ${stats.errors.timeout} timeouts). Fix or remove links to these pages.`,
+        detail: `${stats.errors.total} pages return errors (${stats.errors['4xx']} 4xx, ${stats.errors['5xx']} 5xx, ${stats.errors.timeout} timeouts). Fix or remove links to these pages.${withPages(
+          'Error pages',
+          errorUrls.map((e) => e.url),
+        )}`,
         severity: stats.errors['5xx'] > 0 ? SEVERITY.HIGH : SEVERITY.MEDIUM,
       });
       stats.recommendations.push('Fix or remove broken links to error pages');
@@ -186,7 +192,10 @@ class CrawlBudgetAnalyzer {
     if (stats.duplicates.byTitle > 5) {
       warnings.push({
         message: 'Duplicate titles detected',
-        detail: `${stats.duplicates.byTitle} pages share titles with other pages. Use unique titles or consolidate content.`,
+        detail: `${stats.duplicates.byTitle} pages share titles with other pages. Use unique titles or consolidate content.${withPages(
+          'Pages',
+          [...duplicateTitles.values()].filter((u: string[]) => u.length > 1).flat(),
+        )}`,
         severity: SEVERITY.MEDIUM,
       });
       stats.recommendations.push('Create unique title tags for each page');
@@ -195,7 +204,10 @@ class CrawlBudgetAnalyzer {
     if (stats.duplicates.byCanonical > 10) {
       warnings.push({
         message: 'Many pages canonicalized to other URLs',
-        detail: `${stats.duplicates.byCanonical} pages point canonical to different URLs. Consider consolidating or removing duplicate pages.`,
+        detail: `${stats.duplicates.byCanonical} pages point canonical to different URLs. Consider consolidating or removing duplicate pages.${withPages(
+          'Pages',
+          [...canonicalTargets.values()].flat(),
+        )}`,
         severity: SEVERITY.MEDIUM,
       });
       stats.recommendations.push('Consolidate duplicate content or implement proper pagination');
@@ -205,7 +217,7 @@ class CrawlBudgetAnalyzer {
     if (stats.nonIndexablePages > stats.totalPages * 0.2) {
       warnings.push({
         message: 'High percentage of non-indexable pages',
-        detail: `${stats.nonIndexablePages} pages (${((stats.nonIndexablePages / stats.totalPages) * 100).toFixed(1)}%) are non-indexable (noindex, canonical elsewhere, blocked). Review if these should be in sitemap.`,
+        detail: `${stats.nonIndexablePages} pages (${((stats.nonIndexablePages / stats.totalPages) * 100).toFixed(1)}%) are non-indexable (noindex, canonical elsewhere, blocked). Review if these should be in sitemap.${withPages('Pages', nonIndexableUrls)}`,
         severity: SEVERITY.MEDIUM,
       });
       stats.recommendations.push('Remove non-indexable pages from sitemap');
@@ -215,7 +227,7 @@ class CrawlBudgetAnalyzer {
     if (blockedUrls.length > 0) {
       warnings.push({
         message: 'Pages blocked by robots.txt in sitemap',
-        detail: `${blockedUrls.length} pages are blocked by robots.txt but appear to be crawled. Remove from sitemap or unblock.`,
+        detail: `${blockedUrls.length} pages are blocked by robots.txt but appear to be crawled. Remove from sitemap or unblock.${withPages('Pages', blockedUrls)}`,
         severity: SEVERITY.MEDIUM,
       });
       stats.recommendations.push('Remove robots-blocked pages from sitemap');

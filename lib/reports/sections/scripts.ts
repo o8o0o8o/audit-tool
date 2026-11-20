@@ -2851,18 +2851,23 @@ ${noScore ? '' : `        'Security Score': {
           document.body.appendChild(tip);
 
           var hideTimer;
+          // Keep the box inside the window: flip left/up when it would run off the edge.
+          function place(e) {
+              var w = tip.offsetWidth, h = tip.offsetHeight;
+              var x = e.clientX + 12, y = e.clientY + 12;
+              if (x + w > window.innerWidth - 8) x = Math.max(8, e.clientX - w - 12);
+              if (y + h > window.innerHeight - 8) y = Math.max(8, e.clientY - h - 12);
+              tip.style.left = x + 'px';
+              tip.style.top = y + 'px';
+          }
           badges.forEach(function(badge) {
               badge.addEventListener('mouseenter', function(e) {
                   clearTimeout(hideTimer);
                   tip.innerHTML = badge.getAttribute('data-tip');
-                  tip.style.left = (e.clientX + 12) + 'px';
-                  tip.style.top = (e.clientY + 12) + 'px';
+                  place(e);
                   tip.classList.add('visible');
               });
-              badge.addEventListener('mousemove', function(e) {
-                  tip.style.left = (e.clientX + 12) + 'px';
-                  tip.style.top = (e.clientY + 12) + 'px';
-              });
+              badge.addEventListener('mousemove', place);
               badge.addEventListener('mouseleave', function() {
                   hideTimer = setTimeout(function() { tip.classList.remove('visible'); }, 100);
               });

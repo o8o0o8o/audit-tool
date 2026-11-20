@@ -2655,19 +2655,24 @@
           .row-tooltip {
               position: fixed;
               z-index: 100;
-              background: var(--gray-800);
-              color: var(--color-border-default);
+              background: var(--color-bg-surface-alt);
+              color: var(--color-text-primary);
+              border: 1px solid var(--color-border-default);
               padding: 10px 14px;
               border-radius: var(--radius-lg);
               font-size: var(--font-size-xs);
               line-height: var(--line-height-normal);
-              box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+              box-shadow: 0 8px 24px rgba(0,0,0,0.4);
               pointer-events: none;
               opacity: 0;
               transition: opacity 0.15s;
-              max-width: 320px;
-              white-space: nowrap;
+              max-width: min(420px, calc(100vw - 24px));
+              white-space: normal;
+              overflow-wrap: anywhere;
           }
+
+          .row-tooltip .tt-gap { height: 8px; }
+          .row-tooltip .tt-url { color: var(--color-text-muted); }
 
           .row-tooltip.visible {
               opacity: 1;
@@ -4233,15 +4238,32 @@
           }
           .finding-list { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
           .finding-list li {
-              display: flex;
-              align-items: baseline;
-              gap: var(--space-3);
               padding: 8px 0;
               border-bottom: 1px solid rgba(255, 255, 255, 0.05);
               font-size: var(--font-size-sm);
           }
           .finding-list li:last-child { border-bottom: 0; }
+          .finding-list .finding-row { display: flex; align-items: baseline; gap: var(--space-3); }
+          .finding-list .finding-message { min-width: 0; overflow-wrap: anywhere; }
           .finding-list .finding-count { margin-left: auto; color: var(--color-text-muted); white-space: nowrap; }
+          .finding-list summary.finding-row { cursor: pointer; list-style: none; }
+          .finding-list summary.finding-row::-webkit-details-marker { display: none; }
+          .finding-list summary.finding-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+          .finding-list .finding-toggle::before { content: '+'; color: var(--color-text-muted); font-weight: 600; }
+          .finding-list details[open] .finding-toggle::before { content: '\2212'; }
+          .finding-list .finding-examples {
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+              margin: 8px 0 4px;
+              padding-left: 12px;
+              border-left: 2px solid var(--color-border-default);
+          }
+          .finding-list .finding-example {
+              font-size: var(--font-size-xs);
+              color: var(--color-text-secondary);
+              overflow-wrap: anywhere;
+          }
           .subpanel-note { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--space-3); }
 
           @media (max-width: 640px) {
@@ -8656,18 +8678,23 @@
           document.body.appendChild(tip);
 
           var hideTimer;
+          // Keep the box inside the window: flip left/up when it would run off the edge.
+          function place(e) {
+              var w = tip.offsetWidth, h = tip.offsetHeight;
+              var x = e.clientX + 12, y = e.clientY + 12;
+              if (x + w > window.innerWidth - 8) x = Math.max(8, e.clientX - w - 12);
+              if (y + h > window.innerHeight - 8) y = Math.max(8, e.clientY - h - 12);
+              tip.style.left = x + 'px';
+              tip.style.top = y + 'px';
+          }
           badges.forEach(function(badge) {
               badge.addEventListener('mouseenter', function(e) {
                   clearTimeout(hideTimer);
                   tip.innerHTML = badge.getAttribute('data-tip');
-                  tip.style.left = (e.clientX + 12) + 'px';
-                  tip.style.top = (e.clientY + 12) + 'px';
+                  place(e);
                   tip.classList.add('visible');
               });
-              badge.addEventListener('mousemove', function(e) {
-                  tip.style.left = (e.clientX + 12) + 'px';
-                  tip.style.top = (e.clientY + 12) + 'px';
-              });
+              badge.addEventListener('mousemove', place);
               badge.addEventListener('mouseleave', function() {
                   hideTimer = setTimeout(function() { tip.classList.remove('visible'); }, 100);
               });

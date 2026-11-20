@@ -12,6 +12,7 @@ import { SEVERITY } from '../../constants';
 import type { Issue } from '../../types';
 import { escapeHtml } from '../../reports/html-utils';
 import { libraryFromUrl } from '../security/js-library-analyzer';
+import { withPages } from '../../utils/page-links';
 
 export const REDIRECTED_ASSETS_MESSAGE = 'Assets are served through redirects';
 export const NO_CACHE_BUSTING_MESSAGE = 'Long-cached assets without cache-busting';
@@ -185,14 +186,15 @@ export function classifyCdnCache(headers: Record<string, string> | undefined): C
 }
 
 /** Pure site-level reducer over per-page classifications. */
-export function cdnHtmlCacheIssues(states: CdnCacheState[]): Issue[] {
+/** `missUrls`: the pages that were cache misses, named in the finding. */
+export function cdnHtmlCacheIssues(states: CdnCacheState[], missUrls: string[] = []): Issue[] {
   const cdnPages = states.filter((s) => s !== 'none');
   const misses = cdnPages.filter((s) => s === 'miss').length;
   if (cdnPages.length < 5 || misses / cdnPages.length < 0.8) return [];
   return [
     {
       message: CDN_HTML_MISS_MESSAGE,
-      detail: `${misses} of ${cdnPages.length} HTML pages served through a CDN were cache misses or bypasses (cf-cache-status / x-cache / x-vercel-cache and similar headers). This is deliberate for personalised or logged-in pages; otherwise every visitor waits for the origin server, which raises TTFB. Allow the CDN to cache public HTML (Cache-Control s-maxage, stale-while-revalidate or a cache rule).`,
+      detail: `${misses} of ${cdnPages.length} HTML pages served through a CDN were cache misses or bypasses (cf-cache-status / x-cache / x-vercel-cache and similar headers). This is deliberate for personalised or logged-in pages; otherwise every visitor waits for the origin server, which raises TTFB. Allow the CDN to cache public HTML (Cache-Control s-maxage, stale-while-revalidate or a cache rule).${withPages('Pages', missUrls)}`,
       severity: SEVERITY.LOW,
     },
   ];

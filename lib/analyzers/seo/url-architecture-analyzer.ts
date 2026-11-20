@@ -6,6 +6,7 @@
 import { SEVERITY } from '../../constants';
 import { TRACKING_PARAMS, analyzeUrlStructure, getPathSegments, shortenUrl, formatSampleList } from '../../utils';
 import type { Issue, PageInfo } from '../../types';
+import { withPages } from '../../utils/page-links';
 
 class UrlArchitectureAnalyzer {
   /**
@@ -171,6 +172,8 @@ class UrlArchitectureAnalyzer {
     const longUrls: string[] = [];
     const urlDepths: number[] = [];
     const trailingSlashCount = { with: 0, without: 0 };
+    const slashUrls: { with: string[]; without: string[] } = { with: [], without: [] };
+    const httpUrls: string[] = [];
     const protocolCounts = { http: 0, https: 0 };
 
     for (const url of Object.keys(pages)) {
@@ -189,8 +192,10 @@ class UrlArchitectureAnalyzer {
         // Track trailing slashes
         if (parsed.pathname.endsWith('/') && parsed.pathname !== '/') {
           trailingSlashCount.with++;
+          slashUrls.with.push(url);
         } else if (parsed.pathname !== '/') {
           trailingSlashCount.without++;
+          slashUrls.without.push(url);
         }
 
         // Track protocols
@@ -198,6 +203,7 @@ class UrlArchitectureAnalyzer {
           protocolCounts.https++;
         } else {
           protocolCounts.http++;
+          httpUrls.push(url);
         }
       } catch {
         // Skip invalid URLs
@@ -212,7 +218,11 @@ class UrlArchitectureAnalyzer {
 
       issues.push({
         message: 'Inconsistent trailing slash usage across site',
-        detail: `${trailingSlashCount.with} URLs (${withPercent}%) have trailing slashes, ${trailingSlashCount.without} (${withoutPercent}%) do not. Pick one convention and redirect the other`,
+        detail: `${trailingSlashCount.with} URLs (${withPercent}%) have trailing slashes, ${trailingSlashCount.without} (${withoutPercent}%) do not. Pick one convention and redirect the other.${
+          trailingSlashCount.without <= trailingSlashCount.with
+            ? withPages('Without a trailing slash', slashUrls.without)
+            : withPages('With a trailing slash', slashUrls.with)
+        }`,
         severity: SEVERITY.MEDIUM,
       });
     }
@@ -221,7 +231,7 @@ class UrlArchitectureAnalyzer {
     if (protocolCounts.http > 0 && protocolCounts.https > 0) {
       issues.push({
         message: 'Mixed HTTP/HTTPS URLs detected',
-        detail: `Found ${protocolCounts.http} HTTP and ${protocolCounts.https} HTTPS URLs. All URLs should use HTTPS`,
+        detail: `Found ${protocolCounts.http} HTTP and ${protocolCounts.https} HTTPS URLs. All URLs should use HTTPS.${withPages('HTTP URLs', httpUrls)}`,
         severity: SEVERITY.HIGH,
       });
     }

@@ -6,6 +6,24 @@
 import type { ValidationResult } from './lib/types';
 
 /**
+ * The site to audit from what the user typed: any page of the site, with or
+ * without a scheme (`example.com/blog/post` -> `https://example.com`). Input
+ * that is not an http(s) URL is returned trimmed, so `validateURL` reports it.
+ */
+export function toSiteOrigin(input: string): string {
+  const raw = input.trim();
+  if (!raw) return raw;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/\//, '')}`;
+  try {
+    const url = new URL(withScheme);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw;
+    return url.origin;
+  } catch {
+    return raw;
+  }
+}
+
+/**
  * Validates and sanitizes a URL
  */
 export function validateURL(urlString: string): ValidationResult {

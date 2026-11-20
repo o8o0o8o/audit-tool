@@ -20,7 +20,7 @@ import {
 } from './lib/config-loader';
 import * as constants from './lib/constants';
 import { printAuditSummary, getJsonSummary, type AuditResultsExtended } from './lib/utils/cli-summary';
-import { validateArguments, validateURL, validateRepoPath, isFetchAllowed } from './validators';
+import { validateArguments, validateURL, validateRepoPath, isFetchAllowed, toSiteOrigin } from './validators';
 import { generateWorkflow } from './lib/utils/github-actions-generator';
 import { ComparisonAudit } from './lib/comparison/comparison-audit';
 import { RepoOrchestrator } from './lib/orchestrators/repo-orchestrator';
@@ -149,7 +149,8 @@ async function audit() {
       // malformed URLs and private/internal hosts (SSRF) up front instead of
       // relying on `startsWith('http')` + the downstream ctor.
       const urls: string[] = [];
-      for (const line of rawLines) {
+      for (const rawLine of rawLines) {
+        const line = toSiteOrigin(rawLine);
         const v = validateURL(line);
         if (!v.valid) {
           console.warn(`Skipping invalid site line: ${line} — ${v.error?.split('\n')[0]}`);

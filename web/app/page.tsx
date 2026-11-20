@@ -420,9 +420,11 @@ export default function DispatchPage() {
                   <input
                     id="audit-url"
                     name="url"
-                    type="url"
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
                     required
-                    placeholder="Website URL (https://example.com)"
+                    placeholder="Website URL (example.com)"
                     className="form-input"
                   />
                 </div>

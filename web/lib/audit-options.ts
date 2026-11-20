@@ -71,7 +71,9 @@ function parseUrl(raw: unknown, errors: string[]): string {
   }
   let parsed: URL;
   try {
-    parsed = new URL(raw.trim());
+    // Any page of the site, with or without a scheme: the audit runs on its origin.
+    const text = raw.trim();
+    parsed = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text.replace(/^\/\//, '')}`);
   } catch {
     errors.push('url is not a valid URL');
     return '';

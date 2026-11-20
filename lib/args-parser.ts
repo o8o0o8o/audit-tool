@@ -8,7 +8,21 @@ import type { ParsedArgs as BaseParsedArgs } from './types';
 /** `--agentic` / `--no-agentic`; null defers to `.seoauditrc` (default on). */
 export type ParsedArgs = BaseParsedArgs & { agentic: boolean | null };
 import { isPresetName, parseCsvList, unknownPresetMessage } from './presets';
+import { toSiteOrigin } from '../validators';
 import * as os from 'os';
+
+/**
+ * The audit runs on a whole site, so a page URL (or a host without a scheme)
+ * is reduced to the site's origin; a note says so when anything was dropped.
+ */
+function siteOriginOf(value: string, flag: string, warnings: string[]): string {
+  const origin = toSiteOrigin(value);
+  const typed = value.trim().replace(/\/+$/, '');
+  if (origin !== value.trim() && origin !== typed && /^https?:\/\//.test(origin)) {
+    warnings.push(`${flag}=${value.trim()} is not the site root — auditing ${origin}`);
+  }
+  return origin;
+}
 
 /**
  * Calculate safe concurrency based on available system resources
@@ -189,9 +203,9 @@ function parseArgs(args: string[]): ParsedArgs {
         evidenceCapExplicit = true;
       }
     } else if (arg.startsWith('--origin=')) {
-      parsed.origin = arg.substring('--origin='.length);
+      parsed.origin = siteOriginOf(arg.substring('--origin='.length), '--origin', parsed.warnings);
     } else if (arg.startsWith('--compare=')) {
-      parsed.compare = arg.substring('--compare='.length);
+      parsed.compare = siteOriginOf(arg.substring('--compare='.length), '--compare', parsed.warnings);
     } else if (arg.startsWith('--sitemap=')) {
       parsed.sitemap = arg.substring('--sitemap='.length);
     } else if (arg.startsWith('--compare-sitemap=')) {

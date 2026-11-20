@@ -58,7 +58,7 @@ export function SiteHeader() {
   return (
     <header className={`header${sticky ? ' is-sticky' : ''}`} role="banner">
       <div className="header__container container">
-        <a href="/" className="header__logo" aria-label="Focus Reactive">
+        <a href={`${FR_ORIGIN}/`} className="header__logo" aria-label="Focus Reactive">
           <img src="/assets/img/fr-logo.svg" alt="Focus Reactive logo" width={160} height={55} />
         </a>
 

@@ -29,6 +29,10 @@ on:
         description: Competitive content research (--content-research)
         type: string
         default: 'false'
+      visual:
+        description: UI defect checks (--visual)
+        type: string
+        default: 'false'
       concurrency:
         description: Parallel pages (1-20)
         type: string
@@ -65,6 +69,7 @@ jobs:
       IN_LLM: ${{ inputs.llm }}
       IN_VERIFY: ${{ inputs.verify }}
       IN_CONTENT_RESEARCH: ${{ inputs.content_research }}
+      IN_VISUAL: ${{ inputs.visual }}
       IN_CONCURRENCY: ${{ inputs.concurrency }}
       IN_LIMIT: ${{ inputs.limit }}
       IN_EVIDENCE_CAP: ${{ inputs.evidence_cap }}
@@ -94,7 +99,7 @@ jobs:
           fi
           echo "AUDIT_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           echo "AUDIT_OPTIONS=$(jq -cn --arg perf "$IN_PERF" --arg llm "$IN_LLM" --arg verify "$IN_VERIFY" \
-            --arg contentResearch "$IN_CONTENT_RESEARCH" --arg concurrency "$IN_CONCURRENCY" \
+            --arg contentResearch "$IN_CONTENT_RESEARCH" --arg visual "$IN_VISUAL" --arg concurrency "$IN_CONCURRENCY" \
             --arg limit "$IN_LIMIT" --arg evidenceCap "$IN_EVIDENCE_CAP" \
             --arg preset "$IN_PRESET" --arg sections "$IN_SECTIONS" '$ARGS.named')" >> "$GITHUB_ENV"
 
@@ -136,6 +141,7 @@ jobs:
           [ "$IN_LLM" = "true" ] && args+=("--llm")
           [ "$IN_VERIFY" = "true" ] && args+=("--verify")
           [ "$IN_CONTENT_RESEARCH" = "true" ] && args+=("--content-research")
+          [ "$IN_VISUAL" = "true" ] && args+=("--visual")
           [ -n "$IN_CONCURRENCY" ] && args+=("--concurrency=$IN_CONCURRENCY")
           [ -n "$IN_LIMIT" ] && args+=("--limit=$IN_LIMIT")
           [ -n "$IN_EVIDENCE_CAP" ] && args+=("--evidence-cap=$IN_EVIDENCE_CAP")

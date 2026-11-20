@@ -27,6 +27,7 @@ void describe('web audit options', () => {
       llm: false,
       verify: false,
       contentResearch: false,
+      visual: false,
       concurrency: 5,
       limit: null,
       evidenceCap: 10,
@@ -59,6 +60,7 @@ void describe('web audit options', () => {
       llm: 'on',
       verify: true,
       contentResearch: true,
+      visual: true,
       concurrency: '3',
       limit: 5,
       evidenceCap: 20,
@@ -75,6 +77,7 @@ void describe('web audit options', () => {
       llm: 'true',
       verify: 'true',
       content_research: 'true',
+      visual: 'true',
       concurrency: '3',
       limit: '5',
       evidence_cap: '20',
@@ -85,6 +88,7 @@ void describe('web audit options', () => {
       '--llm',
       '--verify',
       '--content-research',
+      '--visual',
       '--concurrency=3',
       '--limit=5',
       '--evidence-cap=20',
@@ -180,6 +184,7 @@ void describe('estimateAuditDuration', () => {
     assert.ok(minutes({ verify: true }) > b);
     assert.ok(minutes({ llm: true }) > b);
     assert.ok(minutes({ contentResearch: true }) > b);
+    assert.ok(minutes({ visual: true }) > b);
     assert.ok(minutes({ evidenceCap: 50 }) > b);
     assert.ok(minutes({ limit: 1000 }) > b);
     assert.ok(minutes({ perf: true, llm: true, verify: true, contentResearch: true }) > minutes({ perf: true }));

@@ -29,6 +29,7 @@ export interface AuditOptions {
   llm: boolean;
   verify: boolean;
   contentResearch: boolean;
+  visual: boolean;
   concurrency: number;
   limit: number | null;
   evidenceCap: number;
@@ -142,6 +143,7 @@ export function parseAuditRequest(body: unknown): ParseResult {
       llm: parseBool(b.llm),
       verify: parseBool(b.verify),
       contentResearch: parseBool(b.contentResearch),
+      visual: parseBool(b.visual),
       concurrency: concurrency ?? CONCURRENCY_DEFAULT,
       limit,
       evidenceCap: evidenceCap ?? EVIDENCE_CAP_DEFAULT,
@@ -169,6 +171,7 @@ export function toWorkflowInputs(opts: AuditOptions, runId: string): WorkflowInp
     llm: String(opts.llm),
     verify: String(opts.verify),
     content_research: String(opts.contentResearch),
+    visual: String(opts.visual),
     concurrency: String(opts.concurrency),
     limit: opts.limit === null ? '' : String(opts.limit),
     evidence_cap: String(opts.evidenceCap),
@@ -184,6 +187,7 @@ export function toCliArgs(inputs: WorkflowInputs): string[] {
   if (inputs.llm === 'true') args.push('--llm');
   if (inputs.verify === 'true') args.push('--verify');
   if (inputs.content_research === 'true') args.push('--content-research');
+  if (inputs.visual === 'true') args.push('--visual');
   if (inputs.concurrency) args.push(`--concurrency=${inputs.concurrency}`);
   if (inputs.limit) args.push(`--limit=${inputs.limit}`);
   if (inputs.evidence_cap) args.push(`--evidence-cap=${inputs.evidence_cap}`);
@@ -201,6 +205,8 @@ export interface EstimateInput {
   llm: boolean;
   verify: boolean;
   contentResearch: boolean;
+  /** Optional so runs stored before the option existed still estimate. */
+  visual?: boolean;
   concurrency: string | number | null;
   limit: string | number | null;
   evidenceCap: string | number | null;
@@ -225,6 +231,8 @@ const VERIFY_PER_PAGE_SECONDS = 1;
 const LLM_SECONDS = 120;
 const CONTENT_RESEARCH_SECONDS = 5 * 40 * 3;
 const FULL_REPORT_SECONDS = 60;
+const VISUAL_PER_PAGE_SECONDS = 2;
+const VISUAL_PROBE_SECONDS = 10 * 20;
 
 function toPositiveInt(raw: string | number | null, fallback: number): number | null {
   if (raw === null || raw === '') return fallback;
@@ -257,6 +265,7 @@ export function estimateAuditDuration(input: EstimateInput): AuditEstimate | nul
   if (input.llm) seconds += LLM_SECONDS + samples * VISION_SECONDS;
   if (input.verify) seconds += VERIFY_FIXED_SECONDS + pages * VERIFY_PER_PAGE_SECONDS;
   if (input.contentResearch) seconds += CONTENT_RESEARCH_SECONDS;
+  if (input.visual) seconds += Math.ceil(pages / concurrency) * VISUAL_PER_PAGE_SECONDS + VISUAL_PROBE_SECONDS;
   if (!input.preset || input.preset === 'full' || input.preset === 'seo' || input.preset === 'custom') seconds += FULL_REPORT_SECONDS;
 
   return { minutes: Math.max(1, Math.ceil(seconds / 60)), pages, assumedPages };

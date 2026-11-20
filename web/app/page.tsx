@@ -87,6 +87,7 @@ export default function DispatchPage() {
       llm: false,
       verify: false,
       contentResearch: false,
+      visual: false,
       concurrency: 5,
       limit: null,
       evidenceCap: 10,
@@ -170,6 +171,7 @@ export default function DispatchPage() {
         llm: form.get('llm') === 'on',
         verify: form.get('verify') === 'on',
         contentResearch: form.get('contentResearch') === 'on',
+        visual: form.get('visual') === 'on',
         concurrency: String(form.get('concurrency') ?? ''),
         limit: String(form.get('limit') ?? ''),
         evidenceCap: String(form.get('evidenceCap') ?? ''),
@@ -188,6 +190,7 @@ export default function DispatchPage() {
       llm: form.get('llm') === 'on',
       verify: form.get('verify') === 'on',
       contentResearch: form.get('contentResearch') === 'on',
+      visual: form.get('visual') === 'on',
       concurrency: form.get('concurrency'),
       limit: form.get('limit'),
       evidenceCap: form.get('evidenceCap'),
@@ -212,6 +215,7 @@ export default function DispatchPage() {
           llm: body.llm,
           verify: body.verify,
           contentResearch: body.contentResearch,
+          visual: body.visual,
           concurrency: String(body.concurrency ?? ''),
           evidenceCap: String(body.evidenceCap ?? ''),
         };
@@ -376,6 +380,9 @@ export default function DispatchPage() {
           </label>
           <label className="form-check">
             <input name="contentResearch" type="checkbox" /> Content research (--content-research)
+          </label>
+          <label className="form-check">
+            <input name="visual" type="checkbox" /> UI defect checks (--visual)
           </label>
           <p className="form-subhead" hidden={!isCustom}>Report sections</p>
           <div className="section-grid" hidden={!isCustom}>

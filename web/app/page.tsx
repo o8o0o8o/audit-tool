@@ -65,13 +65,15 @@ const PRESETS = [
   { value: 'custom', label: 'Custom', summary: 'Pick the report sections yourself.' },
 ] as const;
 
-const OPTIONS = [
+// `disabled`: not working in hosted runs yet, so shown but not selectable (a disabled
+// checkbox is never submitted, so the request always sends false for it).
+const OPTIONS: readonly { name: string; label: string; flag: string; disabled?: boolean }[] = [
   { name: 'perf', label: 'Performance metrics', flag: '--perf' },
-  { name: 'llm', label: 'LLM passes', flag: '--llm' },
-  { name: 'verify', label: 'Live verification', flag: '--verify' },
-  { name: 'contentResearch', label: 'Content research', flag: '--content-research' },
+  { name: 'llm', label: 'LLM passes', flag: '--llm', disabled: true },
+  { name: 'verify', label: 'Live verification', flag: '--verify', disabled: true },
+  { name: 'contentResearch', label: 'Content research', flag: '--content-research', disabled: true },
   { name: 'visual', label: 'UI defect checks', flag: '--visual' },
-] as const;
+];
 
 const SECTIONS: { value: string; label: string }[] = [
   { value: 'executive-summary', label: 'Executive summary' },
@@ -485,8 +487,12 @@ export default function DispatchPage() {
                   </span>
                   <div className="contacts-form__checklist" role="group" aria-labelledby="audit-options-label">
                     {OPTIONS.map((o) => (
-                      <label key={o.name} className="checkbox-button" title={o.flag}>
-                        <input name={o.name} type="checkbox" />
+                      <label
+                        key={o.name}
+                        className={o.disabled ? 'checkbox-button checkbox-button--disabled' : 'checkbox-button'}
+                        title={o.disabled ? `${o.label} is not available yet` : o.flag}
+                      >
+                        <input name={o.name} type="checkbox" disabled={o.disabled} />
                         <span>{o.label}</span>
                       </label>
                     ))}

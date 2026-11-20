@@ -213,3 +213,11 @@
   border-radius: 24px;
   background: var(--color-dark);
 }
+
+/* Option chips that are not available yet: visible, not selectable. */
+.checkbox-button--disabled,
+.checkbox-button--disabled:hover {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--color-grey-200);
+}

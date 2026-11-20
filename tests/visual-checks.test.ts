@@ -5,6 +5,7 @@ import {
   classifyBrokenImages,
   classifyBrokenMedia,
   classifyFailedMediaRequests,
+  EMPTY_SRC_LABEL,
 } from '../lib/analyzers/visual/broken-media-analyzer';
 import { ISSUE_CATALOG } from '../lib/scoring/seo-catalog';
 import { EXTENDED_FIX_RECOMMENDATIONS } from '../lib/scoring/fix-recommendations-extended';
@@ -34,6 +35,16 @@ void describe('broken media', () => {
         img({ naturalWidth: 0, displayWidth: 1, displayHeight: 1 }),
       ]),
       [],
+    );
+  });
+
+  void it('names an empty src instead of the page URL, and skips images with no box', () => {
+    assert.deepStrictEqual(
+      classifyBrokenImages([
+        img({ src: '', emptySrc: true, naturalWidth: 0 }),
+        img({ src: 'https://x.test/hidden.png', naturalWidth: 0, displayWidth: 0, displayHeight: 60 }),
+      ]),
+      [EMPTY_SRC_LABEL],
     );
   });
 
@@ -146,7 +157,7 @@ void describe('upscaled', async () => {
 });
 
 void describe('text integrity', async () => {
-  const { findTemplateTokens, hasPlaceholderText, findMojibake, isClippedText, TextIntegrityAnalyzer } = await import(
+  const { findTemplateTokens, findRawMarkup, hasPlaceholderText, findMojibake, isClippedText, TextIntegrityAnalyzer } = await import(
     '../lib/analyzers/visual/text-integrity-analyzer'
   );
   const clip = (over: Partial<Parameters<typeof isClippedText>[0]> = {}) => ({
@@ -174,6 +185,22 @@ void describe('text integrity', async () => {
     assert.deepStrictEqual(findTemplateTokens('The function returns undefined when empty.'), []);
     assert.deepStrictEqual(findTemplateTokens('NaN is not a number'), []);
     assert.deepStrictEqual(findTemplateTokens('Welcome to our store'), []);
+  });
+
+  void it('reads markup printed as text as raw code, not a template token', () => {
+    // Live case: a CMS article printed a JSX <img> tag as a paragraph.
+    const text =
+      '<img src=“https://upload.wikimedia.org/x.svg” alt=“Next.js logo” height={150} style={{ paddingLeft: 16 }} />';
+    assert.deepStrictEqual(findTemplateTokens(text), []);
+    assert.strictEqual(findRawMarkup(text).length, 1);
+    assert.deepStrictEqual(findRawMarkup('<a href="/x">docs</a> is a link'), ['<a href="/x">']);
+    assert.deepStrictEqual(findRawMarkup('Wrap content in <main> and <article> elements.'), []);
+    assert.deepStrictEqual(findRawMarkup('if a < b and c > d'), []);
+    // The same tag split by an auto-linked src URL: only the tail is in this node.
+    assert.deepStrictEqual(findRawMarkup('” alt=“Next.js logo” height={150} style={{ paddingLeft: 16 }} />'), [
+      'alt=“Next.js logo” height={150} style={{ paddingLeft: 16 }} />',
+    ]);
+    assert.deepStrictEqual(findRawMarkup('Set width = 100 and close the dialog.'), []);
   });
 
   void it('flags lorem ipsum placeholder text', () => {
@@ -233,6 +260,7 @@ void describe('visual catalog', () => {
       'Images upscaled beyond natural resolution',
       'CSS background images upscaled beyond natural resolution',
       'Unrendered template tokens in page text',
+      'Raw HTML or JSX code shown as page text',
       'Placeholder text (lorem ipsum) on page',
       'Garbled characters (mojibake) in page text',
       'Text clipped by its container',

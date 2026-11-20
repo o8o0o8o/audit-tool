@@ -155,6 +155,7 @@ function buildIndex<T>(src: Record<string, T>, normalize: (s: string) => string)
   }
   return out;
 }
+const FIX_RAW = ScoreCalculator.getFixRecommendations();
 const FIX_BY_NORMAL = buildIndex(ScoreCalculator.getFixRecommendations(), _normalizeMessage);
 const FIX_BY_LOOKUP = buildIndex(ScoreCalculator.getFixRecommendations(), normalizeMessageForLookup);
 // Keys sorted longest-first; used by the prefix-fallback so the most
@@ -165,11 +166,15 @@ const FIX_LOOKUP_KEYS_BY_LENGTH = Object.keys(FIX_BY_LOOKUP).sort((a, b) => b.le
 /** Generic exact→normalized→longest-prefix matcher shared by both catalogs. */
 function matchByMessage<T>(
   message: string,
+  raw: Record<string, T>,
   byNormal: Record<string, T>,
   byLookup: Record<string, T>,
   keysByLength: string[],
 ): T | undefined {
-  const exact = byNormal[_normalizeMessage(message)] ?? byLookup[normalizeMessageForLookup(message)];
+  // The raw key first: normalisation strips tags, so "Missing <main> element"
+  // would otherwise resolve to the generic "Missing element" entry.
+  const exact =
+    raw[message] ?? byNormal[_normalizeMessage(message)] ?? byLookup[normalizeMessageForLookup(message)];
   if (exact) return exact;
   const lookupForm = normalizeMessageForLookup(message);
   for (const key of keysByLength) {
@@ -204,7 +209,7 @@ function sourceLocationsFor(
  * generic catalogue entry; everything else falls back to the generic entry.
  */
 function lookupRecommendation(message: string, isNextjs = false): FixRecommendation | undefined {
-  const base = matchByMessage(message, FIX_BY_NORMAL, FIX_BY_LOOKUP, FIX_LOOKUP_KEYS_BY_LENGTH);
+  const base = matchByMessage(message, FIX_RAW, FIX_BY_NORMAL, FIX_BY_LOOKUP, FIX_LOOKUP_KEYS_BY_LENGTH);
   if (!isNextjs) return base;
   const override = nextjsOverrideFor(message);
   if (!override) return base;
@@ -229,7 +234,10 @@ const DEFAULT_FIX_GENERIC: Record<string, string> = {
 };
 
 const DEFAULT_FIX_NEXTJS: Record<string, string> = {
-  seo: 'Set this per route with the Next.js Metadata API (`export const metadata` or `generateMetadata` for dynamic routes) so each page declares a unique, correct value; configure `metadataBase` once in the root layout.',
+  // Deliberately not Metadata-API specific: this is the fallback for every SEO
+  // finding without its own entry (links, headings, crawl structure), most of
+  // which metadata does not fix.
+  seo: 'Fix this in the route or shared component that renders the affected pages, so the change reaches every page built from it. Prioritise the highest-traffic pages first.',
   performance: 'Address this in the App Router: keep non-interactive UI as Server Components, lazy-load heavy client components with next/dynamic, serve images via next/image, and load third-party tags through next/script with strategy="lazyOnload".',
   accessibility: 'Fix the flagged elements in their React component so the change applies everywhere the component renders (add the label / alt / aria attribute, or correct the contrast token).',
   security: 'Set the missing header in next.config.js `headers()` (or middleware) so every route is covered, then re-test.',
@@ -1154,11 +1162,20 @@ function buildFindingBlock(
       const urls = extractAllUrls(ex);
       if (urls.length > 1) {
         const label = clusterLabel(ex);
-        lines.push(`- ${label || 'Pages sharing this value'}`);
-        for (const u of urls.slice(0, PAGES_PER_CLUSTER)) lines.push(`    - ${mdLink(u, u)}`);
-        if (urls.length > PAGES_PER_CLUSTER) {
+        // A sentence that opens with a link ("<a>/x/</a> returns HTTP 404 and is
+        // linked from …", "<a>/page/</a> has 2 image(s) that failed to render: …")
+        // has no shared-value label. Keep the sentence itself — a generic
+        // "Pages sharing this value" header would list the subject (e.g. the
+        // missing page) as if it were just another affected page. Only URLs the
+        // sentence lead did not already carry (a trailing `<ul>` list) nest
+        // under it.
+        const lead = label ? '' : inlineExample(ex);
+        lines.push(`- ${label || lead}`);
+        const nested = lead ? urls.filter((u) => !lead.includes(u)) : urls;
+        for (const u of nested.slice(0, PAGES_PER_CLUSTER)) lines.push(`    - ${mdLink(u, u)}`);
+        if (nested.length > PAGES_PER_CLUSTER) {
           lines.push(
-            `    - *…and ${urls.length - PAGES_PER_CLUSTER} more page${urls.length - PAGES_PER_CLUSTER === 1 ? '' : 's'}*`,
+            `    - *…and ${nested.length - PAGES_PER_CLUSTER} more page${nested.length - PAGES_PER_CLUSTER === 1 ? '' : 's'}*`,
           );
         }
       } else {

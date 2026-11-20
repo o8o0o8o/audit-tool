@@ -1,6 +1,7 @@
 import { parse, type HTMLElement } from 'node-html-parser';
 import { AGENTIC_FINDING_MESSAGES } from '../../constants';
 import type { Issue } from '../../types';
+import { escapeHtml } from '../../reports/html-utils';
 
 /** Computed-style data gathered in the page; absent when the in-page evaluate failed or timed out. */
 export interface ComputedHints {
@@ -179,7 +180,13 @@ export function runAgenticChecks(html: string, hints?: ComputedHints): AgenticPa
   for (const [key, check] of Object.entries(checks) as [keyof typeof checks, AgenticCheckResult][]) {
     if (check.passed) continue;
     const { message, severity } = AGENTIC_FINDING_MESSAGES[key];
-    issues.push({ message, detail: `${check.offenders.length} element(s): ${sampled(check.offenders)}`, severity });
+    // Escaped: the detail is HTML in the reports, and an offender like `<a>` was
+    // read as a real anchor tag and dropped ("1 element(s): —").
+    issues.push({
+      message,
+      detail: `${check.offenders.length} element(s): ${escapeHtml(sampled(check.offenders))}`,
+      severity,
+    });
   }
   return { checks, ...(hints ? {} : { computedHintsUnavailable: true }), issues };
 }

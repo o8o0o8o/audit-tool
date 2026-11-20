@@ -156,6 +156,7 @@ export const VISUAL_FINDING_MESSAGES = [
   'Broken images detected',
   'Failed image or media requests',
   'Unrendered template tokens in page text',
+  'Raw HTML or JSX code shown as page text',
   'Placeholder text (lorem ipsum) on page',
   'Garbled characters (mojibake) in page text',
   'Text clipped by its container',

@@ -83,7 +83,11 @@ const DEDUP_GROUPS: DedupGroup[] = [
     // are unreachable…" restatement. The previous, narrower patterns matched
     // ONLY a never-emitted aggregate form, so the two findings never merged.
     primary: /orphan page/i,
-    members: [/unreachable from homepage/i],
+    // "Page unreachable from homepage" is NOT folded: the link-depth analyzer
+    // reports there only pages that do have links (from other unreachable
+    // pages), so folding raised the orphan count past its own page list. The
+    // orchestrator's sitemap-only restatement is the same page set.
+    members: [/^some pages have no incoming links from other pages/i],
   },
   // Missing <main>: an AEO/semantic finding and an a11y-landmark finding.
   {

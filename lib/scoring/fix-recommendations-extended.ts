@@ -2213,6 +2213,73 @@ export const EXTENDED_FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     effort: '1 hour',
     fix: 'Raw template output ({{ }}, undefined, NaN, [object Object]) is visible to users. Fix the data binding or add fallbacks so missing values render as empty or a sensible default.',
   },
+  // ─── Fixes for findings that used to fall back to the category default ────
+  'Long-cached assets without cache-busting': {
+    effort: '1 hour',
+    fix: "The site's own scripts or stylesheets are cached for a week or more under a fixed URL, so returning visitors can run an old copy after a deploy. Put a content hash or version in the file name or query string, or shorten max-age for files that keep their URL.",
+    example: '<script src="/js/site.3f9a1c2b.js"></script>',
+  },
+  'Assets are served through redirects': {
+    effort: '30 minutes',
+    fix: 'Reference each script, stylesheet, image or font by its final URL so the browser does not make an extra round trip through the redirect.',
+  },
+  'Missing <main> element': {
+    effort: '15 minutes',
+    fix: 'Wrap the primary content of the page template in one <main> element (outside header, nav and footer) so assistive technology and AI crawlers can find the main content.',
+    example: '<body>\n  <header>…</header>\n  <main>…page content…</main>\n  <footer>…</footer>\n</body>',
+  },
+  'Internal links point to a missing page': {
+    effort: '30 minutes',
+    fix: 'Each listed address returns 404 but other pages link to it. Point those links at the page that replaced it, add a 301 redirect from the old address, or remove the link. When the link sits in a shared block (header, footer, related links), one change fixes every page.',
+  },
+  'Multiple pages target the same keyword in their H1': {
+    effort: '2 hours',
+    fix: 'Several pages lead with the same phrase in their H1, so they compete for the same query. Give each page an H1 that states its own topic, and merge pages that really cover the same thing.',
+  },
+  'Some pages have TTI more than 3800ms': {
+    effort: '2-4 hours',
+    fix: 'The page takes too long to respond to input after it loads. Ship less JavaScript on first load (split bundles, load widgets on interaction), defer third-party tags, and break up long main-thread tasks.',
+  },
+  'LCP bottleneck: Resource Discovery Delay': {
+    effort: '1 hour',
+    fix: 'The browser finds the largest image late — it is set by CSS, by JavaScript, or lazy-loaded. Put it in the HTML as an <img> without loading="lazy" and add fetchpriority="high", or preload it.',
+    example: '<img src="/hero.webp" fetchpriority="high" alt="…">',
+  },
+  'LCP bottleneck: Resource Load Time': {
+    effort: '1 hour',
+    fix: 'The largest image downloads slowly. Serve it smaller (right size, AVIF/WebP), from a CDN close to visitors, and keep it off a slow third-party host.',
+  },
+  'LCP bottleneck: Render Delay': {
+    effort: '1-2 hours',
+    fix: 'The largest element has loaded but waits to be painted, usually behind render-blocking CSS/JS or client-side rendering. Inline critical CSS, defer scripts, and render the element in the server HTML.',
+  },
+  'LCP bottleneck: Server Response (TTFB)': {
+    effort: '2-4 hours',
+    fix: 'The HTML itself arrives late. Cache the page at the CDN or render it statically, and speed up the server work behind it.',
+  },
+  'Interactive elements without an accessible name': {
+    effort: '30 minutes',
+    fix: 'Give every link and button a name: visible text, an aria-label, or alt text on the image inside it. Empty links (no text, no icon label) should be removed.',
+    example: '<button class="menu__caret" aria-label="Open submenu" aria-expanded="false"></button>',
+  },
+  'Unlabeled click targets without an interactive role': {
+    effort: '30 minutes',
+    fix: 'An element reacts to clicks but is a plain div/span/li. Use a real <button> or <a href>, or add role="button", tabindex="0" and a keyboard handler, so keyboard users and agents can find and use it.',
+    example: '<button type="button" class="expertise-spoiler__head" aria-expanded="false">…</button>',
+  },
+  'Content reachable only via hover or JavaScript': {
+    effort: '1 hour',
+    fix: 'Some content appears only on mouse hover. Make it reachable by keyboard focus and click too (:focus-within, a toggle button), or show it by default.',
+  },
+  'Form inputs without a label': {
+    effort: '30 minutes',
+    fix: 'Give each input a <label for> or an aria-label so screen readers and agents know what it asks for. Decorative or read-only checkboxes in article text (rendered task lists) should be replaced with plain list markers.',
+    example: '<label for="email">Email</label>\n<input id="email" type="email" autocomplete="email">',
+  },
+  'Raw HTML or JSX code shown as page text': {
+    effort: '30 minutes',
+    fix: 'An element tag (an image, a link, a component) is printed as text instead of being rendered, usually markup pasted into a CMS rich-text field. Replace it with the CMS image or embed block, or render the field as HTML/MDX where markup is intended.',
+  },
   'Placeholder text (lorem ipsum) on page': {
     effort: '30 minutes',
     fix: 'Replace lorem ipsum with real copy, or unpublish the page until its content is ready.',

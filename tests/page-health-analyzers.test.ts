@@ -208,6 +208,28 @@ void test('asset delivery: redirects, cache-busting, duplicate libraries', () =>
     [REDIRECTED_ASSETS_MESSAGE, NO_CACHE_BUSTING_MESSAGE, DUPLICATE_LIBRARY_MESSAGE],
   );
   assert.doesNotMatch(issues[1].detail ?? '', /3f9a1c2b/);
+  // A vendor script with a fixed URL is not the site's to version.
+  const vendorOnly = assetDeliveryIssues(
+    {
+      'https://d2fuc4clr7gvcn.cloudfront.net/track.js': {
+        resourceType: 'script',
+        status: 200,
+        headers: { 'cache-control': 'max-age=604800' },
+      },
+      'https://static.x.com/site.js': {
+        resourceType: 'script',
+        status: 200,
+        headers: { 'cache-control': 'max-age=604800' },
+      },
+    },
+    'https://www.x.com/',
+  );
+  assert.deepEqual(
+    vendorOnly.map((i) => i.message),
+    [NO_CACHE_BUSTING_MESSAGE],
+  );
+  assert.match(vendorOnly[0].detail ?? '', /static\.x\.com/);
+  assert.doesNotMatch(vendorOnly[0].detail ?? '', /cloudfront/);
   assert.equal(hasCacheBuster('https://x.com/main.css?v=12'), true);
   assert.equal(hasCacheBuster('https://x.com/main.css'), false);
 });

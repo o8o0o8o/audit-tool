@@ -43,6 +43,7 @@ export const ISSUE_CATALOG: Record<string, IssueDescriptor> = {
   'Images upscaled beyond natural resolution': { tier: 'notice', category: 'performance' },
   'CSS background images upscaled beyond natural resolution': { tier: 'notice', category: 'performance' },
   'Unrendered template tokens in page text': { tier: 'error', category: 'technical' },
+  'Raw HTML or JSX code shown as page text': { tier: 'error', category: 'technical' },
   'Placeholder text (lorem ipsum) on page': { tier: 'warning', category: 'technical' },
   'Garbled characters (mojibake) in page text': { tier: 'warning', category: 'technical' },
   'Text clipped by its container': { tier: 'notice', category: 'technical' },

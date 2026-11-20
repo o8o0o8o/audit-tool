@@ -237,7 +237,7 @@ Input validation and security:
 Opt-in via `--visual` (or `visual: true` in `.seoauditrc`; `--no-visual` overrides). Findings route to the UX section; Phase 3 never refutes them. The run's metadata records `visual` (a `--proceed` resume keeps the checkpoint's value), and a clean run shows "No UI issues found" in the HTML and Phase 2 reports. The HTML report has a dedicated **UI Issues** section with crawl-time screenshots of each defect and highlight boxes (`lib/crawler/visual-shot-capture.ts`, `lib/reports/sections/ui-issues.ts`; needs evidence on).
 
 - **broken-media-analyzer.ts**: Broken `<img>` (loaded with naturalWidth 0) and failed 4xx/5xx image/media requests
-- **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`), lorem ipsum, mojibake, clipped text
+- **text-integrity-analyzer.ts**: Unrendered template tokens (`{{ }}`, `undefined`, `NaN`, `[object Object]`; a JSX `={{ … }}` attribute is not one), HTML/JSX tags printed as page text, lorem ipsum, mojibake, clipped text
 - **layout-integrity-analyzer.ts**: text printed over other text, images stretched out of proportion, in-page links to a missing section, the same entry twice in one list, large empty blocks. Runs after the scroll pass (it scrolls to what it checks); geometry is collected in the page, the rules are pure functions
 - **interaction-probe.ts**: runs last on a few pages per audit (one per URL template; 10, or 4 in a lead scan). Repeats the overlap check at desktop width and flags sideways scroll there, then clicks the phone menu button, collapsed sections and tabs, plain buttons and things that only look clickable (`cursor: pointer`), and searches the site for a word from the page. Reports a control that changes nothing, a click that throws, a search that errors or does nothing. With evidence on, each finding gets a screenshot: the desktop layout with the defect boxed, and the window before and after the click. Consent prompts are hidden with CSS, never clicked; nothing in a form, and no button that buys, books, sends, signs in or deletes, is clicked
 
@@ -482,7 +482,8 @@ audit-results/
 
 - Broken images detected (HIGH); failed image or media requests (MEDIUM)
 - Images / CSS background images upscaled beyond natural resolution (LOW/MEDIUM)
-- Unrendered template tokens in page text (HIGH); placeholder text (lorem ipsum) (MEDIUM)
+- Unrendered template tokens in page text (HIGH); raw HTML or JSX code shown as page text (HIGH); placeholder text (lorem ipsum) (MEDIUM)
+- Broken images: an `<img src="">` is named as an empty src (not the page URL); images with no box (0 px wide or tall) are not reported
 - Garbled characters (mojibake) in page text (MEDIUM); text clipped by its container (LOW)
 - Text overlaps other text (MEDIUM); image stretched out of proportion (MEDIUM); page scrolls sideways on desktop (MEDIUM)
 - In-page link points to a missing section, duplicate entries in a list, large empty area on page (LOW)

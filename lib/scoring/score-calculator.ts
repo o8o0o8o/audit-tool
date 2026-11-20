@@ -45,13 +45,21 @@ function agenticPages(pages: Record<string, PageInfo> | undefined): AgenticPage[
   );
 }
 
-/** Pages that ran the agentic checks, out of all analyzed pages; null when none did. */
+/**
+ * Pages that ran the agentic checks, out of the pages they could run on; null
+ * when none did. Redirect stubs, error responses (the 404s a broken link leads
+ * to) and non-HTML files are not counted: the checks never run there, so they
+ * made a full run read as partial ("ran on 384 of 435 pages").
+ */
 export function agenticCoverage(pages: Record<string, PageInfo> | undefined): AgenticCoverage | null {
   const covered = agenticPages(pages);
   if (covered.length === 0) return null;
+  const eligible = Object.values(pages ?? {}).filter(
+    (p) => !p.redirectOnly && !p.nonHtml && (p.status === undefined || p.status === 200),
+  ).length;
   return {
     covered: covered.length,
-    total: Object.keys(pages ?? {}).length,
+    total: Math.max(eligible, covered.length),
     hintsLimited: covered.filter((p) => p.agentic?.computedHintsUnavailable === true).length,
   };
 }

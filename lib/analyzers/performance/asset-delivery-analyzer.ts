@@ -63,6 +63,21 @@ export function hasCacheBuster(url: string): boolean {
   return false;
 }
 
+/**
+ * True when `url` is served from the page's own site (same host, or a subdomain
+ * of it ignoring `www.`). Unknown page URL → treat everything as own.
+ */
+function isOwnAsset(url: string, pageUrl?: string): boolean {
+  if (!pageUrl) return true;
+  try {
+    const base = new URL(pageUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const host = new URL(url).hostname.toLowerCase();
+    return host === base || host.endsWith(`.${base}`);
+  } catch {
+    return true;
+  }
+}
+
 function maxAge(cacheControl: string | undefined): number | null {
   if (!cacheControl || /no-store|no-cache/i.test(cacheControl)) return null;
   const m = /\bmax-age\s*=\s*(\d+)/i.exec(cacheControl);
@@ -89,10 +104,13 @@ export function assetDeliveryIssues(requests: Record<string, AssetRequestInfo>, 
     });
   }
 
-  // (b) long max-age without a hash/version in the URL
+  // (b) long max-age without a hash/version in the URL. Own files only: a
+  // vendor's tag (analytics, chat, tracking) keeps a fixed URL by design, and
+  // the site owner can neither rename it nor change its cache header.
   const stale = entries
     .filter(([u, r]) => {
       if (r.resourceType !== 'script' && r.resourceType !== 'stylesheet') return false;
+      if (!isOwnAsset(u, pageUrl)) return false;
       if ((r.status ?? 0) < 200 || (r.status ?? 0) >= 300) return false;
       const age = maxAge(header(r.headers, 'cache-control'));
       return age !== null && age >= SEVEN_DAYS && !hasCacheBuster(u);

@@ -1549,8 +1549,13 @@ class CrawlerEngine {
     pageData.responseHeaders = (responseHeaders || {}) as Record<string, string>;
     pageData.response = { headers: pageData.responseHeaders };
 
+    // Page-weight findings describe working pages only: an error page (the 404
+    // a broken link leads to) is not one of the site's pages, and counting it
+    // made "affects N pages" exceed the number of pages crawled.
+    const servedOk = status === 200;
+
     // Check page size threshold
-    if (totalResponseSize > THRESHOLDS.PAGE_SIZE) {
+    if (servedOk && totalResponseSize > THRESHOLDS.PAGE_SIZE) {
       const escapedUrl = escapeHtml(url);
       this.#callbacks.saveError(
         `Some pages size is too big`,
@@ -1562,7 +1567,7 @@ class CrawlerEngine {
     const totalNumberOfRequests = Object.keys(requests).length;
     pageData.totalNumberOfRequests = totalNumberOfRequests;
 
-    if (totalNumberOfRequests > THRESHOLDS.REQUEST_COUNT) {
+    if (servedOk && totalNumberOfRequests > THRESHOLDS.REQUEST_COUNT) {
       const escapedUrl = escapeHtml(url);
       this.#callbacks.saveError(
         `Some pages have too many requests`,

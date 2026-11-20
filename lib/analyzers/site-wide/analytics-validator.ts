@@ -180,7 +180,14 @@ class AnalyticsValidator {
       analyticsStats.pagesWithGTM > 0 ||
       analyticsStats.pagesWithFacebookPixel > 0;
 
-    if (hasTracking && consentCoverage < 80) {
+    if (hasTracking && analyticsStats.pagesWithCookieConsent === 0) {
+      // No page has consent at all: nothing is "inconsistent", the banner is missing.
+      issues.push({
+        message: 'Tracking cookies without consent banner',
+        detail: `Your site uses tracking but none of its ${totalPages} pages shows a cookie consent banner. GDPR/CCPA requires consent before tracking.`,
+        severity: SEVERITY.CRITICAL,
+      });
+    } else if (hasTracking && consentCoverage < 80) {
       issues.push({
         message: `Inconsistent cookie consent implementation`,
         detail: `Your site uses tracking but only ${consentCoverage}% of pages (${analyticsStats.pagesWithCookieConsent}/${totalPages}) have cookie consent. GDPR/CCPA requires consent on all pages with tracking.`,

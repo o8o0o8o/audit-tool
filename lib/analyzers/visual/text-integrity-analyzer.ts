@@ -32,6 +32,8 @@ export interface TextSample {
 
 export interface TextIntegrityData {
   templateTokens: string[];
+  /** Element markup printed as visible text; optional so older checkpoints still load. */
+  rawMarkup?: string[];
   placeholderText: boolean;
   mojibake: string[];
   clippedText: string[];
@@ -41,6 +43,7 @@ export interface TextIntegrityData {
 }
 
 export const TEMPLATE_TOKENS_MESSAGE = 'Unrendered template tokens in page text';
+export const RAW_CODE_MESSAGE = 'Raw HTML or JSX code shown as page text';
 export const PLACEHOLDER_TEXT_MESSAGE = 'Placeholder text (lorem ipsum) on page';
 export const MOJIBAKE_MESSAGE = 'Garbled characters (mojibake) in page text';
 export const CLIPPED_TEXT_MESSAGE = 'Text clipped by its container';
@@ -52,6 +55,24 @@ const REPLACEMENT_CHAR_MIN = 3;
 const SAMPLE_LIMIT = 5;
 
 const CURLY_TOKEN = /\{\{[^{}]{0,80}\}\}/g;
+/** `={{ … }}` is a JSX attribute value (`style={{ paddingLeft: 16 }}`), not a template slot. */
+const JSX_ATTR_BEFORE = /=\s*$/;
+/**
+ * Markup printed as text: an element tag with at least one attribute, e.g.
+ * `<img src="…" alt="…" />` or `<Image src={hero} />`. A bare `<div>` mention in
+ * prose is not flagged, and code blocks are never read (see SKIP in analyze).
+ */
+const RAW_MARKUP = /<[A-Za-z][\w.-]*\s+[\w:-]+\s*=\s*(?:"[^"]*"|'[^']*'|“[^”]*”|\{[^<>]{0,120}?\})[^<>]{0,300}?\/?>/g;
+/**
+ * The end of a self-closing tag on its own: `alt="…" height={150} />`. A link
+ * inside the printed tag (an auto-linked `src` URL) splits it across text
+ * nodes, so the opening `<img` is not in the same node as the rest.
+ */
+const ATTR_VALUE = `(?:"[^"]*"|'[^']*'|“[^”]*”|\\{[^<>]{0,120}?\\})`;
+const RAW_TAG_TAIL = new RegExp(
+  `(?:^|\\s)[\\w:-]+\\s*=\\s*${ATTR_VALUE}(?:\\s+[\\w:-]+(?:\\s*=\\s*${ATTR_VALUE})?)*\\s*\\/>`,
+  'g',
+);
 const OBJECT_TOKEN = /\[object Object\]/g;
 const BARE_VALUE = /^(?:undefined|NaN)$/;
 const VALUE_SLOT_BEFORE = /(?:[:=]\s*|[$€£¥]\s*|\d\s*)\b(undefined|NaN)\b/g;
@@ -64,7 +85,9 @@ const REPLACEMENT_CHAR = /�/g;
 /** Unrendered template output in one visible text node; prose mentions of `undefined`/`NaN` are not flagged. */
 export function findTemplateTokens(text: string): string[] {
   const found = new Set<string>();
-  for (const m of text.match(CURLY_TOKEN) ?? []) found.add(m);
+  for (const m of text.matchAll(CURLY_TOKEN)) {
+    if (!JSX_ATTR_BEFORE.test(text.slice(0, m.index))) found.add(m[0]);
+  }
   for (const m of text.match(OBJECT_TOKEN) ?? []) found.add(m);
   const trimmed = text.trim();
   if (BARE_VALUE.test(trimmed)) found.add(trimmed);
@@ -72,6 +95,13 @@ export function findTemplateTokens(text: string): string[] {
     for (const m of text.matchAll(re)) found.add(m[1]!);
   }
   return [...found];
+}
+
+/** HTML/JSX element markup that reached the page as visible text (escaped, not rendered). */
+export function findRawMarkup(text: string): string[] {
+  const found: string[] = [...(text.match(RAW_MARKUP) ?? [])];
+  if (found.length === 0) found.push(...(text.match(RAW_TAG_TAIL) ?? []).map((m) => m.trim()));
+  return [...new Set(found.map((m) => (m.length > 80 ? `${m.slice(0, 77)}…` : m)))];
 }
 
 export function hasPlaceholderText(text: string): boolean {
@@ -99,6 +129,8 @@ export function isClippedText(m: ClipMetrics): boolean {
   return clippedX || clippedY;
 }
 
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 /** Box the text nodes and elements behind each text finding. Mojibake boxes only nodes containing a reported sequence. */
@@ -108,6 +140,8 @@ export function buildTextHighlights(texts: TextSample[], mojibake: string[], cli
     if (!t.rect) continue;
     const tokens = findTemplateTokens(t.value);
     if (tokens.length > 0) out.push({ kind: TEMPLATE_TOKENS_MESSAGE, rect: t.rect, label: short(tokens.join(' ')) });
+    const markup = findRawMarkup(t.value);
+    if (markup.length > 0) out.push({ kind: RAW_CODE_MESSAGE, rect: t.rect, label: short(markup[0]!) });
     if (hasPlaceholderText(t.value)) out.push({ kind: PLACEHOLDER_TEXT_MESSAGE, rect: t.rect, label: 'lorem ipsum' });
     const bad = mojibake.find((m) => t.value.includes(m));
     if (bad) out.push({ kind: MOJIBAKE_MESSAGE, rect: t.rect, label: `“${bad}”` });
@@ -177,6 +211,7 @@ class TextIntegrityAnalyzer {
 
     const values = snapshot.texts.map((t) => t.value);
     const templateTokens = [...new Set(values.flatMap(findTemplateTokens))];
+    const rawMarkup = [...new Set(values.flatMap(findRawMarkup))];
     const placeholderText = values.some(hasPlaceholderText);
     const mojibake = findMojibake(values.join('\n'));
     const clippedSamples = snapshot.clipped.filter((c: ClippedSample) => isClippedText(c.metrics));
@@ -189,6 +224,14 @@ class TextIntegrityAnalyzer {
         severity: SEVERITY.HIGH,
         message: TEMPLATE_TOKENS_MESSAGE,
         detail: `${link} shows raw template output: ${sampleList(templateTokens)}`,
+      });
+    }
+    if (rawMarkup.length > 0) {
+      issues.push({
+        severity: SEVERITY.HIGH,
+        message: RAW_CODE_MESSAGE,
+        // Escaped: the detail is HTML in the report, and the sample IS markup.
+        detail: `${link} shows code as text: ${escapeHtml(sampleList(rawMarkup))}`,
       });
     }
     if (placeholderText) {
@@ -214,7 +257,7 @@ class TextIntegrityAnalyzer {
     }
 
     const highlights = buildTextHighlights(snapshot.texts, mojibake, clippedSamples);
-    return { templateTokens, placeholderText, mojibake, clippedText, issues, highlights };
+    return { templateTokens, rawMarkup, placeholderText, mojibake, clippedText, issues, highlights };
   }
 }
 

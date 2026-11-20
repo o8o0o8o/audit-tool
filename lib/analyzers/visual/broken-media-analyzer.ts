@@ -10,6 +10,11 @@ export interface ImageSnapshot {
   displayWidth: number;
   displayHeight: number;
   loading?: string;
+  /**
+   * `<img src="">` with no srcset. The browser resolves an empty src to the
+   * page's own URL, so `src` alone would name the page as the failed image.
+   */
+  emptySrc?: boolean;
   /** Document-coordinate box, for screenshot highlighting. */
   rect?: DocRect;
 }
@@ -39,6 +44,10 @@ export interface BrokenMediaData {
 
 export const BROKEN_IMAGES_MESSAGE = 'Broken images detected';
 export const FAILED_MEDIA_MESSAGE = 'Failed image or media requests';
+/** How an `<img src="">` is named in the finding (it has no URL of its own). */
+export const EMPTY_SRC_LABEL = 'image with an empty src attribute';
+
+const brokenKey = (img: ImageSnapshot): string => (img.emptySrc ? EMPTY_SRC_LABEL : img.src);
 
 /** Locate the elements behind each broken/failed URL so the report can box them on a screenshot. */
 export function buildMediaHighlights(
@@ -51,7 +60,7 @@ export function buildMediaHighlights(
   const out: VisualHighlight[] = [];
   const broken = new Set(brokenImages);
   for (const img of imgs) {
-    if (img.rect && broken.has(img.src)) out.push({ kind: BROKEN_IMAGES_MESSAGE, rect: img.rect, label: 'broken image' });
+    if (img.rect && broken.has(brokenKey(img))) out.push({ kind: BROKEN_IMAGES_MESSAGE, rect: img.rect, label: 'broken image' });
   }
   const failed = new Map(failedRequests.map((r) => [r.url, r.status]));
   for (const el of [...imgs, ...media]) {
@@ -83,16 +92,22 @@ export function classifyBrokenMedia(media: MediaSnapshot[]): string[] {
   return [...new Set(media.filter((m) => m.src && m.errorCode === MEDIA_ERR_NETWORK).map((m) => m.src))];
 }
 
-/** Images that finished loading yet decoded to nothing. Lazy images not yet loaded (`complete` false) are skipped. */
+/**
+ * Images that finished loading yet decoded to nothing. Skipped: lazy images not yet loaded
+ * (`complete` false), tracking pixels, and images with no box (zero width or height) — a
+ * visitor sees nothing broken there. An `<img src="">` is named by {@link EMPTY_SRC_LABEL}.
+ */
 export function classifyBrokenImages(imgs: ImageSnapshot[]): string[] {
   const broken = imgs.filter(
     (img) =>
       img.complete &&
       img.naturalWidth === 0 &&
-      !!img.src &&
+      (!!img.src || img.emptySrc) &&
+      img.displayWidth > 0 &&
+      img.displayHeight > 0 &&
       !(img.displayWidth <= TRACKING_PIXEL_MAX_PX && img.displayHeight <= TRACKING_PIXEL_MAX_PX),
   );
-  return [...new Set(broken.map((img) => img.src))];
+  return [...new Set(broken.map(brokenKey))];
 }
 
 /** Image/media requests answered with 4xx/5xx, minus URLs already reported as broken images. */
@@ -129,8 +144,11 @@ class BrokenMediaAnalyzer {
           : undefined;
       const imgs = Array.from(document.querySelectorAll('img')).map((img) => {
         const rect = img.getBoundingClientRect();
+        const srcAttr = img.getAttribute('src');
+        const emptySrc = !img.currentSrc && srcAttr !== null && srcAttr.trim() === '' && !img.getAttribute('srcset');
         return {
-          src: img.currentSrc || img.src,
+          src: emptySrc ? '' : img.currentSrc || img.src,
+          emptySrc,
           complete: img.complete,
           naturalWidth: img.naturalWidth,
           displayWidth: rect.width,

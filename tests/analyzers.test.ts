@@ -1192,18 +1192,18 @@ const det = (over: Partial<IssueDetail> = {}): IssueDetail => ({
 });
 
 void describe('consolidateFindings (Phase 2 de-dup)', () => {
-  void it('folds the unreachable-pages finding into the orphan-pages finding', () => {
+  void it('folds the sitemap-only restatement into the orphan finding, keeps unreachable separate', () => {
     const out = consolidateFindings({
-      '8 orphan pages detected (no internal links pointing to them)': det({ severity: 'high', count: 8 }),
-      '9 pages are unreachable from homepage via internal links': det({ severity: 'medium', count: 9 }),
+      'Orphan page (no internal links point to it)': det({ severity: 'high', count: 6 }),
+      'Some pages have no incoming links from other pages': det({ severity: 'medium', count: 6 }),
+      'Page unreachable from homepage via internal links': det({ severity: 'high', count: 1 }),
     });
     const keys = Object.keys(out);
-    assert.ok(keys.some((k) => /orphan pages detected/.test(k)));
-    assert.ok(!keys.some((k) => /unreachable from homepage/.test(k)), 'unreachable should be folded away');
-    // Kept entry escalates to the most-severe and broadest count.
-    const orphan = out['8 orphan pages detected (no internal links pointing to them)'];
-    assert.strictEqual(orphan.severity, 'high');
-    assert.strictEqual(orphan.count, 9);
+    assert.ok(!keys.includes('Some pages have no incoming links from other pages'), 'restatement folded away');
+    // A page linked only from other unreachable pages is not an orphan: the
+    // orphan count must not grow to include it.
+    assert.strictEqual(out['Orphan page (no internal links point to it)'].count, 6);
+    assert.ok(keys.includes('Page unreachable from homepage via internal links'));
   });
 
   void it('folds "inconsistent cookie consent" into the tracking-cookies finding', () => {
@@ -1280,10 +1280,10 @@ void describe('findingGroupKey (cross-list identity)', () => {
     );
   });
 
-  void it('maps orphan and unreachable findings to one identity', () => {
+  void it('maps orphan findings and their sitemap-only restatement to one identity', () => {
     assert.strictEqual(
       findingGroupKey('8 orphan pages detected (no internal links pointing to them)'),
-      findingGroupKey('9 pages are unreachable from homepage via internal links'),
+      findingGroupKey('Some pages have no incoming links from other pages'),
     );
   });
 

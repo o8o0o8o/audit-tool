@@ -76,9 +76,9 @@ export const NEXTJS_FIX_OVERRIDES: Record<string, Partial<FixRecommendation>> = 
 
   // ── Third-party scripts ───────────────────────────────────────────────────
   'External scripts missing Subresource Integrity (SRI)': {
-    fix: 'Load third-party scripts with the next/script component and a non-blocking strategy (afterInteractive or lazyOnload) so they do not block hydration. For first-party bundles, Next.js adds integrity hashes automatically.',
+    fix: 'Add integrity and crossOrigin to third-party scripts that load a fixed, versioned file (next/script passes both attributes through). Vendor tags that change without a new URL (analytics, Clarity, chat widgets) cannot use SRI: limit them with a Content-Security-Policy instead.',
     example:
-      "import Script from 'next/script';\n\n<Script src=\"https://example.com/widget.js\" strategy=\"afterInteractive\" />",
+      "import Script from 'next/script';\n\n<Script\n  src=\"https://cdn.example.com/lib@1.2.3/lib.min.js\"\n  integrity=\"sha384-…\"\n  crossOrigin=\"anonymous\"\n/>",
     resources: [NEXT_DOCS.script],
   },
   'Some pages have render-blocking third-party scripts': {

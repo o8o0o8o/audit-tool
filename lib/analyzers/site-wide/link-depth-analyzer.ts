@@ -123,28 +123,33 @@ class LinkDepthAnalyzer {
     // slash difference between the page key and a graph node isn't mistaken
     // for unreachability.
     const originNorm = normalizeUrlForComparison(origin);
-    const unreachablePages = pageUrls.filter(
+    const allUnreachable = pageUrls.filter(
       (url) => !depths.has(normalizeUrlForComparison(url)) && normalizeUrlForComparison(url) !== originNorm,
     );
-    if (unreachablePages.length > 0) {
+    // Orphans are already reported above. What is left is a page that IS linked,
+    // but only from pages the homepage cannot reach either — a different finding,
+    // and folding it into the orphan count claimed it had no links at all.
+    const orphanSet = new Set(orphanPages.map(normalizeUrlForComparison));
+    const unreachablePages = allUnreachable.filter((url) => !orphanSet.has(normalizeUrlForComparison(url)));
+    if (allUnreachable.length > 0) {
       // Guard against a degraded link graph: if the homepage's outgoing links
       // weren't captured (SPA / client-rendered nav), BFS reaches almost
       // nothing and the whole site looks orphaned. When the unreachable share
       // is implausibly high we can't trust the signal, so we report it as a
       // low-severity caveat rather than a high-severity site defect.
-      const unreachableFraction = totalPages > 0 ? unreachablePages.length / totalPages : 0;
+      const unreachableFraction = totalPages > 0 ? allUnreachable.length / totalPages : 0;
       const likelyDegraded = unreachableFraction > 0.5;
       if (likelyDegraded) {
         warnings.push({
           message: `Internal link graph could not be fully resolved`,
-          detail: `${unreachablePages.length} of ${totalPages} pages were not reachable from the homepage in the captured link graph. This usually means client-rendered navigation wasn't captured rather than a genuine orphan problem — verify internal linking manually.`,
+          detail: `${allUnreachable.length} of ${totalPages} pages were not reachable from the homepage in the captured link graph. This usually means client-rendered navigation wasn't captured rather than a genuine orphan problem — verify internal linking manually.`,
           severity: SEVERITY.LOW,
         });
       } else {
         for (const url of unreachablePages) {
           issues.push({
             message: 'Page unreachable from homepage via internal links',
-            detail: `<a href="${url}">${shortenUrl(url)}</a> — reachable only via sitemap or external links, not internal navigation.`,
+            detail: `<a href="${url}">${shortenUrl(url)}</a> — linked only from pages that the homepage cannot reach either, so internal navigation never leads here.`,
             severity: SEVERITY.HIGH,
           });
         }
@@ -168,7 +173,7 @@ class LinkDepthAnalyzer {
         orphanPages: orphanPages.length,
         deadEndPages: deadEndPages.length,
         deepPages: deepPages.length,
-        unreachablePages: unreachablePages.length,
+        unreachablePages: allUnreachable.length,
         averageDepth: Math.round(avgDepth * 10) / 10,
         maxDepth: depthValues.length > 0 ? Math.max(...depthValues) : 0,
         depthDistribution,

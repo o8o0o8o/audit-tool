@@ -1412,7 +1412,14 @@ export interface AuditSummary {
   quickWins: QuickWinFull[];
   /** Present when at least one page ran the agentic checks. */
   agenticCoverage?: AgenticCoverage;
+  /**
+   * Where the performance score came from: lab metrics on the pages, real-user (CrUX) p75
+   * values when no page had lab data, or the count of performance findings when neither.
+   */
+  performanceSource?: PerformanceSource;
 }
+
+export type PerformanceSource = 'lab' | 'field' | 'findings';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 

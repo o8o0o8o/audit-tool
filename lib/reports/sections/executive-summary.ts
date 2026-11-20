@@ -85,7 +85,7 @@ function getSingleExecutiveSummary(data: ReportSectionData) {
       ? `
     <div class="summary-hero__categories">
       <div class="summary-hero__label">Category health</div>
-      ${getCategoryBars(categoryScores)}
+      ${getCategoryBars(categoryScores, summary.performanceSource as string | undefined)}
     </div>
   `
       : '';
@@ -370,7 +370,19 @@ function getProgressBarClass(score: number): string {
 /**
  * Generate single-origin category progress bars
  */
-function getCategoryBars(categoryScores: Partial<CategoryScores>) {
+/** What the Performance score is based on, when it is not the lab metrics. */
+const PERFORMANCE_SOURCE_NOTE: Record<string, { label: string; title: string }> = {
+  field: {
+    label: 'real users',
+    title: "Scored from Google's real-user data (CrUX, 75th percentile); this run measured no lab metrics.",
+  },
+  findings: {
+    label: 'from findings',
+    title: 'No lab or real-user measurements in this run: estimated from the performance findings.',
+  },
+};
+
+function getCategoryBars(categoryScores: Partial<CategoryScores>, performanceSource?: string) {
   // Agentic is optional: a run without it has no bar rather than a false 0.
   const categories = CATEGORY_KEYS.filter((key) => key !== 'agentic' || categoryScores.agentic !== undefined).map(
     (key) => ({
@@ -382,12 +394,16 @@ function getCategoryBars(categoryScores: Partial<CategoryScores>) {
 
   return categories
     .map((cat) => {
-      const description = CATEGORY_DESCRIPTIONS[cat.key] || '';
+      const sourceNote = cat.key === 'performance' && performanceSource ? PERFORMANCE_SOURCE_NOTE[performanceSource] : undefined;
+      const description = sourceNote?.title ?? CATEGORY_DESCRIPTIONS[cat.key] ?? '';
+      const name = sourceNote
+        ? `${cat.name} <span style="color: var(--color-text-muted); font-weight: 400;">(${sourceNote.label})</span>`
+        : cat.name;
 
       return `
       <div class="summary-category" title="${description}">
         <div class="flex justify-between mb-1 text-sm">
-          <span>${cat.name}</span>
+          <span>${name}</span>
           <span class="font-bold">${cat.score}/100</span>
         </div>
         <div class="progress-bar-container">

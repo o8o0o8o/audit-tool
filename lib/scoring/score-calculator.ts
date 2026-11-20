@@ -21,6 +21,7 @@ import { EXTENDED_FIX_RECOMMENDATIONS } from './fix-recommendations-extended';
 import { logNormalScore, urlPassScore, mean } from './methodologies';
 import { classifyIssue, type IssueTier, type IssueCategory } from './seo-catalog';
 import type {
+  PerformanceSource,
   PageInfo,
   PageData,
   AnalysisDetail,
@@ -119,13 +120,16 @@ class ScoreCalculator {
     analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> },
     pageData: PageData,
     pages: Record<string, PageInfo>,
+    /** The run's CrUX data; scores performance when no page has lab metrics. */
+    cruxData?: unknown,
   ): AuditSummary {
     const criticalCount = analysisData.bySeverity.critical.length;
     const highCount = analysisData.bySeverity.high.length;
     const mediumCount = analysisData.bySeverity.medium.length;
     const lowCount = analysisData.bySeverity.low.length;
 
-    const categoryScores = this.calculateCategoryScores(analysisData, pages);
+    const field = fieldMetricsFromCrux(cruxData);
+    const categoryScores = this.calculateCategoryScores(analysisData, pages, field);
     const totalPages = pageData.totalWithoutError + pageData.totalWithError;
     const coverage = agenticCoverage(pages);
 
@@ -140,6 +144,7 @@ class ScoreCalculator {
       passRate: totalPages > 0 ? Math.round((pageData.totalWithoutError / totalPages) * 100) : 0,
       quickWins: this.identifyQuickWins(analysisData.details),
       ...(coverage && { agenticCoverage: coverage }),
+      performanceSource: performanceSource(Object.values(pages || {}) as PageInfo[], field),
     };
   }
 
@@ -155,6 +160,7 @@ class ScoreCalculator {
   static calculateCategoryScores(
     analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> },
     pages: Record<string, PageInfo>,
+    field: FieldMetrics | null = null,
   ): CategoryScores {
     const pageArray = Object.values(pages || {}) as PageInfo[];
     const totalPages = Math.max(pageArray.length, 1);
@@ -163,7 +169,7 @@ class ScoreCalculator {
     const scores: CategoryScores = {
       seo: roundScore(scoreFromUrlPass(issues, 'seo', totalPages)),
       technical: roundScore(scoreFromUrlPass(issues, 'technical', totalPages)),
-      performance: roundScore(scorePerformance(pageArray, issues, totalPages)),
+      performance: roundScore(scorePerformance(pageArray, issues, totalPages, field)),
       accessibility: roundScore(scoreAccessibility(pageArray)),
       security: roundScore(scoreSecurity(pageArray)),
     };
@@ -329,7 +335,70 @@ function scoreFromUrlPass(issues: EnrichedIssue[], category: IssueCategory, tota
  * PERFORMANCE_METRIC_WEIGHTS. Falls back to URL-pass on perf issues (any
  * tier) when no metrics were collected — e.g., when --perf was not enabled.
  */
-function scorePerformance(pages: PageInfo[], issues: EnrichedIssue[], totalPages: number): number | null {
+/** Real-user p75 values (CrUX), in the units the lab metrics use (ms; CLS unitless). */
+export interface FieldMetrics {
+  LCP?: number;
+  CLS?: number;
+  INP?: number;
+  FCP?: number;
+  TTFB?: number;
+}
+
+/** The p75 values from a CrUX response (`metrics.<NAME>.percentiles.p75`), or null when there are none. */
+export function fieldMetricsFromCrux(crux: unknown): FieldMetrics | null {
+  const metrics = (crux as { metrics?: Record<string, { percentiles?: { p75?: unknown } }> } | null)?.metrics;
+  if (!metrics) return null;
+  const out: FieldMetrics = {};
+  for (const name of ['LCP', 'CLS', 'INP', 'FCP', 'TTFB'] as const) {
+    const value = Number(metrics[name]?.percentiles?.p75);
+    if (metrics[name]?.percentiles?.p75 !== undefined && Number.isFinite(value)) out[name] = value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function hasLabMetrics(page: PageInfo): boolean {
+  return [
+    page.LCP ?? page.lcp,
+    page.TBT ?? page.tbt,
+    page.CLS ?? page.cls,
+    page.FCP ?? page.fcp,
+    page.TTFB ?? page.ttfb,
+  ].some((v) => Number.isFinite(v as number));
+}
+
+/** Where `scorePerformance` takes its score from, in the same order. */
+export function performanceSource(pages: PageInfo[], field: FieldMetrics | null): PerformanceSource {
+  if (pages.some(hasLabMetrics)) return 'lab';
+  return field ? 'field' : 'findings';
+}
+
+/** Real-user p75 values on the lab curves; INP takes TBT's weight (both measure blocked interaction). */
+export function scoreFieldMetrics(field: FieldMetrics): number | null {
+  const cps = SCORING.PERFORMANCE_CONTROL_POINTS;
+  const ws = SCORING.PERFORMANCE_METRIC_WEIGHTS;
+  const parts: Array<[number | undefined, number, { p10: number; median: number }]> = [
+    [field.LCP, ws.LCP, cps.LCP],
+    [field.INP, ws.TBT, SCORING.FIELD_INP_CONTROL_POINT],
+    [field.CLS, ws.CLS, cps.CLS],
+    [field.FCP, ws.FCP, cps.FCP],
+    [field.TTFB, ws.TTFB, cps.TTFB],
+  ];
+  let weighted = 0;
+  let totalWeight = 0;
+  for (const [value, weight, cp] of parts) {
+    if (value === undefined) continue;
+    weighted += weight * logNormalScore(value, cp.p10, cp.median);
+    totalWeight += weight;
+  }
+  return totalWeight > 0 ? weighted / totalWeight : null;
+}
+
+function scorePerformance(
+  pages: PageInfo[],
+  issues: EnrichedIssue[],
+  totalPages: number,
+  field: FieldMetrics | null = null,
+): number | null {
   const cps = SCORING.PERFORMANCE_CONTROL_POINTS;
   const ws = SCORING.PERFORMANCE_METRIC_WEIGHTS;
   const perPageScores: number[] = [];
@@ -372,6 +441,13 @@ function scorePerformance(pages: PageInfo[], issues: EnrichedIssue[], totalPages
   }
 
   if (perPageScores.length > 0) return mean(perPageScores);
+
+  // No lab data (a run without --perf, or a lead scan): real users' p75 values are a measurement,
+  // so they come before the count of performance findings.
+  if (field) {
+    const fieldScore = scoreFieldMetrics(field);
+    if (fieldScore !== null) return fieldScore;
+  }
 
   // Fallback when no perf metrics were collected.
   const allPerfOccurrences = issues.filter((i) => i.category === 'performance').reduce((sum, i) => sum + i.affected, 0);
@@ -739,5 +815,31 @@ const FIX_RECOMMENDATIONS: Record<string, FixRecommendation> = {
     resources: [],
   },
 };
+
+/**
+ * A summary saved before `performanceSource` existed scored a run without lab data from its
+ * performance findings, even when real-user data was there (a lead scan showed 0/100 next to
+ * good real-user vitals). Rescore such a summary from the real-user data; anything else is
+ * returned unchanged.
+ */
+export function withFieldPerformance<T extends Partial<AuditSummary> | undefined>(
+  summary: T,
+  pages: Record<string, PageInfo> | undefined,
+  cruxData: unknown,
+): T {
+  if (!summary || summary.performanceSource || !summary.categoryScores) return summary;
+  const field = fieldMetricsFromCrux(cruxData);
+  const source = performanceSource(Object.values(pages ?? {}) as PageInfo[], field);
+  if (source !== 'field' || !field) return { ...summary, performanceSource: source };
+  const score = scoreFieldMetrics(field);
+  if (score === null) return summary;
+  const categoryScores = { ...summary.categoryScores, performance: roundScore(score) };
+  return {
+    ...summary,
+    categoryScores,
+    overallScore: blendOverallScore({ ...categoryScores }),
+    performanceSource: source,
+  };
+}
 
 export { ScoreCalculator };

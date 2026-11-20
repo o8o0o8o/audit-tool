@@ -109,7 +109,7 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 - `--preset=<name>` - `quick|standard|deep` (crawl speed) or role presets `sales|marketing|seo|custom` that also select report sections (in order) and finding groups; `--sections=<csv>` / `--checks=<csv>` build a `custom` one. Defined in `lib/presets.ts`; each preset, its data and rationale are in [`docs/audit-presets.md`](docs/audit-presets.md)
 - `--evidence` / `--no-evidence` / `--evidence-cap=<n>` - per-page evidence capture
 - `--passive` - for a site whose owner did not ask for the audit: skip the site probes that go beyond reading published pages (exposed files, staging hosts, open buckets, CORS, bot parity, locale redirect, consent reject, Firebase read, WordPress readme files)
-- `--lead` - lead scan of a prospect site: 25 page loads in total, passive, real-user data instead of the lab run, written to `lead-results/` (never `audit-results/`), no Phase 2 report, no history entry. Driven by `scripts/lead-pipeline.ts`
+- `--lead` - lead scan of a prospect site: 25 page loads in total, passive, real-user data instead of the lab run, written to `lead-results/` (never `audit-results/`), no Phase 2 report, no history entry. Driven by `scripts/lead-pipeline.ts`. The web form's **Quick scan** switch runs it with any preset (`lead` workflow input; uploads read `lead-results/`). Without lab data the Performance score comes from the real-user p75 values (`summary.performanceSource`: `lab` / `field` / `findings`), and the report labels it
 
 ### scripts/lead-pipeline.ts + lib/leads/
 

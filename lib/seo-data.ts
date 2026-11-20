@@ -296,6 +296,7 @@ class SEOData {
       this.#results.analysis,
       this.#results.pageData,
       this.#results.pageData.pages,
+      this.#results.cruxData,
     );
 
     this.#results.analysis.summary = summary;

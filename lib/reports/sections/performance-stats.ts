@@ -68,7 +68,11 @@ function getPerformanceStats(data: ReportSectionData) {
   return `
     <div class="charts-section">
       <h2 style="text-align: center; color: var(--gray-800); margin-bottom: 10px;">Performance Statistics</h2>
-      <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Statistical analysis based on ${pagesWithPerf.length} pages with performance data</p>
+      <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">${
+        pagesWithPerf.length > 0
+          ? `Statistical analysis based on ${pagesWithPerf.length} pages with performance data`
+          : "No lab measurements in this run. Below: Google's real-user data for the site, and what the crawl itself measured."
+      }</p>
 
       ${cruxSection}
 

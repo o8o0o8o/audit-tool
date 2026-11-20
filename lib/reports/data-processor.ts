@@ -13,6 +13,7 @@ import { PageMatcher } from '../comparison/page-matcher';
 import { populateIncomingLinksCount } from '../crawler/page-data-builder';
 import type { PageInfo, PageData, AnalysisDetail, FailedBatch, ComparisonData } from '../types';
 import { computePageCounts } from '../utils/page-counts';
+import { withFieldPerformance } from '../scoring/score-calculator';
 
 class ReportDataProcessor {
   /**
@@ -168,7 +169,7 @@ class ReportDataProcessor {
         overall: analysis.overall,
         details: analysis.details,
         bySeverity: analysis.bySeverity,
-        summary: analysis.summary,
+        summary: withFieldPerformance(analysis.summary, pages, metadata.cruxData),
       },
     };
   }

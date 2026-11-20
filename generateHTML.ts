@@ -170,7 +170,17 @@ function recalculateSummary(jsonData: Record<string, unknown>, pageData: PageDat
     { bySeverity, details: analysis.details },
     pageData,
     (pageData.pages ?? {}) as Record<string, PageInfo>,
+    (jsonData as { cruxData?: unknown }).cruxData,
   );
+}
+
+/** A lead scan (`--lead`, the web form's Quick scan) says so next to the preset. */
+export function withQuickScanLabel(label: string, jsonData: unknown): string {
+  const lead = (jsonData as { leadScan?: { cap?: number } } | null)?.leadScan;
+  if (!lead) return label;
+  const quick = `Quick scan (${lead.cap ?? 25} pages, passive)`;
+  // A quick scan with no preset is not a full audit.
+  return label === auditTypeLabel(undefined) ? quick : `${label} · ${quick}`;
 }
 
 /** Header stats: Successful + With Errors always sum to Pages Crawled; load failures are listed apart. */
@@ -183,7 +193,28 @@ const emptyState = (text: string) => `<p class="panel-empty">${escapeHtml(text)}
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`);
 
 /** "LCP p75 1.65 s · TTFB p75 159 ms · CLS p75 0.00" from the crawled pages' lab metrics. */
-function performanceMeta(pages: PageInfo[]): string {
+/** Core Web Vitals thresholds (good / poor) for the real-user summary line. */
+const FIELD_RATING: Record<string, [good: number, poor: number]> = {
+  LCP: [2500, 4000],
+  INP: [200, 500],
+  CLS: [0.1, 0.25],
+};
+
+/** "Real users: LCP 1.80 s good · INP 284 ms needs improvement · CLS 0.03 good" from CrUX p75 values. */
+export function fieldPerformanceMeta(cruxData: unknown): string {
+  const metrics = (cruxData as { metrics?: Record<string, { percentiles?: { p75?: unknown } }> } | null)?.metrics;
+  if (!metrics) return '';
+  const parts: string[] = [];
+  for (const [name, [good, poor]] of Object.entries(FIELD_RATING)) {
+    const p75 = Number(metrics[name]?.percentiles?.p75);
+    if (metrics[name]?.percentiles?.p75 === undefined || !Number.isFinite(p75)) continue;
+    const rating = p75 <= good ? 'good' : p75 <= poor ? 'needs improvement' : 'poor';
+    parts.push(`${name} ${name === 'CLS' ? p75.toFixed(2) : fmtMs(p75)} ${rating}`);
+  }
+  return parts.length ? `Real users: ${parts.join(' · ')}` : '';
+}
+
+function performanceMeta(pages: PageInfo[], cruxData?: unknown): string {
   const values = (get: (p: PageInfo) => number | undefined, min: number) =>
     pages
       .map(get)
@@ -197,7 +228,8 @@ function performanceMeta(pages: PageInfo[]): string {
     ttfb.length ? `TTFB p75 ${fmtMs(statPercentile(ttfb, 0.75))}` : '',
     cls.length ? `CLS p75 ${statPercentile(cls, 0.75).toFixed(2)}` : '',
   ].filter(Boolean);
-  return parts.length ? parts.join(' · ') : 'No lab performance data';
+  // Without lab metrics (a quick scan, or a run without --perf) real-user data is the result.
+  return parts.length ? parts.join(' · ') : fieldPerformanceMeta(cruxData) || 'No lab performance data';
 }
 
 function generateHTML(
@@ -374,7 +406,7 @@ function generateHTML(
       const n = uiFindingCount();
       return n > 0 ? `${plural(n, 'visual defect')} with screenshots` : 'No UI issues found';
     },
-    performance: () => performanceMeta(pages),
+    performance: () => performanceMeta(pages, (jsonData as { cruxData?: unknown }).cruxData),
     charts: () => 'Issue severity and frequency, status codes, word count, indexability',
     'technology-stack': () => {
       const n = countDetectedTechnologies(pages);
@@ -473,7 +505,7 @@ function generateHTML(
             title: isComparison ? 'Comparison report' : 'Audit report',
             brandName: jsonData.branding?.name,
             brandLogo: jsonData.branding?.logo,
-            auditType: auditTypeLabel(selection.preset),
+            auditType: withQuickScanLabel(auditTypeLabel(selection.preset), jsonData),
             generatedIso: generatedAt.toISOString(),
             generatedLocal: generatedAt.toLocaleString(),
             duration: timingInfo.elapsedTimeFormatted as string | undefined,

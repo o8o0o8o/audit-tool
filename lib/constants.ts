@@ -301,6 +301,12 @@ export const SCORING = {
   } as Record<string, { p10: number; median: number }>,
 
   /**
+   * INP control points for real-user (CrUX) scoring, used in TBT's slot when a run has no lab
+   * data. INP has no Lighthouse curve: the "good" threshold (200 ms) scores 50, like LCP's 2.5 s.
+   */
+  FIELD_INP_CONTROL_POINT: { p10: 100, median: 200 },
+
+  /**
    * Quick-win classification thresholds (impact score 0-100, effort in
    * minutes). Used only by identifyQuickWins(); not part of category scoring.
    */

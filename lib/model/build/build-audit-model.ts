@@ -15,6 +15,7 @@ import { deriveCode, findingId } from '../finding-codes';
 import { computeScanQuality } from '../scan-quality';
 import { SiteDocument, type Finding } from '../site';
 import { MODEL_VERSION } from '../version';
+import { PAGE_CHUNK_SIZE, PageRecord, type RunData } from '../page';
 import { factDependsOn, vendorKind } from '../vendor-kinds';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -490,13 +491,72 @@ export function buildAuditModel(input: BuildInput): SiteDocument {
   return SiteDocument.parse(doc);
 }
 
-/** Writes model/site.json.gz and model/raw-archive.tar.gz into the run folder. */
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const intOrNull = (v: unknown): number | null => (num(v) === null ? null : Math.round(v as number));
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+/** The row parts the report needs: run-level data and one record per page (design §2). */
+export function buildRowParts(runDir: string): { runData: RunData; pages: PageRecord[] } {
+  const manifest = readGz(path.join(runDir, 'manifest.json.gz'));
+  if (!manifest) throw new Error(`not a run folder: ${runDir}`);
+  const metadata = readGz(path.join(runDir, 'metadata.json.gz')) ?? {};
+  const analysis = readGz(path.join(runDir, 'analysis.json.gz')) ?? {};
+  const incoming = readGz(path.join(runDir, 'incoming-links.json.gz')) ?? {};
+  const blocked = new Set<string>();
+  for (const [key, urls] of Object.entries((manifest.progress?.byError ?? {}) as Record<string, unknown>)) {
+    if (/^(challenge-)?(401|403|429|503)$/.test(key) && Array.isArray(urls))
+      urls.forEach((u) => typeof u === 'string' && blocked.add(u));
+  }
+  const reasons = new Map<string, string>(
+    ((metadata.leadScan?.selected ?? []) as Json[]).map((s) => [String(s.url), String(s.reason ?? '')]),
+  );
+  const pages = loadRunPages(runDir, manifest).map((p) =>
+    PageRecord.parse({
+      url: String(p.url),
+      finalUrl: str(p.finalUrl),
+      statusCode: intOrNull(p.status),
+      blocked: blocked.has(p.url) || [401, 403, 429].includes(Number(p.status)),
+      segment: str(p.segment),
+      title: str(p.title),
+      metaDescription: str(p.description),
+      canonical: str(p.canonical),
+      h1: Array.isArray(p.headings?.h1) ? p.headings.h1.map(String) : [],
+      lang: str(p.languageDetection?.htmlLang ?? p.internationalSEO?.langAttribute),
+      indexable: typeof p.indexability?.isIndexable === 'boolean' ? p.indexability.isIndexable : null,
+      inSitemap: p.foundIn ? p.foundIn === 'sitemap' : null,
+      wordCount: intOrNull(p.contentQuality?.wordCount),
+      schemaTypes: ((p.structuredData?.jsonLdSchemas ?? []) as Json[]).map((x) => String(x.type ?? '')).filter(Boolean),
+      ttfbMs: intOrNull(p.TTFB ?? p.ttfb),
+      lcpMs: intOrNull(p.LCP ?? p.lcp),
+      cls: num(p.CLS ?? p.cls),
+      fcpMs: intOrNull(p.FCP ?? p.fcp),
+      inpMs: intOrNull(p.INP ?? p.inp),
+      tbtMs: intOrNull(p.TBT ?? p.tbt),
+      bytes: intOrNull(p.totalResponseSize),
+      requests: intOrNull(p.totalNumberOfRequests),
+      selectionReason: reasons.get(p.url) || null,
+      sections: p,
+    }),
+  );
+  return { runData: { manifest, metadata, analysis, 'incoming-links': incoming }, pages };
+}
+
+/** Writes model/site.json.gz, model/run-data.json.gz, model/pages-NNNN.ndjson.gz and model/raw-archive.tar.gz. */
 export function writeAuditModel(input: BuildInput): { doc: SiteDocument; sitePath: string; archivePath: string } {
   const doc = buildAuditModel(input);
   const dir = path.join(input.runDir, 'model');
   mkdirSync(dir, { recursive: true });
   const sitePath = path.join(dir, 'site.json.gz');
   writeFileSync(sitePath, gzipSync(JSON.stringify(doc)));
+  const rows = buildRowParts(input.runDir);
+  writeFileSync(path.join(dir, 'run-data.json.gz'), gzipSync(JSON.stringify(rows.runData)));
+  for (let i = 0; i * PAGE_CHUNK_SIZE < rows.pages.length; i++) {
+    const chunk = rows.pages.slice(i * PAGE_CHUNK_SIZE, (i + 1) * PAGE_CHUNK_SIZE);
+    writeFileSync(
+      path.join(dir, `pages-${String(i + 1).padStart(4, '0')}.ndjson.gz`),
+      gzipSync(chunk.map((r) => JSON.stringify(r)).join('\n')),
+    );
+  }
   const archivePath = path.join(dir, 'raw-archive.tar.gz');
   writeRawArchive(input.runDir, archivePath);
   return { doc, sitePath, archivePath };

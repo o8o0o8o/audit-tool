@@ -10,8 +10,10 @@ import type { Db } from '../../db/client';
 import {
   artifacts,
   auditDocuments,
+  auditRunData,
   audits,
   checkTypes,
+  pages,
   disclosures,
   fieldMetrics,
   findings,
@@ -29,7 +31,9 @@ import {
 import type { FileStore } from '../platform/types';
 import { CHECK_TYPES, UNTYPED } from '@model/finding-codes';
 import { SiteDocument } from '@model/site';
+import { PageRecord, RunData } from '@model/page';
 import { MODEL_VERSION, modelMajor } from '@model/version';
+import { scoringVersion } from './rescore';
 
 export const CHUNKS = ['site', 'findings', 'stack', 'gate', 'disclosures'] as const;
 export type Chunk = (typeof CHUNKS)[number];
@@ -95,37 +99,33 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
           .values(scoreRows.map((s) => ({ auditId, category: s.category, score: s.score, source: s.source })));
       await tx.delete(recommendations).where(eq(recommendations.auditId, auditId));
       if (doc.recommendations.length) {
-        await tx
-          .insert(recommendations)
-          .values(
-            doc.recommendations.map((r) => ({
-              auditId,
-              rank: r.rank,
-              title: r.title,
-              codes: r.codes,
-              impact: r.impact,
-              effort: r.effort,
-              quickWin: r.quickWin,
-              fix: r.fix,
-              pagesAffected: r.pagesAffected,
-            })),
-          );
+        await tx.insert(recommendations).values(
+          doc.recommendations.map((r) => ({
+            auditId,
+            rank: r.rank,
+            title: r.title,
+            codes: r.codes,
+            impact: r.impact,
+            effort: r.effort,
+            quickWin: r.quickWin,
+            fix: r.fix,
+            pagesAffected: r.pagesAffected,
+          })),
+        );
       }
       await tx.delete(siteChecks).where(eq(siteChecks.auditId, auditId));
       const checkRows = [...new Map(doc.siteChecks.map((c) => [c.checkId, c])).values()];
       if (checkRows.length)
-        await tx
-          .insert(siteChecks)
-          .values(
-            checkRows.map((c) => ({
-              auditId,
-              checkId: c.checkId,
-              label: c.label,
-              status: c.status,
-              note: c.note,
-              details: c.details ?? null,
-            })),
-          );
+        await tx.insert(siteChecks).values(
+          checkRows.map((c) => ({
+            auditId,
+            checkId: c.checkId,
+            label: c.label,
+            status: c.status,
+            note: c.note,
+            details: c.details ?? null,
+          })),
+        );
       await tx.delete(siteProfiles).where(eq(siteProfiles.auditId, auditId));
       const p = doc.siteProfile;
       const [shot] = p.homepageScreenshot
@@ -210,19 +210,17 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
       if (!doc.stack) return;
       const iso = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}/.test(d) ? d.slice(0, 10) : null);
       if (doc.stack.technologies.length) {
-        await tx
-          .insert(technologies)
-          .values(
-            doc.stack.technologies.map((t) => ({
-              auditId,
-              name: t.name,
-              kind: t.kind,
-              version: t.version,
-              confidence: t.confidence,
-              eolDate: iso(t.eolDate),
-              evidence: t.evidence ?? null,
-            })),
-          );
+        await tx.insert(technologies).values(
+          doc.stack.technologies.map((t) => ({
+            auditId,
+            name: t.name,
+            kind: t.kind,
+            version: t.version,
+            confidence: t.confidence,
+            eolDate: iso(t.eolDate),
+            evidence: t.evidence ?? null,
+          })),
+        );
       }
       const ids = [...new Map(doc.stack.trackingIds.map((t) => [`${t.kind}:${t.value}`, t])).values()];
       if (ids.length) await tx.insert(trackingIds).values(ids.map((t) => ({ auditId, ...t })));
@@ -245,21 +243,19 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
           .onConflictDoNothing()
           .returning({ id: leadGateRuns.id });
         if (row && g.facts.length) {
-          await tx
-            .insert(leadFacts)
-            .values(
-              g.facts.map((f) => ({
-                gateRunId: row.id,
-                type: f.type,
-                rootCause: f.rootCause,
-                weight: f.weight,
-                fact: f.fact,
-                url: f.url,
-                gate: f.gate,
-                dependsOn: f.dependsOn,
-                evidence: f.evidence ?? {},
-              })),
-            );
+          await tx.insert(leadFacts).values(
+            g.facts.map((f) => ({
+              gateRunId: row.id,
+              type: f.type,
+              rootCause: f.rootCause,
+              weight: f.weight,
+              fact: f.fact,
+              url: f.url,
+              gate: f.gate,
+              dependsOn: f.dependsOn,
+              evidence: f.evidence ?? {},
+            })),
+          );
         }
       }
       return;
@@ -277,6 +273,46 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
       }
       return;
     }
+  }
+}
+
+async function readGzJson(files: FileStore, key: string): Promise<unknown> {
+  const got = await files.get(key);
+  if (!got) throw new Error(`${key} missing`);
+  return JSON.parse(gunzipSync(Buffer.from(await new Response(got.body).arrayBuffer())).toString('utf8'));
+}
+
+/** Row chunks of the model (design §2 "Row parts"): run-data, pages-0001, pages-0002, … */
+async function rowChunks(files: FileStore, prefix: string): Promise<string[]> {
+  const out: string[] = [];
+  for await (const f of files.list(`${prefix}model/`)) {
+    const name = f.key.slice(`${prefix}model/`.length);
+    if (name === 'run-data.json.gz') out.unshift('run-data');
+    else if (/^pages-\d{4}\.ndjson\.gz$/.test(name)) out.push(name.replace('.ndjson.gz', ''));
+  }
+  return out;
+}
+
+async function loadRowChunk(tx: Tx, files: FileStore, prefix: string, auditId: string, chunk: string): Promise<void> {
+  if (chunk === 'run-data') {
+    const data = RunData.parse(await readGzJson(files, `${prefix}model/run-data.json.gz`));
+    await tx.delete(auditRunData).where(eq(auditRunData.auditId, auditId));
+    await tx
+      .insert(auditRunData)
+      .values((Object.keys(data) as (keyof RunData)[]).map((name) => ({ auditId, name, data: data[name] })));
+    return;
+  }
+  const n = Number(chunk.slice('pages-'.length));
+  const got = await files.get(`${prefix}model/${chunk}.ndjson.gz`);
+  if (!got) throw new Error(`${chunk} missing`);
+  const records = gunzipSync(Buffer.from(await new Response(got.body).arrayBuffer()))
+    .toString('utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => PageRecord.parse(JSON.parse(l)));
+  await tx.delete(pages).where(and(eq(pages.auditId, auditId), eq(pages.chunk, n)));
+  for (let i = 0; i < records.length; i += 100) {
+    await tx.insert(pages).values(records.slice(i, i + 100).map((r) => ({ auditId, chunk: n, ...r })));
   }
 }
 
@@ -349,10 +385,26 @@ export async function loadAudit(
     });
     n++;
   }
+  // Row parts: the run's own data and one row per page, so the report renders from the database.
+  const prefix = `audits/${auditId}/${audit.currentAttempt}/`;
+  for (const chunk of await rowChunks(files, prefix)) {
+    if (done.has(chunk)) continue;
+    if (opts.deadline && Date.now() > opts.deadline) return { auditId, outcome: 'partial', chunks: n };
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'load:' + auditId}))`);
+      await loadRowChunk(tx, files, prefix, auditId, chunk);
+      await tx
+        .insert(loadProgress)
+        .values({ auditId, chunk })
+        .onConflictDoUpdate({ target: [loadProgress.auditId, loadProgress.chunk], set: { doneAt: new Date() } });
+    });
+    n++;
+  }
   await db
     .update(audits)
     .set({
       status: 'succeeded',
+      scoringVersion: scoringVersion(),
       phase: null,
       finishedAt: audit.finishedAt ?? opts.now ?? new Date(),
       modelVersion: doc.modelVersion,

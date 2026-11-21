@@ -99,6 +99,8 @@ export const audits = pgTable(
     toolVersion: text('tool_version'),
     modelVersion: text('model_version'),
     rendererVersion: text('renderer_version'),
+  /** Hash of the scoring code the stored scores were computed with (not in the design's SQL); re-scored when it changes. */
+  scoringVersion: text('scoring_version'),
     createdAt: tz('created_at').notNull().defaultNow(),
     startedAt: tz('started_at'),
     finishedAt: tz('finished_at'),
@@ -606,3 +608,55 @@ export const leadFacts = pgTable(
     index('lead_facts_run').on(t.gateRunId),
   ],
 );
+
+// ── Step 6 (first part): page rows and the run's own data, so reports render from the database ──
+
+/** One row per crawled page (design §4 `pages`); `sections` holds the full page record. */
+export const pages = pgTable('pages', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  auditId: uuid('audit_id').notNull().references(() => audits.id, { onDelete: 'cascade' }),
+  chunk: integer('chunk').notNull(),
+  url: text('url').notNull(),
+  finalUrl: text('final_url'),
+  statusCode: integer('status_code'),
+  blocked: boolean('blocked').notNull().default(false),
+  template: text('template'),
+  segment: text('segment'),
+  title: text('title'),
+  metaDescription: text('meta_description'),
+  canonical: text('canonical'),
+  h1: text('h1').array().notNull().default(sql`'{}'`),
+  lang: text('lang'),
+  indexable: boolean('indexable'),
+  inSitemap: boolean('in_sitemap'),
+  depth: integer('depth'),
+  wordCount: integer('word_count'),
+  schemaTypes: text('schema_types').array().notNull().default(sql`'{}'`),
+  ttfbMs: integer('ttfb_ms'),
+  lcpMs: integer('lcp_ms'),
+  cls: real('cls'),
+  fcpMs: integer('fcp_ms'),
+  inpMs: integer('inp_ms'),
+  tbtMs: integer('tbt_ms'),
+  speedIndexMs: integer('speed_index_ms'),
+  lcpElement: text('lcp_element'),
+  bytes: bigint('bytes', { mode: 'number' }),
+  weight: jsonb('weight'),
+  requests: integer('requests'),
+  selectionReason: text('selection_reason'),
+  sections: jsonb('sections').notNull().default({}),
+}, (t) => [
+  uniqueIndex('pages_audit_url').on(t.auditId, sql`md5(${t.url})`),
+  index('pages_audit_chunk').on(t.auditId, t.chunk),
+]);
+
+/**
+ * Not in the design's SQL: the run-level data the HTML report is rendered from (manifest, metadata,
+ * analysis with every finding and its examples, incoming links), one jsonb per name. With `pages`,
+ * the report is rendered from the database alone (screenshots stay in the file store).
+ */
+export const auditRunData = pgTable('audit_run_data', {
+  auditId: uuid('audit_id').notNull().references(() => audits.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  data: jsonb('data').notNull(),
+}, (t) => [primaryKey({ columns: [t.auditId, t.name] }), check('audit_run_data_name', sql`${t.name} in ('manifest','metadata','analysis','incoming-links')`)]);

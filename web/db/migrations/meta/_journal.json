@@ -22,6 +22,20 @@
       "when": 1795248334674,
       "tag": "0002_step3_4_results",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795254144394,
+      "tag": "0003_step6_pages_run_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795254352702,
+      "tag": "0004_scoring_version",
+      "breakpoints": true
     }
   ]
 }

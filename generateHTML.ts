@@ -59,6 +59,53 @@ export interface HtmlReportSelection {
   noScore?: boolean;
   /** Recompute scores with the current scoring code (a report re-rendered later, scripts/render-report.ts). */
   rescore?: boolean;
+  /**
+   * Earlier audits of the same site with the same settings, oldest first (the platform's database).
+   * When given, it replaces the history file on disk, for every kind of audit; this audit is added last.
+   */
+  history?: ReportHistoryEntry[];
+}
+
+/** One earlier audit, as the platform passes it to the renderer. */
+export interface ReportHistoryEntry {
+  date: string;
+  overallScore: number | null;
+  categoryScores: Record<string, number | null>;
+  totalIssues: number;
+  critical: number;
+  high: number;
+}
+
+/** History from the platform's audits: the trend series and the audit before this one. */
+function historyFromEntries(entries: ReportHistoryEntry[], current: Record<string, unknown>): { trendData: unknown; previousAudit: unknown } | null {
+  if (!entries.length) return null;
+  const cur = (current ?? {}) as { overallScore?: number; categoryScores?: Record<string, number>; totalIssues?: number; criticalCount?: number; highCount?: number };
+  const all = [
+    ...entries,
+    {
+      date: new Date().toISOString(),
+      overallScore: cur.overallScore ?? null,
+      categoryScores: cur.categoryScores ?? {},
+      totalIssues: cur.totalIssues ?? 0,
+      critical: cur.criticalCount ?? 0,
+      high: cur.highCount ?? 0,
+    },
+  ];
+  const cats = [...new Set(all.flatMap((e) => Object.keys(e.categoryScores)))];
+  const prev = entries[entries.length - 1]!;
+  return {
+    trendData: {
+      labels: all.map((e, i) => (i === all.length - 1 ? 'This audit' : new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))),
+      scores: all.map((e) => e.overallScore ?? 0),
+      issues: all.map((e) => e.totalIssues),
+      critical: all.map((e) => e.critical),
+      high: all.map((e) => e.high),
+      categoryScores: Object.fromEntries(cats.map((c) => [c, all.map((e) => e.categoryScores[c] ?? null)])),
+      performance: { ttfb: all.map(() => null), lcp: all.map(() => null), cls: all.map(() => null) },
+      issueTrends: null,
+    },
+    previousAudit: { date: prev.date, summary: { overallScore: prev.overallScore ?? 0, totalIssues: prev.totalIssues, categoryScores: prev.categoryScores } },
+  };
 }
 
 /** Short labels for the sticky section navigation. */
@@ -295,7 +342,8 @@ function generateHTML(
     };
   }
 
-  const { jsonData, pageData, pages, timing, trendData, previousAudit } = reportData;
+  const { jsonData, pageData, pages, timing } = reportData;
+  let { trendData, previousAudit } = reportData;
   if (!isComparison && !loadError) {
     // A checks filter that excludes UX findings leaves the visual check out of this report entirely.
     const visualInReport = !selection.checks || matchesChecks(VISUAL_FINDING_MESSAGES[0], 'ux', selection.checks);
@@ -304,6 +352,11 @@ function generateHTML(
   if ((selection.checks || selection.rescore) && !loadError) {
     if (selection.checks) filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
     recalculateSummary(jsonData as Record<string, unknown>, pageData as PageData);
+  }
+  if (selection.history && !loadError && !isComparison) {
+    const h = historyFromEntries(selection.history, (jsonData as { analysis?: { summary?: Record<string, unknown> } }).analysis?.summary ?? {});
+    trendData = (h?.trendData ?? null) as typeof trendData;
+    previousAudit = (h?.previousAudit ?? null) as typeof previousAudit;
   }
 
   const rawPageData = pageData as { pages?: Record<string, unknown>; byError?: Record<string, unknown> };

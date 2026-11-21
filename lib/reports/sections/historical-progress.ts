@@ -321,9 +321,10 @@ function getCategoryDeltaCards(jsonData: Record<string, unknown>, previousAudit:
 
   const cards = categories
     .map((cat) => {
-      const current = currentCats[cat.key] || 0;
+      // A category not measured in either audit (no Performance data, say) has no delta to show.
+      const current = currentCats[cat.key];
       const prev = prevCats[cat.key];
-      if (prev === undefined) return '';
+      if (typeof current !== 'number' || typeof prev !== 'number') return '';
 
       const delta = current - prev;
       const color = getDeltaCssColor(delta);

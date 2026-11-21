@@ -11,6 +11,7 @@ import { reap } from '../lib/core/reaper';
 import { deliverDueWebhooks, onAuditFinished } from '../lib/core/webhooks';
 import { runRetention } from '../lib/core/retention';
 import { dispatchJobs } from '../lib/core/jobs';
+import { rescoreStale } from '../lib/core/rescore';
 
 const once = process.argv.includes('--once');
 const interval = Number(process.env.CRON_INTERVAL_MS) || 15_000;
@@ -41,6 +42,7 @@ async function pass(): Promise<void> {
   await step('dispatch', () => dispatchNext(db, platform, { onFinished }));
   await step('jobs', () => dispatchJobs(db, platform));
   await step('loader', () => runLoader(db, platform.files, { budgetMs: 60_000, onFinished }));
+  await step('rescore', () => rescoreStale(db, platform.files));
   await step('webhooks', () => deliverDueWebhooks(db, { allowPrivate: platform.mode === 'local' }));
   await step('retention', () => runRetention(db, platform.files));
 }

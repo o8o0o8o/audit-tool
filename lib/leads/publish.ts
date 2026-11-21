@@ -9,7 +9,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { buildAuditModel, writeRawArchive } from '../model/build/build-audit-model';
+import { buildAuditModel, buildRowParts, writeRawArchive } from '../model/build/build-audit-model';
+import { PAGE_CHUNK_SIZE } from '../model/page';
 import { MODEL_VERSION } from '../model/version';
 import { classify } from '../platform-worker/files';
 import { maskSecretsInRun, readMaskRecord } from '../platform-worker/mask-secrets';
@@ -61,6 +62,17 @@ export async function publishRun(
   const masked = readMaskRecord(runDir);
   const artifacts: Array<{ kind: string; key: string; bytes: number; sha256: string; page_url?: string | null }> = [];
   await upload(grant, `${prefix}model/site.json.gz`, gzipSync(JSON.stringify(doc)));
+  // Row parts, so the platform renders the report from its database.
+  const rows = buildRowParts(runDir);
+  await upload(grant, `${prefix}model/run-data.json.gz`, gzipSync(JSON.stringify(rows.runData)));
+  for (let i = 0; i * PAGE_CHUNK_SIZE < rows.pages.length; i++) {
+    const chunk = rows.pages.slice(i * PAGE_CHUNK_SIZE, (i + 1) * PAGE_CHUNK_SIZE);
+    await upload(
+      grant,
+      `${prefix}model/pages-${String(i + 1).padStart(4, '0')}.ndjson.gz`,
+      gzipSync(chunk.map((r) => JSON.stringify(r)).join('\n')),
+    );
+  }
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'publish-'));
   try {
     const archive = path.join(tmp, 'raw-archive.tar.gz');

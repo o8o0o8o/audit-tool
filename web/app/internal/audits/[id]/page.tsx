@@ -95,12 +95,11 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             hasPdf={a.artifacts.some((f) => f.kind === 'report_pdf')}
           />
           {a.status === 'succeeded' && a.artifacts.some((f) => f.kind === 'report_html') && (
-            <iframe
-              className="report-frame"
-              data-testid="report-frame"
-              src={`/internal/audits/${a.audit_id}/report?embed=1`}
-              title="Audit report"
-            />
+            <p>
+              <a className="btn" href={`/internal/audits/${a.audit_id}/view`}>
+                Open the report
+              </a>
+            </p>
           )}
         </div>
       </div>

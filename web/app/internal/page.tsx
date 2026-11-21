@@ -209,6 +209,11 @@ export default function DispatchPage() {
     };
   }, [runId, fetching]);
 
+  // One view of a finished report: full size, with the site header and footer.
+  useEffect(() => {
+    if (runId && view === 'succeeded') window.location.assign(`/internal/audits/${runId}/view`);
+  }, [runId, view]);
+
   function clearRun() {
     setRunParam(null);
     setRunId(null);
@@ -389,17 +394,14 @@ export default function DispatchPage() {
 
     const main = findMainReport(status?.files);
     if (state === 'succeeded' && main) {
-      const src = `${main.url ?? `/internal/audits/${id}/report`}?embed=1`;
       return (
         <section className="run-result">
           <p className="run-result-actions">
             Audit finished.{' '}
-            <a className="link-accent" href={`/internal/audits/${id}/view`} target="_blank" rel="noreferrer">
-              Open report in a new tab
-            </a>{' '}
-            {newAudit}
+            <a className="link-accent" href={`/internal/audits/${id}/view`}>
+              Open the report
+            </a>
           </p>
-          <iframe className="report-frame" data-testid="report-frame" src={src} title={`Audit report ${main.name}`} />
         </section>
       );
     }

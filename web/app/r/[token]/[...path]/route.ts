@@ -12,7 +12,11 @@ import { ctx } from '../../../../lib/server';
 export const dynamic = 'force-dynamic';
 
 const EMBED_STYLE =
-  '<style>.fr-header-bar .fr-wordmark,body>.container>footer,footer:has(.fr-footer-inner){display:none!important}.fr-header-bar{justify-content:flex-end}</style>';
+  '<style>.fr-header-bar .fr-wordmark,footer:has(.fr-footer-inner),.reading-progress{display:none!important}' +
+  '.fr-header-bar{justify-content:flex-end}html,body{overflow:hidden!important}body{padding-left:0!important;padding-right:0!important}</style>' +
+  // Tell the page our height, so the frame grows to it (the page, not the frame, scrolls).
+  '<script>(function(){var last=0;function send(){var h=document.documentElement.scrollHeight;if(h!==last){last=h;parent.postMessage({type:"audit-report-height",height:h},"*")}}' +
+  'addEventListener("load",send);if(window.ResizeObserver)new ResizeObserver(send).observe(document.documentElement);setInterval(send,1000)})()</script>';
 
 const deny = (status: number, message: string) =>
   new Response(message, {

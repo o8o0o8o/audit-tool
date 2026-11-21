@@ -9,6 +9,7 @@ import type { Platform } from '../platform/types';
 import { cancelAudit, continueAudit, getAudit, listAudits, startAudit, TERMINAL_STATUSES } from '../core/audits';
 import { CoreError } from '../core/errors';
 import { requestPdf } from '../core/jobs';
+import { raiseWork } from '../core/cron-gate';
 import { getLeadSummary } from '../core/lead-summary';
 import type { Principal } from '../core/principal';
 import { getProspect, listProspects } from '../core/prospects';
@@ -129,6 +130,7 @@ export function buildMcpServer(d: McpDeps): McpServer {
     },
     wrap(async (a) => {
       const res = await startAudit(db, principal, a);
+      if (res.status === 'queued' && !res.reused) await raiseWork(d.platform.files);
       if (res.status === 'queued' && !res.reused)
         await dispatchNext(db, d.platform, { onFinished: finished, max: 2 }).catch(() => {});
       return res;
@@ -203,6 +205,7 @@ export function buildMcpServer(d: McpDeps): McpServer {
     },
     wrap(async (a) => {
       const res = await continueAudit(db, principal, a);
+      if (res.status === 'queued' && !res.reused) await raiseWork(d.platform.files);
       if (res.status === 'queued' && !res.reused)
         await dispatchNext(db, d.platform, { onFinished: finished, max: 2 }).catch(() => {});
       return res;
@@ -216,12 +219,14 @@ export function buildMcpServer(d: McpDeps): McpServer {
       description: 'Cancels an audit you started (needs audits:cancel).',
       inputSchema: { audit_id: z.string() },
     },
-    wrap(async (a) =>
-      cancelAudit(db, principal, a.audit_id, {
+    wrap(async (a) => {
+      const res = await cancelAudit(db, principal, a.audit_id, {
         cancelRun: (id, at) => d.platform.dispatcher.cancel(id, at),
         onFinished: finished,
-      }),
-    ),
+      });
+      await raiseWork(d.platform.files);
+      return res;
+    }),
   );
 
   server.registerTool(
@@ -381,7 +386,11 @@ export function buildMcpServer(d: McpDeps): McpServer {
         kind: z.enum(['pdf', 'verified_pdf', 'content_research_pdf', 'teaser_pdf']),
       },
     },
-    wrap(async (a) => requestPdf(db, principal, a)),
+    wrap(async (a) => {
+      const res = await requestPdf(db, principal, a);
+      await raiseWork(d.platform.files);
+      return res;
+    }),
   );
 
   return server;

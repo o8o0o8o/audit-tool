@@ -1,3 +1,4 @@
+import { raiseWork } from '../../../../../../lib/core/cron-gate';
 import { completeImport } from '../../../../../../lib/core/imports';
 import { apiPrincipal, ctx, handle, readJson } from '../../../../../../lib/server';
 
@@ -8,5 +9,7 @@ export const POST = handle(async (request: Request, { params }: { params: Promis
   const principal = await apiPrincipal(request);
   const { id } = await params;
   const { db, platform } = ctx();
-  return Response.json(await completeImport(db, platform.files, principal, id, await readJson(request)));
+  const res = await completeImport(db, platform.files, principal, id, await readJson(request));
+  await raiseWork(platform.files);
+  return Response.json(res);
 });

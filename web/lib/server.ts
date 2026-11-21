@@ -1,4 +1,5 @@
 /** Route-handler glue: database, platform, principal from the request, finish hooks. Server only. */
+import { raiseWork } from './core/cron-gate';
 import { cookies } from 'next/headers';
 import { getDb, type Db } from '../db/client';
 import { getPlatform } from './platform';
@@ -41,6 +42,7 @@ export async function apiPrincipal(request: Request): Promise<Principal> {
 export async function kickQueue(): Promise<void> {
   try {
     const { db, platform } = ctx();
+    await raiseWork(platform.files);
     await dispatchNext(db, platform, { onFinished, max: 3 });
   } catch (err) {
     console.warn('dispatch from request failed; the cron will retry', err);

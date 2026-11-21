@@ -1,6 +1,8 @@
 /**
  * Local stand-in for the Vercel crons (design §10): dispatch, loader, reaper, webhooks, PDF jobs and
  * retention, each in a loop of its own. Every step locks the rows it works on, so two loops never double-work.
+ * Each step first asks the cron gate (`lib/core/cron-gate.ts`): while nothing is open it skips the database,
+ * as the production crons must, so Neon can scale to zero.
  *   yarn --cwd web crons            (CRON_INTERVAL_MS, default 15000; --once for one pass)
  */
 import { closeDb, getDb } from '../db/client';
@@ -13,6 +15,7 @@ import { runRetention } from '../lib/core/retention';
 import { dispatchJobs } from '../lib/core/jobs';
 import { rescoreStale } from '../lib/core/rescore';
 import { runCronLoops, type CronStep } from '../lib/platform/local/cron-loop';
+import { gated } from '../lib/core/cron-gate';
 
 const once = process.argv.includes('--once');
 const interval = Number(process.env.CRON_INTERVAL_MS) || 15_000;
@@ -26,7 +29,7 @@ function steps(): Step[] {
   const db = getDb();
   const platform = getPlatform();
   const onFinished = (id: string) => onAuditFinished(db, id);
-  return [
+  const steps: Step[] = [
     ['reaper', () => reap(db, platform.dispatcher, { onFinished })],
     ['dispatch', () => dispatchNext(db, platform, { onFinished })],
     ['jobs', () => dispatchJobs(db, platform)],
@@ -35,6 +38,8 @@ function steps(): Step[] {
     ['webhooks', () => deliverDueWebhooks(db, { allowPrivate: platform.mode === 'local' })],
     ['retention', () => runRetention(db, platform.files)],
   ];
+  // The reaper's tick also records the platform as idle once nothing is open.
+  return steps.map(([name, fn]) => [name, gated(db, platform.files, fn, { settle: name === 'reaper' })]);
 }
 
 async function run([name, fn]: Step): Promise<void> {

@@ -1,3 +1,4 @@
+import { raiseWork } from '../../../../../../lib/core/cron-gate';
 import { dispatchJobs, requestPdf } from '../../../../../../lib/core/jobs';
 import { ctx, handle, readJson, requireInternalPrincipal } from '../../../../../../lib/server';
 
@@ -10,6 +11,9 @@ export const POST = handle(async (request: Request, { params }: { params: Promis
   const body = (await readJson(request)) as { kind?: string };
   const { db, platform } = ctx();
   const res = await requestPdf(db, principal, { audit_id: id, kind: body?.kind ?? 'pdf' });
-  if (res.status === 'queued') await dispatchJobs(db, platform).catch(() => {});
+  if (res.status === 'queued') {
+    await raiseWork(platform.files);
+    await dispatchJobs(db, platform).catch(() => {});
+  }
   return Response.json(res);
 });

@@ -9,6 +9,7 @@ import {
   withFieldPerformance,
 } from '../lib/scoring/score-calculator';
 import { fieldPerformanceMeta, withQuickScanLabel } from '../generateHTML';
+import { blendOverallScore } from '../lib/utils';
 import type { AnalysisDetail, PageData, PageInfo } from '../lib/types';
 
 const crux = (p75: Record<string, number>) => ({
@@ -56,17 +57,17 @@ void describe('performance score without lab data', () => {
     assert.equal(performanceSource(Object.values(pages), fieldMetricsFromCrux(ZOOVER)), 'lab');
     const summary = ScoreCalculator.calculateSummary(analysis, pageData, pages, crux({ LCP: 9000 }));
     assert.equal(summary.performanceSource, 'lab');
-    assert.ok(summary.categoryScores.performance > 90);
+    assert.ok(summary.categoryScores.performance! > 90);
   });
 
   void it('rescores a summary saved before the source was recorded', () => {
     const old = ScoreCalculator.calculateSummary(analysis, pageData, pagesNoLab);
     delete old.performanceSource;
-    assert.equal(old.categoryScores.performance, 0);
+    assert.equal(old.categoryScores.performance, undefined, 'nothing measured: no score');
     const fixed = withFieldPerformance(old, pagesNoLab, ZOOVER);
     assert.equal(fixed.performanceSource, 'field');
-    assert.ok(fixed.categoryScores!.performance > 40);
-    assert.ok(fixed.overallScore! > old.overallScore);
+    assert.ok(fixed.categoryScores!.performance! > 40);
+    assert.equal(fixed.overallScore, blendOverallScore({ ...fixed.categoryScores! }), 'the overall now includes the real-user score');
     // A summary that already records its source is left alone.
     assert.equal(withFieldPerformance(fixed, pagesNoLab, crux({ LCP: 9000 })), fixed);
   });

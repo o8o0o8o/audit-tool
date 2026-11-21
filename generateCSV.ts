@@ -275,7 +275,7 @@ function generateSummaryCSV(jsonData: AuditJsonData) {
 
   if (summary.categoryScores) {
     rows.push(['SEO Score', summary.categoryScores.seo || 0]);
-    rows.push(['Performance Score', summary.categoryScores.performance || 0]);
+    rows.push(['Performance Score', summary.categoryScores.performance ?? 'not measured']);
     rows.push(['Accessibility Score', summary.categoryScores.accessibility || 0]);
     rows.push(['Security Score', summary.categoryScores.security || 0]);
     rows.push(['Technical Score', summary.categoryScores.technical || 0]);

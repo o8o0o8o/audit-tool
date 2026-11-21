@@ -1375,7 +1375,8 @@ export interface SpellingData {
 
 export interface CategoryScores {
   seo: number;
-  performance: number;
+  /** Absent when the run measured nothing: no lab metrics and no real-user (CrUX) data. Never a guessed 0. */
+  performance?: number;
   accessibility: number;
   security: number;
   technical: number;

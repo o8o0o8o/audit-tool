@@ -722,7 +722,7 @@ void describe('ScoreCalculator', () => {
     assert.ok(scores.seo < 100, `Expected seo < 100, got ${scores.seo}`);
   });
 
-  void it('Performance issue without metrics uses URL-pass fallback', () => {
+  void it('Performance without any measurement has no score (findings never stand in for one)', () => {
     const analysisData = {
       bySeverity: { critical: [], high: [], medium: ['High percentage of unused JavaScript'], low: [] },
       details: {},
@@ -731,7 +731,8 @@ void describe('ScoreCalculator', () => {
       analysisData,
       dummyPages as unknown as Record<string, PageInfo>,
     );
-    assert.ok(scores.performance < 100, `Expected performance < 100, got ${scores.performance}`);
+    assert.equal(scores.performance, undefined);
+    assert.ok(!('performance' in scores));
   });
 
   void it('Performance score uses log-normal CDF on per-page metrics', () => {
@@ -744,8 +745,8 @@ void describe('ScoreCalculator', () => {
 
     const fast = ScoreCalculator.calculateCategoryScores(empty, fastPages as unknown as Record<string, PageInfo>);
     const slow = ScoreCalculator.calculateCategoryScores(empty, slowPages as unknown as Record<string, PageInfo>);
-    assert.ok(fast.performance > 80, `Expected fast performance > 80, got ${fast.performance}`);
-    assert.ok(slow.performance < 30, `Expected slow performance < 30, got ${slow.performance}`);
+    assert.ok(fast.performance! > 80, `Expected fast performance > 80, got ${fast.performance}`);
+    assert.ok(slow.performance! < 30, `Expected slow performance < 30, got ${slow.performance}`);
   });
 
   void it('Performance score is not inflated by crawler INP=0; heavy TBT pulls it down', () => {
@@ -762,7 +763,7 @@ void describe('ScoreCalculator', () => {
       heavyTbt as unknown as Record<string, PageInfo>,
     );
     assert.ok(
-      scores.performance < 80,
+      scores.performance! < 80,
       `Expected heavy-TBT performance < 80 (was ~100 with the INP=0 bug), got ${scores.performance}`,
     );
   });

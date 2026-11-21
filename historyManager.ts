@@ -528,7 +528,7 @@ class HistoryManager {
       highIssues: history.audits.map((a) => a.summary.highCount),
       categoryScores: {
         seo: history.audits.map((a) => a.summary.categoryScores?.seo ?? 0),
-        performance: history.audits.map((a) => a.summary.categoryScores?.performance ?? 0),
+        performance: history.audits.map((a) => a.summary.categoryScores?.performance ?? null),
         accessibility: history.audits.map((a) => a.summary.categoryScores?.accessibility ?? 0),
         security: history.audits.map((a) => a.summary.categoryScores?.security ?? 0),
         technical: history.audits.map((a) => a.summary.categoryScores?.technical ?? 0),

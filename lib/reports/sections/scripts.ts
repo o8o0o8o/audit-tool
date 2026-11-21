@@ -1715,7 +1715,7 @@ ${noScore ? '' : `        'Security Score': {
                   if (summaryData.categoryScores) {
                       const cs = compareSummaryData.categoryScores || {};
                       rows.push(['SEO Score', summaryData.categoryScores.seo || 0, cs.seo || 0, (summaryData.categoryScores.seo || 0) - (cs.seo || 0)]);
-                      rows.push(['Performance Score', summaryData.categoryScores.performance || 0, cs.performance || 0, (summaryData.categoryScores.performance || 0) - (cs.performance || 0)]);
+                      rows.push(['Performance Score', summaryData.categoryScores.performance ?? 'not measured', cs.performance ?? 'not measured', summaryData.categoryScores.performance != null && cs.performance != null ? summaryData.categoryScores.performance - cs.performance : '']);
                       rows.push(['Accessibility Score', summaryData.categoryScores.accessibility || 0, cs.accessibility || 0, (summaryData.categoryScores.accessibility || 0) - (cs.accessibility || 0)]);
                       rows.push(['Security Score', summaryData.categoryScores.security || 0, cs.security || 0, (summaryData.categoryScores.security || 0) - (cs.security || 0)]);
                       rows.push(['Technical Score', summaryData.categoryScores.technical || 0, cs.technical || 0, (summaryData.categoryScores.technical || 0) - (cs.technical || 0)]);
@@ -1735,7 +1735,7 @@ ${noScore ? '' : `        'Security Score': {
                   ];
                   if (summaryData.categoryScores) {
                       rows.push(['SEO Score', summaryData.categoryScores.seo || 0]);
-                      rows.push(['Performance Score', summaryData.categoryScores.performance || 0]);
+                      rows.push(['Performance Score', summaryData.categoryScores.performance ?? 'not measured']);
                       rows.push(['Accessibility Score', summaryData.categoryScores.accessibility || 0]);
                       rows.push(['Security Score', summaryData.categoryScores.security || 0]);
                       rows.push(['Technical Score', summaryData.categoryScores.technical || 0]);

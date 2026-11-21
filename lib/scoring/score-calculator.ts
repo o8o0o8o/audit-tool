@@ -166,10 +166,11 @@ class ScoreCalculator {
     const totalPages = Math.max(pageArray.length, 1);
     const issues = enrichIssues(analysisData);
 
+    const performance = scorePerformance(pageArray, field);
     const scores: CategoryScores = {
       seo: roundScore(scoreFromUrlPass(issues, 'seo', totalPages)),
       technical: roundScore(scoreFromUrlPass(issues, 'technical', totalPages)),
-      performance: roundScore(scorePerformance(pageArray, issues, totalPages, field)),
+      ...(performance === null ? {} : { performance: roundScore(performance) }),
       accessibility: roundScore(scoreAccessibility(pageArray)),
       security: roundScore(scoreSecurity(pageArray)),
     };
@@ -393,12 +394,7 @@ export function scoreFieldMetrics(field: FieldMetrics): number | null {
   return totalWeight > 0 ? weighted / totalWeight : null;
 }
 
-function scorePerformance(
-  pages: PageInfo[],
-  issues: EnrichedIssue[],
-  totalPages: number,
-  field: FieldMetrics | null = null,
-): number | null {
+function scorePerformance(pages: PageInfo[], field: FieldMetrics | null = null): number | null {
   const cps = SCORING.PERFORMANCE_CONTROL_POINTS;
   const ws = SCORING.PERFORMANCE_METRIC_WEIGHTS;
   const perPageScores: number[] = [];
@@ -449,10 +445,9 @@ function scorePerformance(
     if (fieldScore !== null) return fieldScore;
   }
 
-  // Fallback when no perf metrics were collected.
-  const allPerfOccurrences = issues.filter((i) => i.category === 'performance').reduce((sum, i) => sum + i.affected, 0);
-  if (allPerfOccurrences === 0) return null;
-  return urlPassScore(allPerfOccurrences, totalPages);
+  // Nothing was measured: no score. Counting performance findings instead gave 0 for any site with
+  // a few large images, and the overall blend then fell to its worst category.
+  return null;
 }
 
 /**

@@ -383,8 +383,10 @@ const PERFORMANCE_SOURCE_NOTE: Record<string, { label: string; title: string }> 
 };
 
 function getCategoryBars(categoryScores: Partial<CategoryScores>, performanceSource?: string) {
-  // Agentic is optional: a run without it has no bar rather than a false 0.
-  const categories = CATEGORY_KEYS.filter((key) => key !== 'agentic' || categoryScores.agentic !== undefined).map(
+  // Agentic and Performance are optional: a run that did not measure them has no bar rather than a false 0.
+  const categories = CATEGORY_KEYS.filter(
+    (key) => (key !== 'agentic' && key !== 'performance') || categoryScores[key] !== undefined,
+  ).map(
     (key) => ({
       key,
       name: CATEGORY_NAMES[key],

@@ -632,11 +632,16 @@ function blendOverallScore(
 ): number {
   let weightedMean = 0;
   const values: number[] = [];
+  // A category that was not measured (undefined) is left out; the others' weights are rescaled.
+  let totalWeight = 0;
   for (const [category, weight] of Object.entries(categoryWeights)) {
-    const value = categoryScores[category] || 0;
+    const value = categoryScores[category];
+    if (value === undefined || value === null || !Number.isFinite(value)) continue;
     weightedMean += value * weight;
+    totalWeight += weight;
     values.push(value);
   }
+  if (totalWeight > 0) weightedMean /= totalWeight;
   const worst = values.length ? Math.min(...values) : weightedMean;
   const w = SCORING.OVERALL_MEAN_WEIGHT;
   const blended = weightedMean * w + worst * (1 - w);

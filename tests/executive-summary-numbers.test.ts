@@ -92,9 +92,11 @@ void describe('executive summary numbers', () => {
   void it('estimate skips unmeasured categories', () => {
     const scores = { seo: 80, performance: 80, technical: 80, accessibility: 80 };
     const overall = blendOverallScore(scores);
-    // security is absent: it stays 0, so the worst-category term stays 0 and the estimate is small.
+    // security is absent (not measured): it is left out of the blend, never counted as 0.
     const fixed = { seo: 92, performance: 92, technical: 92, accessibility: 92 };
+    assert.equal(overall, 80);
     assert.equal(estimateScoreAfterFixes(overall, scores, SCORING.CATEGORY_WEIGHTS), blendOverallScore(fixed));
-    assert.ok(blendOverallScore(fixed) < blendOverallScore({ ...fixed, security: 60 }));
+    assert.equal(blendOverallScore(fixed), 92);
+    assert.ok(blendOverallScore(fixed) > blendOverallScore({ ...fixed, security: 60 }), 'a measured low category pulls the score down');
   });
 });

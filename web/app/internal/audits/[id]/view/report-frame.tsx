@@ -14,10 +14,18 @@ export function ReportFrame({ src }: { src: string }) {
       if (e.source !== ref.current?.contentWindow) return;
       const h = (e.data as { type?: string; height?: number } | null)?.height;
       if ((e.data as { type?: string })?.type === 'audit-report-height' && typeof h === 'number' && h > 0)
-        setHeight(Math.ceil(h));
+        setHeight((prev) => (prev === Math.ceil(h) ? prev : Math.ceil(h)));
     };
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    // The report may have loaded before this listener existed: ask it for its height now.
+    const ping = () => ref.current?.contentWindow?.postMessage({ type: 'audit-report-ping' }, '*');
+    ping();
+    const frame = ref.current;
+    frame?.addEventListener('load', ping);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      frame?.removeEventListener('load', ping);
+    };
   }, []);
   return (
     <iframe

@@ -15,8 +15,11 @@ const EMBED_STYLE =
   '<style>.fr-header-bar .fr-wordmark,footer:has(.fr-footer-inner),.reading-progress{display:none!important}' +
   '.fr-header-bar{justify-content:flex-end}html,body{overflow:hidden!important}body{padding-left:0!important;padding-right:0!important}</style>' +
   // Tell the page our height, so the frame grows to it (the page, not the frame, scrolls).
-  '<script>(function(){var last=0;function send(){var h=document.documentElement.scrollHeight;if(h!==last){last=h;parent.postMessage({type:"audit-report-height",height:h},"*")}}' +
-  'addEventListener("load",send);if(window.ResizeObserver)new ResizeObserver(send).observe(document.documentElement);setInterval(send,1000)})()</script>';
+  // The page asks for it ("audit-report-ping") once it listens; we also repeat it, so a message sent
+  // before the page was ready is never the only one.
+  '<script>(function(){function send(){parent.postMessage({type:"audit-report-height",height:document.documentElement.scrollHeight},"*")}' +
+  'addEventListener("message",function(e){if(e.data&&e.data.type==="audit-report-ping")send()});addEventListener("load",send);' +
+  'if(window.ResizeObserver)new ResizeObserver(send).observe(document.body);setInterval(send,1000)})()</script>';
 
 const deny = (status: number, message: string) =>
   new Response(message, {

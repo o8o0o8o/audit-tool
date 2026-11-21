@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
+import { templateKey } from '../../leads/page-selector';
 import { categorize } from '../../phase2/categorize';
 import { deriveCode, findingId } from '../finding-codes';
 import { pgSafe } from '../pg-safe';
@@ -615,6 +616,7 @@ export function buildRowParts(runDir: string, source?: RunSource): { runData: Ru
       indexable: typeof p.indexability?.isIndexable === 'boolean' ? p.indexability.isIndexable : null,
       inSitemap: p.foundIn ? p.foundIn === 'sitemap' : null,
       depth: intOrNull(p.urlAnalysis?.depth),
+      template: templateKey(String(p.url)),
       wordCount: intOrNull(p.contentQuality?.wordCount),
       schemaTypes: ((p.structuredData?.jsonLdSchemas ?? []) as Json[]).map((x) => String(x.type ?? '')).filter(Boolean),
       ttfbMs: intOrNull(p.TTFB ?? p.ttfb),

@@ -181,6 +181,8 @@ export function maskText(text: string): { text: string; masked: number; patterns
 
 /** "…" as its UTF-8 bytes, for text held as latin1. */
 const ELL_BYTES = '\xE2\x80\xA6';
+/** The character a masked value carries (U+2026); a resumed crawl skips URLs that contain it. */
+export const MASK_MARK = '\u2026';
 
 /**
  * Masks a file's bytes window by window. The tail of each window is carried into the next one, and

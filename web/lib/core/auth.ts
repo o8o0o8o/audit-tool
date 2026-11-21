@@ -69,6 +69,29 @@ export function sessionPrincipal(
   return claims?.sub === 'internal' ? { kind: 'internal', label: 'internal' } : null;
 }
 
+const revokedBucket = (cookie: string) => `session:revoked:${sha256Hex(cookie).slice(0, 40)}`;
+
+/**
+ * Logout ends the session on the server too: the cookie's hash is kept until the cookie would
+ * have expired anyway (rate events live 24 h, a session 12 h), so a copied cookie stops working.
+ */
+export async function revokeSession(db: Db, cookie: string | undefined, now = new Date()): Promise<void> {
+  if (cookie) await recordRate(db, revokedBucket(cookie), now);
+}
+
+/** The session behind a cookie, unless it is invalid, expired or was logged out. */
+export async function activeSessionPrincipal(
+  db: Db,
+  cookie: string | undefined,
+  sessionSecret: string,
+  now = new Date(),
+): Promise<Principal | null> {
+  const principal = sessionPrincipal(cookie, sessionSecret, now.getTime());
+  if (!principal || !cookie) return null;
+  const revoked = await countRate(db, revokedBucket(cookie), SESSION_TTL_SECONDS * 1000, now);
+  return revoked > 0 ? null : principal;
+}
+
 // ── API keys ────────────────────────────────────────────────────────────────
 
 const KEY_PREFIX = 'ak_';

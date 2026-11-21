@@ -12,6 +12,7 @@ import { deliverDueWebhooks, onAuditFinished } from '../lib/core/webhooks';
 import { runRetention } from '../lib/core/retention';
 import { dispatchJobs } from '../lib/core/jobs';
 import { rescoreStale } from '../lib/core/rescore';
+import { runCronLoops, type CronStep } from '../lib/platform/local/cron-loop';
 
 const once = process.argv.includes('--once');
 const interval = Number(process.env.CRON_INTERVAL_MS) || 15_000;
@@ -19,7 +20,7 @@ let stopping = false;
 process.on('SIGINT', () => (stopping = true));
 process.on('SIGTERM', () => (stopping = true));
 
-type Step = [name: string, fn: () => Promise<unknown>];
+type Step = CronStep;
 
 function steps(): Step[] {
   const db = getDb();
@@ -52,20 +53,12 @@ async function run([name, fn]: Step): Promise<void> {
   }
 }
 
-/** One step's own loop: the next run starts `interval` after the last one ended, so a step never overlaps itself. */
-async function loop(step: Step): Promise<void> {
-  while (!stopping) {
-    await run(step);
-    for (let t = 0; t < interval && !stopping; t += 500) await new Promise((r) => setTimeout(r, 500));
-  }
-}
-
 async function main(): Promise<void> {
   console.log(`[cron] local crons every ${interval} ms (${getPlatform().mode} mode)`);
   // --once: one pass in order. Otherwise every step runs on its own loop, so a slow one (a webhook
   // to a slow endpoint, a long load) does not hold back the reaper or dispatch.
   if (once) for (const step of steps()) await run(step);
-  else await Promise.all(steps().map(loop));
+  else await runCronLoops(steps(), run, interval, () => stopping);
   await closeDb();
 }
 

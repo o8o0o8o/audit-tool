@@ -22,6 +22,11 @@ export const PageRecord = z.object({
   indexable: z.boolean().nullable(),
   inSitemap: z.boolean().nullable(),
   depth: int.default(null).describe('Path depth of the URL'),
+  template: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe('URL template with the language prefix ignored: `/`, `/pricing`, `/blog/*`'),
   wordCount: int,
   schemaTypes: z.array(z.string()),
   ttfbMs: int,

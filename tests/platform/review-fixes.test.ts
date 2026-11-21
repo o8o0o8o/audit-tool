@@ -7,7 +7,12 @@ import { SECRET } from './helpers';
 import { auditAttempts, audits, jobs, prospects, webhookDeliveries } from '../../web/db/schema';
 import { cancelAudit, startAudit } from '../../web/lib/core/audits';
 import { CoreError } from '../../web/lib/core/errors';
-import { JOB_LIMITS, reapJobs } from '../../web/lib/core/jobs';
+import { JOB_LIMITS, reapJobs, registerJob } from '../../web/lib/core/jobs';
+import { activeSessionPrincipal, login, revokeSession } from '../../web/lib/core/auth';
+import { runCronLoops } from '../../web/lib/platform/local/cron-loop';
+import { isMaskedUrl } from '../../lib/crawler/crawler-engine';
+import { MASK_MARK, maskText } from '../../lib/platform-worker/mask-secrets';
+import { randomBytes, scryptSync } from 'node:crypto';
 import { upsertProspect } from '../../web/lib/core/prospects';
 import type { Principal } from '../../web/lib/core/principal';
 import { reap, REAPER } from '../../web/lib/core/reaper';
@@ -60,7 +65,9 @@ void test('a worker status after a cancel is refused and the audit stays cancell
   const id = await audit('running');
   await t.db.insert(auditAttempts).values({ auditId: id, attempt: 1, status: 'running', dispatchNonce: 'n' });
   let finished = 0;
-  const onFinished = async () => void finished++;
+  const onFinished = async (): Promise<void> => {
+    finished++;
+  };
   assert.equal((await cancelAudit(t.db, internal, id, { onFinished })).status, 'cancelled');
   await assert.rejects(
     reportStatus(t.db, { auditId: id, attempt: 1 }, { status: 'built' }, { onFinished }),
@@ -101,7 +108,7 @@ void test('PDF jobs: a silent job is requeued, then failed after the last try', 
   const silent = new Date(now.getTime() - JOB_LIMITS.silentMs - 1000);
   const [job] = await t.db
     .insert(jobs)
-    .values({ type: 'render-pdf', auditId: id, kind: 'report', status: 'running', tries: 1, heartbeatAt: silent })
+    .values({ type: 'render-pdf', auditId: id, kind: 'pdf', status: 'running', tries: 1, heartbeatAt: silent })
     .returning({ id: jobs.id });
   assert.deepEqual((await reapJobs(t.db, undefined, now)).requeued, [job!.id]);
   await t.db
@@ -177,4 +184,105 @@ void test('start_audit refuses a private target outside local mode', { skip: SKI
     else process.env.PLATFORM_MODE = before;
   }
   assert.equal((await t.db.select().from(webhookDeliveries)).length, 0);
+});
+
+void test(
+  'race: cancel and a worker status at the same moment end cancelled, with one event',
+  { skip: SKIP_DB },
+  async () => {
+    for (let i = 0; i < 15; i++) {
+      const id = await audit('running');
+      await t.db.insert(auditAttempts).values({ auditId: id, attempt: 1, dispatchNonce: 'n', status: 'running' });
+      let finished = 0;
+      const onFinished = async (): Promise<void> => {
+        finished++;
+      };
+      const results: PromiseSettledResult<unknown>[] = await Promise.allSettled([
+        reportStatus(t.db, { auditId: id, attempt: 1 }, { status: 'succeeded' }, { onFinished }),
+        cancelAudit(t.db, internal, id, { onFinished }),
+      ]);
+      const status = await statusOf(id);
+      // Whichever write came first wins; the other is refused or reports the state. Never two events.
+      assert.ok(['cancelled', 'succeeded'].includes(status), status);
+      assert.equal(finished, 1, `events for ${status}`);
+      if (status === 'cancelled') assert.equal(results[0].status, 'rejected');
+    }
+  },
+);
+
+void test('race: two registrations with one job nonce, only one gets a session', { skip: SKIP_DB }, async () => {
+  const id = await audit('succeeded');
+  const [job] = await t.db
+    .insert(jobs)
+    .values({
+      type: 'render-pdf',
+      auditId: id,
+      kind: 'pdf',
+      status: 'dispatched',
+      tries: 1,
+      dispatchNonce: 'nonce-12345',
+    })
+    .returning({ id: jobs.id });
+  const identity = { verify: async () => ({ runId: '1', runAttempt: 1 }) };
+  const body = { job_id: job!.id, attempt: 1, nonce: 'nonce-12345' };
+  const results = await Promise.allSettled([
+    registerJob(t.db, identity, 'tok', body),
+    registerJob(t.db, identity, 'tok', body),
+    registerJob(t.db, identity, 'tok', body),
+  ]);
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+});
+
+void test(
+  'race: parallel wrong logins are counted one by one; logout ends the session',
+  { skip: SKIP_DB },
+  async () => {
+    const salt = randomBytes(16);
+    const cfg = {
+      passwordHash: `scrypt:${salt.toString('hex')}:${scryptSync('right password here', salt, 64).toString('hex')}`,
+      sessionSecret: SECRET,
+    };
+    const now = new Date('2026-11-22T10:00:00Z');
+    const tries = await Promise.allSettled(
+      Array.from({ length: 12 }, () => login(t.db, { password: 'wrong', ip: '203.0.113.7' }, cfg, now)),
+    );
+    const codes = tries.map((r) => (r.status === 'rejected' ? (r.reason as CoreError).code : 'ok'));
+    assert.equal(codes.filter((c) => c === 'unauthorized').length, 5);
+    assert.equal(codes.filter((c) => c === 'rate_limited').length, 7);
+
+    const cookie = await login(t.db, { password: 'right password here', ip: '203.0.113.8' }, cfg, now);
+    assert.ok(await activeSessionPrincipal(t.db, cookie, SECRET, now));
+    await revokeSession(t.db, cookie, now);
+    assert.equal(await activeSessionPrincipal(t.db, cookie, SECRET, new Date(now.getTime() + 60_000)), null);
+  },
+);
+
+void test('cron loops: a slow step does not hold back the others', async () => {
+  let fast = 0;
+  let slowStarted = 0;
+  let stop = false;
+  const done = runCronLoops(
+    [
+      ['slow', () => new Promise((r) => (slowStarted++, setTimeout(r, 400)))],
+      ['fast', async () => void fast++],
+    ],
+    async ([, fn]) => void (await fn()),
+    20,
+    () => stop,
+    10,
+  );
+  await new Promise((r) => setTimeout(r, 300));
+  stop = true;
+  await done;
+  assert.equal(slowStarted, 1, 'the slow step never overlaps itself');
+  assert.ok(fast >= 4, `the fast step kept its pace (${fast} runs)`);
+});
+
+void test('a URL masked in a restored checkpoint is recognised, and only on a resumed run', () => {
+  const masked = maskText('https://example.com/p?access_token=abcd1234efgh5678ijkl9012').text;
+  assert.ok(masked.includes(MASK_MARK), masked);
+  assert.equal(isMaskedUrl(masked, MASK_MARK), true);
+  assert.equal(isMaskedUrl(new URL(masked).toString(), MASK_MARK), true);
+  assert.equal(isMaskedUrl('https://example.com/p?page=2', MASK_MARK), false);
+  assert.equal(isMaskedUrl(masked, undefined), false);
 });

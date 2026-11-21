@@ -83,6 +83,9 @@ export function buildCheckpointMetadata(results: ProgressResults) {
     visual: results.visual === true,
     siteChecks: results.siteChecks ?? null,
     // Only present on runs that used the flags, so a full audit's metadata is unchanged.
+    // The llms.txt result, so a reader can tell "valid" from "not checked" (a finding exists only
+    // for missing / invalid).
+    ...(results.aeo?.llmsTxt?.status ? { aeo: { llmsTxt: { status: results.aeo.llmsTxt.status } } } : {}),
     ...(results.passive ? { passive: true } : {}),
     ...(results.leadScan ? { leadScan: results.leadScan } : {}),
     ...(results.singlePage ? { singlePage: results.singlePage } : {}),
@@ -98,6 +101,7 @@ export interface ProgressResults {
   crawlProfile?: CrawlProfile | null;
   visual?: boolean;
   siteChecks?: SiteChecksData | null;
+  aeo?: { llmsTxt?: { status?: string } };
   /** `--passive` / `--lead`: the site probes ran in passive mode. */
   passive?: boolean;
   /** `--lead`: page selection, sitemap sample and request counts of the lead scan. */

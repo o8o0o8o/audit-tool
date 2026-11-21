@@ -87,7 +87,9 @@ export async function startFixtureSite(opts: { pages?: number; delayMs?: number;
   const links = Array.from({ length: n }, (_, i) => `<li><a href="/page-${i}">Page ${i}</a></li>`).join('');
   const page = (title: string) =>
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title} — Fixture Site for Platform Tests</title><meta name="description" content="A fixture page used by the platform's slow tests to check the run path end to end."><meta name="viewport" content="width=device-width"></head><body><header><nav><ul>${links}</ul></nav></header><main><h1>${title}</h1><p>${'Words for the content checks. '.repeat(40)}</p></main></body></html>`;
+  let hits = 0;
   const server = http.createServer((req, res) => {
+    hits++;
     const url = new URL(req.url ?? '/', 'http://x');
     if (opts.redirectTo && url.pathname === '/') {
       res.writeHead(301, { location: opts.redirectTo });
@@ -118,5 +120,10 @@ export async function startFixtureSite(opts: { pages?: number; delayMs?: number;
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   const port = (server.address() as { port: number }).port;
-  return { origin: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => server.close(() => r())) };
+  return {
+    origin: `http://127.0.0.1:${port}`,
+    /** Requests received so far. */
+    hits: () => hits,
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  };
 }

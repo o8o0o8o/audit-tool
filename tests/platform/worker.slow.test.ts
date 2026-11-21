@@ -206,3 +206,42 @@ void test(
     }
   },
 );
+
+void test(
+  'slow: a run past its time limit is killed with its whole process tree and ends failed',
+  { skip: SKIP, timeout: 180_000 },
+  async () => {
+    const site = await startFixtureSite({ pages: 10, delayMs: 2500 });
+    const short = new LocalDispatcher(identity, {
+      appUrl: app.url,
+      repoRoot: path.resolve(__dirname, '../..'),
+      extraEnv: {
+        PLATFORM_HEARTBEAT_MS: '2000',
+        PLATFORM_PROGRESS_MS: '1000',
+        PLATFORM_MAX_RUN_MINUTES_QUICK: '0.25',
+        CRUX_API_KEY: '',
+        ANTHROPIC_API_KEY: '',
+      },
+    });
+    Object.assign(short, { platformDir });
+    try {
+      const s = await startAudit(
+        t.db,
+        internalPrincipal(),
+        { url: site.origin, mode: 'quick' },
+        { allowPrivateTarget: true },
+      );
+      await dispatchNext(t.db, { dispatcher: short }, { caps });
+      await until(async () => (await statusOf(s.audit_id)).status === 'failed', 120_000, 'the run to be stopped');
+      const row = await statusOf(s.audit_id);
+      assert.match(row.error ?? '', /run time limit/);
+      await until(async () => (await short.state(s.audit_id, 1)) === 'gone', 30_000, 'the worker to exit');
+      // Nothing of the run is left: no audit child and no browser still loading the site.
+      const hits = site.hits();
+      await new Promise((r) => setTimeout(r, 6000));
+      assert.equal(site.hits(), hits, 'the site is no longer being loaded');
+    } finally {
+      await site.close();
+    }
+  },
+);

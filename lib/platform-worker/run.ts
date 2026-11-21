@@ -14,6 +14,7 @@ import { mtimeOf, restoreSnapshot, Snapshotter } from './snapshot';
 import { uploadRun } from './files';
 import { auditChildEnv } from './env';
 import { killTree } from './proc-tree';
+import { MASK_MARK } from './mask-secrets';
 
 export interface WorkerEnv {
   appUrl: string;
@@ -219,6 +220,8 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
         env: auditChildEnv(process.env, options, {
           AUDIT_PROGRESS_FILE: progressFile,
           AUDIT_CHECKPOINT_MARKER: marker,
+          // A restored checkpoint has masked URLs; they are not loaded again.
+          ...(proceed ? { AUDIT_SKIP_URL_MARK: MASK_MARK } : {}),
         }),
         stdio: ['ignore', 'pipe', 'pipe'],
       },

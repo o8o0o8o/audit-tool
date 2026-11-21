@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { getDb, type Db } from '../db/client';
 import { getPlatform } from './platform';
 import type { Platform } from './platform/types';
-import { authenticateApiKey, SESSION_COOKIE, sessionPrincipal } from './core/auth';
+import { activeSessionPrincipal, authenticateApiKey, SESSION_COOKIE } from './core/auth';
 import { CoreError, errorResponse } from './core/errors';
 import type { Principal } from './core/principal';
 import { sessionKeyFromEnv } from './core/tokens';
@@ -23,7 +23,7 @@ export const onFinished = (auditId: string) => onAuditFinished(getDb(), auditId)
 /** The internal session from the cookie, or null. */
 export async function internalPrincipal(): Promise<Principal | null> {
   const jar = await cookies();
-  return sessionPrincipal(jar.get(SESSION_COOKIE)?.value, sessionKeyFromEnv());
+  return activeSessionPrincipal(getDb(), jar.get(SESSION_COOKIE)?.value, sessionKeyFromEnv());
 }
 
 export async function requireInternalPrincipal(): Promise<Principal> {

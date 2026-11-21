@@ -140,6 +140,15 @@ function sameResource(a: string, b: string): boolean | null {
   }
 }
 
+/**
+ * Set by the platform worker on a resumed run (`AUDIT_SKIP_URL_MARK`): the restored checkpoint has
+ * secrets in URLs replaced by this mark, so such an address is no longer the real one and loading
+ * it would report a page that does not exist. Unset in every other run.
+ */
+export function isMaskedUrl(url: string, mark = process.env.AUDIT_SKIP_URL_MARK): boolean {
+  return !!mark && (url.includes(mark) || url.includes(encodeURIComponent(mark)));
+}
+
 class CrawlerEngine {
   #options: CrawlerInternalOptions;
   #visual: boolean;
@@ -965,6 +974,11 @@ class CrawlerEngine {
         const BATCH_TIMEOUT = CRAWL_SETTINGS.BATCH_TIMEOUT || 300000;
         const batchPromise = Promise.allSettled(
           batch.map(async (url: string) => {
+            if (isMaskedUrl(url)) {
+              console.log(`   Not loaded (its address was masked in the restored checkpoint): ${url}`);
+              progress.skip(url);
+              return { url, skipped: true };
+            }
             if (results.pageData.processedPages.has(url)) {
               // Only count as skip if it wasn't already counted at start (prevents double-counting on resume)
               if (!alreadyProcessedAtStart.has(url)) {
@@ -1107,7 +1121,7 @@ class CrawlerEngine {
 
           for (const url of retryPages) {
             if (abortRequested) break;
-            if (results.pageData.processedPages.has(url)) continue;
+            if (results.pageData.processedPages.has(url) || isMaskedUrl(url)) continue;
 
             const attempt = (results.pageData.attempts[url] || 0) + 1;
             console.log(`   Retry ${attempt}/${maxRetries}: ${url}`);

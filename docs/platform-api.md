@@ -845,7 +845,7 @@ create table action_log (
 
 Not settled, to measure before step 6:
 
-- **Size of `pages.sections`.** abilio.com is about 18 000 pages in 12 MB gzipped. Postgres compresses less well than gzip, so a rough estimate is 100–200 MB in the database for an audit that size. Not measured. Keep `sections` to the fields a consumer reads, set `lz4` compression on the column, and load one large audit before the page tables ship.
+- **Size of `pages.sections`.** Measured 2026-11-21 on the stored abilio.com run (910 pages): 25.5 kB per page row, 26 MB for the audit; ten times the pages gives 262 MB, so about 29 MB per 1 000 pages. The 18 000-page crawl would be roughly 500 MB, above the earlier 100–200 MB estimate. Still to do: keep `sections` to the fields a consumer reads, try `lz4` on the column, and load one real large audit. Numbers and method: build guide, "After the code review".
 - **Growth of `finding_occurrences` and `page_links`.** They grow with every full audit and are kept forever. No partitioning is planned; partitioning by audit age may be needed later.
 - **Measured on the local build (2026-11-21), site part only.** All 838 stored runs (full, lead, single-page) import in 93 s. The stored abilio.com run here has 910 pages (23 MB on disk, not the 18 000-page crawl above): its site document is 59 KB (21 KB in the `jsonb` column), 86 finding rows, built and loaded in 0.5 s. All 838 runs together: `audit_documents` 27 MB, `findings` 29 MB (91 466 rows). Page rows (step 6) are not measured yet.
 - **`findings.code` and unknown codes.** The foreign key means the loader must insert a new derived code into `check_types` before the finding, or use the `untyped` row (§8.2).
@@ -1098,8 +1098,12 @@ Cut from the first build because the first consumer does not need them. Each com
 | MCP auth | API keys now; OAuth only if an external client (e.g. claude.ai connectors) must connect |
 | Disclosure owner | Who works the `disclosures` queue (sending, follow-up). Must be named before step 3 ships |
 | Public result content | Decided 2026-11-21: the full quick-scan (or single-page) report |
-| Teaser PDF | The teaser PDF is what gets sent, so `lead-pipeline.ts teaser` should print it without being asked, as the one exception to "PDFs only with `--pdf`". Not decided |
+| Teaser PDF | Built 2026-11-21 as §8.9 describes: `lead-pipeline.ts teaser` prints `teaser.pdf` only with `--pdf`, and the review page links it only when it exists. The other option, printing it always because it is what gets sent, is still open |
 | Lifetime of the public result page | `/scan/{audit_id}` works for as long as the audit exists, so a shared link never expires. Option: the page stops after 30 days, with the screenshots; the data stays for us. Not decided |
+| Re-scoring inside reads | `get_site` and `get_lead_summary` re-compute stale scores before answering: about 1 s at 910 pages, over 10 s at 9 100. Option: answer with the stored scores marked as stale and let the cron catch up. Not decided |
+| Where reports are rendered in production | Rendering and re-scoring run the audit tool as a child process, which a Vercel function cannot do as it is. Options: a worker job, or bundling the generator. Not decided (build guide §8, item 3) |
+
+The full list of what deployment still needs is in the build guide, §8.
 
 To check before the first deployment (the local build does not need them), because the design leans on them and they were not verified:
 

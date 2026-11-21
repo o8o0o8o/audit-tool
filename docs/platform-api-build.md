@@ -265,19 +265,31 @@ The local build is done when these five pass, in order (they are the five checks
 
 ## 8. Left for deployment
 
-Not needed for the local build, and not to be guessed at while building it:
+The app does not start in production yet: `PLATFORM_MODE=production` throws on purpose. What has to exist first, as of 2026-11-21:
 
-- The production implementations of the three interfaces, and the four platform checks in design §12.
-- Whether Vercel builds `web/` with imports from the root `lib/model/`, or the repo moves to yarn workspaces.
-- The database driver: `pg` with a pool works locally; on Vercel it needs Neon's pooled address, to be confirmed with one pass on a Neon branch.
-- Copying existing public Blob uploads to the private store and removing the public copies.
-- `audit.yml` rewritten to run `scripts/platform-worker.ts` with `id-token: write`.
+1. **Production implementations of the three interfaces.** Only the local ones exist. To write: a Vercel Blob `FileStore`, a GitHub Actions `Dispatcher`, and a `WorkerIdentity` that verifies GitHub's OIDC token.
+2. **The worker workflow.** `.github/workflows/audit.yml` is still the old flow with `upload-results.mjs`. It has to run `scripts/platform-worker.ts` with `id-token: write`.
+3. **Report rendering and re-scoring.** Both run the audit tool as a child process from the repo root with tsx (`scripts/render-report.ts`, `scripts/score-run.ts`). That does not work in a Vercel function as it is. Options: a worker job that renders and stores the HTML, or a build that bundles the generator. The generator used about 600 MB of memory for a 910-page report, which also has to fit. Not decided.
+4. **Crons.** Locally `web/scripts/local-crons.ts` loops over reaper, dispatch, jobs, loader, re-score, webhooks and retention. Production needs a cron route for each and entries in `web/vercel.json`.
+5. **The database.** Nothing has run against Neon. `pg` with a pool works locally; on Vercel it needs Neon's pooled address. One pass on a Neon branch has to confirm the pooled connection, the advisory locks through the pooler, and the seven migrations.
+6. **The four platform checks** in design §12 (cron frequency, Blob upload tokens, images in the sandboxed report, GitHub OIDC claims). None is done.
+7. **The build.** Whether Vercel builds `web/` with imports from the root `lib/model/`, or the repo moves to yarn workspaces.
+8. **The public site** (step 5): public quick scan and single page, with Turnstile and rate limits. Today `/` redirects to `/internal`.
+9. **Existing data.** Copying the existing public Blob uploads to the private store and removing the public copies.
+
+Before going live:
+
+- **Secrets and settings:** production values for `SESSION_SECRET`, `REPORT_TOKEN_SECRET`, the worker secret or OIDC audience, and `INTERNAL_PASSWORD_HASH`. The login limit believes forwarded headers only on Vercel or with `TRUST_PROXY=1`.
+- **Untested paths:** the worker's "no progress for 30 minutes" kill, and the cron script run as a whole process.
+- **Open decisions:** design §12.
+
+Order: an internal-only deployment first (items 1–7), one real audit end to end on a preview deployment against a Neon branch, then the public site and the data copy. Item 3 has a design choice in it and is settled first.
 
 ## Built so far (2026-11-21)
 
 Steps 0–4 exist as described above, with these differences:
 
-- **Migrations:** three files, `0000_step1_core`, `0001_step2_prospects_api`, `0002_step3_4_results`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
+- **Migrations:** seven files, `0000_step1_core` to `0006_perf_indexes`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
 - **`prospects.extra`** (`jsonb`, not in the design's SQL) keeps the other `companies.csv` columns, so the pipeline's API store round-trips every column it reads and writes.
 - **Imports end with `POST /api/v1/audits/{id}/complete`** (not in §6): `audits/import` creates the audit and returns an upload grant; `complete` records the uploaded artifacts and sets `built`.
 - **Finding codes (3.2):** explicit codes are seeded in `lib/model/check-types.json` (`scripts/build-check-types.ts`: the 50 most frequent findings across the stored runs plus every security and email-DNS finding, 69 codes). Analyzers do not set `Issue.code` yet; codes come from titles in `lib/model/finding-codes.ts`.
@@ -290,3 +302,33 @@ Steps 0–4 exist as described above, with these differences:
 - **Slow tests** (`tests/platform/worker.slow.test.ts`) run only with `PLATFORM_SLOW_TESTS=1`. The audit itself may still try PageSpeed/CrUX for the loopback fixture site; those calls fail harmlessly.
 
 Measured: all 838 stored runs build a valid model (`npx tsx scripts/build-model.ts --all`, 27 s) and imported in 93 s before the import was dropped; the end-to-end quick scan of example.com takes ~36 s from `start_audit` to `succeeded`; a worker killed during the crawl was resumed by the reaper and finished 12.5 min after the kill.
+
+## After the code review (2026-11-21)
+
+The local build was reviewed in four parts (access, run path, data, lead pipeline) and the findings fixed. What changed in behaviour:
+
+- **`do_not_contact`:** an upsert refuses such a row; the CSV prospect store also asks the platform guard when the platform is configured, and refuses when it cannot be reached; the seed moves the flag only towards true.
+- **State changes are guarded:** the worker's status write, cancel and the reaper each name the state they expect, so a cancelled audit stays cancelled and gets one webhook.
+- **Limits:** one attempt may run 350 / 45 / 20 minutes (full / quick / page) in the worker and 390 minutes in the reaper; a run with no progress for 30 minutes is killed and retried; PDF jobs and failed loads end after three tries.
+- **Secrets:** snapshots are masked before upload and deleted when the audit ends; masking covers files of any size, `.gz` files and the raw archive; a file that cannot be masked is not uploaded; publishing masks a temporary copy. A resumed run does not load a URL that was masked in its checkpoint.
+- **Reports:** clients get report links only for `succeeded` audits; raw archives, gate evidence and expired files are never served.
+- **Addresses:** webhook and audit-target checks cover IPv4 inside IPv6 and private hosts; `start_audit` refuses private targets outside local mode.
+- **Login:** counted atomically, with an overall cap of 30 failures per 15 minutes; a password change or a logout ends the session on the server.
+- **Scores:** the loader stores no scoring version; stored scores are re-computed when the scoring code changes, on read and by the cron. CLI history keeps `SCORING_VERSION` (`lib/scoring/scoring-version.ts`, raised by hand) and gives no score difference across versions.
+- **Model:** findings seen only on blocked pages are removed from the stored run data too; finding codes are deterministic (a title that is not a stable check title is `untyped`); `list_findings` has a cursor and a total; the crawl saves the llms.txt result; pages carry a URL template.
+- **Routes:** `/api/v1/guard` needs `prospects:read` or `audits:publish`; an import is finished only by the client that began it.
+
+Measured on local Docker Postgres with `scripts/measure-platform.ts` (abilio.com, 910 pages, and the same pages repeated ten times):
+
+| Step | 910 pages | 9 100 pages |
+|---|---|---|
+| Load into Postgres | 1.8 s | 16 s |
+| Re-score | 1.3 s | 11–12 s |
+| Rebuild the run folder for a render | 0.9 s | 7.5–9 s |
+| `get_site` | 15 ms | 14 ms |
+| `list_findings`, first 100 | 1 ms | 1 ms |
+| `pages` table | 26 MB | 262 MB |
+
+A page row is 25.5 kB on average for this run. The 9 100-page case is copied pages, not a real large site, and there is no network latency to a hosted database in these numbers.
+
+Tests: `yarn test` runs 1377 tests; the five slow worker tests need `PLATFORM_SLOW_TESTS=1`.

@@ -30,7 +30,7 @@ export default function LoginPage() {
     <section className="section">
       <div className="container">
         <h1 className="section__title section__title--sm">Internal login</h1>
-        <form className="contacts-form" onSubmit={onSubmit} style={{ maxWidth: 420 }}>
+        <form className="internal-form" onSubmit={onSubmit} style={{ maxWidth: 440 }}>
           <div className="contacts-form__item">
             <label className="contacts-form__label" htmlFor="password">
               Password
@@ -38,6 +38,7 @@ export default function LoginPage() {
             <input
               id="password"
               name="password"
+              placeholder="Password"
               type="password"
               autoComplete="current-password"
               required

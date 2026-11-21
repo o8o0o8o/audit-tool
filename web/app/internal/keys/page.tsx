@@ -67,9 +67,9 @@ export default function KeysPage() {
       <div className="container">
         <h1 className="section__title section__title--sm">API keys</h1>
         {created && (
-          <div className="card run-details" role="status">
+          <div className="internal-form run-details" role="status" style={{ marginBottom: 24 }}>
             <p>Copy the key now; it is not shown again.</p>
-            <code data-testid="new-key" style={{ wordBreak: 'break-all' }}>
+            <code data-testid="new-key" className="code-box">
               {created.key}
             </code>
             {created.webhookSecret && (
@@ -79,12 +79,12 @@ export default function KeysPage() {
             )}
           </div>
         )}
-        <form className="contacts-form" onSubmit={create} style={{ maxWidth: 640 }}>
+        <form className="internal-form" onSubmit={create}>
           <div className="contacts-form__item">
             <label className="contacts-form__label" htmlFor="key-name">
               Name
             </label>
-            <input id="key-name" name="name" required className="form-input" />
+            <input id="key-name" name="name" placeholder="Name (e.g. crm-sync)" required className="form-input" />
           </div>
           <div className="contacts-form__item">
             <span className="contacts-form__label">Scopes</span>
@@ -101,13 +101,20 @@ export default function KeysPage() {
             <label className="contacts-form__label" htmlFor="key-rate">
               Calls per hour
             </label>
-            <input id="key-rate" name="rate" type="number" defaultValue={60} className="form-input" />
+            <input
+              id="key-rate"
+              name="rate"
+              type="number"
+              placeholder="Calls per hour"
+              defaultValue={60}
+              className="form-input"
+            />
           </div>
           <div className="contacts-form__item">
             <label className="contacts-form__label" htmlFor="key-webhook">
               Webhook URL (optional)
             </label>
-            <input id="key-webhook" name="webhookUrl" className="form-input" />
+            <input id="key-webhook" name="webhookUrl" placeholder="Webhook URL (optional)" className="form-input" />
           </div>
           {error && <p className="error">{error}</p>}
           <button className="btn" type="submit">
@@ -116,7 +123,7 @@ export default function KeysPage() {
         </form>
         <ul className="run-list">
           {keys.map((k) => (
-            <li key={k.id}>
+            <li key={k.id} className="key-row">
               <strong>{k.name}</strong>{' '}
               <span className="muted">
                 {k.scopes.join(', ')} · {k.rateLimitPerHour}/h{k.webhookUrl ? ` · webhook ${k.webhookUrl}` : ''}

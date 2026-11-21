@@ -227,3 +227,85 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Internal pages (/internal/*): a page title sized for a tool, not the site's 120px hero. */
+.section__title--sm {
+  --title-size: clamp(32px, 5vw, 56px);
+  margin-bottom: 32px;
+  overflow-wrap: anywhere;
+}
+
+.internal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 640px;
+  padding: 32px;
+  border: 1px solid var(--color-grey-200);
+  border-radius: 24px;
+  background: var(--color-dark);
+}
+
+.internal-form .btn {
+  align-self: flex-start;
+}
+
+.internal-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.internal-filter .form-input {
+  width: auto;
+  flex: 1 1 200px;
+  max-width: 280px;
+}
+
+.table-scroll {
+  margin-top: 32px;
+  overflow-x: auto;
+}
+
+.run-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.run-table th,
+.run-table td {
+  padding: 12px 16px 12px 0;
+  border-bottom: 1px solid var(--color-grey-200);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.run-table th {
+  color: var(--color-grey-500, #9a9a9a);
+  font-weight: 500;
+}
+
+.run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.key-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.code-box {
+  display: block;
+  padding: 12px;
+  border-radius: 12px;
+  background: #000;
+  word-break: break-all;
+}

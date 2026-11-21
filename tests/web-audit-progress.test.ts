@@ -112,6 +112,24 @@ void describe('ProgressReporter progress file', () => {
       else process.env.AUDIT_PROGRESS_FILE = prev;
     }
   });
+
+  void it('counts pages of earlier crawl passes in the file (sitemap pass + discovered-links pass)', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'progress-')), 'progress.json');
+    const prev = process.env.AUDIT_PROGRESS_FILE;
+    process.env.AUDIT_PROGRESS_FILE = file;
+    try {
+      // 538 sitemap pages done; the second pass has 81 discovered URLs.
+      const reporter = new ProgressReporter(81, 2000, 0, 'default', true, 538);
+      for (let i = 0; i < 81; i++) reporter.success(`https://example.com/${i}`, 10);
+      reporter.printSummary();
+      const doc = JSON.parse(readFileSync(file, 'utf8'));
+      assert.equal(doc.processed, 619);
+      assert.equal(doc.total, 619);
+    } finally {
+      if (prev === undefined) delete process.env.AUDIT_PROGRESS_FILE;
+      else process.env.AUDIT_PROGRESS_FILE = prev;
+    }
+  });
 });
 
 void describe('report links', () => {

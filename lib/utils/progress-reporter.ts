@@ -32,6 +32,8 @@ class ProgressReporter {
   #onResize;
   #progressFile: string | undefined;
   #lastProgressWrite = 0;
+  /** Pages finished by earlier crawl passes of this run; added to the progress file only. */
+  #fileOffset: number;
 
   /**
    * Create a ProgressReporter
@@ -40,6 +42,8 @@ class ProgressReporter {
    * @param {number} alreadyProcessed - Items already processed from previous run (for resume)
    * @param {string} colorScheme - Color scheme: 'default' (red→yellow→green) or 'discovered' (cyan→blue→magenta)
    * @param {boolean} verbose - Whether to show per-URL logging (default: false)
+   * @param {number} fileOffset - Pages done by earlier passes of the same run: the progress file
+   *   reports the whole run (`processed` and `total` both include them), the console only this pass
    */
   constructor(
     total: number,
@@ -47,7 +51,9 @@ class ProgressReporter {
     alreadyProcessed: number = 0,
     colorScheme: string = 'default',
     verbose: boolean = false,
+    fileOffset: number = 0,
   ) {
+    this.#fileOffset = fileOffset;
     this.#total = total;
     this.#processed = 0;
     this.#succeeded = 0;
@@ -151,8 +157,8 @@ class ProgressReporter {
     if (!force && now - this.#lastProgressWrite < PROGRESS_FILE_INTERVAL_MS) return;
     this.#lastProgressWrite = now;
     const doc: AuditProgressFile = {
-      processed: this.#processed + this.#skipped,
-      total: this.#total,
+      processed: this.#fileOffset + this.#processed + this.#skipped,
+      total: this.#fileOffset + this.#total,
       phase: this.#colorScheme === 'discovered' ? 'discovered' : 'pages',
       updatedAt: new Date(now).toISOString(),
     };

@@ -7,6 +7,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { MODEL_VERSION } from '../model/version';
 import { normalizeRunOptions, toCliArgs } from '../model/run-options';
 import { AppClient, StaleAttempt, type RegisteredAudit } from './client';
@@ -360,6 +361,9 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
       await client.status({ status: 'failed', error: 'no audit results produced' });
       return finish(1);
     }
+    // The progress file holds the last crawl pass's counter; the run's real page count is in its manifest.
+    const pages = crawledPageCount(runDir);
+    if (pages != null) await client.progress({ processed: pages, total: pages });
     const ctx: StepContext = { audit, runDir, repoRoot: env.repoRoot };
     // Platform steps: each is separate from the audit and never fails it (except the model build).
     for (const [phase, fn] of [
@@ -393,5 +397,18 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
       .status({ status: 'failed', error: String(err instanceof Error ? err.message : err).slice(0, 1000) })
       .catch(() => {});
     return finish(1);
+  }
+}
+
+/** Pages the finished run loaded (`manifest.progress.processedPages`), or null when it cannot be read. */
+export function crawledPageCount(runDir: string): number | null {
+  try {
+    const manifest = JSON.parse(gunzipSync(readFileSync(path.join(runDir, 'manifest.json.gz'))).toString('utf8')) as {
+      progress?: { processedPages?: unknown };
+    };
+    const pages = manifest.progress?.processedPages;
+    return Array.isArray(pages) ? pages.length : null;
+  } catch {
+    return null;
   }
 }

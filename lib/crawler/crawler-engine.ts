@@ -909,6 +909,9 @@ class CrawlerEngine {
         alreadyProcessedCount,
         colorScheme,
         this.#options.verbose,
+        // Pages loaded by an earlier pass (the sitemap pass, before the discovered-links pass), so the
+        // progress file counts the whole run instead of restarting at this pass's own total.
+        results.pageData.processedPages.size - alreadyProcessedCount,
       );
 
       // Graceful shutdown on SIGINT (Ctrl+C)

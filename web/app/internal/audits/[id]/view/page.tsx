@@ -24,7 +24,12 @@ export default async function ReportView({ params }: { params: Promise<{ id: str
             Report only
           </a>
         </p>
-        <iframe className="report-page-frame" data-testid="report-page-frame" src={src} title="Audit report" />
+        <iframe
+          className="report-page-frame"
+          data-testid="report-page-frame"
+          src={`${src}?embed=1`}
+          title="Audit report"
+        />
       </div>
     </section>
   );

@@ -98,7 +98,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             <iframe
               className="report-frame"
               data-testid="report-frame"
-              src={`/internal/audits/${a.audit_id}/report`}
+              src={`/internal/audits/${a.audit_id}/report?embed=1`}
               title="Audit report"
             />
           )}

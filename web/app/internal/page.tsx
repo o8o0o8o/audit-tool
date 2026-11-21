@@ -389,7 +389,7 @@ export default function DispatchPage() {
 
     const main = findMainReport(status?.files);
     if (state === 'succeeded' && main) {
-      const src = main.url ?? `/internal/audits/${id}/report`;
+      const src = `${main.url ?? `/internal/audits/${id}/report`}?embed=1`;
       return (
         <section className="run-result">
           <p className="run-result-actions">

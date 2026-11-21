@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!(await internalPrincipal())) return NextResponse.redirect(new URL('/internal/login', request.url));
+  const embed = new URL(request.url).searchParams.get('embed') === '1' ? '?embed=1' : '';
   return NextResponse.redirect(
-    new URL(`/r/${makeReportToken(id, secretFromEnv('REPORT_TOKEN_SECRET'))}/report.html`, request.url),
+    new URL(`/r/${makeReportToken(id, secretFromEnv('REPORT_TOKEN_SECRET'))}/report.html${embed}`, request.url),
   );
 }

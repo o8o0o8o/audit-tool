@@ -33,10 +33,8 @@ function getHistoricalProgress(data: ReportSectionData) {
   const currentIssues = (summaryObj.totalIssues ?? 0) as number;
   const auditCount = trendData?.labels?.length ?? 1;
 
-  // Show first audit message if no previous audit
-  if (!previousAudit || !trendData || auditCount < 2) {
-    return '<p class="history-note">Trends appear after your second audit.</p>';
-  }
+  // No earlier audit: no History section (and no tab) at all.
+  if (!previousAudit || !trendData || auditCount < 2) return '';
 
   const scoreDelta = currentScore - previousAudit.summary.overallScore;
   const issuesDelta = currentIssues - previousAudit.summary.totalIssues;

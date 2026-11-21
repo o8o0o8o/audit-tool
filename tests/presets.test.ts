@@ -170,7 +170,8 @@ void describe('preset report rendering', () => {
 
   void it('sales HTML renders its sections in preset order and drops the rest', () => {
     const html = renderHtml('sales');
-    const ids = ['executive-summary', 'technology-stack', 'content-insights', 'issues-detail', 'performance'];
+    // The fixture has no performance data, so its Performance section is left out.
+    const ids = ['executive-summary', 'technology-stack', 'content-insights', 'issues-detail'];
     const positions = ids.map((id) => html.indexOf(`<div id="${id}">`));
     for (const p of positions) assert.ok(p > 0);
     assert.deepEqual(

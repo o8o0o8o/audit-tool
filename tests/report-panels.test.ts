@@ -91,10 +91,10 @@ void describe('report panels', () => {
     assert.deepEqual(counts, { total: 15, critical: 12, high: 0, medium: 0, low: 3 });
   });
 
-  void it('a section without data keeps its panel with an explicit empty state', () => {
+  void it('an audit without performance data has no Performance section and no tab', () => {
     const html = renderNoPresetHtml();
-    assert.ok(panelHeader(html, 'performance').includes('No data'));
-    assert.match(html, /<div id="performance"><p class="panel-empty">No performance data in this audit/);
+    assert.doesNotMatch(html, /id="panel-performance"/);
+    assert.doesNotMatch(html, /data-target="performance"/);
   });
 
   void it('section tabs follow the body order, with the crawl setup just before the pages', () => {

@@ -171,28 +171,27 @@ void describe('issues table cap', () => {
 });
 
 void describe('history section placement', () => {
-  void it('first audit renders a single note, no cards or first-audit panel', () => {
-    const html = getHistoricalProgress(sectionData({}));
-    assert.equal(html, '<p class="history-note">Trends appear after your second audit.</p>');
+  void it('a first audit has no History section and no History tab', () => {
+    assert.equal(getHistoricalProgress(sectionData({})), '');
     const report = renderNoPresetHtml();
+    assert.doesNotMatch(report, /id="history"/);
+    assert.doesNotMatch(report, /data-target="history"/);
+    assert.doesNotMatch(report, /Trends appear after your second audit/);
     assert.doesNotMatch(report, /This is your first audit!/);
-    assert.doesNotMatch(report, /Current Score/);
   });
 
-  void it('no-preset order puts history after the issues and before the pages table', () => {
+  void it('no-preset order: issues, then config info, then the pages table last', () => {
     const report = renderNoPresetHtml();
     const issues = report.indexOf('class="issues-section"');
-    const history = report.indexOf('class="history-note"');
     const config = report.indexOf('class="info-section"');
     const pages = report.indexOf('<div id="pages-table">');
-    assert.ok(issues >= 0 && history > issues, 'history after issues');
-    assert.ok(config > history && pages > config, 'config info then pages table last');
+    assert.ok(issues >= 0 && config > issues && pages > config);
   });
 
   void it('an order without the pages table puts config info last', () => {
     const report = renderHtml(writeManyIssuesAudit(), { sections: ['issues-detail', 'history'] });
-    const history = report.indexOf('class="history-note"');
+    const issues = report.indexOf('class="issues-section"');
     const config = report.indexOf('class="info-section"');
-    assert.ok(history >= 0 && config > history);
+    assert.ok(issues >= 0 && config > issues);
   });
 });

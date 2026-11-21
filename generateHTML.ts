@@ -358,8 +358,9 @@ function generateHTML(
           </div>`,
     'ui-issues': () => getUiIssues(sectionData),
     performance: () => {
+      // No performance data: no Performance section (and no tab), like an empty History.
       const html = getPerformanceStats(sectionData);
-      return `<div id="performance">${html.trim() ? html : emptyState('No performance data in this audit. Run it with --perf to measure Core Web Vitals.')}</div>`;
+      return html.trim() ? `<div id="performance">${html}</div>` : '';
     },
     charts: () => `<div id="charts">
           ${getChartsSection()}

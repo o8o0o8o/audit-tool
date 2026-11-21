@@ -42,7 +42,6 @@ void describe('HTML report — FocusReactive brand theme', () => {
     for (const id of [
       'executive-summary',
       'issues-detail',
-      'performance',
       'charts',
       'technology-stack',
       'content-insights',

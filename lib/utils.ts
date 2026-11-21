@@ -624,12 +624,13 @@ function parseJsonLdSchemas(parsedPage: {
 
 /**
  * Overall score: weighted mean of category scores blended with the worst category,
- * so one failing category drags the overall down. A missing category counts as 0.
+ * so one failing category drags the overall down. A category that was not measured is left out;
+ * when none was measured there is no overall score (null), never 0.
  */
 function blendOverallScore(
   categoryScores: Record<string, number | undefined>,
   categoryWeights: Record<string, number> = SCORING.CATEGORY_WEIGHTS,
-): number {
+): number | null {
   let weightedMean = 0;
   const values: number[] = [];
   // A category that was not measured (undefined) is left out; the others' weights are rescaled.
@@ -641,8 +642,9 @@ function blendOverallScore(
     totalWeight += weight;
     values.push(value);
   }
-  if (totalWeight > 0) weightedMean /= totalWeight;
-  const worst = values.length ? Math.min(...values) : weightedMean;
+  if (totalWeight <= 0) return null;
+  weightedMean /= totalWeight;
+  const worst = Math.min(...values);
   const w = SCORING.OVERALL_MEAN_WEIGHT;
   const blended = weightedMean * w + worst * (1 - w);
   return Math.round(Math.max(0, Math.min(100, blended)));
@@ -663,7 +665,7 @@ function estimateScoreAfterFixes(
     if (typeof score === 'number') fixed[cat] = score + (100 - score) * FIX_RECOVERY_RATIO;
   }
   const predicted = blendOverallScore(fixed, categoryWeights);
-  return predicted > overallScore ? predicted : null;
+  return predicted !== null && predicted > overallScore ? predicted : null;
 }
 
 /**

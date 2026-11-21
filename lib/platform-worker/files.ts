@@ -86,7 +86,9 @@ export async function uploadRun(
   const files = walkFiles(runDir)
     .map((f) => path.relative(runDir, f).split(path.sep).join('/'))
     .map((rel) => classify(rel, urls))
-    .filter((f): f is StoredFile => f !== null);
+    .filter((f): f is StoredFile => f !== null)
+    // A file that could not be masked is never stored (platform/masked.json says which).
+    .filter((f) => !masked[f.rel]?.notMasked);
   const grant: { current: UploadGrant; area: 'audit' } = { current: await client.uploadGrant('audit'), area: 'audit' };
   const prefix = `audits/${auditId}/${attempt}/`;
   const out: ArtifactRecord[] = [];

@@ -21,6 +21,7 @@ export const PageRecord = z.object({
   lang: z.string().nullable(),
   indexable: z.boolean().nullable(),
   inSitemap: z.boolean().nullable(),
+  depth: int.default(null).describe('Path depth of the URL'),
   wordCount: int,
   schemaTypes: z.array(z.string()),
   ttfbMs: int,
@@ -29,7 +30,19 @@ export const PageRecord = z.object({
   fcpMs: int,
   inpMs: int,
   tbtMs: int,
+  speedIndexMs: int.default(null),
+  lcpElement: z.string().nullable().default(null).describe('Selector of the largest contentful element (lab run)'),
   bytes: int,
+  weight: z
+    .object({
+      totalBytes: int,
+      imageBytes: int,
+      thirdPartyBytes: int,
+      requestsByType: z.record(z.string(), z.number()).nullable(),
+    })
+    .nullable()
+    .default(null)
+    .describe('Transfer size as the crawl recorded it; bytes per resource type are not recorded'),
   requests: int,
   selectionReason: z.string().nullable().describe('Quick scans: why the page was picked'),
   sections: z.record(z.string(), z.unknown()).describe('The full page record as the analyzers wrote it'),

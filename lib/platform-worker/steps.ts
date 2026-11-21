@@ -72,9 +72,14 @@ async function gate(ctx: StepContext): Promise<void> {
 }
 
 async function mask(ctx: StepContext): Promise<void> {
-  const masked = maskSecretsInRun(ctx.runDir);
-  const n = Object.keys(masked).length;
-  if (n) console.log(`[worker] masked secrets in ${n} stored file(s)`);
+  // The whole run folder, before the model and the raw archive are built from it.
+  const record = maskSecretsInRun(ctx.runDir, undefined, {
+    quarantineDir: path.join(path.dirname(ctx.runDir), '.not-masked', path.basename(ctx.runDir)),
+  });
+  const all = Object.values(record);
+  const failed = all.filter((r) => r.notMasked).length;
+  if (all.length) console.log(`[worker] masked secrets in ${all.length - failed} stored file(s)`);
+  if (failed) console.log(`[worker] ${failed} file(s) could not be masked and are not stored`);
 }
 
 async function build(ctx: StepContext): Promise<void> {

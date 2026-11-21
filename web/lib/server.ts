@@ -6,7 +6,7 @@ import type { Platform } from './platform/types';
 import { authenticateApiKey, SESSION_COOKIE, sessionPrincipal } from './core/auth';
 import { CoreError, errorResponse } from './core/errors';
 import type { Principal } from './core/principal';
-import { secretFromEnv } from './core/tokens';
+import { sessionKeyFromEnv } from './core/tokens';
 import { onAuditFinished } from './core/webhooks';
 import { dispatchNext } from './core/queue';
 
@@ -23,7 +23,7 @@ export const onFinished = (auditId: string) => onAuditFinished(getDb(), auditId)
 /** The internal session from the cookie, or null. */
 export async function internalPrincipal(): Promise<Principal | null> {
   const jar = await cookies();
-  return sessionPrincipal(jar.get(SESSION_COOKIE)?.value, secretFromEnv('SESSION_SECRET'));
+  return sessionPrincipal(jar.get(SESSION_COOKIE)?.value, sessionKeyFromEnv());
 }
 
 export async function requireInternalPrincipal(): Promise<Principal> {
@@ -47,10 +47,14 @@ export async function kickQueue(): Promise<void> {
   }
 }
 
+/**
+ * The caller's address for rate limits. Forwarded headers are believed only behind a proxy that
+ * sets them itself (Vercel, or TRUST_PROXY=1); anywhere else the caller could write them, so
+ * every direct caller shares one bucket.
+ */
 export function clientIp(request: Request): string {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1'
-  );
+  if (!process.env.VERCEL && process.env.TRUST_PROXY !== '1') return 'direct';
+  return request.headers.get('x-real-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'direct';
 }
 
 export async function readJson(request: Request): Promise<unknown> {

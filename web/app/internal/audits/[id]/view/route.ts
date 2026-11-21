@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { findArtifactByKind, makeReportToken, REPORT_HEADERS } from '../../../../../lib/core/reports';
+import {
+  findArtifactByKind,
+  makeReportToken,
+  REPORT_HEADERS,
+  REPORT_TOKEN_TTL_SECONDS,
+} from '../../../../../lib/core/reports';
 import { secretFromEnv } from '../../../../../lib/core/tokens';
 import { loadShell, wrapReport } from '../../../../../lib/report-shell';
 import { renderReportHtml } from '../../../../../lib/core/render-report';
@@ -15,6 +20,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response('This audit has no HTML report.', { status: 404 });
   const url = new URL(request.url);
   if (!(await internalPrincipal()))
     return NextResponse.redirect(new URL(`/internal/login?next=${encodeURIComponent(url.pathname)}`, url));
@@ -27,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!file) return new Response('This audit has no HTML report.', { status: 404 });
     report = await new Response(file.body).text();
   }
-  const token = makeReportToken(id, secretFromEnv('REPORT_TOKEN_SECRET'));
+  const token = makeReportToken(id, secretFromEnv('REPORT_TOKEN_SECRET'), Date.now(), REPORT_TOKEN_TTL_SECONDS, true);
   const shell = await loadShell(url.origin);
   return new Response(wrapReport(report, shell, `/r/${token}/`), {
     headers: { ...REPORT_HEADERS, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store' },

@@ -1,5 +1,6 @@
 // Enable TypeScript imports via tsx
 import * as fs from 'fs';
+import { SCORING_VERSION, scoringVersionOf } from './lib/scoring/scoring-version';
 import * as path from 'path';
 import * as https from 'https';
 import * as http from 'http';
@@ -67,7 +68,11 @@ process.on('uncaughtException', (error) => {
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 /** Previous audit's overall score for "vs Previous" — `??`, not `||`, so a real 0 isn't discarded as unmeasured. */
-export function previousScoreFrom(lastAudit: { summary?: { overallScore?: number | null } } | undefined): number | null {
+export function previousScoreFrom(
+  lastAudit: { summary?: { overallScore?: number | null } } | undefined,
+): number | null {
+  // A snapshot scored by older rules gives no "vs Previous": the difference would not be the site's.
+  if (lastAudit && scoringVersionOf(lastAudit) !== SCORING_VERSION) return null;
   return lastAudit?.summary?.overallScore ?? null;
 }
 
@@ -176,7 +181,15 @@ async function audit() {
       for (let i = 0; i < urls.length; i++) {
         console.log(`\n[${i + 1}/${urls.length}] Auditing: ${urls[i]}\n`);
         try {
-          const batchSeo = new SEOData(urls[i], false, args.perf, false, args.concurrency, null as string | null, siteOptions);
+          const batchSeo = new SEOData(
+            urls[i],
+            false,
+            args.perf,
+            false,
+            args.concurrency,
+            null as string | null,
+            siteOptions,
+          );
           await batchSeo.audit();
 
           const score = batchSeo.data.analysis?.summary?.overallScore ?? 0;
@@ -340,8 +353,7 @@ async function audit() {
       // from config, or when that preset is `custom` (CLI --preset=sales must
       // not inherit a config's custom section list and then fail validation).
       const useConfigLists = args.preset == null || presetName === 'custom';
-      const sections =
-        args.sections.length > 0 ? args.sections : useConfigLists ? (config.sections ?? []) : [];
+      const sections = args.sections.length > 0 ? args.sections : useConfigLists ? (config.sections ?? []) : [];
       const checks = args.checks.length > 0 ? args.checks : useConfigLists ? (config.checks ?? []) : [];
       resolvedPreset = resolvePreset(presetName, { sections, checks });
     } catch (e: unknown) {
@@ -382,9 +394,14 @@ async function audit() {
     if (resolveVisual(args.visual, config)) console.log(`🖼️  Visual (UI defect) checks: enabled`);
     if (!resolveAgentic(args.agentic, config)) console.log(`🤖 Agentic browsing checks: disabled`);
     if (args.limit) console.log(`🔢 Page limit: ${args.limit}${args.lead ? ' in total (lead scan)' : ''}`);
-    if (args.page) console.log(`📄 Single page: ${args.page} (checks that need many pages are skipped, no history entry)`);
-    if (args.lead) console.log(`🎯 Lead scan: passive checks only, results in ${LEAD_MODE.resultsBase}/, no curated report, no history entry`);
-    else if (args.passive) console.log(`🤫 Passive mode: site probes that go beyond reading published pages are skipped`);
+    if (args.page)
+      console.log(`📄 Single page: ${args.page} (checks that need many pages are skipped, no history entry)`);
+    if (args.lead)
+      console.log(
+        `🎯 Lead scan: passive checks only, results in ${LEAD_MODE.resultsBase}/, no curated report, no history entry`,
+      );
+    else if (args.passive)
+      console.log(`🤫 Passive mode: site probes that go beyond reading published pages are skipped`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
 
     // Check if comparison mode

@@ -4,7 +4,8 @@ import {
   findArtifactByPath,
   findAuditArtifact,
   REPORT_HEADERS,
-  reportTokenAudit,
+  reportTokenTarget,
+  servedByReportLink,
 } from '../../../../lib/core/reports';
 import { renderReportHtml } from '../../../../lib/core/render-report';
 import { secretFromEnv } from '../../../../lib/core/tokens';
@@ -29,9 +30,9 @@ const deny = (status: number, message: string) =>
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string; path: string[] }> }) {
   const { token, path } = await params;
-  const auditId = reportTokenAudit(token, secretFromEnv('REPORT_TOKEN_SECRET'));
-  if (!auditId) return deny(403, 'This link has expired or is not valid.');
   const { db, platform } = ctx();
+  const auditId = await reportTokenTarget(db, token, secretFromEnv('REPORT_TOKEN_SECRET'));
+  if (!auditId) return deny(403, 'This link has expired or is not valid.');
   if (path.length === 1 && path[0] === 'report.html') {
     // Rendered with the current report code (cached per code version); the stored HTML is the fallback.
     const html = await renderReportHtml(db, platform.files, auditId);
@@ -46,7 +47,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
       : path.length === 2 && path[0] === 'a'
         ? await findAuditArtifact(db, auditId, path[1]!)
         : await findArtifactByPath(db, auditId, path);
-  if (!art) return deny(404, 'not found');
+  if (!art || !servedByReportLink(art)) return deny(404, 'not found');
   const file = await platform.files.get(art.blobKey);
   if (!file) return deny(404, 'file no longer stored');
   return new Response(file.body, {

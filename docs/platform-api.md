@@ -60,9 +60,9 @@ flowchart LR
   - **Row parts**, written as NDJSON chunks: one record per page (core fields plus typed per-analyzer sections), every finding occurrence, link edges, redirects, hreflang links, sitemap entries, lab metrics per page.
 
   Measured: raw JSON of large full audits is already 12 MB (abilio.com) and 25 MB (themeateater.com) gzipped, so one document per audit would be far too big to decompress on every read. The split keeps every read small: a page read touches one row.
-- **`buildAuditModel(runFolder)`** runs once at the end of an audit, in the worker. It is the only code that knows raw analyzer shapes. It reshapes what the run computed: it never re-runs an analyzer and never changes a score or a severity.
+- **`buildAuditModel(runFolder)`** runs once at the end of an audit, in the worker. It is the only code that knows raw analyzer shapes. It reshapes what the run computed: it never re-runs an analyzer, never changes a severity and does not score.
 - **The loader** (§3) inserts the chunks in batches, each in its own transaction, idempotent per chunk, and flips the audit to `succeeded` only after the last one. Readers only see succeeded audits, so a half-loaded audit is never visible.
-- **Scores and findings are computed once**, by the run. The renderer, the PDF, the tables and every consumer show the same numbers.
+- **Findings are computed once**, by the run. **Scores** start as the run's own; when the scoring code version changes, `rescore` re-computes the stored scores from the stored run data and writes the `scores` rows, the site document and the audit's scoring version in one transaction. The renderer, the PDF, the tables and every consumer show the same numbers.
 - **Locally** the same model is written next to the run folder (`model/`); the CLI needs no database.
 - **Consumers move to the model over time**: renderer, then CSV, history/comparison (becomes a query; `audit-history.json.gz` goes away), Phase 2/3 and the lead gate.
 
@@ -1083,7 +1083,7 @@ Cut from the first build because the first consumer does not need them. Each com
 | `query_sql`, row-level security | A real need for free queries by an agent | A per-request setting is not safe when the caller sends SQL (`set_config()` works inside a `SELECT`): use a separate login role with its own views |
 | REST mirror of the MCP tools, OpenAPI | A service that cannot speak MCP | Generated from the same zod schemas |
 | `compare_audits`, `search_sites` | The internal app or an agent needs them | Compare only equal `comparable_key`; report a finding whose check is newer than the older audit as `new_check`, not as a regression |
-| `rebuild-model` (rebuild old audits from raw archives) | The first breaking model change, or a new field wanted for old audits | Raw archives are kept for this. A rebuild must not show mixed rows: load into a new generation and switch in one transaction. It reshapes and never re-scores |
+| `rebuild-model` (rebuild old audits from raw archives) | The first breaking model change, or a new field wanted for old audits | Raw archives are kept for this. A rebuild must not show mixed rows: load into a new generation and switch in one transaction. The builder reshapes and does not score; stored scores are re-computed by `rescore` from the stored run data when the scoring code version changes, in one transaction |
 | One running audit shared by several clients (subscriptions) | A second client that starts audits | `external_ref` and the idempotency key then live per subscriber, with a unique key per (audit, client) |
 | MCP resources | — | |
 | Truth gate on public scans | A decision to show facts on the public page | Public scans stay passive and add no gate requests to a third party's site |

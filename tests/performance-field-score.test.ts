@@ -49,7 +49,8 @@ void describe('performance score without lab data', () => {
     assert.ok(withField.categoryScores.performance > 40, 'mostly good vitals must not score near 0');
 
     const without = ScoreCalculator.calculateSummary(analysis, pageData, pagesNoLab);
-    assert.equal(without.performanceSource, 'findings');
+    assert.equal(without.performanceSource, undefined, 'nothing measured: no source, like no score');
+    assert.equal(without.categoryScores.performance, undefined);
   });
 
   void it('lab metrics still win over real-user data', () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, gt, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { ACTIVE_AUDIT_STATUSES, actionLog, artifacts, audits, scanQuality, scores, sites } from '../../db/schema';
@@ -16,7 +16,7 @@ import {
 import { CoreError } from './errors';
 import { checkGuard, isProspectDomain } from './guard';
 import { assertPrincipal, hasScope, principalLabel, requireScope, type Principal } from './principal';
-import { findOrCreateSite, normalizeTarget, resolveSites } from './sites';
+import { findOrCreateSite, isPrivateHost, normalizeTarget, resolveSites } from './sites';
 
 export const StartAuditInput = z.object({
   url: z.string().min(1).describe('Site (any page of it) or, for mode=page, the page URL'),
@@ -68,7 +68,12 @@ export async function startAudit(
   db: Db,
   principal: Principal,
   rawInput: StartAuditInput,
-  opts: { now?: Date; source?: 'internal' | 'api' | 'pipeline' | 'public'; profile?: AuditProfile } = {},
+  opts: {
+    now?: Date;
+    source?: 'internal' | 'api' | 'pipeline' | 'public';
+    profile?: AuditProfile;
+    allowPrivateTarget?: boolean;
+  } = {},
 ): Promise<StartAuditResult> {
   const input = StartAuditInput.parse(rawInput);
   const now = opts.now ?? new Date();
@@ -94,6 +99,9 @@ export async function startAudit(
     throw new CoreError('forbidden', 'active audits are internal only');
 
   const target = normalizeTarget(input.url, mode === 'page');
+  // Every caller (form, API, MCP) is refused a local or private target; local mode audits fixtures.
+  if (process.env.PLATFORM_MODE !== 'local' && !opts.allowPrivateTarget && isPrivateHost(target.host))
+    throw new CoreError('invalid_input', 'url must not point at localhost or a private network');
   // 1. Scan guard.
   const guard = await checkGuard(db, target.host);
   if (!guard.allowed) throw new CoreError('do_not_contact', `${guard.registrableDomain} must not be scanned`);
@@ -101,14 +109,12 @@ export async function startAudit(
   const site = await findOrCreateSite(db, target.host);
   if (mode === 'full' && (await isProspectDomain(db, target.host))) {
     if (input.active) {
-      await db
-        .insert(actionLog)
-        .values({
-          principal: principalLabel(principal),
-          action: 'active_audit_of_prospect',
-          target: target.host,
-          at: now,
-        });
+      await db.insert(actionLog).values({
+        principal: principalLabel(principal),
+        action: 'active_audit_of_prospect',
+        target: target.host,
+        at: now,
+      });
     } else options = { ...options, passive: true };
   }
   const profile: AuditProfile = opts.profile ?? 'standard';
@@ -366,10 +372,16 @@ export async function cancelAudit(
   if (principal.kind === 'client' && row.createdByClientId !== principal.clientId)
     throw new CoreError('forbidden', 'not your audit');
   if ((TERMINAL_STATUSES as readonly string[]).includes(row.status)) return { audit_id: row.id, status: row.status };
-  await db
+  const done = await db
     .update(audits)
     .set({ status: 'cancelled', error: 'cancelled', finishedAt: now })
-    .where(eq(audits.id, row.id));
+    .where(and(eq(audits.id, row.id), notInArray(audits.status, [...TERMINAL_STATUSES])))
+    .returning({ id: audits.id });
+  if (!done.length) {
+    // It ended while this request was in flight: report what it became, queue no second webhook.
+    const after = await getAuditRow(db, auditId);
+    return { audit_id: row.id, status: after?.status ?? row.status };
+  }
   if (row.currentAttempt > 0 && deps.cancelRun) await deps.cancelRun(row.id, row.currentAttempt).catch(() => {});
   await deps.onFinished?.(row.id);
   return { audit_id: row.id, status: 'cancelled' };

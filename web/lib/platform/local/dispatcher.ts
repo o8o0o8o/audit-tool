@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'no
 import path from 'node:path';
 import type { DispatchRequest, Dispatcher } from '../types';
 import type { LocalWorkerIdentity } from './identity';
+import { killTree, processStart } from '../../../../lib/platform-worker/proc-tree';
 
 /** Env names never passed to a worker: the worker talks to the app only through worker routes. */
 const PRIVATE_ENV =
@@ -18,6 +19,11 @@ interface WorkerFile {
   pid: number;
   runId: string;
   startedAt: string;
+  /**
+   * The process's start time as `ps` prints it: a pid alone can belong to another process after a
+   * reboot or pid reuse. Null when `ps` could not be read at dispatch (then only the pid is checked).
+   */
+  procStart?: string | null;
 }
 
 /**
@@ -69,7 +75,12 @@ export class LocalDispatcher implements Dispatcher {
       stdio: ['ignore', log, log],
     });
     if (!child.pid) throw new Error('worker did not start');
-    const info: WorkerFile = { pid: child.pid, runId, startedAt: new Date().toISOString() };
+    const info: WorkerFile = {
+      pid: child.pid,
+      runId,
+      startedAt: new Date().toISOString(),
+      procStart: processStart(child.pid),
+    };
     writeFileSync(path.join(work, 'worker.json'), JSON.stringify(info));
     child.unref();
   }
@@ -84,28 +95,29 @@ export class LocalDispatcher implements Dispatcher {
     }
   }
 
-  async state(id: string, attempt: number): Promise<'waiting' | 'running' | 'gone'> {
-    const info = this.read(id, attempt);
-    if (!info) return 'gone';
+  /** Is the recorded worker still that process? A reused pid has another start time. */
+  private alive(info: WorkerFile): boolean {
+    if (info.procStart) return processStart(info.pid) === info.procStart;
     try {
       process.kill(info.pid, 0);
-      return 'running';
+      return true;
     } catch {
-      return 'gone';
+      return false;
     }
   }
 
+  async state(id: string, attempt: number): Promise<'waiting' | 'running' | 'gone'> {
+    const info = this.read(id, attempt);
+    return info && this.alive(info) ? 'running' : 'gone';
+  }
+
+  /**
+   * Kills the worker and everything under it (the audit, and Chromium, which runs in a process
+   * group of its own), and waits until they are gone. Does nothing when the worker has ended.
+   */
   async cancel(id: string, attempt: number): Promise<void> {
     const info = this.read(id, attempt);
-    if (!info) return;
-    const kill = (sig: NodeJS.Signals) => {
-      try {
-        process.kill(-info.pid, sig);
-      } catch {
-        /* already gone */
-      }
-    };
-    kill('SIGTERM');
-    setTimeout(() => kill('SIGKILL'), 5000).unref();
+    if (!info || !this.alive(info)) return;
+    await killTree(info.pid);
   }
 }

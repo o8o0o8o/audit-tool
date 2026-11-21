@@ -7,6 +7,13 @@
     "default_severity": "low"
   },
   {
+    "code": "broken-pagination-wastes-crawl-budget",
+    "title": "Broken pagination wastes crawl budget",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "high"
+  },
+  {
     "code": "color-contrast-fails-wcag-aa",
     "title": "Color contrast fails WCAG AA",
     "family": "accessibility",
@@ -481,5 +488,12 @@
     "family": "security",
     "category": "technical",
     "default_severity": "low"
+  },
+  {
+    "code": "trailing-slash-duplicate-url-pairs-in-sitemap",
+    "title": "Trailing-slash duplicate URL pairs in sitemap",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
   }
 ]

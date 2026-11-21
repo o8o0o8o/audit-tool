@@ -3,7 +3,7 @@
  * second request for the same audit and kind joins it. The job runs on a worker that registers and
  * heartbeats like an audit attempt, bound to the `jobs` row.
  */
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { artifacts, audits, jobs } from '../../db/schema';
@@ -69,8 +69,48 @@ export async function requestPdf(
   });
 }
 
+export const JOB_LIMITS = { silentMs: 20 * 60_000, maxTries: 3 };
+
+/**
+ * A job whose worker died (or never registered) goes back to the queue, and fails after
+ * `maxTries`, so dead jobs neither fill the two slots nor block a new request for that PDF.
+ */
+export async function reapJobs(
+  db: Db,
+  dispatcher?: Pick<Platform['dispatcher'], 'cancel'>,
+  now = new Date(),
+): Promise<{ requeued: string[]; failed: string[] }> {
+  const out = { requeued: [] as string[], failed: [] as string[] };
+  const silent = await db
+    .select({ id: jobs.id, tries: jobs.tries, status: jobs.status })
+    .from(jobs)
+    .where(
+      and(
+        inArray(jobs.status, ['dispatched', 'running']),
+        lt(jobs.heartbeatAt, new Date(now.getTime() - JOB_LIMITS.silentMs)),
+      ),
+    );
+  for (const j of silent) {
+    const give = j.tries >= JOB_LIMITS.maxTries;
+    const done = await db
+      .update(jobs)
+      .set(
+        give
+          ? { status: 'failed', finishedAt: now, sessionHash: null, dispatchNonce: null }
+          : { status: 'queued', sessionHash: null, dispatchNonce: null },
+      )
+      .where(and(eq(jobs.id, j.id), eq(jobs.status, j.status), eq(jobs.tries, j.tries)))
+      .returning({ id: jobs.id });
+    if (!done.length) continue;
+    await dispatcher?.cancel(j.id, j.tries).catch(() => {});
+    (give ? out.failed : out.requeued).push(j.id);
+  }
+  return out;
+}
+
 export async function dispatchJobs(db: Db, platform: Pick<Platform, 'dispatcher'>, max = 2): Promise<string[]> {
   const out: string[] = [];
+  await reapJobs(db, platform.dispatcher);
   for (let i = 0; i < max; i++) {
     const picked = await db.transaction(async (tx) => {
       const busy = await tx
@@ -128,21 +168,28 @@ export async function registerJob(db: Db, identity: WorkerIdentity, token: strin
   const claims = token ? await identity.verify(token) : null;
   if (!claims || (claims.id && claims.id !== input.job_id))
     throw new CoreError('unauthorized', 'worker identity not valid');
-  const [job] = await db.select().from(jobs).where(eq(jobs.id, input.job_id));
-  if (!job || job.dispatchNonce !== input.nonce) throw new CoreError('unauthorized', 'nonce does not match');
-  if (job.status !== 'dispatched' || job.tries !== input.attempt)
-    throw new CoreError('stale_attempt', 'job is not waiting for this run');
   const session = randomToken(32);
-  await db
+  // One statement checks and spends the nonce, so two registrations cannot both pass.
+  const [job] = await db
     .update(jobs)
     .set({
       status: 'running',
+      dispatchNonce: null,
       sessionHash: sha256Hex(session),
       ghRunId: Number(claims.runId),
       ghRunAttempt: claims.runAttempt,
       heartbeatAt: new Date(),
     })
-    .where(eq(jobs.id, job.id));
+    .where(
+      and(
+        eq(jobs.id, input.job_id),
+        eq(jobs.dispatchNonce, input.nonce),
+        eq(jobs.status, 'dispatched'),
+        eq(jobs.tries, input.attempt),
+      ),
+    )
+    .returning();
+  if (!job) throw new CoreError('unauthorized', 'job is not waiting for this run');
   const [audit] = await db.select({ attempt: audits.currentAttempt }).from(audits).where(eq(audits.id, job.auditId));
   const src = PDF_SOURCES[job.kind as PdfKind];
   const files = await db
@@ -202,22 +249,20 @@ export async function finishJob(
       throw new CoreError('invalid_input', 'artifact outside the audit');
     const [audit] = await db.select({ source: audits.source }).from(audits).where(eq(audits.id, s.auditId));
     const kind = PDF_SOURCES[s.kind].pdf;
-    await db
-      .insert(artifacts)
-      .values({
-        auditId: s.auditId,
-        kind,
-        blobKey: input.artifact.key,
-        bytes: input.artifact.bytes,
-        sha256: input.artifact.sha256,
-        createdAt: now,
-        expiresAt: artifactExpiry(kind, audit?.source ?? 'api', now),
-      });
+    await db.insert(artifacts).values({
+      auditId: s.auditId,
+      kind,
+      blobKey: input.artifact.key,
+      bytes: input.artifact.bytes,
+      sha256: input.artifact.sha256,
+      createdAt: now,
+      expiresAt: artifactExpiry(kind, audit?.source ?? 'api', now),
+    });
   }
   await db
     .update(jobs)
     .set({ status: input.status === 'done' && input.artifact ? 'done' : 'failed', finishedAt: now })
-    .where(eq(jobs.id, s.jobId));
+    .where(and(eq(jobs.id, s.jobId), eq(jobs.status, 'running')));
   if (input.status === 'done') await hooks.onPdfReady?.(s.jobId);
   return { status: input.status };
 }

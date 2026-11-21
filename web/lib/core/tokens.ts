@@ -49,6 +49,14 @@ export function verifyToken<T extends Record<string, unknown>>(
   return claims as T & { exp: number };
 }
 
+/**
+ * The key session cookies are signed with: the session secret bound to the password hash, so
+ * changing the password ends every open session.
+ */
+export function sessionKeyFromEnv(): string {
+  return sha256Hex(`${secretFromEnv('SESSION_SECRET')}:${process.env.INTERNAL_PASSWORD_HASH ?? ''}`);
+}
+
 export function secretFromEnv(name: 'SESSION_SECRET' | 'REPORT_TOKEN_SECRET' | 'LOCAL_WORKER_SECRET'): string {
   const v = process.env[name];
   if (!v || v.length < 32) throw new Error(`${name} must be set to at least 32 characters`);

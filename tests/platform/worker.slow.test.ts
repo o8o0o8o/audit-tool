@@ -72,7 +72,12 @@ void test(
   async () => {
     const site = await startFixtureSite({ pages: 3 });
     try {
-      const s = await startAudit(t.db, internalPrincipal(), { url: site.origin, mode: 'quick' });
+      const s = await startAudit(
+        t.db,
+        internalPrincipal(),
+        { url: site.origin, mode: 'quick' },
+        { allowPrivateTarget: true },
+      );
       await dispatchNext(t.db, { dispatcher }, { caps });
       await until(
         async () => ['built', 'failed', 'cancelled'].includes((await statusOf(s.audit_id)).status),
@@ -102,7 +107,12 @@ void test(
   async () => {
     const site = await startFixtureSite({ pages: 10, delayMs: 2500 });
     try {
-      const s = await startAudit(t.db, internalPrincipal(), { url: site.origin, mode: 'quick' });
+      const s = await startAudit(
+        t.db,
+        internalPrincipal(),
+        { url: site.origin, mode: 'quick' },
+        { allowPrivateTarget: true },
+      );
       await dispatchNext(t.db, { dispatcher }, { caps });
       await until(async () => /snapshot 1 taken/.test(logOf(s.audit_id, 1)), 120_000, 'the first snapshot');
       await dispatcher.cancel(s.audit_id, 1); // kill the whole process group
@@ -144,7 +154,12 @@ void test(
       .onConflictDoNothing();
     const site = await startFixtureSite({ redirectTo: 'http://guarded.example/' });
     try {
-      const s = await startAudit(t.db, internalPrincipal(), { url: site.origin, mode: 'quick' });
+      const s = await startAudit(
+        t.db,
+        internalPrincipal(),
+        { url: site.origin, mode: 'quick' },
+        { allowPrivateTarget: true },
+      );
       await dispatchNext(t.db, { dispatcher }, { caps });
       await until(
         async () => ['cancelled', 'failed', 'built'].includes((await statusOf(s.audit_id)).status),
@@ -155,6 +170,37 @@ void test(
       assert.equal(row.status, 'cancelled', logOf(s.audit_id, 1).slice(-2000));
       assert.equal(row.error, 'scan_guard');
       assert.equal((await t.db.select().from(artifacts).where(eq(artifacts.auditId, s.audit_id))).length, 0);
+    } finally {
+      await site.close();
+    }
+  },
+);
+
+void test(
+  'slow: a page audit whose URL redirects to a guarded domain ends cancelled too',
+  { skip: SKIP, timeout: 120_000 },
+  async () => {
+    await t.db
+      .insert(suppressedDomains)
+      .values({ registrableDomain: 'guarded.example', reason: 'legal' })
+      .onConflictDoNothing();
+    const site = await startFixtureSite({ redirectTo: 'http://guarded.example/' });
+    try {
+      const s = await startAudit(
+        t.db,
+        internalPrincipal(),
+        { url: `${site.origin}/`, mode: 'page' },
+        { allowPrivateTarget: true },
+      );
+      await dispatchNext(t.db, { dispatcher }, { caps });
+      await until(
+        async () => ['cancelled', 'failed', 'built'].includes((await statusOf(s.audit_id)).status),
+        100_000,
+        'cancelled',
+      );
+      const row = await statusOf(s.audit_id);
+      assert.equal(row.status, 'cancelled', logOf(s.audit_id, 1).slice(-2000));
+      assert.equal(row.error, 'scan_guard');
     } finally {
       await site.close();
     }

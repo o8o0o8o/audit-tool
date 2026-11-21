@@ -1,8 +1,10 @@
+import { isIP } from 'node:net';
 import { asc, eq, sql } from 'drizzle-orm';
 import { parse } from 'tldts';
 import type { Db } from '../../db/client';
 import { siteAliases, sites } from '../../db/schema';
 import { CoreError } from './errors';
+import { isPrivateAddress } from './webhooks';
 
 export interface NormalizedTarget {
   /** The URL to audit: origin for site modes, the page URL (no fragment) for `page`. */
@@ -29,6 +31,20 @@ export function normalizeTarget(raw: string, keepPath = false): NormalizedTarget
   const registrableDomain = registrableDomainOf(host);
   u.hash = '';
   return { url: keepPath ? u.toString() : u.origin, host, registrableDomain };
+}
+
+/**
+ * A host that names this machine or a private network. By name only: a public name that resolves
+ * to a private address is the crawler's check (`isFetchAllowed`).
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const host = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal'))
+    return true;
+  return isIP(host) !== 0 && isPrivateAddress(host);
 }
 
 export function registrableDomainOf(host: string): string {

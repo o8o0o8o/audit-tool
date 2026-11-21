@@ -1,7 +1,8 @@
 /**
  * buildAuditModel (design §2): the only code that knows raw analyzer shapes. It reshapes what the
- * run computed; it never re-runs an analyzer and never changes a score or a severity. It marks
- * blocked pages and drops the findings raised only on them; a blocked scan has no scores.
+ * run computed; it never re-runs an analyzer and never scores. It marks blocked pages and drops the
+ * findings raised only on them, from the site document and from the stored run data alike, so the
+ * API, the report and a later re-score see the same findings. A blocked scan has no scores.
  *
  * Output: `<run>/model/site.json.gz` (the site document) and `<run>/model/raw-archive.tar.gz`
  * (the run's *.json.gz and report text, without screenshots and evidence).
@@ -12,7 +13,8 @@ import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { categorize } from '../../phase2/categorize';
 import { deriveCode, findingId } from '../finding-codes';
-import { computeScanQuality } from '../scan-quality';
+import { pgSafe } from '../pg-safe';
+import { computeScanQuality, wasRead } from '../scan-quality';
 import { SiteDocument, type Finding } from '../site';
 import { MODEL_VERSION } from '../version';
 import { PAGE_CHUNK_SIZE, PageRecord, type RunData } from '../page';
@@ -59,7 +61,7 @@ const AI_CRAWLERS = [
 const BOOKING =
   /calendly\.com|hubspot\.com\/meetings|meetings\.hubspot|cal\.com|acuityscheduling|youcanbook\.me|chilipiper|savvycal|zcal\.co|tidycal/i;
 
-const linkUrls = (s: string) => [...s.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!);
+const linkUrls = (s: string) => [...s.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!.replace(/&amp;/g, '&'));
 const plain = (s: string) =>
   s
     .replace(/<[^>]+>/g, '')
@@ -69,31 +71,100 @@ const plain = (s: string) =>
 
 export function loadRunPages(runDir: string, manifest: Json | null): Json[] {
   const pages: Json[] = [];
+  const seen = new Set<string>();
   for (const b of (manifest?.files?.pageBatches ?? []) as Array<{ file: string }>) {
     const data = readGz(path.join(runDir, b.file));
-    for (const [url, p] of Object.entries((data?.pages ?? {}) as Record<string, Json>))
-      pages.push({ ...p, url: p.url ?? url });
+    for (const [url, p] of Object.entries((data?.pages ?? {}) as Record<string, Json>)) {
+      const page = { ...p, url: String(p.url ?? url) };
+      // one record per URL (`pages_audit_url`): the first one wins
+      if (seen.has(page.url)) continue;
+      seen.add(page.url);
+      pages.push(page);
+    }
   }
   return pages;
 }
 
-export function buildAuditModel(input: BuildInput): SiteDocument {
-  const { runDir } = input;
-  const manifest = readGz(path.join(runDir, 'manifest.json.gz'));
+/**
+ * A blocked request is never evidence. Removes from `analysis` what was seen only on blocked pages:
+ * an example is about the crawled pages it links to; an example whose pages were all blocked goes,
+ * and a finding left with no example goes too. The sample of examples is capped, so a finding whose
+ * sample is all blocked stays only when it has more occurrences than there are blocked pages (some
+ * must then be on pages that were read); it stays without examples.
+ */
+export function dropBlockedFindings(analysis: Json, pageUrls: Set<string>, blockedUrls: Set<string>): Json {
+  if (!blockedUrls.size || !analysis.details) return analysis;
+  const dropped = new Set<string>();
+  const details: Record<string, Json> = {};
+  for (const [title, d] of Object.entries(analysis.details as Record<string, Json>)) {
+    const examples: unknown[] = Array.isArray(d.examples) ? d.examples : [];
+    const kept = examples.filter((e) => {
+      const about = linkUrls(String(e)).filter((u) => pageUrls.has(u) || blockedUrls.has(u));
+      return !about.length || !about.every((u) => blockedUrls.has(u));
+    });
+    const removed = examples.length - kept.length;
+    if (!removed) {
+      details[title] = d;
+      continue;
+    }
+    const count = Number(d.count ?? examples.length) || examples.length;
+    if (!kept.length && !(count > examples.length && count > blockedUrls.size)) {
+      dropped.add(title);
+      continue;
+    }
+    details[title] = { ...d, examples: kept, count: Math.max(kept.length, count - removed, 1) };
+  }
+  if (!dropped.size && Object.keys(details).every((t) => details[t] === analysis.details[t])) return analysis;
+  const out: Json = { ...analysis, details };
+  if (Array.isArray(analysis.overall))
+    out.overall = analysis.overall.filter(
+      (t: unknown) => !dropped.has(typeof t === 'string' ? t : (t as Json)?.message),
+    );
+  if (analysis.bySeverity && typeof analysis.bySeverity === 'object')
+    out.bySeverity = Object.fromEntries(
+      Object.entries(analysis.bySeverity as Record<string, unknown>).map(([sev, titles]) => [
+        sev,
+        Array.isArray(titles) ? titles.filter((t) => !dropped.has(String(t).replace(/ \[[a-z]+\]$/, ''))) : titles,
+      ]),
+    );
+  if (Array.isArray(analysis.summary?.quickWins))
+    out.summary = {
+      ...analysis.summary,
+      quickWins: analysis.summary.quickWins.filter((q: Json) => !dropped.has(String(q?.issue ?? ''))),
+    };
+  return out;
+}
+
+/** A run folder as both parts of the model read it: raw files, scan quality, blocked findings dropped. */
+export interface RunSource {
+  runDir: string;
+  manifest: Json;
+  metadata: Json;
+  analysis: Json;
+  pages: Json[];
+  domain: string;
+  mode: 'full' | 'quick' | 'page';
+  home: string;
+  keyUrl: string;
+  checks: Json[];
+  homePage: Json | undefined;
+  quality: ReturnType<typeof computeScanQuality>;
+}
+
+export function readRun(runDir: string, modeHint?: 'full' | 'quick' | 'page'): RunSource {
+  const manifest = pgSafe(readGz(path.join(runDir, 'manifest.json.gz')));
   if (!manifest) throw new Error(`not a run folder (no readable manifest.json.gz): ${runDir}`);
-  const metadata = readGz(path.join(runDir, 'metadata.json.gz')) ?? {};
-  const analysis = readGz(path.join(runDir, 'analysis.json.gz')) ?? {};
-  const pages = loadRunPages(runDir, manifest);
+  const metadata = pgSafe(readGz(path.join(runDir, 'metadata.json.gz')) ?? {});
+  const rawAnalysis = pgSafe(readGz(path.join(runDir, 'analysis.json.gz')) ?? {});
+  const pages = pgSafe(loadRunPages(runDir, manifest));
   const domain: string = manifest.domain ?? path.basename(path.dirname(runDir));
-  const mode = input.mode ?? (metadata.leadScan ? 'quick' : metadata.singlePage ? 'page' : 'full');
+  const mode = modeHint ?? (metadata.leadScan ? 'quick' : metadata.singlePage ? 'page' : 'full');
   const home: string =
     metadata.leadScan?.home ??
     (metadata.singlePage?.url as string | undefined) ??
     pages.find((p) => /^https?:\/\/[^/]+\/?$/.test(p.url))?.url ??
     `https://${domain}/`;
   const keyUrl = mode === 'page' ? ((metadata.singlePage?.url as string) ?? pages[0]?.url ?? home) : home;
-
-  // ── Scan quality ───────────────────────────────────────────────────────────
   const checks = ((metadata.siteChecks?.checks ?? []) as Json[]).filter((c) => c && c.id);
   const probesBlocked = checks.filter(
     (c) => c.status === 'skipped' && /blocked|refused|403|429|rate.?limit/i.test(String(c.note ?? '')),
@@ -116,6 +187,14 @@ export function buildAuditModel(input: BuildInput): SiteDocument {
     probesBlocked,
     botProtection: homePage?.caching?.cdnProvider ?? null,
   });
+  const analysis = dropBlockedFindings(rawAnalysis, new Set(pages.map((p) => p.url as string)), quality.blockedUrls);
+  return { runDir, manifest, metadata, analysis, pages, domain, mode, home, keyUrl, checks, homePage, quality };
+}
+
+export function buildAuditModel(input: BuildInput, source?: RunSource): SiteDocument {
+  const { runDir } = input;
+  const { manifest, metadata, analysis, pages, domain, mode, home, keyUrl, checks, homePage, quality } =
+    source ?? readRun(runDir, input.mode);
   const { blockedUrls, ...scanQuality } = quality;
   const blocked = scanQuality.state === 'blocked';
 
@@ -126,8 +205,6 @@ export function buildAuditModel(input: BuildInput): SiteDocument {
   for (const [title, d] of Object.entries(details)) {
     const examples: string[] = Array.isArray(d.examples) ? d.examples.map(String) : [];
     const urls = examples.flatMap(linkUrls);
-    // A blocked request is never evidence: drop a finding raised only on blocked pages.
-    if (urls.length && urls.every((u) => blockedUrls.has(u))) continue;
     const { code, params } = deriveCode(title);
     const severity = String(d.severity ?? 'low').toLowerCase();
     let id = findingId(input.auditId, code, params);
@@ -182,7 +259,7 @@ export function buildAuditModel(input: BuildInput): SiteDocument {
   }));
 
   // ── Site profile ───────────────────────────────────────────────────────────
-  const okPages = pages.filter((p) => !blockedUrls.has(p.url) && (p.status ?? 200) < 300 && !p.redirectOnly);
+  const okPages = pages.filter((p) => !blockedUrls.has(p.url) && wasRead(p));
   const languages = [
     ...new Set(
       okPages
@@ -199,11 +276,21 @@ export function buildAuditModel(input: BuildInput): SiteDocument {
     }),
   );
   const titles = Object.keys(details).join('\n');
-  const llmsTxt = /llms\.txt is missing/i.test(titles)
-    ? 'missing'
-    : /llms\.txt.*(invalid|malformed)/i.test(titles)
-      ? 'invalid'
-      : 'valid';
+  // The run stores the llms.txt result only as a finding (missing / invalid). Without one the check
+  // may have passed, been off (--no-agentic), or its fetch may have failed: not known, so null,
+  // unless the run recorded the result (`metadata.aeo.llmsTxt`).
+  const llmsRecorded = metadata.aeo?.llmsTxt as { status?: string; hasLlmsTxt?: boolean } | undefined;
+  const llmsStatus = llmsRecorded
+    ? (llmsRecorded.status ?? (llmsRecorded.hasLlmsTxt ? 'valid' : 'missing'))
+    : /llms\.txt is missing/i.test(titles)
+      ? 'missing'
+      : /llms\.txt.*(invalid|malformed)/i.test(titles)
+        ? 'invalid'
+        : null;
+  const llmsTxt =
+    blocked || mode === 'page' || !['valid', 'invalid', 'missing'].includes(String(llmsStatus))
+      ? null
+      : (llmsStatus as 'valid' | 'invalid' | 'missing');
   const schemaTypes = [
     ...new Set(
       okPages
@@ -496,26 +583,29 @@ const intOrNull = (v: unknown): number | null => (num(v) === null ? null : Math.
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
 /** The row parts the report needs: run-level data and one record per page (design §2). */
-export function buildRowParts(runDir: string): { runData: RunData; pages: PageRecord[] } {
-  const manifest = readGz(path.join(runDir, 'manifest.json.gz'));
-  if (!manifest) throw new Error(`not a run folder: ${runDir}`);
-  const metadata = readGz(path.join(runDir, 'metadata.json.gz')) ?? {};
-  const analysis = readGz(path.join(runDir, 'analysis.json.gz')) ?? {};
-  const incoming = readGz(path.join(runDir, 'incoming-links.json.gz')) ?? {};
-  const blocked = new Set<string>();
-  for (const [key, urls] of Object.entries((manifest.progress?.byError ?? {}) as Record<string, unknown>)) {
-    if (/^(challenge-)?(401|403|429|503)$/.test(key) && Array.isArray(urls))
-      urls.forEach((u) => typeof u === 'string' && blocked.add(u));
-  }
+export function buildRowParts(runDir: string, source?: RunSource): { runData: RunData; pages: PageRecord[] } {
+  const { manifest, metadata, analysis, pages: runPages, quality } = source ?? readRun(runDir);
+  const incoming = pgSafe(readGz(path.join(runDir, 'incoming-links.json.gz')) ?? {});
   const reasons = new Map<string, string>(
     ((metadata.leadScan?.selected ?? []) as Json[]).map((s) => [String(s.url), String(s.reason ?? '')]),
   );
-  const pages = loadRunPages(runDir, manifest).map((p) =>
-    PageRecord.parse({
+  const pages = runPages.map((p) => {
+    const weight = {
+      totalBytes: intOrNull(p.requests?.totalSize ?? p.totalResponseSize),
+      imageBytes: intOrNull(p.imageOptimization?.totalImageSize),
+      thirdPartyBytes: intOrNull(p.thirdPartyData?.totalSize),
+      requestsByType:
+        p.requests?.byType && typeof p.requests.byType === 'object'
+          ? Object.fromEntries(
+              Object.entries(p.requests.byType as Record<string, unknown>).filter(([, n]) => typeof n === 'number'),
+            )
+          : null,
+    };
+    return PageRecord.parse({
       url: String(p.url),
       finalUrl: str(p.finalUrl),
       statusCode: intOrNull(p.status),
-      blocked: blocked.has(p.url) || [401, 403, 429].includes(Number(p.status)),
+      blocked: quality.blockedUrls.has(p.url),
       segment: str(p.segment),
       title: str(p.title),
       metaDescription: str(p.description),
@@ -524,6 +614,7 @@ export function buildRowParts(runDir: string): { runData: RunData; pages: PageRe
       lang: str(p.languageDetection?.htmlLang ?? p.internationalSEO?.langAttribute),
       indexable: typeof p.indexability?.isIndexable === 'boolean' ? p.indexability.isIndexable : null,
       inSitemap: p.foundIn ? p.foundIn === 'sitemap' : null,
+      depth: intOrNull(p.urlAnalysis?.depth),
       wordCount: intOrNull(p.contentQuality?.wordCount),
       schemaTypes: ((p.structuredData?.jsonLdSchemas ?? []) as Json[]).map((x) => String(x.type ?? '')).filter(Boolean),
       ttfbMs: intOrNull(p.TTFB ?? p.ttfb),
@@ -532,23 +623,27 @@ export function buildRowParts(runDir: string): { runData: RunData; pages: PageRe
       fcpMs: intOrNull(p.FCP ?? p.fcp),
       inpMs: intOrNull(p.INP ?? p.inp),
       tbtMs: intOrNull(p.TBT ?? p.tbt),
+      speedIndexMs: intOrNull(p.speedIndex),
+      lcpElement: str(p.vitals?.lcpElement)?.slice(0, 500) ?? null,
       bytes: intOrNull(p.totalResponseSize),
+      weight: Object.values(weight).some((v) => v !== null) ? weight : null,
       requests: intOrNull(p.totalNumberOfRequests),
       selectionReason: reasons.get(p.url) || null,
       sections: p,
-    }),
-  );
+    });
+  });
   return { runData: { manifest, metadata, analysis, 'incoming-links': incoming }, pages };
 }
 
 /** Writes model/site.json.gz, model/run-data.json.gz, model/pages-NNNN.ndjson.gz and model/raw-archive.tar.gz. */
 export function writeAuditModel(input: BuildInput): { doc: SiteDocument; sitePath: string; archivePath: string } {
-  const doc = buildAuditModel(input);
+  const source = readRun(input.runDir, input.mode);
+  const doc = buildAuditModel(input, source);
   const dir = path.join(input.runDir, 'model');
   mkdirSync(dir, { recursive: true });
   const sitePath = path.join(dir, 'site.json.gz');
   writeFileSync(sitePath, gzipSync(JSON.stringify(doc)));
-  const rows = buildRowParts(input.runDir);
+  const rows = buildRowParts(input.runDir, source);
   writeFileSync(path.join(dir, 'run-data.json.gz'), gzipSync(JSON.stringify(rows.runData)));
   for (let i = 0; i * PAGE_CHUNK_SIZE < rows.pages.length; i++) {
     const chunk = rows.pages.slice(i * PAGE_CHUNK_SIZE, (i + 1) * PAGE_CHUNK_SIZE);

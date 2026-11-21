@@ -81,7 +81,7 @@ void describe('executive summary numbers', () => {
 
   void it('estimate uses blended formula', () => {
     const scores = { seo: 30, performance: 80, technical: 70, accessibility: 90, security: 50 };
-    const overall = ScoreCalculator.calculateOverallScore({ bySeverity: {}, details: {} }, {}, scores);
+    const overall = ScoreCalculator.calculateOverallScore({ bySeverity: {}, details: {} }, {}, scores)!;
     assert.equal(overall, blendOverallScore(scores));
     const fixed = Object.fromEntries(Object.entries(scores).map(([k, v]) => [k, v + (100 - v) * FIX_RECOVERY_RATIO]));
     assert.equal(estimateScoreAfterFixes(overall, scores, SCORING.CATEGORY_WEIGHTS), blendOverallScore(fixed));
@@ -91,12 +91,12 @@ void describe('executive summary numbers', () => {
 
   void it('estimate skips unmeasured categories', () => {
     const scores = { seo: 80, performance: 80, technical: 80, accessibility: 80 };
-    const overall = blendOverallScore(scores);
+    const overall = blendOverallScore(scores)!;
     // security is absent (not measured): it is left out of the blend, never counted as 0.
     const fixed = { seo: 92, performance: 92, technical: 92, accessibility: 92 };
     assert.equal(overall, 80);
     assert.equal(estimateScoreAfterFixes(overall, scores, SCORING.CATEGORY_WEIGHTS), blendOverallScore(fixed));
     assert.equal(blendOverallScore(fixed), 92);
-    assert.ok(blendOverallScore(fixed) > blendOverallScore({ ...fixed, security: 60 }), 'a measured low category pulls the score down');
+    assert.ok(blendOverallScore(fixed)! > blendOverallScore({ ...fixed, security: 60 })!, 'a measured low category pulls the score down');
   });
 });

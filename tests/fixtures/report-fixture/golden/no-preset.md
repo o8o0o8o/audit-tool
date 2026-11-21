@@ -32,7 +32,7 @@ Each category section header shows the current 0–100 score and, where there is
 
 | Category | Weight | How it is scored |
 |---|---|---|
-| SEO | 30% | Each Error-tier SEO issue lowers the score by half its reach, and issues compound: 100 × Π (1 − 0.5 × share of crawled pages it affects). One issue on every page gives 50; on 1 page in 25, 98. A site-wide issue counts as every page. Warnings and notices are reported but not scored. |
+| SEO | 30% | Each Error-tier SEO issue lowers the score by half its reach, and issues compound: 100 × Π (1 − 0.5 × share of crawled pages it affects). One issue on every page gives 50; on 1 page in 25, 98. An issue reported with a count reaches that many pages; one reported for the site as a whole (no pages, no count) counts as every page. Warnings and notices are reported but not scored. |
 | Performance | 25% | Per page, each Core Web Vital is scored 0–100 on a Lighthouse log-normal curve (top-decile value → 90, median → 50) and the metrics are blended by weight: LCP 25%, TBT 30%, CLS 25%, FCP 10%, TTFB 10%. The category is the mean across pages; without lab metrics it uses real-user (CrUX) p75 values; with neither it has no score and is left out of the overall. |
 | Technical | 20% | Like SEO: 100 × Π (1 − 0.5 × share of crawled pages it affects) over Error-tier technical issues. |
 | Accessibility | 15% | Mean of the per-page accessibility scores (axe-style deductions per violation; 100 − 10 per violation when only a count is known). |

@@ -2,10 +2,11 @@
  * Publishes a local run to the platform (design §8.13, task 4.7): `POST /audits/import` creates an
  * audit (source `pipeline`) and returns an upload grant; the model, raw archive and stored files are
  * uploaded; `POST /audits/{id}/complete` hands it to the loader. Gate runs after that (rerank,
- * recheck) are appended with `POST /audits/{id}/gate-runs`. Secrets are masked before upload.
+ * recheck) are appended with `POST /audits/{id}/gate-runs`. Secrets are masked before upload, in a
+ * temporary copy of the run: the run on disk is never changed.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { constants, cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -39,10 +40,27 @@ export interface PublishResult {
 
 export async function publishRun(
   api: ApiProspectStore,
-  runDir: string,
+  sourceDir: string,
   opts: { withEvidence?: boolean } = {},
 ): Promise<PublishResult> {
-  maskSecretsInRun(runDir);
+  const work = mkdtempSync(path.join(os.tmpdir(), 'publish-run-'));
+  try {
+    // Same <domain>/<stamp> tail as the source, which the model and the legacy run id are read from.
+    const runDir = path.join(work, path.basename(path.dirname(path.resolve(sourceDir))), path.basename(sourceDir));
+    cpSync(sourceDir, runDir, { recursive: true, mode: constants.COPYFILE_FICLONE });
+    maskSecretsInRun(runDir);
+    return await publishMaskedCopy(api, runDir, opts);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** `runDir` is the masked temporary copy. */
+async function publishMaskedCopy(
+  api: ApiProspectStore,
+  runDir: string,
+  opts: { withEvidence?: boolean },
+): Promise<PublishResult> {
   const probe = buildAuditModel({ runDir, auditId: randomUUID(), gateSource: 'pipeline' });
   const legacy = `${path.basename(path.dirname(runDir))}/${path.basename(runDir)}`;
   const begin = await api.call<{ audit_id: string; already_imported: boolean; prefix?: string; upload?: Grant }>(
@@ -91,6 +109,8 @@ export async function publishRun(
   for (const f of walkFiles(runDir)) {
     const rel = path.relative(runDir, f).split(path.sep).join('/');
     if (rel.startsWith('model/')) continue;
+    // A file the masker could not read is never uploaded.
+    if (masked[rel]?.notMasked) continue;
     const c = classify(rel, {});
     if (!c?.kind) continue;
     if (

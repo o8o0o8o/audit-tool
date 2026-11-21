@@ -75,9 +75,9 @@ void test('webhooks: one signed delivery on success; a retry after a 500', { ski
     webhookUrl: `http://127.0.0.1:${port}/hook`,
   });
   const id = await finishedAudit(k.id);
-  await onAuditFinished(t.db, id);
   failNext = 1;
   const now = new Date('2026-11-21T10:00:00Z');
+  await onAuditFinished(t.db, id, now);
   assert.equal(await deliverDueWebhooks(t.db, { now, allowPrivate: true }), 0);
   const [d1] = await t.db.select().from(webhookDeliveries).where(eq(webhookDeliveries.auditId, id));
   assert.equal(d1!.statusCode, 500);

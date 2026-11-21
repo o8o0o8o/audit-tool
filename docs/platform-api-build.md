@@ -104,7 +104,7 @@ web/
     r/[token]/[...path]/route.ts
     internal/...             login, dispatch form, runs list, run page, keys
   scripts/
-    local-crons.ts  create-key.ts  hash-password.ts  import-run.ts  seed-prospects.ts
+    local-crons.ts  create-key.ts  hash-password.ts  reload-audits.ts  seed-prospects.ts
 tests/platform/              database and run-path tests (§6 below)
 ```
 
@@ -226,7 +226,7 @@ Before 3.1, two pieces of design work that the design doc leaves open:
 | 3.5 | Tables `audit_documents`, `load_progress`, `check_types`, `check_type_aliases`, `findings`, `scores`, `recommendations`, `site_checks`, `scan_quality`, `site_profiles`, `field_metrics` | migration applied |
 | 3.6 | Loader: reads the attempt that reported `built`, loads in transactions with `load_progress`, refuses an unknown model major, sets `succeeded`; the worker now reports `built` | tests: a loader killed halfway resumes and the row counts are right; an unknown major leaves the audit `built` with `load_blocked` |
 | 3.7 | Run profiles in the tool (design §8.1): the `public` profile skips the JS-secrets scan, the takeover check and the gate; `disclosures` table, a row opened or updated per hit in the `standard` profile | tests: a public-profile run has neither check row; a second scan of the same exposure updates the row |
-| 3.8 | `web/scripts/import-run.ts <run dir>`: builds the model for a stored run and loads it as an audit with `legacy_run_id` | all stored runs import; abilio.com loads and its database size is written down |
+| 3.8 | Dropped (see "Stored runs are not imported" below; `web/scripts/import-run.ts` was built, measured and removed). `web/scripts/reload-audits.ts` rebuilds audits already in the database after a model change | — |
 
 ### Step 4: lead results (about 7 days)
 
@@ -253,7 +253,7 @@ Before 3.1, two pieces of design work that the design doc leaves open:
 Seed:
 
 - Prospects: `yarn --cwd web tsx scripts/seed-prospects.ts --sample`, or the real CSV.
-- Audits: `yarn --cwd web tsx scripts/import-run.ts <run dir>` for stored runs. Start with one lead scan, one single-page run, `focusreactive.com` (medium) and `abilio.com` (largest).
+- Audits: stored runs are not imported. Run an audit through the platform, or publish a lead-pipeline run (`npx tsx scripts/lead-pipeline.ts publish`). After a model change, `yarn --cwd web tsx scripts/reload-audits.ts [<audit id> …]` rebuilds audits already in the database from their raw archive.
 
 The local build is done when these five pass, in order (they are the five checks in design §10):
 
@@ -283,7 +283,7 @@ Steps 0–4 exist as described above, with these differences:
 - **Finding codes (3.2):** explicit codes are seeded in `lib/model/check-types.json` (`scripts/build-check-types.ts`: the 50 most frequent findings across the stored runs plus every security and email-DNS finding, 69 codes). Analyzers do not set `Issue.code` yet; codes come from titles in `lib/model/finding-codes.ts`.
 - **Password hash** format is `scrypt:<salt>:<hash>`: Next's env loader expands `$` in `.env.local` values.
 - **Worker:** `start.ts` and the worker load tsx by absolute path, so a work folder anywhere works. The audit writes `$AUDIT_CHECKPOINT_MARKER` after each completed checkpoint save; the worker snapshots on it (first marker at once, then at most every `PLATFORM_SNAPSHOT_INTERVAL_MS`, default 10 min). A homepage redirect is followed hop by hop (no full load), so a redirect to an unreachable guarded domain is still refused.
-- **`--pdf`:** Phase 2, 3 and 4 print PDFs only with the flag; the teaser stage is unchanged (open decision §12).
+- **`--pdf`:** Phase 2, 3 and 4 print PDFs only with the flag. The lead pipeline writes `teaser.md` and `email.md` always and `teaser.pdf` only with `--pdf` (`npx tsx scripts/lead-pipeline.ts teaser --only=<domain> --pdf` prints it later).
 - **Stored runs are not imported (decided 2026-11-21):** only audits run through the platform, or published by the lead pipeline (`audits/import`), are in the database. Task 3.8 and acceptance check 2 are dropped; `import-run.ts` was built, measured (below) and removed.
 - **Reports render from the database (step 6, first part; decided 2026-11-21):** `pages` (one row per page, the full page record in `sections`) and `audit_run_data` (manifest, metadata, analysis, incoming links; not in the design's SQL) are loaded as row chunks (`model/run-data.json.gz`, `model/pages-NNNN.ndjson.gz`). On every view the app rebuilds the renderer's input from those rows (screenshots from the file store) and runs `scripts/render-report.ts` with the current code; History comes from earlier audits of the same site and `comparable_key`. Stored scores are kept current: `audits.scoring_version` (not in the design) records the scoring code they came from, and stale audits are re-scored from their rows (`scripts/score-run.ts`, on view and by the cron). `web/scripts/reload-audits.ts` backfills audits loaded before a model change.
 - **Not built:** occurrences, link edges and the other step-6 tables; the public site (step 5); production implementations (§8). `audit.yml`, `upload-results.mjs` and `lib/blob.ts` are still the old flow.

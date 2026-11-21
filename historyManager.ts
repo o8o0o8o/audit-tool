@@ -21,6 +21,10 @@ import { extractPageInsights } from './lib/reports/data-processor';
 import { sanitizeDomainName } from './validators';
 import { statAvg, statPercentile } from './lib/utils';
 import { slugifyFinding, isVolatileFinding } from './lib/utils/finding-id';
+import { SCORES_NOT_COMPARABLE_NOTE, SCORING_VERSION, scoresComparable } from './lib/scoring/scoring-version';
+
+/** A comparison that also says whether the two audits' scores may be compared at all. */
+export type ScoredComparison = AuditComparison & { scoresComparable: boolean; scoresNote?: string };
 
 /**
  * Audit History Manager
@@ -171,6 +175,8 @@ class HistoryManager {
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleDateString(),
       runTimestamp: runTimestamp ?? null, // Link to run directory
+      // Scores from different scoring rules are never subtracted (see compareAudits).
+      scoringVersion: SCORING_VERSION,
       summary: {
         overallScore: auditData.analysis?.summary?.overallScore ?? 0,
         totalIssues: auditData.analysis?.summary?.totalIssues ?? 0,
@@ -290,12 +296,20 @@ class HistoryManager {
     return history.audits;
   }
 
-  compareAudits(oldAudit: AuditSnapshot, newAudit: AuditSnapshot): AuditComparison {
-    const comparison: AuditComparison = {
+  /**
+   * When the two snapshots were scored by different rules (or one has no scoring version),
+   * `scoresComparable` is false, `scoresNote` says why, and no score delta is given: `scoreChange`
+   * is 0 and `categoryDeltas` is empty. Issue counts and metrics are compared as usual.
+   */
+  compareAudits(oldAudit: AuditSnapshot, newAudit: AuditSnapshot): ScoredComparison {
+    const comparable = scoresComparable(oldAudit, newAudit);
+    const comparison: ScoredComparison = {
       timestamp: new Date().toISOString(),
       oldDate: oldAudit.date,
       newDate: newAudit.date,
-      scoreChange: newAudit.summary.overallScore - oldAudit.summary.overallScore,
+      scoresComparable: comparable,
+      ...(comparable ? {} : { scoresNote: SCORES_NOT_COMPARABLE_NOTE }),
+      scoreChange: comparable ? newAudit.summary.overallScore - oldAudit.summary.overallScore : 0,
       improvements: [],
       regressions: [],
       fixed: [],
@@ -311,7 +325,9 @@ class HistoryManager {
     };
 
     // Compare category scores
-    if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
+    if (!comparable) {
+      comparison.categoryDeltas = {};
+    } else if (oldAudit.summary.categoryScores && newAudit.summary.categoryScores) {
       // A category missing on either side (e.g. `agentic` absent from an older
       // snapshot) yields no delta — never a fake `0 → N` jump.
       const deltas: Record<string, number> = {};
@@ -675,7 +691,9 @@ if (require.main === module) {
     const comparison = manager.compareAudits(oldAudit, newAudit);
     console.log(`\n📊 Comparison: ${comparison.oldDate} → ${comparison.newDate}\n`);
     console.log(
-      `Overall Score: ${oldAudit.summary.overallScore} → ${newAudit.summary.overallScore} (${comparison.scoreChange > 0 ? '+' : ''}${comparison.scoreChange})`,
+      comparison.scoresComparable
+        ? `Overall Score: ${oldAudit.summary.overallScore} → ${newAudit.summary.overallScore} (${comparison.scoreChange > 0 ? '+' : ''}${comparison.scoreChange})`
+        : `Overall Score: ${oldAudit.summary.overallScore} → ${newAudit.summary.overallScore}\n${comparison.scoresNote}`,
     );
     console.log(
       `Total Issues: ${oldAudit.summary.totalIssues} → ${newAudit.summary.totalIssues} (${comparison.deltaMetrics.totalIssues > 0 ? '+' : ''}${comparison.deltaMetrics.totalIssues})`,

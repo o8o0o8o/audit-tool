@@ -238,14 +238,15 @@ export function buildMcpServer(d: McpDeps): McpServer {
     {
       title: 'List findings',
       description:
-        'Findings of an audit with code, params, title, severity and occurrence count, most severe first. Filter by severity_min, category, codes (see list_check_types), scope.',
+        'Findings of an audit with code, params, title, severity and occurrence count, most severe first. Filter by severity_min, category, codes (see list_check_types), scope. Returns `total` (all findings that match the filters), `count` (this page) and `next_cursor`: pass it back as `cursor` with the same filters for the next page; null on the last page. A blocked scan returns no findings.',
       inputSchema: {
         ...target,
         severity_min: z.enum(['critical', 'high', 'medium', 'low']).optional(),
         category: z.string().optional().describe('performance, seo, privacy, accessibility, ux, technical, agentic'),
         codes: z.array(z.string()).optional(),
         scope: z.enum(['page', 'site']).optional(),
-        limit: z.number().int().min(1).max(500).optional(),
+        limit: z.number().int().min(1).max(500).optional().describe('Page size, default 50'),
+        cursor: z.string().optional().describe('next_cursor of the previous page'),
       },
     },
     wrap(async (a) => listFindings(db, principal, a)),

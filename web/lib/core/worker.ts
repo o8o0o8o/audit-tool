@@ -227,7 +227,8 @@ export async function reportStatus(
     }
   }
   const terminal = input.status === 'succeeded' || input.status === 'failed' || input.status === 'cancelled';
-  await db
+  // Guarded write: a cancel or the reaper may have ended this attempt since the session check.
+  const written = await db
     .update(audits)
     .set({
       status: input.status,
@@ -238,7 +239,15 @@ export async function reportStatus(
       ...(terminal ? { finishedAt: now } : {}),
       progressAt: now,
     })
-    .where(eq(audits.id, s.auditId));
+    .where(
+      and(
+        eq(audits.id, s.auditId),
+        eq(audits.currentAttempt, s.attempt),
+        inArray(audits.status, ['running', 'dispatched']),
+      ),
+    )
+    .returning({ id: audits.id });
+  if (!written.length) throw new CoreError('stale_attempt', 'this attempt is no longer current');
   await db
     .update(auditAttempts)
     .set({ status: input.status, heartbeatAt: now })

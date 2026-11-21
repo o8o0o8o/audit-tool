@@ -26,13 +26,40 @@ export function makeReportToken(
   secret: string,
   nowMs = Date.now(),
   ttl = REPORT_TOKEN_TTL_SECONDS,
+  /** Internal views may open an audit that did not succeed (a failed run's partial report). */
+  anyStatus = false,
 ): string {
-  return signToken('report', { aud: auditId }, secret, ttl, nowMs);
+  return signToken('report', { aud: auditId, ...(anyStatus ? { any: true } : {}) }, secret, ttl, nowMs);
 }
 
 /** The audit a report token opens, or null when altered or expired. */
 export function reportTokenAudit(token: string, secret: string, nowMs = Date.now()): string | null {
   return verifyToken<{ aud: string }>('report', token, secret, nowMs)?.aud ?? null;
+}
+
+/**
+ * The audit a report token opens, checked against the audit's state: readers see only
+ * `succeeded` audits, unless the token was made for an internal view.
+ */
+export async function reportTokenTarget(
+  db: Db,
+  token: string,
+  secret: string,
+  nowMs = Date.now(),
+): Promise<string | null> {
+  const claims = verifyToken<{ aud: string; any?: boolean }>('report', token, secret, nowMs);
+  if (!claims?.aud) return null;
+  const [audit] = await db.select({ status: audits.status }).from(audits).where(eq(audits.id, claims.aud));
+  if (!audit || (audit.status !== 'succeeded' && !claims.any)) return null;
+  return claims.aud;
+}
+
+/** Kinds a report link never serves: raw run data and gate evidence stay behind the API. */
+const NOT_SERVED = new Set(['raw_archive', 'gate_evidence', 'model', 'other']);
+
+/** May a report link serve this file now? Not a hidden kind, not past its expiry. */
+export function servedByReportLink(art: { kind: string; expiresAt: Date | null }, nowMs = Date.now()): boolean {
+  return !NOT_SERVED.has(art.kind) && (!art.expiresAt || art.expiresAt.getTime() > nowMs);
 }
 
 /** Report tokens are made only after checking the caller (§7). */
@@ -45,11 +72,13 @@ export async function reportUrl(
 ): Promise<{ url: string; expires_at: string; kind: ReportKind }> {
   requireScope(principal, 'audits:read');
   const id = z.uuid().parse(input.audit_id);
-  const [audit] = await db.select({ id: audits.id }).from(audits).where(eq(audits.id, id));
+  const [audit] = await db.select({ id: audits.id, status: audits.status }).from(audits).where(eq(audits.id, id));
   if (!audit) throw new CoreError('not_found', 'audit not found');
+  const internal = principal.kind === 'internal';
+  if (audit.status !== 'succeeded' && !internal) throw new CoreError('audit_not_ready', 'the audit has not finished');
   const art = await findArtifactByKind(db, id, REPORT_KINDS[input.kind]);
   if (!art) throw new CoreError('not_generated', `no ${input.kind} report for this audit`);
-  const token = makeReportToken(id, cfg.secret, nowMs);
+  const token = makeReportToken(id, cfg.secret, nowMs, REPORT_TOKEN_TTL_SECONDS, internal);
   const path = input.kind === 'html' ? 'report.html' : `a/${art.id}`;
   return {
     url: `${cfg.appUrl}/r/${token}/${path}`,

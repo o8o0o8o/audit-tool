@@ -39,8 +39,9 @@
  *                 move between teaser_ready and no_teaser to match and changed teasers are rebuilt.
  *                 --only=<domain>      one site
  *   disclosed <domain>   Record that a security disclosure was sent; outreach is blocked until then.
- *   teaser        Stage 6: write teaser.md, teaser.pdf and email.md for every teaser_ready row.
+ *   teaser        Stage 6: write teaser.md and email.md for every teaser_ready row.
  *                 --only=<domain>      one site
+ *                 --pdf                also print teaser.pdf
  *   review        Write lead-results/leads-review.html: one card per teaser waiting for a verdict.
  *   approve <domain>                   All highlights confirmed by the reviewer → approved.
  *   reject <domain> --highlight=<n> --reason="…" [--factual]
@@ -59,7 +60,11 @@
  * Common options:
  *   --csv=<path>   prospect list (default docs/gtm/companies.csv); forces the CSV store
  *   --store=csv|api  where prospects live. Default: the platform API when AUDIT_API_URL and
- *                  AUDIT_API_KEY are set (then the CSV is never written), else the CSV
+ *                  AUDIT_API_KEY are set (then the CSV is never written), else the CSV. With the
+ *                  CSV store and those variables set, the platform's scan guard is still asked, and
+ *                  a platform that does not answer refuses every scan
+ *   --pdf          also print teaser.pdf wherever a teaser is written (gate, rerank, recheck, teaser);
+ *                  without it only teaser.md and email.md are written (PDFs only on request)
  *   --out=<dir>    where fingerprint files and logs go (default lead-results). Lead scans themselves
  *                  are always written to lead-results/<domain>/<timestamp>/.
  *
@@ -111,6 +116,7 @@ import {
 import { buildReviewPage, type ReviewCard } from '../lib/leads/review-page';
 import { TEASER_CSS, TeaserError, buildTeaser, loadTeaserConfig } from '../lib/leads/teaser';
 import { renderMarkdownToPdf } from '../lib/reports/pdf-renderer';
+import { pdfRequested } from '../lib/reports/pdf-policy';
 import { LEAD_RESULTS_DIR, stackJsonPath } from '../lib/leads/paths';
 import { chooseScanOrigin } from '../lib/leads/scan-origin';
 import { loadRun } from '../lib/leads/run-data';
@@ -697,7 +703,10 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
   return lead;
 }
 
-/** Writes teaser.md, email.md and teaser.pdf next to lead.json. Returns false when no teaser may be built. */
+/**
+ * Writes teaser.md and email.md next to lead.json, and teaser.pdf only on request (`--pdf`).
+ * Returns false when no teaser may be built.
+ */
 async function writeTeaser(lead: LeadFile): Promise<boolean> {
   const dir = leadDir(lead.runDir);
   let teaser;
@@ -710,6 +719,13 @@ async function writeTeaser(lead: LeadFile): Promise<boolean> {
   }
   fs.writeFileSync(path.join(dir, 'teaser.md'), teaser.markdown);
   fs.writeFileSync(path.join(dir, 'email.md'), teaser.email);
+  if (!(flag('pdf') || pdfRequested())) {
+    // A PDF left from an earlier run would no longer match the text.
+    fs.rmSync(path.join(dir, 'teaser.pdf'), { force: true });
+    console.log(`      teaser: ${path.join(dir, 'teaser.md')}`);
+    console.log(`      for the PDF: npx tsx scripts/lead-pipeline.ts teaser --only=${lead.domain} --pdf`);
+    return true;
+  }
   try {
     await renderMarkdownToPdf(teaser.markdown, path.join(dir, 'teaser.pdf'), {
       title: teaser.subject,
@@ -811,7 +827,7 @@ function approve() {
   );
   updateCompanies(csvPath, [{ website: record[KEY_COLUMN], values: stageValues('approved', now) }]);
   console.log(
-    `${domain}: approved. On the day of sending run \`recheck ${domain}\`, then send email.md with teaser.pdf.`,
+    `${domain}: approved. On the day of sending run \`recheck ${domain}\`, then send email.md with teaser.pdf (\`teaser --only=${domain} --pdf\` prints it).`,
   );
 }
 
@@ -1059,13 +1075,30 @@ async function main() {
     console.error(`Prospect list not found: ${csvPath}`);
     process.exit(1);
   }
-  await store.load();
+  // These read only the review log: they need no prospect list, so they also work with the platform down.
+  if (command === 'precision' || command === 'resume-type') return run();
+  try {
+    await store.load();
+  } catch (error) {
+    // Fail closed: without the list (and its do_not_contact rows) nothing is read or scanned.
+    console.error(`The prospect list could not be loaded. ${(error as Error).message}`);
+    process.exit(1);
+  }
   if (store.kind === 'api') console.log(`Prospects: ${process.env.AUDIT_API_URL} (API store; the CSV is not written)`);
+  let failure: unknown;
   try {
     await run();
-  } finally {
-    await store.flush();
+  } catch (error) {
+    failure = error;
   }
+  // Always flush: stages reached before a failure are sent (or saved for the next run).
+  try {
+    await store.flush();
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exitCode = 1;
+  }
+  if (failure) throw failure;
 }
 
 async function run() {

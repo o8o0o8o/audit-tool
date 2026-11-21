@@ -5,6 +5,7 @@
  */
 
 import * as path from 'node:path';
+import { existsSync } from 'node:fs';
 import type { LeadFile } from './lead-file';
 import { shortLabel, stackLine, whyItMatters } from './teaser';
 
@@ -66,7 +67,7 @@ function card({ lead, stage, disclosed }: ReviewCard, pageDir: string): string {
     <ol>${highlights}</ol>
     <details><summary>Checked and dropped (${dropped.length})</summary><ul>${dropped.map((d) => `<li><code>${esc(d.type)}</code> ${esc(d.reason)}${d.detail ? ` — ${esc(d.detail)}` : ''}</li>`).join('') || '<li>none</li>'}</ul></details>
     <details><summary>Audit findings left for the full audit (${notUsed.length})</summary><ul>${notUsed.map((d) => `<li>${esc(d.type)} <em>(${esc(d.detail)})</em></li>`).join('') || '<li>none</li>'}</ul></details>
-    <p class="files"><a href="${esc(path.join(base, 'teaser.pdf'))}">teaser.pdf</a> · <a href="${esc(path.join(base, 'email.md'))}">email.md</a> · <a href="${esc(path.join(base, 'lead.json'))}">lead.json</a></p>
+    <p class="files">${existsSync(path.join(lead.runDir, 'lead', 'teaser.pdf')) ? `<a href="${esc(path.join(base, 'teaser.pdf'))}">teaser.pdf</a> · ` : ''}<a href="${esc(path.join(base, 'email.md'))}">email.md</a> · <a href="${esc(path.join(base, 'lead.json'))}">lead.json</a></p>
     <pre>npx tsx scripts/lead-pipeline.ts approve ${esc(lead.domain)}
 npx tsx scripts/lead-pipeline.ts reject ${esc(lead.domain)} --highlight=1 --reason="…" [--factual]</pre>
   </article>`;

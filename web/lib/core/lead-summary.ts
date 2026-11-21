@@ -18,6 +18,7 @@ import {
 } from '../../db/schema';
 import { LeadSummary } from '@model/lead-summary';
 import { hasScope, type Principal } from './principal';
+import { ensureScored } from './rescore';
 import { fieldMetricRows, getTechStack, resolveAudit } from './results';
 import { registrableDomainOf } from './sites';
 
@@ -71,6 +72,8 @@ export async function getLeadSummary(db: Db, principal: Principal, raw: Record<s
   const vendors: Record<string, string[]> = {};
   if (showStack) for (const t of stack.technologies) (vendors[t.kind] ??= []).push(t.name);
   const [profile] = await db.select().from(siteProfiles).where(eq(siteProfiles.auditId, used.audit_id));
+  // Returned scores come from the current scoring code (a blocked scan has none).
+  if (!blocked) await ensureScored(db, null, [used.audit_id]);
   const scoreRows = await db.select().from(scores).where(eq(scores.auditId, used.audit_id));
   const counts: Record<string, number> = {};
   for (const f of await db

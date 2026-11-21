@@ -17,6 +17,9 @@
  * With the platform API configured (AUDIT_API_URL + AUDIT_API_KEY) the prospect rows are read and
  * written through it (the CSV is not written), the scan guard is asked before each audit, and each
  * finished run is published as a `full` audit (POST /api/v1/audits/import).
+ * A `has_audit` mark the platform did not take is retried, then saved to
+ * lead-results/pending-prospect-updates.json and sent first on the next start, so a site is not
+ * audited twice. With `--csv` / `--store=csv` and the platform configured, its scan guard is still asked.
  *
  * Usage: npx tsx scripts/audit-companies.ts [--once] [--full] [--active] [--timeout-min=n] [--csv=path] [--store=csv|api]
  */
@@ -53,7 +56,12 @@ function mark(website: string, value: string) {
 }
 
 async function main() {
-  await store.load();
+  try {
+    await store.load();
+  } catch (error) {
+    console.error(`The prospect list could not be loaded. ${(error as Error).message}`);
+    process.exit(1);
+  }
   const skipped = new Set<string>();
   for (;;) {
     // Rows marked do_not_contact are skipped, like in every lead-pipeline command.

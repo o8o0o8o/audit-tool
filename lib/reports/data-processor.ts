@@ -5,6 +5,7 @@
 
 import { isConfidentLanguageMismatch } from '../utils/language-confidence';
 import * as fs from 'fs';
+import { scoresComparable } from '../scoring/scoring-version';
 import * as path from 'path';
 import { FileManager } from '../storage/file-manager';
 import { HistoryManager } from '../../historyManager';
@@ -155,9 +156,13 @@ class ReportDataProcessor {
       timing: metadata.timing,
       cruxData: metadata.cruxData ?? null,
       // Present only on lead scans (`--lead`); marks the run as one that has no audit history.
-      ...((metadata as { leadScan?: unknown }).leadScan ? { leadScan: (metadata as { leadScan?: unknown }).leadScan } : {}),
+      ...((metadata as { leadScan?: unknown }).leadScan
+        ? { leadScan: (metadata as { leadScan?: unknown }).leadScan }
+        : {}),
       // Present only on single-page audits (`--page`); the report labels the run and shows no history.
-      ...((metadata as { singlePage?: unknown }).singlePage ? { singlePage: (metadata as { singlePage?: unknown }).singlePage } : {}),
+      ...((metadata as { singlePage?: unknown }).singlePage
+        ? { singlePage: (metadata as { singlePage?: unknown }).singlePage }
+        : {}),
       repoAnalysis,
       pageData: {
         pages,
@@ -253,7 +258,9 @@ class ReportDataProcessor {
 
       const previousAudit = audits.length >= 2 ? audits[audits.length - 2] : null;
 
-      return { trendData, previousAudit, audits };
+      const comparable = scoresComparable(audits[audits.length - 1], previousAudit);
+
+      return { trendData, previousAudit, audits, scoresComparable: comparable };
     } catch (e: unknown) {
       console.log('Could not load history data:', (e as Error).message);
       return null;
@@ -394,7 +401,12 @@ class ReportDataProcessor {
     const isSinglePage = Boolean((jsonData as { singlePage?: unknown }).singlePage);
     const historyData = isLeadScan || isSinglePage ? null : this.loadHistory(domainName);
 
-    const pageData = (jsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0, byError: {} }) as PageData & {
+    const pageData = (jsonData.pageData ?? {
+      pages: {},
+      totalWithoutError: 0,
+      totalWithError: 0,
+      byError: {},
+    }) as PageData & {
       incomingLinks?: Record<string, string[]>;
     };
     const pages: PageInfo[] = Object.values(pageData.pages ?? {});
@@ -416,6 +428,7 @@ class ReportDataProcessor {
       topIssues: this.getTopIssues(analysis.details as Record<string, AnalysisDetail> | undefined),
       trendData: historyData?.trendData ?? null,
       previousAudit: historyData?.previousAudit ?? null,
+      scoresComparable: historyData?.scoresComparable ?? true,
       sitemaps: jsonData.sitemaps ?? {},
       robots: jsonData.robots ?? {},
       isMultiLang: jsonData.isMultiLang ?? false,

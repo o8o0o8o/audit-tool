@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { login, SESSION_COOKIE, SESSION_TTL_SECONDS } from '../../../../lib/core/auth';
-import { secretFromEnv } from '../../../../lib/core/tokens';
+import { sessionKeyFromEnv } from '../../../../lib/core/tokens';
 import { clientIp, ctx, handle, readJson } from '../../../../lib/server';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ export const POST = handle(async (request: Request) => {
   const value = await login(
     db,
     { password: typeof body?.password === 'string' ? body.password : '', ip: clientIp(request) },
-    { passwordHash: process.env.INTERNAL_PASSWORD_HASH, sessionSecret: secretFromEnv('SESSION_SECRET') },
+    { passwordHash: process.env.INTERNAL_PASSWORD_HASH, sessionSecret: sessionKeyFromEnv() },
   );
   (await cookies()).set(SESSION_COOKIE, value, {
     httpOnly: true,

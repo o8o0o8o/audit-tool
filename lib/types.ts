@@ -1613,6 +1613,8 @@ export interface ReportSectionData {
   topIssues?: TopIssue[];
   trendData?: TrendDataCompat | null;
   previousAudit?: AuditSnapshot | null;
+  /** False when this audit and the previous one were scored by different scoring rules. */
+  scoresComparable?: boolean;
   sitemaps?: Record<string, unknown>;
   robots?: Record<string, unknown>;
   isMultiLang?: boolean;

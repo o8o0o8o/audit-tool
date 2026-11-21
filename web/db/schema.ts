@@ -101,6 +101,10 @@ export const audits = pgTable(
     rendererVersion: text('renderer_version'),
   /** Hash of the scoring code the stored scores were computed with (not in the design's SQL); re-scored when it changes. */
   scoringVersion: text('scoring_version'),
+    /** Failed loads so far; at 3 the loader sets the audit `failed` with the error (not in the design's SQL). */
+    loadAttempts: integer('load_attempts').notNull().default(0),
+    /** Failed re-scores with the current scoring code; at 3 the audit is marked and the queue moves on. */
+    scoreAttempts: integer('score_attempts').notNull().default(0),
     createdAt: tz('created_at').notNull().defaultNow(),
     startedAt: tz('started_at'),
     finishedAt: tz('finished_at'),

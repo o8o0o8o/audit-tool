@@ -12,6 +12,8 @@ import { normalizeRunOptions, toCliArgs } from '../model/run-options';
 import { AppClient, StaleAttempt, type RegisteredAudit } from './client';
 import { mtimeOf, restoreSnapshot, Snapshotter } from './snapshot';
 import { uploadRun } from './files';
+import { auditChildEnv } from './env';
+import { killTree } from './proc-tree';
 
 export interface WorkerEnv {
   appUrl: string;
@@ -24,7 +26,14 @@ export interface WorkerEnv {
   heartbeatMs: number;
   progressMs: number;
   snapshotIntervalMs: number;
+  /** Wall-clock limit of one run, by mode; after it the worker kills the audit and reports `failed`. */
+  maxRunMs: Record<RegisteredAudit['mode'], number>;
+  /** The audit child has written nothing (progress, checkpoint, output) for this long: the run is given up. */
+  stallMs: number;
 }
+
+/** Full audits: the GitHub workflow's 350 minutes. A quick scan loads 25 pages, a page audit one. */
+const MAX_RUN_MINUTES = { full: 350, quick: 45, page: 20 } as const;
 
 export function workerEnvFrom(env: NodeJS.ProcessEnv, repoRoot: string): WorkerEnv {
   const need = (k: string) => {
@@ -43,6 +52,12 @@ export function workerEnvFrom(env: NodeJS.ProcessEnv, repoRoot: string): WorkerE
     heartbeatMs: Number(env.PLATFORM_HEARTBEAT_MS) || 60_000,
     progressMs: Number(env.PLATFORM_PROGRESS_MS) || 15_000,
     snapshotIntervalMs: Number(env.PLATFORM_SNAPSHOT_INTERVAL_MS) || 10 * 60_000,
+    maxRunMs: {
+      full: (Number(env.PLATFORM_MAX_RUN_MINUTES_FULL) || MAX_RUN_MINUTES.full) * 60_000,
+      quick: (Number(env.PLATFORM_MAX_RUN_MINUTES_QUICK) || MAX_RUN_MINUTES.quick) * 60_000,
+      page: (Number(env.PLATFORM_MAX_RUN_MINUTES_PAGE) || MAX_RUN_MINUTES.page) * 60_000,
+    },
+    stallMs: (Number(env.PLATFORM_STALL_MINUTES) || 30) * 60_000,
   };
 }
 
@@ -121,28 +136,48 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
   mkdirSync(env.workDir, { recursive: true });
 
   let stopped = false;
-  const beat = setInterval(() => {
-    client.heartbeat().catch((err) => {
-      if (err instanceof StaleAttempt) stop('attempt is no longer current');
-    });
-  }, env.heartbeatMs);
-  let child: ReturnType<typeof spawn> | null = null;
-  const stop = (why: string) => {
-    if (stopped) return;
+  const timers: Array<ReturnType<typeof setInterval>> = [];
+  /** Never resolves: the run is being stopped and the process exits from `stop`. */
+  const halt = () => new Promise<never>(() => {});
+  /**
+   * Ends the run: no more heartbeats, the audit and everything it started (Chromium runs in a
+   * process group of its own) is killed and checked to be gone, then the worker exits.
+   * `report` is sent as the audit's final status; without it the reaper redispatches the audit.
+   */
+  const stop = async (why: string, code: number, report?: string): Promise<never> => {
+    if (stopped) return halt();
     stopped = true;
     log(`stopping: ${why}`);
-    clearInterval(beat);
-    // The local Dispatcher starts the worker as a process-group leader: the audit and Chromium are
-    // in the same group, so one kill ends them all.
-    if (process.env.PLATFORM_WORKER_GROUP_LEADER === '1') {
-      try {
-        process.kill(-process.pid, 'SIGKILL');
-      } catch {
-        /* fall through */
-      }
-    }
-    child?.kill('SIGKILL');
-    process.exit(3);
+    for (const t of timers) clearInterval(t);
+    const gone = await killTree(process.pid, { includeRoot: false });
+    if (!gone) log('some child processes could not be killed');
+    if (report) await client.status({ status: 'failed', error: report }).catch(() => {});
+    process.exit(code);
+  };
+  const stale = () => stop('attempt is no longer current', 3);
+  timers.push(
+    setInterval(() => {
+      client.heartbeat().catch((err) => {
+        if (err instanceof StaleAttempt) void stale();
+      });
+    }, env.heartbeatMs),
+  );
+  const maxRunMs = env.maxRunMs[audit.mode];
+  const maxRunMin = Math.round(maxRunMs / 60_000);
+  timers.push(
+    setInterval(
+      () =>
+        void stop(
+          `run time limit of ${maxRunMin} min reached`,
+          1,
+          `stopped after ${maxRunMin} minutes (run time limit)`,
+        ),
+      maxRunMs,
+    ),
+  );
+  const finish = (code: number): number => {
+    for (const t of timers) clearInterval(t);
+    return code;
   };
 
   try {
@@ -160,14 +195,13 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
     }
 
     // Guard a homepage that lands on another host before anything else is loaded.
-    const host = audit.mode === 'page' ? null : await finalHost(audit.target_url);
+    const host = await finalHost(audit.target_url);
     if (host && host !== audit.host) {
       const g = await client.guard(host);
       if (!g.allowed) {
         await client.status({ status: 'cancelled', error: 'scan_guard' });
         log(`homepage redirects to ${host}, which must not be scanned`);
-        clearInterval(beat);
-        return 0;
+        return finish(0);
       }
     }
 
@@ -177,15 +211,28 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
     const marker = path.join(env.workDir, 'checkpoint.marker');
     await client.progress({ phase: 'crawl' });
     log(`start.ts ${args.join(' ')}`);
-    child = spawn(
+    const child = spawn(
       process.execPath,
       ['--import', tsxLoader(env.repoRoot), path.join(env.repoRoot, 'start.ts'), ...args],
       {
         cwd: env.workDir,
-        env: { ...process.env, AUDIT_PROGRESS_FILE: progressFile, AUDIT_CHECKPOINT_MARKER: marker },
-        stdio: 'inherit',
+        env: auditChildEnv(process.env, options, {
+          AUDIT_PROGRESS_FILE: progressFile,
+          AUDIT_CHECKPOINT_MARKER: marker,
+        }),
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
+    // Output is passed on, and counts as a sign of life: the phases after the crawl write no progress file.
+    let lastActivity = Date.now();
+    child.stdout.on('data', (d: Buffer) => {
+      lastActivity = Date.now();
+      process.stdout.write(d);
+    });
+    child.stderr.on('data', (d: Buffer) => {
+      lastActivity = Date.now();
+      process.stderr.write(d);
+    });
 
     const snapshotter = new Snapshotter(client, env.workDir, base, audit.audit_id, audit.attempt);
     let lastProgress = '';
@@ -201,13 +248,19 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
               const p = JSON.parse(raw) as { processed?: number; total?: number };
               client
                 .progress({ processed: p.processed, total: p.total })
-                .catch((err) => err instanceof StaleAttempt && stop('stale'));
+                .catch((err) => err instanceof StaleAttempt && void stale());
             }
           }
         } catch {
           /* a half-written progress file; next tick */
         }
         const m = mtimeOf(marker);
+        const idle = Date.now() - Math.max(lastActivity, mtimeOf(progressFile), m);
+        if (idle > env.stallMs) {
+          // No final status: the reaper sees the heartbeat stop and redispatches from the snapshot.
+          void stop(`the audit has made no progress for ${Math.round(idle / 60_000)} min`, 4);
+          return;
+        }
         const due = snapshotter.count === 0 || Date.now() - snapshotter.lastAt >= env.snapshotIntervalMs;
         if (m && m !== lastMarker && due && !snapshotting) {
           snapshotting = true;
@@ -219,26 +272,25 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
                 log(`snapshot ${snapshotter.count} taken`);
               }
             })
-            .catch((err) => (err instanceof StaleAttempt ? stop('stale') : log(`snapshot failed: ${err.message}`)))
+            .catch((err) => (err instanceof StaleAttempt ? void stale() : log(`snapshot failed: ${err.message}`)))
             .finally(() => (snapshotting = false));
         }
       },
       Math.min(env.progressMs, 5000),
     );
 
-    const code: number = await new Promise((resolve) => child!.on('exit', (c) => resolve(c ?? 1)));
+    timers.push(poll);
+    const code: number = await new Promise((resolve) => child.on('exit', (c) => resolve(c ?? 1)));
     clearInterval(poll);
-    child = null;
+    if (stopped) await halt();
     if (code !== 0) {
       await client.status({ status: 'failed', error: `audit exited with code ${code}` });
-      clearInterval(beat);
-      return 1;
+      return finish(1);
     }
     const runDir = findRunDir(env.workDir, base);
     if (!runDir) {
       await client.status({ status: 'failed', error: 'no audit results produced' });
-      clearInterval(beat);
-      return 1;
+      return finish(1);
     }
     const ctx: StepContext = { audit, runDir, repoRoot: env.repoRoot };
     // Platform steps: each is separate from the audit and never fails it (except the model build).
@@ -263,15 +315,15 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
       artifacts,
     });
     log(`uploaded ${artifacts.length} artifact(s); status ${steps.build ? 'built' : 'succeeded'}`);
-    clearInterval(beat);
-    return 0;
+    return finish(0);
   } catch (err) {
-    if (err instanceof StaleAttempt) stop('attempt is no longer current');
+    // A 409 on any call (a status call included: the audit was cancelled or reaped) ends the run quietly.
+    if (err instanceof StaleAttempt) await stale();
+    if (stopped) await halt();
     log(`failed: ${err instanceof Error ? err.stack : err}`);
     await client
       .status({ status: 'failed', error: String(err instanceof Error ? err.message : err).slice(0, 1000) })
       .catch(() => {});
-    clearInterval(beat);
-    return 1;
+    return finish(1);
   }
 }

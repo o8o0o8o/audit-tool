@@ -7,6 +7,7 @@ import { escapeHtml, getSeverityBadge } from '../html-utils';
 import { truncateText } from '../../utils';
 import { extractAnalysis, extractSummary } from '../data-processor';
 import { getDeltaCssColor } from '../comparison-helpers';
+import { SCORES_NOT_COMPARABLE_NOTE } from '../../scoring/scoring-version';
 import type { ReportSectionData, TrendDataCompat, AuditSnapshot, IssueTrend } from '../../types';
 
 const SCORE_RULES_LINK = '<a href="#score-rules" class="score-rules-link" title="How is this score calculated?">ⓘ</a>';
@@ -36,6 +37,8 @@ function getHistoricalProgress(data: ReportSectionData) {
   // No earlier audit: no History section (and no tab) at all.
   if (!previousAudit || !trendData || auditCount < 2) return '';
 
+  // Scores from different scoring rules are never subtracted: the change may not be the site's.
+  const comparable = data.scoresComparable !== false;
   const scoreDelta = currentScore - previousAudit.summary.overallScore;
   const issuesDelta = currentIssues - previousAudit.summary.totalIssues;
 
@@ -45,13 +48,14 @@ function getHistoricalProgress(data: ReportSectionData) {
       <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">Track your SEO improvements over ${auditCount} audit${auditCount > 1 ? 's' : ''}</p>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-        ${noScore ? '' : getDeltaCard(`Score Change ${SCORE_RULES_LINK}`, scoreDelta, scoreDelta >= 0, 'Since last audit')}
+        ${noScore || !comparable ? '' : getDeltaCard(`Score Change ${SCORE_RULES_LINK}`, scoreDelta, scoreDelta >= 0, 'Since last audit')}
         ${getDeltaCard('Issues Change', issuesDelta, issuesDelta <= 0, 'Since last audit', true)}
         ${getInfoCard('Total Audits', auditCount, 'var(--color-info)', 'var(--color-link)', 'Tracked over time')}
         ${noScore ? '' : getInfoCard(`Current Score ${SCORE_RULES_LINK}`, currentScore, 'var(--purple-500)', 'var(--purple-600)', 'Out of 100')}
       </div>
 
-      ${noScore ? '' : getCategoryDeltaCards(jsonData, previousAudit)}
+      ${noScore || comparable ? '' : `<p style="text-align: center; color: var(--color-text-muted); margin-bottom: 25px;">${escapeHtml(SCORES_NOT_COMPARABLE_NOTE)}</p>`}
+      ${noScore || !comparable ? '' : getCategoryDeltaCards(jsonData, previousAudit)}
 
       <div class="charts-grid">
         ${

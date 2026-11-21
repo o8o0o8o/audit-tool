@@ -65,17 +65,15 @@ export async function beginImport(db: Db, files: FileStore, principal: Principal
     startedAt: now,
     finishedAt: input.finished_at ? new Date(input.finished_at) : null,
   });
-  await db
-    .insert(auditAttempts)
-    .values({
-      auditId: id,
-      attempt: 1,
-      dispatchNonce: 'import',
-      sessionHash: sha256Hex(session),
-      registeredAt: now,
-      heartbeatAt: now,
-      status: 'running',
-    });
+  await db.insert(auditAttempts).values({
+    auditId: id,
+    attempt: 1,
+    dispatchNonce: 'import',
+    sessionHash: sha256Hex(session),
+    registeredAt: now,
+    heartbeatAt: now,
+    status: 'running',
+  });
   const prefix = `audits/${id}/1/`;
   return {
     audit_id: id,
@@ -93,6 +91,12 @@ const Artifact = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   page_url: z.string().nullish(),
 });
+
+/** An import is finished and added to only by the client that began it (or internally). */
+function assertOwnImport(principal: Principal, ownerClientId: string | null): void {
+  if (principal.kind === 'client' && ownerClientId !== principal.clientId)
+    throw new CoreError('forbidden', 'not your import');
+}
 
 export async function completeImport(
   db: Db,
@@ -115,6 +119,7 @@ export async function completeImport(
     .from(audits)
     .where(eq(audits.id, z.uuid().parse(auditId)));
   if (!audit || audit.source !== 'pipeline') throw new CoreError('not_found', 'import not found');
+  assertOwnImport(principal, audit.createdByClientId);
   if (audit.status !== 'running') throw new CoreError('conflict', `import is ${audit.status}`);
   if (!(await files.get(`audits/${auditId}/1/model/site.json.gz`)))
     throw new CoreError('invalid_input', 'upload model/site.json.gz first');
@@ -125,20 +130,18 @@ export async function completeImport(
   for (let i = 0; i < input.artifacts.length; i += 1000) {
     const chunk = input.artifacts.slice(i, i + 1000);
     if (chunk.length) {
-      await db
-        .insert(artifacts)
-        .values(
-          chunk.map((a) => ({
-            auditId,
-            kind: a.kind,
-            blobKey: a.key,
-            bytes: a.bytes,
-            sha256: a.sha256,
-            pageUrl: a.page_url ?? null,
-            createdAt: now,
-            expiresAt: artifactExpiry(a.kind, 'pipeline', now),
-          })),
-        );
+      await db.insert(artifacts).values(
+        chunk.map((a) => ({
+          auditId,
+          kind: a.kind,
+          blobKey: a.key,
+          bytes: a.bytes,
+          sha256: a.sha256,
+          pageUrl: a.page_url ?? null,
+          createdAt: now,
+          expiresAt: artifactExpiry(a.kind, 'pipeline', now),
+        })),
+      );
     }
   }
   await db
@@ -185,10 +188,11 @@ export async function appendGateRun(db: Db, principal: Principal, auditId: strin
   requireScope(principal, 'audits:publish');
   const lead = GateRunInput.parse(raw);
   const [audit] = await db
-    .select({ id: audits.id })
+    .select({ id: audits.id, owner: audits.createdByClientId })
     .from(audits)
     .where(eq(audits.id, z.uuid().parse(auditId)));
   if (!audit) throw new CoreError('not_found', 'audit not found');
+  assertOwnImport(principal, audit.owner);
   const runAt = new Date(lead.rerankedAt ?? lead.checkedAt);
   const [existing] = await db
     .select({ id: leadGateRuns.id })
@@ -226,5 +230,12 @@ export async function appendGateRun(db: Db, principal: Principal, auditId: strin
 
 export async function listGateRuns(db: Db, principal: Principal, auditId: string) {
   requireScope(principal, 'audits:read');
+  const [audit] = await db
+    .select({ status: audits.status })
+    .from(audits)
+    .where(eq(audits.id, z.uuid().parse(auditId)));
+  if (!audit) throw new CoreError('not_found', 'audit not found');
+  if (audit.status !== 'succeeded' && principal.kind !== 'internal')
+    throw new CoreError('audit_not_ready', 'the audit has not finished');
   return db.select().from(leadGateRuns).where(eq(leadGateRuns.auditId, auditId)).orderBy(desc(leadGateRuns.runAt));
 }

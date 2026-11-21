@@ -17,7 +17,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_METHODS: Record<string, string> = {
-  seo: 'Each Error-tier SEO issue lowers the score by half its reach, and issues compound: 100 × Π (1 − 0.5 × share of crawled pages it affects). One issue on every page gives 50; on 1 page in 25, 98. A site-wide issue counts as every page. Warnings and notices are reported but not scored.',
+  seo: 'Each Error-tier SEO issue lowers the score by half its reach, and issues compound: 100 × Π (1 − 0.5 × share of crawled pages it affects). One issue on every page gives 50; on 1 page in 25, 98. An issue reported with a count reaches that many pages; one reported for the site as a whole (no pages, no count) counts as every page. Warnings and notices are reported but not scored.',
   technical: 'Like SEO: 100 × Π (1 − 0.5 × share of crawled pages it affects) over Error-tier technical issues.',
   performance: '', // filled from PERFORMANCE_METRIC_WEIGHTS below
   accessibility:

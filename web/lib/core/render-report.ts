@@ -10,8 +10,7 @@
  * will run it in a worker job.
  */
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,7 +20,7 @@ import type { Db } from '../../db/client';
 import { auditDocuments, auditRunData, audits, pages, scores } from '../../db/schema';
 import type { FileStore } from '../platform/types';
 import { repoRootFrom } from '../platform/local/dispatcher';
-import { ensureScored } from './rescore';
+import { ensureScored, hashSources } from './rescore';
 
 /** The audit tool's files the report depends on; their contents version the cache. */
 const RENDERER_SOURCES = [
@@ -34,23 +33,12 @@ const RENDERER_SOURCES = [
   'scripts/render-report.ts',
 ];
 
-let versionCache: { at: number; value: string } | null = null;
-
-function walk(p: string, out: string[]): void {
-  const st = statSync(p, { throwIfNoEntry: false });
-  if (!st) return;
-  if (st.isDirectory()) for (const e of readdirSync(p).sort()) walk(path.join(p, e), out);
-  else if (/\.(ts|json)$/.test(p)) out.push(p);
-}
+let versionCache: { at: number; root: string; value: string } | null = null;
 
 /** Hash of the renderer's source files (checked at most every 2 s). */
 export function rendererVersion(root = repoRootFrom()): string {
-  if (versionCache && Date.now() - versionCache.at < 2000) return versionCache.value;
-  const files: string[] = [];
-  for (const s of RENDERER_SOURCES) walk(path.join(root, s), files);
-  const h = createHash('sha256');
-  for (const f of files) h.update(f).update(readFileSync(f));
-  versionCache = { at: Date.now(), value: h.digest('hex').slice(0, 16) };
+  if (versionCache && versionCache.root === root && Date.now() - versionCache.at < 2000) return versionCache.value;
+  versionCache = { at: Date.now(), root, value: hashSources(root, RENDERER_SOURCES) };
   return versionCache.value;
 }
 
@@ -155,7 +143,7 @@ export async function renderReportHtml(db: Db, files: FileStore, auditId: string
 /** Rebuilds the run folder the renderer reads, from the rows (and the screenshots from the file store). */
 export async function materialize(
   db: Db,
-  files: FileStore,
+  files: FileStore | null,
   audit: AuditRow,
   runDir: string,
   opts: { evidence?: boolean } = {},
@@ -187,7 +175,8 @@ export async function materialize(
   if (rest.length) {
     const file = 'pages/batch_rest.json.gz';
     gz(file, { urls: rest.map((r) => r.url), pages: Object.fromEntries(rest.map((r) => [r.url, r.sections])) });
-    (manifest.files as { pageBatches: unknown[] }).pageBatches.push({
+    const index = (manifest.files ??= {}) as { pageBatches?: unknown[] };
+    (index.pageBatches ??= []).push({
       file,
       count: rest.length,
       urls: rest.map((r) => r.url),
@@ -198,7 +187,7 @@ export async function materialize(
   gz('analysis.json.gz', data.analysis ?? {});
   gz('incoming-links.json.gz', data['incoming-links'] ?? {});
   // Screenshots the report shows (UI issues): binary files stay in the file store.
-  if (opts.evidence === false) return;
+  if (opts.evidence === false || !files) return;
   const prefix = `audits/${audit.id}/${audit.currentAttempt}/`;
   for await (const f of files.list(`${prefix}evidence/`)) {
     const body = await files.get(f.key);

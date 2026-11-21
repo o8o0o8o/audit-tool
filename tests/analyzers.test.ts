@@ -39,6 +39,7 @@ import { isFetchAllowed, isPrivateOrInternalHost } from '../validators';
 import { getPaginationSeriesKey, normalizeUrlForComparison } from '../lib/utils';
 import { computeTotalPagesProcessed } from '../lib/orchestrators/audit-orchestrator';
 import { previousScoreFrom } from '../robots';
+import { SCORING_VERSION } from '../lib/scoring/scoring-version';
 import { collectLinks } from '../lib/crawler/page-data-builder';
 import { parse as parseHtml } from 'node-html-parser';
 import { recordPaginationNotFound, worstPaginationStreak } from '../lib/crawler/resilience';
@@ -8182,7 +8183,10 @@ void describe('Sitemap-parser fix — relative <loc> resolution', () => {
 
 void describe('previousScoreFrom', () => {
   void it('keeps a real 0 instead of discarding it as unmeasured', () => {
-    assert.strictEqual(previousScoreFrom({ summary: { overallScore: 0 } }), 0);
+    const current = { scoringVersion: SCORING_VERSION, summary: { overallScore: 0 } };
+    assert.strictEqual(previousScoreFrom(current), 0);
+    // A snapshot scored by older rules (no version stored) gives no previous score.
+    assert.strictEqual(previousScoreFrom({ summary: { overallScore: 70 } }), null);
   });
 
   void it('returns null for unmeasured or missing history', () => {

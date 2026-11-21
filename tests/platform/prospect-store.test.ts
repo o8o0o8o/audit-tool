@@ -78,11 +78,13 @@ void test('prospect store: the CSV and API implementations behave the same', asy
   try {
     const csv = path.join(dir, 'companies.csv');
     writeFileSync(csv, CSV);
-    await exercise(new CsvProspectStore(csv));
+    await exercise(new CsvProspectStore(csv, {}));
     const api = fakeApi();
     const csv2 = path.join(dir, 'untouched.csv');
     writeFileSync(csv2, CSV);
-    await exercise(new ApiProspectStore('http://api.test', 'ak_x', api.f));
+    await exercise(
+      new ApiProspectStore('http://api.test', 'ak_x', api.f, { pendingFile: path.join(dir, 'pending.json') }),
+    );
     assert.equal(readFileSync(csv2, 'utf8'), CSV, 'the API store never writes the CSV');
     assert.ok(api.calls.includes('PATCH /api/v1/prospects/a'));
     assert.ok(!api.calls.includes('PATCH /api/v1/prospects/n'), 'no write is even attempted for a do_not_contact row');
@@ -101,4 +103,88 @@ void test('prospect store: the API store is chosen when configured', () => {
     openProspectStore({ csvPath: 'x.csv', store: 'csv', env: { AUDIT_API_URL: 'http://a', AUDIT_API_KEY: 'k' } }).kind,
     'csv',
   );
+});
+
+const PLATFORM = { AUDIT_API_URL: 'http://api.test', AUDIT_API_KEY: 'ak_x' };
+
+void test('prospect store: the CSV guard also asks the platform when it is configured', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'store-'));
+  try {
+    const csv = path.join(dir, 'companies.csv');
+    // The CSV calls nope.example an ordinary row; the platform says do_not_contact.
+    writeFileSync(csv, 'company,website,stage\nAcme,acme.example,selected\nNope,nope.example,selected\n');
+    const api = fakeApi();
+    const store = new CsvProspectStore(csv, PLATFORM, api.f);
+    assert.deepEqual(await store.guard('nope.example'), { allowed: false, reason: 'do_not_contact' });
+    assert.equal((await store.guard('acme.example')).allowed, true);
+
+    // A CSV do_not_contact row is refused without asking, whatever the platform says.
+    writeFileSync(csv, 'company,website,stage\nAcme,acme.example,do_not_contact\n');
+    assert.equal((await store.guard('acme.example')).allowed, false);
+
+    // Platform configured but not answering: refused, with the address in the reason.
+    writeFileSync(csv, 'company,website,stage\nAcme,acme.example,selected\n');
+    const down = (async () => {
+      throw new Error('connect ECONNREFUSED');
+    }) as unknown as typeof fetch;
+    const closed = await new CsvProspectStore(csv, PLATFORM, down).guard('acme.example');
+    assert.equal(closed.allowed, false);
+    assert.match(closed.reason ?? '', /http:\/\/api\.test.*could not be reached/);
+    const denied = (async () => new Response('no', { status: 401 })) as unknown as typeof fetch;
+    assert.equal((await new CsvProspectStore(csv, PLATFORM, denied).guard('acme.example')).allowed, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test('prospect store: updates the platform did not take are saved and sent first on the next load', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'store-'));
+  try {
+    const pendingFile = path.join(dir, 'lead-results', 'pending.json');
+    const api = fakeApi();
+    let up = true;
+    const f = (async (url: string, init?: RequestInit) => {
+      if (!up && init?.method === 'PATCH') throw new Error('connect ECONNREFUSED');
+      return api.f(url, init);
+    }) as typeof fetch;
+    const opts = { pendingFile, retries: 2, retryDelayMs: 1 };
+
+    const first = new ApiProspectStore('http://api.test', 'ak_x', f, opts);
+    await first.load();
+    up = false;
+    first.update([{ website: 'acme.example', values: { stage: 'scanned' } }]);
+    first.update([{ website: 'acme.example', values: { run_dir: 'lead-results/acme.example/x' } }]);
+    await assert.rejects(first.flush(), /saved in .*pending\.json/);
+    assert.equal(JSON.parse(readFileSync(pendingFile, 'utf8')).length, 2);
+    assert.equal(api.rows[0]!.record.stage, 'fingerprinted');
+
+    up = true;
+    const second = new ApiProspectStore('http://api.test', 'ak_x', f, opts);
+    await second.load();
+    const row = second.records().find((r) => r.website === 'acme.example')!;
+    assert.equal(row.stage, 'scanned');
+    assert.equal(row.run_dir, 'lead-results/acme.example/x');
+    assert.equal(api.rows[0]!.record.stage, 'scanned');
+    assert.throws(() => readFileSync(pendingFile), 'the pending file is removed once sent');
+
+    // A short outage is covered by the retries: nothing is saved.
+    const third = new ApiProspectStore('http://api.test', 'ak_x', f, opts);
+    await third.load();
+    up = false;
+    third.update([{ website: 'acme.example', values: { stage: 'teaser_ready' } }]);
+    setTimeout(() => (up = true), 0);
+    await third.flush();
+    assert.equal(api.rows[0]!.record.stage, 'teaser_ready');
+
+    // A platform that cannot be reached at load names its address and the CSV option.
+    const dead = (async () => {
+      throw new Error('connect ECONNREFUSED');
+    }) as unknown as typeof fetch;
+    await assert.rejects(
+      new ApiProspectStore('http://api.test', 'ak_x', dead, opts).load(),
+      /http:\/\/api\.test.*--store=csv/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

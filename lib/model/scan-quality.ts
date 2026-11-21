@@ -19,6 +19,15 @@ export const BLOCKED_ERROR_KEYS = new Set([
   'challenge-503',
 ]);
 
+/** The one definition of "blocked": a byError key (a bare 503 is a failure, a challenged 503 a block). */
+export const isBlockedErrorKey = (key: string): boolean => BLOCKED_ERROR_KEYS.has(key);
+/** A page answered with a status that means the site refused us. */
+export const isBlockedStatus = (status: unknown): boolean =>
+  typeof status === 'number' && BLOCKED_ERROR_KEYS.has(String(status));
+/** A page was read when it answered 2xx; a page without a status was not read. */
+export const wasRead = (p: { status?: number | null; redirectOnly?: boolean }): boolean =>
+  !p.redirectOnly && typeof p.status === 'number' && p.status >= 200 && p.status < 300;
+
 export interface ScanQualityInput {
   /** The URL that must be readable: the homepage, or the page of a single-page audit. */
   keyUrl: string;
@@ -41,19 +50,23 @@ const norm = (u: string) => {
 
 export function computeScanQuality(input: ScanQualityInput): ScanQuality & { blockedUrls: Set<string> } {
   const blockedUrls = new Set<string>();
+  const errorUrls = new Set<string>();
   const errorsByType: Record<string, number> = {};
   let failed = 0;
   for (const [key, value] of Object.entries(input.byError ?? {})) {
     const urls = Array.isArray(value) ? (value as unknown[]).filter((u): u is string => typeof u === 'string') : [];
     if (!urls.length) continue;
     errorsByType[key] = urls.length;
-    if (BLOCKED_ERROR_KEYS.has(key)) urls.forEach((u) => blockedUrls.add(u));
+    urls.forEach((u) => errorUrls.add(u));
+    if (isBlockedErrorKey(key)) urls.forEach((u) => blockedUrls.add(u));
     else failed += urls.length;
   }
-  const okPages = input.pages.filter(
-    (p) => !p.redirectOnly && !blockedUrls.has(p.url) && (p.status ?? 200) >= 200 && (p.status ?? 200) < 300,
-  );
-  for (const p of input.pages) if (p.status && BLOCKED_ERROR_KEYS.has(String(p.status))) blockedUrls.add(p.url);
+  for (const p of input.pages) if (isBlockedStatus(p.status)) blockedUrls.add(p.url);
+  const okPages = input.pages.filter((p) => !blockedUrls.has(p.url) && wasRead(p));
+  // A page record without a status, listed under no error, was still not read.
+  failed += input.pages.filter(
+    (p) => !p.redirectOnly && typeof p.status !== 'number' && !errorUrls.has(p.url) && !blockedUrls.has(p.url),
+  ).length;
   const blocked = blockedUrls.size;
   const requested = okPages.length + blocked + failed;
   const key = norm(input.keyUrl);

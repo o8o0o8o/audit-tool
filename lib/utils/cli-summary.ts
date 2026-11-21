@@ -172,7 +172,8 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   const failedPages = counts.withErrors + counts.failedToLoad;
   const successRate = totalPages > 0 ? ((successPages / totalPages) * 100).toFixed(1) : 0;
 
-  const overallScore = summary.overallScore ?? 0;
+  // No score (nothing was measured) is not 0.
+  const overallScore: number | null = typeof summary.overallScore === 'number' ? summary.overallScore : null;
   const categoryScores: Record<string, number> = (summary.categoryScores ?? {}) as Record<string, number>;
 
   const quickWins = getTopQuickWins(analysis, 3);
@@ -184,16 +185,20 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   console.log('╠' + '═'.repeat(W) + '╣');
 
   // Score gauge with letter grade
-  const scoreColor =
-    overallScore >= 80 ? C.BRIGHT_GREEN : overallScore >= 60 ? C.GREEN : overallScore >= 40 ? C.ORANGE : C.RED;
-  const scoreLabel =
-    overallScore >= 90 ? 'Excellent' : overallScore >= 70 ? 'Good' : overallScore >= 50 ? 'Needs Work' : 'Poor';
-  const letterGrade = getLetterGrade(overallScore);
-  const gauge = bar(overallScore, 100, 30);
-  line(
-    `${C.BOLD}Score:${C.RESET} ${scoreColor}${C.BOLD}${overallScore}${C.RESET}/100 (${scoreColor}${letterGrade}${C.RESET}) ${scoreColor}${scoreLabel}${C.RESET}`,
-  );
-  line(`       ${gauge} `);
+  if (overallScore === null) {
+    line(`${C.BOLD}Score:${C.RESET} ${C.DIM}not available (nothing was measured)${C.RESET}`);
+  } else {
+    const scoreColor =
+      overallScore >= 80 ? C.BRIGHT_GREEN : overallScore >= 60 ? C.GREEN : overallScore >= 40 ? C.ORANGE : C.RED;
+    const scoreLabel =
+      overallScore >= 90 ? 'Excellent' : overallScore >= 70 ? 'Good' : overallScore >= 50 ? 'Needs Work' : 'Poor';
+    const letterGrade = getLetterGrade(overallScore);
+    const gauge = bar(overallScore, 100, 30);
+    line(
+      `${C.BOLD}Score:${C.RESET} ${scoreColor}${C.BOLD}${overallScore}${C.RESET}/100 (${scoreColor}${letterGrade}${C.RESET}) ${scoreColor}${scoreLabel}${C.RESET}`,
+    );
+    line(`       ${gauge} `);
+  }
   emptyLine();
 
   // Category scores with mini bars
@@ -207,7 +212,12 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
       { key: 'technical', name: 'Technical', icon: '🔧' },
     ];
     for (const cat of categories) {
-      const score = categoryScores[cat.key] ?? 0;
+      const score = categoryScores[cat.key];
+      if (typeof score !== 'number') {
+        // Only Performance can be missing: no lab run and no real-user data.
+        line(`  ${cat.icon} ${cat.name.padEnd(14)} ${C.DIM}not measured${C.RESET}`);
+        continue;
+      }
       const catBar = bar(score, 100, 15);
       const scoreStr = String(score).padStart(3);
       line(`  ${cat.icon} ${cat.name.padEnd(14)} ${catBar} ${scoreStr}/100`);
@@ -338,7 +348,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   }
 
   // Score prediction based on category headroom
-  if (criticalCount > 0 || highCount > 0) {
+  if (overallScore !== null && (criticalCount > 0 || highCount > 0)) {
     const predicted = estimateScoreAfterFixes(overallScore, categoryScores, SCORING.CATEGORY_WEIGHTS);
     if (predicted) {
       emptyLine();
@@ -348,7 +358,7 @@ function printAuditSummary(results: AuditResultsExtended, domainName: string, ht
   }
 
   // Previous audit comparison
-  if (results.previousScore !== undefined && results.previousScore !== null) {
+  if (overallScore !== null && results.previousScore !== undefined && results.previousScore !== null) {
     emptyLine();
     divider();
     const prev = results.previousScore;
@@ -426,8 +436,9 @@ function getJsonSummary(results: AuditResultsExtended, domainName: string, htmlP
   const pageData = results.pageData ?? {};
   const counts = computePageCounts(pageData.pages, pageData.byError ?? {});
 
-  const score = summary.overallScore ?? 0;
-  const grade = getLetterGrade(score);
+  // null when nothing was measured: no score is not a score of 0.
+  const score = typeof summary.overallScore === 'number' ? summary.overallScore : null;
+  const grade = score === null ? null : getLetterGrade(score);
 
   return {
     domain: domainName,

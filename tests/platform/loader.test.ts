@@ -80,7 +80,10 @@ void test('loader: a loader killed halfway resumes and the row counts are right'
   assert.equal((await t.db.select().from(auditDocuments).where(eq(auditDocuments.auditId, id))).length, 1);
   assert.equal((await t.db.select().from(scores).where(eq(scores.auditId, id))).length, model.scores.length);
   assert.ok((await t.db.select().from(technologies).where(eq(technologies.auditId, id))).length > 0);
-  assert.equal((await t.db.select().from(audits).where(eq(audits.id, id)))[0]!.status, 'succeeded');
+  const [row] = await t.db.select().from(audits).where(eq(audits.id, id));
+  assert.equal(row!.status, 'succeeded');
+  assert.equal(row!.loadAttempts, 0, 'a killed loader is not a failed load');
+  assert.equal(row!.scoringVersion, null, "the run's scores are not stamped with this app's scoring version");
   // loading again is a no-op (status no longer built)
   assert.equal((await loadAudit(t.db, files.store, id)).outcome, 'skipped');
 });

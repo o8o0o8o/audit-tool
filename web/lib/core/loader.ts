@@ -3,9 +3,15 @@
  * `built`, loads it in chunks, each in its own transaction (delete this audit's rows of the chunk,
  * insert, record the chunk done), and sets `succeeded` after the last one. A crash resumes at the
  * next chunk. An unknown model major leaves the audit `built` with `load_blocked = model_version`.
+ *
+ * A load that throws is counted (`load_attempts`) and its error recorded; the third failure sets
+ * the audit `failed`, so a model that cannot be loaded neither blocks the queue nor keeps the site
+ * from being scanned again. A reload of a `succeeded` audit runs in one transaction: readers see the
+ * old rows until the new ones are in, and a failed reload changes nothing.
  */
 import { gunzipSync } from 'node:zlib';
-import { and, asc, eq, inArray, isNull, like, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { ZodError } from 'zod';
 import type { Db } from '../../db/client';
 import {
   artifacts,
@@ -29,19 +35,22 @@ import {
   trackingIds,
 } from '../../db/schema';
 import type { FileStore } from '../platform/types';
-import { CHECK_TYPES, UNTYPED } from '@model/finding-codes';
+import { CHECK_TYPES, UNTYPED, deriveCode } from '@model/finding-codes';
 import { SiteDocument } from '@model/site';
 import { PageRecord, RunData } from '@model/page';
+import { pgSafe, pgSafeText } from '@model/pg-safe';
 import { MODEL_VERSION, modelMajor } from '@model/version';
-import { scoringVersion } from './rescore';
 
 export const CHUNKS = ['site', 'findings', 'stack', 'gate', 'disclosures'] as const;
 export type Chunk = (typeof CHUNKS)[number];
 
-/** At most this many new derived codes per audit; the rest load as `untyped` (design §8.2). */
-export const MAX_NEW_CODES = 20;
+/** Derived codes the vocabulary may hold; past it a finding without a known code loads as `untyped`. */
+export const MAX_DERIVED_CODES = 2000;
+/** Failed loads before the audit is set `failed`. */
+export const MAX_LOAD_ATTEMPTS = 3;
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+type AuditRow = typeof audits.$inferSelect;
 
 export async function seedCheckTypes(db: Db | Tx): Promise<void> {
   await db
@@ -63,10 +72,80 @@ export async function seedCheckTypes(db: Db | Tx): Promise<void> {
 export async function readSiteDocument(files: FileStore, auditId: string, attempt: number): Promise<unknown> {
   const got = await files.get(`audits/${auditId}/${attempt}/model/site.json.gz`);
   if (!got) throw new Error(`model/site.json.gz missing for attempt ${attempt}`);
-  return JSON.parse(gunzipSync(Buffer.from(await new Response(got.body).arrayBuffer())).toString('utf8'));
+  return pgSafe(JSON.parse(gunzipSync(Buffer.from(await new Response(got.body).arrayBuffer())).toString('utf8')));
 }
 
-async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, doc: SiteDocument): Promise<void> {
+/**
+ * Finding codes as they are stored, in the `findings` rows and in the site document alike. A code
+ * is kept when it is a known check type, or when the finding's title is a stable check title that
+ * derives exactly this code (it then becomes a new derived check type). Anything else is `untyped`,
+ * title kept. The rule depends on the title and on codes that only ever get added, so loading the
+ * same audit again gives the same codes.
+ */
+export async function resolveCodes(db: Db, auditId: string, doc: SiteDocument): Promise<SiteDocument> {
+  const codes = [
+    ...new Set([...doc.findings.map((f) => f.code), ...doc.recommendations.flatMap((r) => r.codes)]),
+  ].filter((c) => c !== UNTYPED);
+  if (!codes.length) return doc;
+  const known = new Set<string>();
+  for (let i = 0; i < codes.length; i += 1000)
+    for (const r of await db
+      .select({ code: checkTypes.code })
+      .from(checkTypes)
+      .where(inArray(checkTypes.code, codes.slice(i, i + 1000))))
+      known.add(r.code);
+  const fresh = new Map<string, SiteDocument['findings'][number]>();
+  const refused: string[] = [];
+  for (const f of doc.findings) {
+    if (f.code === UNTYPED || known.has(f.code) || fresh.has(f.code)) continue;
+    if (deriveCode(f.title).code === f.code) fresh.set(f.code, f);
+    else refused.push(f.title);
+  }
+  if (fresh.size) {
+    const [have] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(checkTypes)
+      .where(eq(checkTypes.derived, true));
+    const room = Math.max(0, MAX_DERIVED_CODES - (have?.n ?? 0));
+    for (const code of [...fresh.keys()].sort().slice(room)) {
+      refused.push(fresh.get(code)!.title);
+      fresh.delete(code);
+    }
+  }
+  if (fresh.size) {
+    await db
+      .insert(checkTypes)
+      .values(
+        [...fresh.values()].map((f) => ({
+          code: f.code,
+          title: f.title.slice(0, 300),
+          category: f.category,
+          defaultSeverity: f.severity,
+          derived: true,
+        })),
+      )
+      .onConflictDoNothing();
+    console.warn(
+      `[loader] ${auditId}: ${fresh.size} new finding code(s): ${[...fresh.values()].map((f) => JSON.stringify(f.title)).join(', ')}`,
+    );
+  }
+  if (refused.length)
+    console.warn(
+      `[loader] ${auditId}: ${refused.length} finding(s) loaded as untyped: ${refused
+        .slice(0, 20)
+        .map((t) => JSON.stringify(t.slice(0, 120)))
+        .join(', ')}`,
+    );
+  const keep = (code: string) => (known.has(code) || fresh.has(code) ? code : UNTYPED);
+  return {
+    ...doc,
+    findings: doc.findings.map((f) => ({ ...f, code: keep(f.code) })),
+    recommendations: doc.recommendations.map((r) => ({ ...r, codes: [...new Set(r.codes.map(keep))] })),
+  };
+}
+
+async function loadChunk(tx: Tx, audit: AuditRow, chunk: Chunk, doc: SiteDocument): Promise<void> {
+  const auditId = audit.id;
   switch (chunk) {
     case 'site': {
       const json = JSON.stringify(doc);
@@ -128,11 +207,18 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
         );
       await tx.delete(siteProfiles).where(eq(siteProfiles.auditId, auditId));
       const p = doc.siteProfile;
+      // Exact suffix (no LIKE: `_` and `%` in a path are not wildcards); this attempt's file first.
+      const suffix = `/${p.homepageScreenshot}`;
       const [shot] = p.homepageScreenshot
         ? await tx
             .select({ id: artifacts.id })
             .from(artifacts)
-            .where(and(eq(artifacts.auditId, auditId), like(artifacts.blobKey, `%/${p.homepageScreenshot}`)))
+            .where(and(eq(artifacts.auditId, auditId), sql`right(${artifacts.blobKey}, ${suffix.length}) = ${suffix}`))
+            .orderBy(
+              sql`(${artifacts.blobKey} = ${`audits/${auditId}/${audit.currentAttempt}${suffix}`}) desc`,
+              desc(artifacts.createdAt),
+              asc(artifacts.id),
+            )
             .limit(1)
         : [];
       await tx.insert(siteProfiles).values({
@@ -159,39 +245,12 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
     case 'findings': {
       await tx.delete(findings).where(eq(findings.auditId, auditId));
       if (!doc.findings.length) return;
-      const codes = [...new Set(doc.findings.map((f) => f.code))];
-      const known = new Set(
-        (await tx.select({ code: checkTypes.code }).from(checkTypes).where(inArray(checkTypes.code, codes))).map(
-          (r) => r.code,
-        ),
-      );
-      const fresh = codes.filter((c) => !known.has(c));
-      const allowed = new Set(fresh.slice(0, MAX_NEW_CODES));
-      if (fresh.length > MAX_NEW_CODES)
-        console.warn(`[loader] ${auditId}: ${fresh.length - MAX_NEW_CODES} new codes loaded as untyped`);
-      if (allowed.size) {
-        await tx
-          .insert(checkTypes)
-          .values(
-            [...allowed].map((code) => {
-              const f = doc.findings.find((x) => x.code === code)!;
-              return {
-                code,
-                title: f.title.slice(0, 300),
-                category: f.category,
-                defaultSeverity: f.severity,
-                derived: true,
-              };
-            }),
-          )
-          .onConflictDoNothing();
-      }
       for (let i = 0; i < doc.findings.length; i += 500) {
         await tx.insert(findings).values(
           doc.findings.slice(i, i + 500).map((f) => ({
             id: f.id,
             auditId,
-            code: known.has(f.code) || allowed.has(f.code) ? f.code : UNTYPED,
+            code: f.code,
             params: f.params,
             title: f.title,
             severity: f.severity,
@@ -261,14 +320,27 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
       return;
     }
     case 'disclosures': {
-      // A rescan that sees the same exposure updates the row; it never opens a second one.
+      // A rescan that sees the same exposure updates the row; it never opens a second one. First
+      // and last are decided by when the audits ran, not by the order they were loaded in.
+      const at = (audit.finishedAt ?? audit.createdAt).toISOString();
+      const ranAt = (col: typeof disclosures.firstAuditId | typeof disclosures.lastSeenAuditId) =>
+        sql`(select coalesce(a.finished_at, a.created_at) from audits a where a.id = ${col})`;
       for (const d of doc.disclosures) {
         await tx
           .insert(disclosures)
-          .values({ siteId, code: d.code, target: d.target, firstAuditId: auditId, lastSeenAuditId: auditId })
+          .values({
+            siteId: audit.siteId,
+            code: d.code,
+            target: d.target,
+            firstAuditId: auditId,
+            lastSeenAuditId: auditId,
+          })
           .onConflictDoUpdate({
             target: [disclosures.siteId, disclosures.code, disclosures.target],
-            set: { lastSeenAuditId: auditId },
+            set: {
+              firstAuditId: sql`case when ${disclosures.firstAuditId} is null or ${ranAt(disclosures.firstAuditId)} > ${at}::timestamptz then ${auditId}::uuid else ${disclosures.firstAuditId} end`,
+              lastSeenAuditId: sql`case when ${disclosures.lastSeenAuditId} is null or ${ranAt(disclosures.lastSeenAuditId)} <= ${at}::timestamptz then ${auditId}::uuid else ${disclosures.lastSeenAuditId} end`,
+            },
           });
       }
       return;
@@ -279,7 +351,7 @@ async function loadChunk(tx: Tx, auditId: string, siteId: string, chunk: Chunk, 
 async function readGzJson(files: FileStore, key: string): Promise<unknown> {
   const got = await files.get(key);
   if (!got) throw new Error(`${key} missing`);
-  return JSON.parse(gunzipSync(Buffer.from(await new Response(got.body).arrayBuffer())).toString('utf8'));
+  return pgSafe(JSON.parse(gunzipSync(Buffer.from(await new Response(got.body).arrayBuffer())).toString('utf8')));
 }
 
 /** Row chunks of the model (design §2 "Row parts"): run-data, pages-0001, pages-0002, … */
@@ -290,7 +362,8 @@ async function rowChunks(files: FileStore, prefix: string): Promise<string[]> {
     if (name === 'run-data.json.gz') out.unshift('run-data');
     else if (/^pages-\d{4}\.ndjson\.gz$/.test(name)) out.push(name.replace('.ndjson.gz', ''));
   }
-  return out;
+  // listing order is the store's; chunks load in page order so the first record of a URL wins
+  return out.sort((a, b) => (a === 'run-data' ? -1 : b === 'run-data' ? 1 : a < b ? -1 : 1));
 }
 
 async function loadRowChunk(tx: Tx, files: FileStore, prefix: string, auditId: string, chunk: string): Promise<void> {
@@ -309,10 +382,15 @@ async function loadRowChunk(tx: Tx, files: FileStore, prefix: string, auditId: s
     .toString('utf8')
     .split('\n')
     .filter(Boolean)
-    .map((l) => PageRecord.parse(JSON.parse(l)));
+    .map((l) => PageRecord.parse(pgSafe(JSON.parse(l))));
+  // One row per URL (`pages_audit_url`): the first record wins, within the chunk and across chunks.
+  const unique = [...new Map(records.reverse().map((r) => [r.url, r])).values()].reverse();
   await tx.delete(pages).where(and(eq(pages.auditId, auditId), eq(pages.chunk, n)));
-  for (let i = 0; i < records.length; i += 100) {
-    await tx.insert(pages).values(records.slice(i, i + 100).map((r) => ({ auditId, chunk: n, ...r })));
+  for (let i = 0; i < unique.length; i += 100) {
+    await tx
+      .insert(pages)
+      .values(unique.slice(i, i + 100).map((r) => ({ auditId, chunk: n, ...r })))
+      .onConflictDoNothing();
   }
 }
 
@@ -320,6 +398,52 @@ export interface LoadResult {
   auditId: string;
   outcome: 'succeeded' | 'blocked' | 'partial' | 'failed' | 'skipped';
   chunks: number;
+  error?: string;
+}
+
+interface LoadOptions {
+  deadline?: number;
+  onFinished?: (auditId: string) => Promise<void>;
+  knownMajor?: number;
+  /** Test hook: the process dies after this many chunks (not a counted failure). */
+  failAfterChunks?: number;
+  now?: Date;
+  /** Load a `succeeded` audit again, in one transaction (see `reloadAudit`). */
+  reload?: boolean;
+}
+
+class SimulatedCrash extends Error {}
+
+const pageChunkNumber = (chunk: string) => Number(chunk.slice('pages-'.length));
+
+/** One line for `audits.error`: a schema error as its first few issues, not zod's full JSON. */
+function describeError(err: unknown): string {
+  if (err instanceof ZodError) {
+    const issues = err.issues.slice(0, 5).map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
+    return `model does not match the schema: ${issues.join('; ')}${err.issues.length > 5 ? ` (+${err.issues.length - 5} more)` : ''}`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Counts a failed load and records its error; the third failure sets the audit `failed`. */
+async function recordLoadFailure(db: Db, auditId: string, err: unknown, opts: LoadOptions): Promise<LoadResult> {
+  const error = pgSafeText(`load: ${describeError(err)}`).slice(0, 2000);
+  const active = and(eq(audits.id, auditId), inArray(audits.status, ['built', 'loading']));
+  const [row] = await db
+    .update(audits)
+    .set({ loadAttempts: sql`${audits.loadAttempts} + 1`, error })
+    .where(active)
+    .returning({ n: audits.loadAttempts, finishedAt: audits.finishedAt });
+  console.error(`[loader] ${auditId} failed (attempt ${row?.n ?? '?'} of ${MAX_LOAD_ATTEMPTS}): ${error}`);
+  if (row && row.n >= MAX_LOAD_ATTEMPTS) {
+    const [failed] = await db
+      .update(audits)
+      .set({ status: 'failed', phase: null, finishedAt: row.finishedAt ?? opts.now ?? new Date() })
+      .where(active)
+      .returning({ id: audits.id });
+    if (failed) await opts.onFinished?.(auditId);
+  }
+  return { auditId, outcome: 'failed', chunks: 0, error };
 }
 
 /** Loads one audit as far as the time budget allows. */
@@ -327,95 +451,169 @@ export async function loadAudit(
   db: Db,
   files: FileStore,
   auditId: string,
-  opts: {
-    deadline?: number;
-    onFinished?: (auditId: string) => Promise<void>;
-    knownMajor?: number;
-    failAfterChunks?: number;
-    now?: Date;
-  } = {},
+  opts: LoadOptions = {},
 ): Promise<LoadResult> {
   const [audit] = await db.select().from(audits).where(eq(audits.id, auditId));
-  if (!audit || !['built', 'loading'].includes(audit.status) || audit.loadBlocked)
+  const reload = !!opts.reload && audit?.status === 'succeeded';
+  if (!audit || audit.loadBlocked || !(reload || ['built', 'loading'].includes(audit.status)))
     return { auditId, outcome: 'skipped', chunks: 0 };
-  let raw: unknown;
   try {
-    raw = await readSiteDocument(files, auditId, audit.currentAttempt);
+    return reload ? await reloadSucceeded(db, files, audit, opts) : await loadBuilt(db, files, audit, opts);
   } catch (err) {
-    await db
-      .update(audits)
-      .set({ error: `load: ${(err as Error).message}` })
-      .where(eq(audits.id, auditId));
-    return { auditId, outcome: 'failed', chunks: 0 };
+    if (err instanceof SimulatedCrash) throw err;
+    if (!reload) return recordLoadFailure(db, auditId, err, opts);
+    // A failed reload rolled back: the audit stays `succeeded` with the rows it had.
+    const error = describeError(err);
+    console.error(`[loader] reload of ${auditId} failed, rows unchanged: ${error}`);
+    return { auditId, outcome: 'failed', chunks: 0, error };
   }
+}
+
+function modelMajorOf(raw: unknown): { version: string; major: number } {
   const version = String((raw as { modelVersion?: unknown })?.modelVersion ?? '');
-  const known = opts.knownMajor ?? modelMajor(MODEL_VERSION);
-  let major: number;
   try {
-    major = modelMajor(version);
+    return { version, major: modelMajor(version) };
   } catch {
-    major = -1;
+    return { version, major: -1 };
   }
+}
+
+async function markChunk(tx: Tx, auditId: string, chunk: string): Promise<void> {
+  await tx
+    .insert(loadProgress)
+    .values({ auditId, chunk })
+    .onConflictDoUpdate({ target: [loadProgress.auditId, loadProgress.chunk], set: { doneAt: new Date() } });
+}
+
+/** Page rows of chunks the model no longer has (a rebuild with fewer pages) go. */
+async function dropStalePages(tx: Tx, auditId: string, chunks: string[]): Promise<void> {
+  const numbers = chunks.filter((c) => c !== 'run-data').map(pageChunkNumber);
+  await tx
+    .delete(pages)
+    .where(
+      numbers.length ? and(eq(pages.auditId, auditId), notInArray(pages.chunk, numbers)) : eq(pages.auditId, auditId),
+    );
+}
+
+async function loadBuilt(db: Db, files: FileStore, audit: AuditRow, opts: LoadOptions): Promise<LoadResult> {
+  const auditId = audit.id;
+  const raw = await readSiteDocument(files, auditId, audit.currentAttempt);
+  const known = opts.knownMajor ?? modelMajor(MODEL_VERSION);
+  const { version, major } = modelMajorOf(raw);
   if (major !== known) {
     // Version skew: wait for the next deploy; this does not count as a failed attempt.
     await db.update(audits).set({ loadBlocked: 'model_version', status: 'built' }).where(eq(audits.id, auditId));
     console.warn(`[loader] ${auditId}: model ${version} needs a newer app (knows major ${known})`);
     return { auditId, outcome: 'blocked', chunks: 0 };
   }
-  const doc = SiteDocument.parse(raw);
-  await db.update(audits).set({ status: 'loading', phase: 'load' }).where(eq(audits.id, auditId));
+  const parsed = SiteDocument.parse(raw);
+  await db
+    .update(audits)
+    .set({ status: 'loading', phase: 'load' })
+    .where(and(eq(audits.id, auditId), inArray(audits.status, ['built', 'loading'])));
   await seedCheckTypes(db);
+  const doc = await resolveCodes(db, auditId, parsed);
   const done = new Set(
     (await db.select({ chunk: loadProgress.chunk }).from(loadProgress).where(eq(loadProgress.auditId, auditId))).map(
       (r) => r.chunk,
     ),
   );
+  const locked = (fn: (tx: Tx) => Promise<void>) =>
+    db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'load:' + auditId}))`);
+      await fn(tx);
+    });
   let n = 0;
   for (const chunk of CHUNKS) {
     if (done.has(chunk)) continue;
     if (opts.deadline && Date.now() > opts.deadline) return { auditId, outcome: 'partial', chunks: n };
-    if (opts.failAfterChunks !== undefined && n >= opts.failAfterChunks) throw new Error('simulated loader crash');
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'load:' + auditId}))`);
-      await loadChunk(tx, auditId, audit.siteId, chunk, doc);
-      await tx
-        .insert(loadProgress)
-        .values({ auditId, chunk })
-        .onConflictDoUpdate({ target: [loadProgress.auditId, loadProgress.chunk], set: { doneAt: new Date() } });
+    if (opts.failAfterChunks !== undefined && n >= opts.failAfterChunks)
+      throw new SimulatedCrash('simulated loader crash');
+    await locked(async (tx) => {
+      await loadChunk(tx, audit, chunk, doc);
+      await markChunk(tx, auditId, chunk);
     });
     n++;
   }
   // Row parts: the run's own data and one row per page, so the report renders from the database.
   const prefix = `audits/${auditId}/${audit.currentAttempt}/`;
-  for (const chunk of await rowChunks(files, prefix)) {
+  const rows = await rowChunks(files, prefix);
+  for (const chunk of rows) {
     if (done.has(chunk)) continue;
     if (opts.deadline && Date.now() > opts.deadline) return { auditId, outcome: 'partial', chunks: n };
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'load:' + auditId}))`);
+    await locked(async (tx) => {
       await loadRowChunk(tx, files, prefix, auditId, chunk);
-      await tx
-        .insert(loadProgress)
-        .values({ auditId, chunk })
-        .onConflictDoUpdate({ target: [loadProgress.auditId, loadProgress.chunk], set: { doneAt: new Date() } });
+      await markChunk(tx, auditId, chunk);
     });
     n++;
   }
-  await db
-    .update(audits)
-    .set({
-      status: 'succeeded',
-      scoringVersion: scoringVersion(),
-      phase: null,
-      finishedAt: audit.finishedAt ?? opts.now ?? new Date(),
-      modelVersion: doc.modelVersion,
-      error: null,
-    })
-    .where(and(eq(audits.id, auditId), inArray(audits.status, ['built', 'loading'])));
+  await locked(async (tx) => {
+    await dropStalePages(tx, auditId, rows);
+    // `scoring_version` stays empty: the scores are the run's own, not this app's scoring code's.
+    await tx
+      .update(audits)
+      .set({
+        status: 'succeeded',
+        scoringVersion: null,
+        scoreAttempts: 0,
+        phase: null,
+        finishedAt: audit.finishedAt ?? opts.now ?? new Date(),
+        modelVersion: doc.modelVersion,
+        error: null,
+      })
+      .where(and(eq(audits.id, auditId), inArray(audits.status, ['built', 'loading'])));
+  });
   await opts.onFinished?.(auditId);
   return { auditId, outcome: 'succeeded', chunks: n };
 }
 
-/** Loader cron: every built/loading audit without a load block, until the time budget is used. */
+/**
+ * Loads a `succeeded` audit again from its model files (after a rebuild). Everything happens in one
+ * transaction and the status never changes, so readers see the old rows until the commit and a
+ * failure leaves them as they were.
+ */
+async function reloadSucceeded(db: Db, files: FileStore, audit: AuditRow, opts: LoadOptions): Promise<LoadResult> {
+  const auditId = audit.id;
+  const raw = await readSiteDocument(files, auditId, audit.currentAttempt);
+  const known = opts.knownMajor ?? modelMajor(MODEL_VERSION);
+  const { version, major } = modelMajorOf(raw);
+  if (major !== known) {
+    console.warn(`[loader] ${auditId}: model ${version} needs a newer app (knows major ${known}); not reloaded`);
+    return { auditId, outcome: 'blocked', chunks: 0 };
+  }
+  const parsed = SiteDocument.parse(raw);
+  await seedCheckTypes(db);
+  const doc = await resolveCodes(db, auditId, parsed);
+  const prefix = `audits/${auditId}/${audit.currentAttempt}/`;
+  const rows = await rowChunks(files, prefix);
+  let n = 0;
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'load:' + auditId}))`);
+    await tx.delete(loadProgress).where(eq(loadProgress.auditId, auditId));
+    for (const chunk of CHUNKS) {
+      await loadChunk(tx, audit, chunk, doc);
+      await markChunk(tx, auditId, chunk);
+      n++;
+    }
+    if (rows.length) await tx.delete(pages).where(eq(pages.auditId, auditId));
+    for (const chunk of rows) {
+      await loadRowChunk(tx, files, prefix, auditId, chunk);
+      await markChunk(tx, auditId, chunk);
+      n++;
+    }
+    await tx
+      .update(audits)
+      .set({ scoringVersion: null, scoreAttempts: 0, modelVersion: doc.modelVersion })
+      .where(eq(audits.id, auditId));
+  });
+  return { auditId, outcome: 'succeeded', chunks: n };
+}
+
+/**
+ * Loader cron: built/loading audits without a load block, until the time budget is used. Audits
+ * that failed before go last, and a failing one is counted and passed over, so it never holds the
+ * others; after MAX_LOAD_ATTEMPTS it is `failed` and leaves the queue.
+ */
 export async function runLoader(
   db: Db,
   files: FileStore,
@@ -426,7 +624,7 @@ export async function runLoader(
     .select({ id: audits.id })
     .from(audits)
     .where(and(inArray(audits.status, ['built', 'loading']), isNull(audits.loadBlocked)))
-    .orderBy(asc(audits.createdAt))
+    .orderBy(asc(audits.loadAttempts), asc(audits.createdAt))
     .limit(50);
   const out: LoadResult[] = [];
   for (const r of rows) {
@@ -434,6 +632,7 @@ export async function runLoader(
     try {
       out.push(await loadAudit(db, files, r.id, { deadline, onFinished: opts.onFinished }));
     } catch (err) {
+      // loadAudit records its own failures; this is the recording itself failing (database down)
       console.error(`[loader] ${r.id} failed; retried on the next pass`, err);
       out.push({ auditId: r.id, outcome: 'failed', chunks: 0 });
     }

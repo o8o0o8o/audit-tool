@@ -1,5 +1,5 @@
 import { scryptSync } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { apiClients } from '../../db/schema';
 import { CoreError } from './errors';
@@ -20,6 +20,10 @@ export function verifyPassword(password: string, stored: string): boolean {
   return safeEqual(got, hashHex);
 }
 
+const LOGIN_ALL_BUCKET = 'login:all';
+/** Failed logins from all addresses together, per window. */
+const LOGIN_MAX_FAILURES_ALL = 30;
+
 export const ipBucket = (ip: string, secret: string) => `login:ip:${sha256Hex(`${secret}:${ip}`).slice(0, 32)}`;
 
 /**
@@ -34,14 +38,24 @@ export async function login(
   now = new Date(),
 ): Promise<string> {
   if (!cfg.passwordHash) throw new CoreError('unauthorized', 'INTERNAL_PASSWORD_HASH is not set');
+  const hash = cfg.passwordHash;
   const bucket = ipBucket(input.ip, cfg.sessionSecret);
-  if ((await countRate(db, bucket, LOGIN_WINDOW_MS, now)) >= LOGIN_MAX_FAILURES) {
-    throw new CoreError('rate_limited', 'too many failed logins; try again later');
-  }
-  if (!verifyPassword(input.password, cfg.passwordHash)) {
-    await recordRate(db, bucket, now);
-    throw new CoreError('unauthorized', 'wrong password');
-  }
+  // Count, check and record under one lock, so parallel guesses cannot each see "4 so far".
+  // The overall bucket stops guessing from many addresses.
+  const outcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('rate:login'))`);
+    if (
+      (await countRate(tx, bucket, LOGIN_WINDOW_MS, now)) >= LOGIN_MAX_FAILURES ||
+      (await countRate(tx, LOGIN_ALL_BUCKET, LOGIN_WINDOW_MS, now)) >= LOGIN_MAX_FAILURES_ALL
+    )
+      return 'limited' as const;
+    if (verifyPassword(input.password, hash)) return 'ok' as const;
+    await recordRate(tx, bucket, now);
+    await recordRate(tx, LOGIN_ALL_BUCKET, now);
+    return 'wrong' as const;
+  });
+  if (outcome === 'limited') throw new CoreError('rate_limited', 'too many failed logins; try again later');
+  if (outcome === 'wrong') throw new CoreError('unauthorized', 'wrong password');
   return signToken('session', { sub: 'internal' }, cfg.sessionSecret, SESSION_TTL_SECONDS, now.getTime());
 }
 

@@ -3,7 +3,7 @@
  * `audit_id`; with a domain the newest succeeded audit that holds the data is used, and every
  * result names the audit it used (`audit_id`, `mode`, `scanned_at`) and its scan quality.
  */
-import { and, asc, desc, eq, inArray, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lt, ne, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import {
@@ -25,6 +25,7 @@ import {
 } from '../../db/schema';
 import { CoreError } from './errors';
 import { hasScope, requireScope, type Principal } from './principal';
+import { ensureScored, scoringVersion } from './rescore';
 import { listAliases, registrableDomainOf, resolveSites } from './sites';
 
 export const Target = z
@@ -106,25 +107,58 @@ export const ListFindingsInput = z.object({
   codes: z.array(z.string()).nullish().describe('check_types codes; aliases accepted'),
   scope: z.enum(['page', 'site']).nullish(),
   limit: z.number().int().min(1).max(500).nullish(),
+  cursor: z.string().nullish().describe('next_cursor of the previous page, with the same filters'),
 });
+
+const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+
+/** Opaque keyset cursor over (severity rank, occurrences desc, id). */
+function encodeCursor(row: { severity: string; occurrences: number; id: string }): string {
+  const rank = SEVERITIES.indexOf(row.severity);
+  return Buffer.from(JSON.stringify([rank < 0 ? 3 : Math.min(rank, 3), row.occurrences, row.id])).toString('base64url');
+}
+
+function decodeCursor(cursor: string): [number, number, string] {
+  try {
+    const v = z
+      .tuple([z.number().int().min(0).max(3), z.number().int(), z.uuid()])
+      .parse(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')));
+    return v;
+  } catch {
+    throw new CoreError('invalid_input', 'cursor is not valid');
+  }
+}
 
 export async function listFindings(db: Db, principal: Principal, raw: Record<string, unknown>) {
   const { used } = await resolveAudit(db, principal, raw);
   const input = ListFindingsInput.parse(raw);
+  // A blocked request is never evidence: a blocked scan shows no findings, as in get_lead_summary.
+  if (used.scan_quality === 'blocked') return { ...used, findings: [], count: 0, total: 0, next_cursor: null };
   const where: SQL[] = [eq(findings.auditId, used.audit_id)];
-  if (input.severity_min) {
-    const keep = ['critical', 'high', 'medium', 'low'].slice(
-      0,
-      ['critical', 'high', 'medium', 'low'].indexOf(input.severity_min) + 1,
-    );
-    where.push(inArray(findings.severity, keep));
-  }
+  if (input.severity_min)
+    where.push(inArray(findings.severity, SEVERITIES.slice(0, SEVERITIES.indexOf(input.severity_min) + 1)));
   if (input.category) where.push(eq(findings.category, input.category));
   if (input.scope) where.push(eq(findings.scope, input.scope));
   if (input.codes?.length) {
     const aliases = await db.select().from(checkTypeAliases).where(inArray(checkTypeAliases.oldCode, input.codes));
     where.push(inArray(findings.code, [...input.codes, ...aliases.map((a) => a.code)]));
   }
+  const [counted] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(findings)
+    .where(and(...where));
+  const page: SQL[] = [...where];
+  if (input.cursor) {
+    const [rank, occurrences, id] = decodeCursor(input.cursor);
+    page.push(
+      or(
+        sql`${SEV_ORDER} > ${rank}`,
+        and(sql`${SEV_ORDER} = ${rank}`, lt(findings.occurrences, occurrences)),
+        and(sql`${SEV_ORDER} = ${rank}`, eq(findings.occurrences, occurrences), gt(findings.id, id)),
+      )!,
+    );
+  }
+  const limit = input.limit ?? 50;
   const rows = await db
     .select({
       id: findings.id,
@@ -138,10 +172,17 @@ export async function listFindings(db: Db, principal: Principal, raw: Record<str
       pages_total: findings.pagesTotal,
     })
     .from(findings)
-    .where(and(...where))
-    .orderBy(SEV_ORDER, desc(findings.occurrences))
-    .limit(input.limit ?? 50);
-  return { ...used, findings: rows, count: rows.length };
+    .where(and(...page))
+    .orderBy(SEV_ORDER, desc(findings.occurrences), asc(findings.id))
+    .limit(limit + 1);
+  const out = rows.slice(0, limit);
+  return {
+    ...used,
+    findings: out,
+    count: out.length,
+    total: counted?.n ?? 0,
+    next_cursor: rows.length > limit ? encodeCursor(out[out.length - 1]!) : null,
+  };
 }
 
 export async function getRecommendations(db: Db, principal: Principal, raw: Record<string, unknown>) {
@@ -259,6 +300,9 @@ export async function listCheckTypes(db: Db, principal: Principal, raw: Record<s
   };
 }
 
+/** Stale audits of a score trend re-scored by one `get_site` call. */
+const TREND_RESCORES_PER_READ = 5;
+
 export async function getSite(db: Db, principal: Principal, raw: Record<string, unknown>) {
   const { used, row } = await resolveAudit(db, principal, raw);
   const aliases = await listAliases(db, row.siteId);
@@ -267,18 +311,40 @@ export async function getSite(db: Db, principal: Principal, raw: Record<string, 
     .from(audits)
     .where(and(eq(audits.siteId, row.siteId), eq(audits.status, 'succeeded')))
     .groupBy(audits.mode);
+  // Scores are brought up to the current scoring code before they are returned. The trend's other
+  // audits are re-scored a few per read (the cron does the rest) and only audits scored with the
+  // same code as this one are in it, so a trend never mixes scoring versions.
+  const comparable = and(
+    eq(audits.siteId, row.siteId),
+    eq(audits.status, 'succeeded'),
+    eq(audits.comparableKey, row.comparableKey),
+  );
+  await ensureScored(db, null, [used.audit_id]);
+  const others = await db
+    .select({ id: audits.id })
+    .from(audits)
+    .where(comparable)
+    .orderBy(desc(audits.finishedAt))
+    .limit(50);
+  await ensureScored(
+    db,
+    null,
+    others.map((o) => o.id),
+    { max: TREND_RESCORES_PER_READ },
+  );
+  const [scored] = await db.select({ version: audits.scoringVersion }).from(audits).where(eq(audits.id, used.audit_id));
   const scoreRows = await db.select().from(scores).where(eq(scores.auditId, used.audit_id));
   const [profile] = await db.select().from(siteProfiles).where(eq(siteProfiles.auditId, used.audit_id));
   const stack = await getTechStack(db, principal, { audit_id: used.audit_id });
-  const trend = await db
-    .select({ audit_id: audits.id, finished_at: audits.finishedAt, score: scores.score })
-    .from(audits)
-    .innerJoin(scores, and(eq(scores.auditId, audits.id), eq(scores.category, 'overall')))
-    .where(
-      and(eq(audits.siteId, row.siteId), eq(audits.status, 'succeeded'), eq(audits.comparableKey, row.comparableKey)),
-    )
-    .orderBy(asc(audits.finishedAt))
-    .limit(50);
+  const trend = scored?.version
+    ? await db
+        .select({ audit_id: audits.id, finished_at: audits.finishedAt, score: scores.score })
+        .from(audits)
+        .innerJoin(scores, and(eq(scores.auditId, audits.id), eq(scores.category, 'overall')))
+        .where(and(comparable, eq(audits.scoringVersion, scored.version)))
+        .orderBy(asc(audits.finishedAt))
+        .limit(50)
+    : [];
   let prospect = null;
   if (hasScope(principal, 'prospects:read')) {
     const [p] = await db
@@ -303,6 +369,8 @@ export async function getSite(db: Db, principal: Principal, raw: Record<string, 
       latest: m.last ? new Date(m.last).toISOString() : null,
     })),
     scores: Object.fromEntries(scoreRows.map((s) => [s.category, s.score])),
+    scoring_version: scored?.version ?? null,
+    scores_current: scored?.version === scoringVersion(),
     stack: stack.technologies,
     tracking_ids: stack.tracking_ids,
     site_profile: profile

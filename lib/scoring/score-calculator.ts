@@ -105,6 +105,8 @@ interface EnrichedIssue {
    *  Used by URL-pass scoring to count UNIQUE pages with at least one error,
    *  not the sum of (potentially overlapping) occurrence counts. */
   urls: string[];
+  /** The finding names neither pages nor a count: it is about the site as a whole. */
+  siteLevel: boolean;
 }
 
 /** Pull each real https?:// URL out of an analyzer example string. Templated
@@ -132,6 +134,8 @@ class ScoreCalculator {
     const categoryScores = this.calculateCategoryScores(analysisData, pages, field);
     const totalPages = pageData.totalWithoutError + pageData.totalWithError;
     const coverage = agenticCoverage(pages);
+    const overallScore = this.calculateOverallScore(analysisData, pages, categoryScores);
+    const source = performanceSource(Object.values(pages || {}) as PageInfo[], field);
 
     return {
       totalIssues: criticalCount + highCount + mediumCount + lowCount,
@@ -140,20 +144,21 @@ class ScoreCalculator {
       mediumCount,
       lowCount,
       categoryScores,
-      overallScore: this.calculateOverallScore(analysisData, pages, categoryScores),
+      // No category measured means no overall score: the field is left out, never written as 0.
+      ...(overallScore === null ? {} : { overallScore }),
       passRate: totalPages > 0 ? Math.round((pageData.totalWithoutError / totalPages) * 100) : 0,
       quickWins: this.identifyQuickWins(analysisData.details),
       ...(coverage && { agenticCoverage: coverage }),
-      performanceSource: performanceSource(Object.values(pages || {}) as PageInfo[], field),
-    };
+      ...(source && { performanceSource: source }),
+    } as AuditSummary;
   }
 
-  /** Weighted mean of category scores, using SCORING.CATEGORY_WEIGHTS. */
+  /** Weighted mean of category scores, using SCORING.CATEGORY_WEIGHTS; null when no category has a score. */
   static calculateOverallScore(
     _analysisData: { bySeverity: Record<string, string[]>; details: Record<string, AnalysisDetail> },
     _pages: Record<string, PageInfo>,
     categoryScores: CategoryScores,
-  ): number {
+  ): number | null {
     return blendOverallScore({ ...categoryScores });
   }
 
@@ -289,17 +294,18 @@ function enrichIssues(analysisData: {
       category,
       affected: detail.count || detail.examples?.length || 1,
       urls,
+      siteLevel: !detail.count && !detail.examples?.length,
     });
     seen.add(title);
   }
 
-  // bySeverity entries not in details — count as one occurrence each.
+  // bySeverity entries not in details: no pages and no count, so they are about the whole site.
   for (const [severity, list] of Object.entries(analysisData.bySeverity ?? {})) {
     for (const labelled of list) {
       const title = stripIssueSeverity(labelled);
       if (seen.has(title)) continue;
       const { tier, category } = classifyIssue(title, severity);
-      issues.push({ title, tier, category, affected: 1, urls: [] });
+      issues.push({ title, tier, category, affected: 1, urls: [], siteLevel: true });
       seen.add(title);
     }
   }
@@ -315,8 +321,9 @@ function enrichIssues(analysisData: {
 /**
  * SEO and technical: every Error-tier issue lowers the score in proportion to how much of the site
  * it reaches, and issues compound: 100 × Π (1 − ERROR_ISSUE_WEIGHT × share). One issue on every
- * page gives 50, the same issue on 1 page in 25 gives 98. A finding with no page URL and a count
- * of 1 is site-wide (share 1). Warnings and notices are reported but not scored.
+ * page gives 50, the same issue on 1 page in 25 gives 98. A finding with a count reaches that many
+ * pages, whatever its examples look like (full URL, path or plain text); only a finding with no
+ * examples and no count is site-wide (share 1). Warnings and notices are reported but not scored.
  *
  * Before: "pages with no error ÷ pages crawled", so one issue on every page gave 0 whatever else
  * the site got right.
@@ -325,14 +332,10 @@ function scoreFromUrlPass(issues: EnrichedIssue[], category: IssueCategory, tota
   let score = 1;
   for (const issue of issues) {
     if (issue.category !== category || issue.tier !== 'error') continue;
-    // Page URLs when the finding names them (examples may be capped, so the count can be higher);
-    // a finding with no URL and a count of 1 is site-wide (no sitemap, robots.txt, …).
-    const reach =
-      issue.urls.length > 0
-        ? Math.max(new Set(issue.urls).size, Math.min(issue.affected, totalPages))
-        : issue.affected > 1
-          ? issue.affected
-          : totalPages;
+    // Page URLs when the finding names them (examples may be capped, so the count can be higher).
+    const reach = issue.siteLevel
+      ? totalPages
+      : Math.max(new Set(issue.urls).size, Math.min(issue.affected, totalPages));
     const share = Math.min(1, reach / totalPages);
     score *= 1 - SCORING.ERROR_ISSUE_WEIGHT * share;
   }
@@ -375,10 +378,13 @@ function hasLabMetrics(page: PageInfo): boolean {
   ].some((v) => Number.isFinite(v as number));
 }
 
-/** Where `scorePerformance` takes its score from, in the same order. */
-export function performanceSource(pages: PageInfo[], field: FieldMetrics | null): PerformanceSource {
+/**
+ * Where `scorePerformance` takes its score from, in the same order; undefined when neither was
+ * measured (then there is no performance score).
+ */
+export function performanceSource(pages: PageInfo[], field: FieldMetrics | null): PerformanceSource | undefined {
   if (pages.some(hasLabMetrics)) return 'lab';
-  return field ? 'field' : 'findings';
+  return field ? 'field' : undefined;
 }
 
 /** Real-user p75 values on the lab curves; INP takes TBT's weight (both measure blocked interaction). */
@@ -833,14 +839,14 @@ export function withFieldPerformance<T extends Partial<AuditSummary> | undefined
   if (!summary || summary.performanceSource || !summary.categoryScores) return summary;
   const field = fieldMetricsFromCrux(cruxData);
   const source = performanceSource(Object.values(pages ?? {}) as PageInfo[], field);
-  if (source !== 'field' || !field) return { ...summary, performanceSource: source };
+  if (source !== 'field' || !field) return source ? { ...summary, performanceSource: source } : summary;
   const score = scoreFieldMetrics(field);
   if (score === null) return summary;
   const categoryScores = { ...summary.categoryScores, performance: roundScore(score) };
   return {
     ...summary,
     categoryScores,
-    overallScore: blendOverallScore({ ...categoryScores }),
+    overallScore: blendOverallScore({ ...categoryScores }) ?? summary.overallScore,
     performanceSource: source,
   };
 }

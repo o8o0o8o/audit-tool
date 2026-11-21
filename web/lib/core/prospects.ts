@@ -138,12 +138,25 @@ export async function upsertProspect(
   requireScope(principal, 'prospects:write');
   const values = rowFromRecord(record);
   if (!values.website) throw new CoreError('invalid_input', 'website is required');
+  // A do_not_contact row is never changed, by this path or any other.
+  const [existing] = await db.select().from(prospects).where(eq(prospects.website, values.website));
+  if (existing?.doNotContact) throw new CoreError('do_not_contact', 'a do_not_contact prospect is never changed');
   const [row] = await db
     .insert(prospects)
     .values(values)
-    .onConflictDoUpdate({ target: prospects.website, set: values })
+    .onConflictDoUpdate({
+      target: prospects.website,
+      set: values,
+      setWhere: eq(prospects.doNotContact, false),
+    })
     .returning();
-  return toView(row!);
+  // No row back: the prospect became do_not_contact between the check and the write.
+  if (!row) throw new CoreError('do_not_contact', 'a do_not_contact prospect is never changed');
+  if (values.doNotContact)
+    await db
+      .insert(actionLog)
+      .values({ principal: principalLabel(principal), action: 'prospect_do_not_contact', target: values.website });
+  return toView(row);
 }
 
 /**
@@ -171,21 +184,17 @@ export async function patchProspect(
     .where(eq(prospects.id, row.id))
     .returning();
   if (next.doNotContact)
-    await db
-      .insert(actionLog)
-      .values({
-        principal: principalLabel(principal),
-        action: 'prospect_do_not_contact',
-        target: row.website ?? row.id,
-      });
+    await db.insert(actionLog).values({
+      principal: principalLabel(principal),
+      action: 'prospect_do_not_contact',
+      target: row.website ?? row.id,
+    });
   else if (Object.keys(values).length)
-    await db
-      .insert(actionLog)
-      .values({
-        principal: principalLabel(principal),
-        action: 'prospect_edit',
-        target: `${row.website}: ${Object.keys(values).join(',')}`,
-      });
+    await db.insert(actionLog).values({
+      principal: principalLabel(principal),
+      action: 'prospect_edit',
+      target: `${row.website}: ${Object.keys(values).join(',')}`,
+    });
   return toView(updated!);
 }
 

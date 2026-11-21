@@ -61,7 +61,8 @@ interface MatchedPageEntry {
 interface ScoreSet {
   overall: number;
   seo: number;
-  performance: number;
+  /** null: not measured on at least one side (no lab run, no real-user data), so no score and no delta. */
+  performance: number | null;
   accessibility: number;
   security: number;
   technical: number;
@@ -343,7 +344,7 @@ class ComparisonAudit {
     const extractScores = (s: Partial<AuditSummary>): ScoreSet => ({
       overall: s.overallScore ?? 0,
       seo: s.categoryScores?.seo ?? 0,
-      performance: s.categoryScores?.performance ?? 0,
+      performance: s.categoryScores?.performance ?? null,
       accessibility: s.categoryScores?.accessibility ?? 0,
       security: s.categoryScores?.security ?? 0,
       technical: s.categoryScores?.technical ?? 0,
@@ -360,7 +361,7 @@ class ComparisonAudit {
     const diffScores = (a: ScoreSet, b: ScoreSet): ScoreSet => ({
       overall: a.overall - b.overall,
       seo: a.seo - b.seo,
-      performance: a.performance - b.performance,
+      performance: a.performance === null || b.performance === null ? null : a.performance - b.performance,
       accessibility: a.accessibility - b.accessibility,
       security: a.security - b.security,
       technical: a.technical - b.technical,
@@ -961,7 +962,21 @@ class ComparisonAudit {
    * Get a comparison card HTML (used for both scores and issues)
    * @param higherIsBetter - true for scores, false for issues
    */
-  #getComparisonCard(label: string, origin: number, compare: number, delta: number, higherIsBetter: boolean, style: 'score' | 'stat' = 'score') {
+  #getComparisonCard(label: string, origin: number | null, compare: number | null, delta: number | null, higherIsBetter: boolean, style: 'score' | 'stat' = 'score') {
+    if (delta === null) {
+      const shown = (v: number | null) => (v === null ? 'not measured' : String(v));
+      return `
+        <div class="score-item">
+          <div class="score-label">${label}</div>
+          <div class="score-values">
+            <span class="score-num">${shown(origin)}</span>
+            <span class="score-arrow">→</span>
+            <span class="score-num">${shown(compare)}</span>
+          </div>
+          <div class="delta neutral">no comparison</div>
+        </div>
+      `;
+    }
     const isPositive = higherIsBetter ? delta > 0 : delta < 0;
     const cls = delta === 0 ? 'neutral' : isPositive ? 'positive' : 'negative';
     const sign = delta > 0 ? '+' : '';
@@ -1083,7 +1098,8 @@ class ComparisonAudit {
     console.log(`  Origin Only:      ${data.summary.originOnlyPages}`);
     console.log(`  Compare Only:     ${data.summary.compareOnlyPages}`);
 
-    const formatRow = (name: string, o: number, c: number, d: number, pad = 15) => {
+    const formatRow = (name: string, o: number | null, c: number | null, d: number | null, pad = 15) => {
+      if (d === null) return `  ${name.padEnd(pad)} ${o ?? 'not measured'} → ${c ?? 'not measured'}`;
       const sign = d > 0 ? '+' : '';
       return `  ${name.padEnd(pad)} ${o} → ${c}  (${sign}${d})`;
     };

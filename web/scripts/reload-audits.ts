@@ -1,6 +1,7 @@
 /**
  * Rebuilds the model of audits loaded before a model change, from their stored raw archive, and
- * loads it again (today: adds the page rows and run data the report renders from).
+ * loads it again (today: adds the page rows and run data the report renders from). Readers keep
+ * seeing the audit with its old rows until the new ones are committed.
  *   yarn --cwd web tsx scripts/reload-audits.ts [<audit id> …]   (no id: every succeeded audit without page rows)
  */
 import { execFileSync } from 'node:child_process';
@@ -9,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { and, eq, inArray, notExists } from 'drizzle-orm';
 import { closeDb, getDb } from '../db/client';
-import { audits, auditRunData, loadProgress } from '../db/schema';
+import { audits, auditRunData } from '../db/schema';
 import { getPlatform } from '../lib/platform';
 import { loadAudit } from '../lib/core/loader';
 import { findArtifactByKind } from '../lib/core/reports';
@@ -56,14 +57,22 @@ async function main(): Promise<void> {
         preset: options.preset,
       });
       const prefix = `audits/${a.id}/${a.currentAttempt}/model/`;
-      for (const f of readdirSync(path.join(runDir, 'model'))) {
-        if (f === 'raw-archive.tar.gz') continue;
-        await files.put(prefix + f, readFileSync(path.join(runDir, 'model', f)));
+      const built = readdirSync(path.join(runDir, 'model')).filter((f) => f !== 'raw-archive.tar.gz');
+      for (const f of built) await files.put(prefix + f, readFileSync(path.join(runDir, 'model', f)));
+      // Page chunks of the model before the rebuild that the new one no longer has.
+      const stale: string[] = [];
+      for await (const f of files.list(prefix)) {
+        const name = f.key.slice(prefix.length);
+        if (/^pages-\d{4}\.ndjson\.gz$/.test(name) && !built.includes(name)) stale.push(f.key);
       }
-      await db.delete(loadProgress).where(eq(loadProgress.auditId, a.id));
-      await db.update(audits).set({ status: 'built' }).where(eq(audits.id, a.id));
-      const res = await loadAudit(db, files, a.id);
-      console.log(`${a.id}: ${res.outcome} (${res.chunks} chunk(s))`);
+      if (stale.length) await files.delete(stale);
+      // A succeeded audit is reloaded in one transaction and stays visible with its old rows until
+      // the new ones are in; a failure leaves it as it was. An audit still loading is just loaded.
+      const res =
+        a.status === 'succeeded'
+          ? await loadAudit(db, files, a.id, { reload: true })
+          : await loadAudit(db, files, a.id);
+      console.log(`${a.id}: ${res.outcome} (${res.chunks} chunk(s))${res.error ? ` ${res.error}` : ''}`);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

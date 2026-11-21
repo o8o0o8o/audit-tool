@@ -3,6 +3,7 @@ import { apiClients, actionLog } from '../../../../db/schema';
 import { createApiKey } from '../../../../lib/core/auth';
 import { CoreError } from '../../../../lib/core/errors';
 import { parseScopes } from '../../../../lib/core/principal';
+import { assertWebhookUrl } from '../../../../lib/core/webhooks';
 import { ctx, handle, readJson, requireInternalPrincipal } from '../../../../lib/server';
 
 export const dynamic = 'force-dynamic';
@@ -35,12 +36,20 @@ export const POST = handle(async (request: Request) => {
   } catch (err) {
     throw new CoreError('invalid_input', (err as Error).message);
   }
-  const { db } = ctx();
+  const { db, platform } = ctx();
+  const webhookUrl = body.webhookUrl?.trim() || null;
+  if (webhookUrl) {
+    try {
+      assertWebhookUrl(webhookUrl, platform.mode === 'local');
+    } catch (err) {
+      throw new CoreError('invalid_input', (err as Error).message);
+    }
+  }
   const res = await createApiKey(db, {
     name: body.name.trim(),
     scopes,
     rateLimitPerHour: Number(body.rate) || 60,
-    webhookUrl: body.webhookUrl?.trim() || null,
+    webhookUrl,
   });
   await db
     .insert(actionLog)

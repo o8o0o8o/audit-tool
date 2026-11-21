@@ -335,6 +335,8 @@ function buildComparisonHtml(
         </div>
 
         ${(() => {
+          if (!comparison.scoresComparable)
+            return `<div class="summary-banner unchanged">${escapeHtml(comparison.scoresNote ?? '')}</div>`;
           const scoreDelta = comparison.scoreChange;
           let bannerClass = 'unchanged';
           let bannerText = 'No significant change in overall score';
@@ -362,9 +364,13 @@ function buildComparisonHtml(
                     ${newAudit.summary.overallScore}
                     <div class="score-label">After</div>
                 </div>
-                <div class="delta ${deltaClass(comparison.scoreChange)}" style="font-size: 28px; padding: 12px 20px;">
+                ${
+                  comparison.scoresComparable
+                    ? `<div class="delta ${deltaClass(comparison.scoreChange)}" style="font-size: 28px; padding: 12px 20px;">
                     ${deltaSymbol(comparison.scoreChange)}${comparison.scoreChange}
-                </div>
+                </div>`
+                    : ''
+                }
             </div>
         </div>
 

@@ -3,6 +3,7 @@
  *   yarn --cwd web tsx scripts/seed-prospects.ts [--csv=<path>] [--sample]
  */
 import { readFileSync } from 'node:fs';
+import { sql } from 'drizzle-orm';
 import path from 'node:path';
 import { closeDb, getDb } from '../db/client';
 import { prospects } from '../db/schema';
@@ -58,9 +59,12 @@ async function main(): Promise<void> {
     await db
       .insert(prospects)
       .values(unique.slice(i, i + 500))
+      // A re-run keeps what the database has, with one exception: a row the CSV now marks
+      // do_not_contact becomes do_not_contact (never the other way; a row already marked is not changed).
       .onConflictDoUpdate({
         target: prospects.website,
-        set: { company: prospects.company }, // keep what the database has; re-run is a no-op
+        set: { doNotContact: true, stage: sql`excluded.stage`, stageAt: sql`now()` },
+        setWhere: sql`excluded.do_not_contact and not prospects.do_not_contact`,
       });
   }
   const c = await countProspects(db);

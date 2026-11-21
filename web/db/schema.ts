@@ -148,6 +148,10 @@ export const auditAttempts = pgTable(
     status: text('status').notNull(),
   },
   (t) => [
+    // Every worker call (heartbeat, progress, upload, status) finds its attempt by session.
+    index('audit_attempts_session')
+      .on(t.sessionHash)
+      .where(sql`session_hash is not null`),
     primaryKey({ columns: [t.auditId, t.attempt] }),
     unique('audit_attempts_gh_run').on(t.ghRunId, t.ghRunAttempt),
   ],
@@ -176,6 +180,8 @@ export const artifacts = pgTable(
       sql`${t.kind} in ('report_html','report_md','report_pdf','report_verified_md','report_verified_pdf','content_research_md','content_research_pdf','teaser_md','teaser_pdf','screenshot','evidence','gate_evidence','raw_archive')`,
     ),
     index('artifacts_audit').on(t.auditId, t.kind),
+    // A report asks for each of its files by key.
+    index('artifacts_audit_key').on(t.auditId, t.blobKey),
     index('artifacts_expires')
       .on(t.expiresAt)
       .where(sql`deleted_at is null`),
@@ -266,6 +272,10 @@ export const jobs = pgTable(
   (t) => [
     check('jobs_type', sql`${t.type} in ('render-pdf')`),
     check('jobs_status', sql`${t.status} in ('queued','dispatched','running','done','failed')`),
+    // Every call of a job's worker finds its job by session.
+    index('jobs_session')
+      .on(t.sessionHash)
+      .where(sql`session_hash is not null`),
     uniqueIndex('jobs_active')
       .on(t.type, t.auditId, t.kind)
       .where(sql`status in ('queued','dispatched','running')`),

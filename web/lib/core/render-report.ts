@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { and, asc, eq, inArray, lt } from 'drizzle-orm';
+import { and, asc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { auditDocuments, auditRunData, audits, pages, scores } from '../../db/schema';
 import type { FileStore } from '../platform/types';
@@ -141,6 +141,9 @@ export async function renderReportHtml(db: Db, files: FileStore, auditId: string
 }
 
 /** Rebuilds the run folder the renderer reads, from the rows (and the screenshots from the file store). */
+/** Page rows read per query when a run folder is rebuilt. */
+const MATERIALIZE_PAGE_ROWS = 200;
+
 export async function materialize(
   db: Db,
   files: FileStore | null,
@@ -152,36 +155,71 @@ export async function materialize(
     (await db.select().from(auditRunData).where(eq(auditRunData.auditId, audit.id))).map((r) => [r.name, r.data]),
   ) as Record<string, Record<string, unknown>>;
   const gz = (name: string, value: unknown) => writeFileSync(path.join(runDir, name), gzipSync(JSON.stringify(value)));
-  const rows = await db
-    .select({ url: pages.url, sections: pages.sections })
-    .from(pages)
-    .where(eq(pages.auditId, audit.id))
-    .orderBy(asc(pages.chunk), asc(pages.id));
-  const byUrl = new Map(rows.map((r) => [r.url, r.sections as Record<string, unknown>]));
-  // Same batch files as the run wrote, so the manifest's page index stays true.
+  // Pages are read a few hundred at a time and written as soon as a batch file is complete, so a
+  // large audit is never held in memory whole. Same batch files as the run wrote, so the manifest's
+  // page index stays true.
   const manifest = data.manifest ?? {};
   const batches = (
     (manifest.files as { pageBatches?: Array<{ file: string; urls?: string[] }> } | undefined)?.pageBatches ?? []
   ).filter((b) => b.file && !b.file.includes('..'));
   mkdirSync(path.join(runDir, 'pages'), { recursive: true });
-  const written = new Set<string>();
+  type Sections = Record<string, unknown>;
+  const fileOf = new Map<string, string>();
+  const open = new Map<string, { pages: Record<string, Sections>; left: number }>();
   for (const b of batches) {
-    const own = Object.fromEntries((b.urls ?? []).filter((u) => byUrl.has(u)).map((u) => [u, byUrl.get(u)]));
-    Object.keys(own).forEach((u) => written.add(u));
-    mkdirSync(path.dirname(path.join(runDir, b.file)), { recursive: true });
-    gz(b.file, { urls: Object.keys(own), pages: own });
+    for (const u of b.urls ?? []) fileOf.set(u, b.file);
+    open.set(b.file, { pages: {}, left: new Set(b.urls ?? []).size });
   }
-  const rest = rows.filter((r) => !written.has(r.url));
-  if (rest.length) {
-    const file = 'pages/batch_rest.json.gz';
-    gz(file, { urls: rest.map((r) => r.url), pages: Object.fromEntries(rest.map((r) => [r.url, r.sections])) });
-    const index = (manifest.files ??= {}) as { pageBatches?: unknown[] };
-    (index.pageBatches ??= []).push({
-      file,
-      count: rest.length,
-      urls: rest.map((r) => r.url),
-    });
+  const writeBatch = (file: string, own: Record<string, Sections>) => {
+    mkdirSync(path.dirname(path.join(runDir, file)), { recursive: true });
+    gz(file, { urls: Object.keys(own), pages: own });
+  };
+  const index = (manifest.files ??= {}) as { pageBatches?: unknown[] };
+  let rest: Record<string, Sections> = {};
+  let restFiles = 0;
+  const flushRest = () => {
+    const urls = Object.keys(rest);
+    if (!urls.length) return;
+    const file = `pages/batch_rest_${restFiles++}.json.gz`;
+    writeBatch(file, rest);
+    (index.pageBatches ??= []).push({ file, count: urls.length, urls });
+    rest = {};
+  };
+  let after: { chunk: number; id: number } | null = null;
+  for (;;) {
+    const rows: Array<{ id: number; chunk: number; url: string; sections: unknown }> = await db
+      .select({ id: pages.id, chunk: pages.chunk, url: pages.url, sections: pages.sections })
+      .from(pages)
+      .where(
+        and(
+          eq(pages.auditId, audit.id),
+          after ? sql`(${pages.chunk}, ${pages.id}) > (${after.chunk}, ${after.id})` : undefined,
+        ),
+      )
+      .orderBy(asc(pages.chunk), asc(pages.id))
+      .limit(MATERIALIZE_PAGE_ROWS);
+    for (const r of rows) {
+      const file = fileOf.get(r.url);
+      const batch = file ? open.get(file) : undefined;
+      if (!file || !batch) {
+        rest[r.url] = r.sections as Sections;
+        if (Object.keys(rest).length >= 100) flushRest();
+        continue;
+      }
+      if (!(r.url in batch.pages)) batch.left--;
+      batch.pages[r.url] = r.sections as Sections;
+      if (batch.left <= 0) {
+        writeBatch(file, batch.pages);
+        open.delete(file);
+      }
+    }
+    if (rows.length < MATERIALIZE_PAGE_ROWS) break;
+    const last = rows[rows.length - 1]!;
+    after = { chunk: last.chunk, id: last.id };
   }
+  // Batch files whose pages are not all in the database (dropped duplicates) are written as they are.
+  for (const [file, batch] of open) writeBatch(file, batch.pages);
+  flushRest();
   gz('manifest.json.gz', manifest);
   gz('metadata.json.gz', data.metadata ?? {});
   gz('analysis.json.gz', data.analysis ?? {});

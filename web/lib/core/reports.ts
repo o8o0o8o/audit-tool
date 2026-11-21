@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, like } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { artifacts, audits } from '../../db/schema';
@@ -115,25 +115,17 @@ export async function findArtifactByPath(db: Db, auditId: string, segments: stri
   if (!segments.length || !segments.every((s) => /^[A-Za-z0-9._@-]+$/.test(s) && s !== '.' && s !== '..')) return null;
   const [audit] = await db.select({ attempt: audits.currentAttempt }).from(audits).where(eq(audits.id, auditId));
   if (!audit) return null;
-  const key = `audits/${auditId}/${audit.attempt}/${segments.join('/')}`;
-  const [row] = await db
+  // The current attempt's file, else the same file from an earlier attempt (an imported run keeps
+  // attempt 1 in its keys). Exact keys only, so the (audit, key) index answers it.
+  const rel = segments.join('/');
+  const keys: string[] = [];
+  for (let a = Math.max(audit.attempt, 1); a >= 1 && keys.length < 5; a--) keys.push(`audits/${auditId}/${a}/${rel}`);
+  const rows = await db
     .select()
     .from(artifacts)
-    .where(and(eq(artifacts.auditId, auditId), eq(artifacts.blobKey, key), isNull(artifacts.deletedAt)));
-  if (row) return row;
-  // An imported run keeps its own attempt number in the key.
-  const [any] = await db
-    .select()
-    .from(artifacts)
-    .where(
-      and(
-        eq(artifacts.auditId, auditId),
-        like(artifacts.blobKey, `audits/${auditId}/%/${segments.join('/')}`),
-        isNull(artifacts.deletedAt),
-      ),
-    )
-    .limit(1);
-  return any ?? null;
+    .where(and(eq(artifacts.auditId, auditId), inArray(artifacts.blobKey, keys), isNull(artifacts.deletedAt)));
+  rows.sort((x, y) => keys.indexOf(x.blobKey) - keys.indexOf(y.blobKey));
+  return rows[0] ?? null;
 }
 
 const TYPES: Record<string, string> = {

@@ -285,6 +285,30 @@ Before going live:
 
 Order: an internal-only deployment first (items 1–7), one real audit end to end on a preview deployment against a Neon branch, then the public site and the data copy. Item 3 has a design choice in it and is settled first.
 
+## 9. Everything on Vercel (no GitHub Actions)
+
+Written 2026-11-21. The goal in design §13 ("Worker"): compute and storage all on Vercel. This changes §8 above where it assumes GitHub Actions; the other §8 items stay.
+
+1. **Worker in Vercel Sandbox** (a function stops after about 13 min; a full crawl can take about 6 hours).
+   - Image: Node, the repo at the deployed commit, `node_modules`, Playwright Chromium and its system libraries. A Sandbox snapshot, not an install on every start.
+   - A Sandbox `Dispatcher`: start a Sandbox running `scripts/platform-worker.ts`, `state` (waiting / running / gone) for the reaper, `cancel`.
+   - `WorkerIdentity`: instead of GitHub OIDC, a short-lived token the dispatcher signs for one audit and attempt (as the local identity does).
+   - Session limit: if Sandbox's maximum session is under a full audit's length (not confirmed), the worker stops cleanly before it and the reaper starts a new Sandbox that resumes from the snapshot. Snapshots and `--proceed` exist; a planned stop before a time limit does not.
+   - Retire `.github/workflows/audit.yml`, `upload-results.mjs` and `lib/blob.ts`.
+2. **Report rendering and re-scoring** (§8 item 3): run them as Sandbox jobs on the same image through the `jobs` table, as PDF jobs do; the generator needs about 600 MB. The alternative is bundling the generator into a function.
+3. **Blob `FileStore`**, private, with worker upload tokens. Open: whether a token can cover a folder or only one file (if one file, tokens per batch of files).
+4. **Cron routes** with `gated()` and `web/vercel.json` entries (§8 item 4). Open: whether the plan allows a cron every minute.
+5. **Neon:** pooled address; one pass on a Neon branch for the migrations and advisory locks through the pooler.
+6. **Build:** `web/` importing the root `lib/model/` on Vercel, or yarn workspaces. The Sandbox image needs the root project too.
+7. **Secrets:** `SESSION_SECRET`, `REPORT_TOKEN_SECRET`, the worker token key, `INTERNAL_PASSWORD_HASH`, and the audit's API keys (PageSpeed / CrUX, LLM, `WPSCAN_API_TOKEN`), which must also reach the Sandbox.
+8. **Existing data:** copy the public Blob uploads to the private store, delete the public copies.
+9. **Public site** (step 5): needed to go public, not for the move.
+10. **Outbound traffic from Vercel's addresses:** the crawl and the site probes (DNS, crt.sh, exposure probes) come from Vercel IP ranges, which some sites block. Compare the blocked-scan share with GitHub runs on the first audits.
+
+**Order:** (1) prove one real full audit in Sandbox, including a stop and resume, and record time, CPU and memory (also replaces the cost guesses below); (2) Blob `FileStore`, Sandbox dispatcher and identity, cron routes; (3) one real audit end to end on a preview deployment against a Neon branch; (4) rendering and re-scoring as Sandbox jobs; (5) public site and the data copy.
+
+**Cost estimate, not measured** (2026-11-21, `iad1` list prices: Sandbox $0.128 per active CPU hour, $0.0212 per GB-hour of memory). For the plentific.com full audit (617 pages, 97 min): the crawl on a 4 vCPU / 8 GB Sandbox about $0.50–1.10, mostly the CPU share, which is a guess (30–60 %); loader, re-score and render under $0.01; Blob about 77 MB kept, about $0.005; Neon storage about 13 MB (`pages` rows about 19.5 kB each). Neon compute is billed while the database is awake; with the gated crons it sleeps between audits.
+
 ## Built so far (2026-11-21)
 
 Steps 0–4 exist as described above, with these differences:

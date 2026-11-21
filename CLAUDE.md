@@ -93,6 +93,7 @@ Checkpoint persistence and restoration:
 Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (and `completions.sh`) for the full set; the README usage section is the canonical user-facing list. Common ones:
 
 - `--origin=<url>` - Target website
+- `--page=<url>` - single-page audit: loads only that page (and its same-site redirect target). robots.txt and the sitemap are read only to say whether it is blocked or listed; domain probes, site text files, sitemap structure findings and the cross-page / link-graph checks (`MULTI_PAGE_VALIDATORS` in `lib/orchestrators/single-page.ts`) are skipped. Writes to `audit-results/`, no history entry; metadata records `singlePage` and both reports label the run. The web form's **Single page** scan choice runs it (`page` workflow input)
 - `--proceed` - Resume from saved progress
 - `--perf` - Enable performance metrics
 - `--save-html` - Save HTML snapshots

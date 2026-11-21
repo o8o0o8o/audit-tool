@@ -111,6 +111,7 @@ function parseArgs(args: string[]): ParsedArgs {
     evidence: true, // Capture per-page evidence for representative URLs (--no-evidence to skip)
     evidenceCap: 10, // Max representative pages to capture (default 10)
     lead: false, // --lead: lead scan of a prospect site (small, passive, own results folder)
+    page: null, // --page=<url>: audit only this one page
     passive: false, // --passive: skip the site probes that go beyond reading published pages
     contentResearch: false, // Phase 4 — competitive content research + content plan (opt-in)
     competitors: null, // Competitor URLs (CSV or file path); optional — LLM discovers when omitted
@@ -202,6 +203,10 @@ function parseArgs(args: string[]): ParsedArgs {
         parsed.evidenceCap = Math.min(val, 100); // safety ceiling
         evidenceCapExplicit = true;
       }
+    } else if (arg.startsWith('--page=')) {
+      const page = singlePageUrlOf(arg.substring('--page='.length));
+      if (page) parsed.page = page;
+      else parsed.errors.push(`--page=${arg.substring('--page='.length)} is not an http(s) page URL.`);
     } else if (arg.startsWith('--origin=')) {
       parsed.origin = siteOriginOf(arg.substring('--origin='.length), '--origin', parsed.warnings);
     } else if (arg.startsWith('--compare=')) {
@@ -313,7 +318,54 @@ function parseArgs(args: string[]): ParsedArgs {
   }
 
   if (parsed.lead) applyLeadMode(parsed, { evidenceCapExplicit });
+  if (parsed.page) applySinglePageMode(parsed);
   return parsed;
+}
+
+/**
+ * The page URL `--page` audits: a scheme is added when missing, the `#fragment` is dropped
+ * (it never reaches the server). Null when the value is not an http(s) URL.
+ */
+export function singlePageUrlOf(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/\//, '')}`);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `--page=<url>`: audit that one page. The site is the page's origin; robots.txt and the sitemap
+ * are read only to tell whether this page is blocked or listed. Nothing here applies without the flag.
+ */
+export function applySinglePageMode(parsed: ParsedArgs): void {
+  const page = parsed.page;
+  if (!page) return;
+  const origin = toSiteOrigin(page);
+  if (parsed.origin && parsed.origin !== origin) {
+    parsed.errors.push(`--page=${page} is not on --origin=${parsed.origin}.`);
+  }
+  parsed.origin = origin;
+  if (parsed.limit) {
+    parsed.warnings.push('--page audits one page; --limit is ignored.');
+    parsed.limit = null;
+  }
+  if (parsed.exclude.length) {
+    parsed.warnings.push('--page audits one page; --exclude is ignored.');
+    parsed.exclude = [];
+  }
+  if (parsed.contentResearch) {
+    parsed.contentResearch = false;
+    parsed.warnings.push('--page ignores --content-research (it compares whole sites).');
+  }
+  for (const [flag, value] of [['--lead', parsed.lead], ['--compare', parsed.compare], ['--compare-sitemap', parsed.compareSitemap], ['--sites', parsed.sites], ['--sitemap', parsed.sitemap]] as const) {
+    if (value) parsed.errors.push(`--page cannot be combined with ${flag}.`);
+  }
 }
 
 /** Lead-scan settings. The page cap is a ceiling: `--limit` can lower it, never raise it. */

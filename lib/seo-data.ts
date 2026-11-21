@@ -24,6 +24,7 @@ import { AEOAnalyzer } from './analyzers/seo/aeo-analyzer';
 import { SiteTextFilesAnalyzer } from './analyzers/seo/site-text-files-analyzer';
 import { runSiteProbes } from './analyzers/site-checks/site-probes';
 import { RequestCounter } from './leads/request-counter';
+import { robotsBlockedPageFinding } from './orchestrators/single-page';
 
 /** Where full audits are written. Lead scans use their own base folder (`LEAD_MODE.resultsBase`). */
 export const DEFAULT_RESULTS_BASE = 'audit-results';
@@ -38,6 +39,9 @@ import { parse } from 'node-html-parser';
  * `--limit=N` allows N sitemap pages plus N pages found through links, so the total is at most 2N;
  * without it, the links found on discovered pages kept growing the queue to thousands of pages.
  */
+/** Page loads a single-page audit may make: the page and up to four same-site redirect hops. */
+export const SINGLE_PAGE_LOADS = 5;
+
 export function crawlPageBudget(limit: number | null | undefined, lead: boolean): number | null {
   if (!limit) return null;
   return lead ? limit : limit * 2;
@@ -76,6 +80,8 @@ class SEOData {
   #agentic: boolean;
   /** Lead scan (`--lead`): homepage-first selection under one page cap, no media probe. */
   #lead: boolean;
+  /** Single-page audit (`--page=<url>`): the one page to load, or null for a site audit. */
+  #page: string | null;
   /** Passive site probes (`--passive`, implied by `--lead`). */
   #passive: boolean;
   /** Base folder of the run: `audit-results`, or `lead-results` for a lead scan. */
@@ -125,6 +131,7 @@ class SEOData {
     this.#visual = options.visual ?? false;
     this.#agentic = options.agentic ?? true;
     this.#lead = options.lead ?? false;
+    this.#page = options.page ?? null;
     this.#passive = options.passive ?? this.#lead;
     this.#resultsBase = options.resultsBase ?? DEFAULT_RESULTS_BASE;
 
@@ -149,6 +156,7 @@ class SEOData {
       visual: this.#visual,
       agentic: this.#agentic,
       ...(this.#passive ? { passive: true } : {}),
+      ...(this.#page ? { singlePage: { url: this.#page } } : {}),
       pageData: {
         pages: {},
         processedPages: new Set(),
@@ -235,7 +243,7 @@ class SEOData {
         visual: this.#visual,
         agentic: this.#agentic,
         lead: this.#lead,
-        maxPages: crawlPageBudget(this.#limit, this.#lead),
+        maxPages: this.#page ? SINGLE_PAGE_LOADS : crawlPageBudget(this.#limit, this.#lead),
         requestObserver: this.#lead ? (this.#requestCounter ??= new RequestCounter(this.domainName)).observeBrowser : undefined,
       },
       {
@@ -373,6 +381,7 @@ class SEOData {
       this.#results.agentic = agentic;
       if (this.#crawlerEngine) this.#crawlerEngine.agentic = agentic;
       if (this.#passive) this.#results.passive = true;
+      if (this.#page) this.#results.singlePage ??= { url: this.#page };
     } catch (error: unknown) {
       const err = error as Error;
       console.error(`\n❌ ERROR restoring progress:`, err.message);
@@ -401,6 +410,15 @@ class SEOData {
     // Update results with parsed data
     this.#results.robots.sitemaps = result.sitemaps;
     this.#results.robots['user-agent'] = result.userAgents;
+
+    // Single page: robots.txt is read only to tell whether this page may be crawled. Its own
+    // problems, the AI-crawler rules and the other site files (llms.txt, security.txt, ads.txt)
+    // are about the site, not the page.
+    if (this.#page) {
+      const finding = robotsBlockedPageFinding(this.#page, result);
+      if (finding) this.saveError(finding.message, finding.detail, finding.severity);
+      return;
+    }
 
     // Register any errors found during parsing
     result.errors.forEach((error: { message: string; detail: string | null; severity: string }) => {
@@ -501,6 +519,10 @@ class SEOData {
     this.#results.sitemaps.urls = result.urls;
     this.#results.sitemaps.total = result.total;
 
+    // Single page: the sitemap only tells whether this page is listed (decided after the crawl,
+    // once the final URL is known). Sitemap structure findings and the media probe are site-level.
+    if (this.#page) return;
+
     // Register all errors
     result.errors.forEach((error: { message: string; detail: string; severity: string }) => {
       this.saveError(error.message, error.detail, error.severity);
@@ -549,6 +571,7 @@ class SEOData {
       origin: this.origin,
       limit: this.#limit,
       lead: this.#lead ? this.#leadContext() : undefined,
+      singlePage: this.#page ?? undefined,
     });
   }
 
@@ -572,6 +595,7 @@ class SEOData {
    * Print estimated crawl time based on URL count and concurrency
    */
   #printEstimatedTime() {
+    if (this.#page) return; // one page: the sitemap size says nothing about this run
     const totalUrls = this.#results.sitemaps?.total ?? 0;
     if (totalUrls === 0) return;
 
@@ -711,27 +735,36 @@ class SEOData {
       this.saveError.bind(this) as Parameters<typeof AuditOrchestrator.runSiteWideValidation>[3],
       this.#results.sitemaps?.urls ?? {},
       this.#results.siteTextFiles,
-      { probeUncrawledSitemapUrls: !this.#lead, sitemapUrlsBeyondLimit: this.#sitemapUrlsBeyondLimit },
+      {
+        probeUncrawledSitemapUrls: !this.#lead && !this.#page,
+        sitemapUrlsBeyondLimit: this.#sitemapUrlsBeyondLimit,
+        singlePage: this.#page !== null,
+      },
     );
 
     // Site-level Domain & Exposure checks: email/DNS, exposed files, missing-page
     // status, dangling CNAMEs. After the crawl so a WAF block can't affect it.
-    console.log('Running domain & exposure checks...');
-    try {
-      this.#results.siteChecks = await runSiteProbes(
-        this.origin ?? '',
-        this.#results.pageData.pages,
-        this.saveError.bind(this),
-        {
-          robotsUserAgents: this.#results.robots?.['user-agent'],
-          sitemapUrls: this.#results.sitemaps?.urls ?? {},
-          discoveredUrls: Object.keys(this.#results.pageData.incomingLinks ?? {}),
-          passive: this.#passive,
-          onBrowserRequest: this.#requestCounter?.observeBrowser,
-        },
-      );
-    } catch (e: unknown) {
-      console.log('Domain & exposure checks skipped:', (e as Error).message);
+    // A single-page audit is about the page, so none of these run.
+    if (this.#page) {
+      console.log('Single page: domain & exposure checks skipped.');
+    } else {
+      console.log('Running domain & exposure checks...');
+      try {
+        this.#results.siteChecks = await runSiteProbes(
+          this.origin ?? '',
+          this.#results.pageData.pages,
+          this.saveError.bind(this),
+          {
+            robotsUserAgents: this.#results.robots?.['user-agent'],
+            sitemapUrls: this.#results.sitemaps?.urls ?? {},
+            discoveredUrls: Object.keys(this.#results.pageData.incomingLinks ?? {}),
+            passive: this.#passive,
+            onBrowserRequest: this.#requestCounter?.observeBrowser,
+          },
+        );
+      } catch (e: unknown) {
+        console.log('Domain & exposure checks skipped:', (e as Error).message);
+      }
     }
 
     // Defective/non-real pages (broken-pagination tails + soft 404s) are phantom

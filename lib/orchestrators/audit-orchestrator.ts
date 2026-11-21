@@ -16,12 +16,15 @@ import type { PageInfo, SitemapUrl, AlternateLink, Issue, SeverityLevel, SiteTex
 import { SiteTextFilesAnalyzer } from '../analyzers/seo/site-text-files-analyzer';
 import { evenSample, selectLeadPages, type HomeLink } from '../leads/page-selector';
 import type { LeadScanInfo } from '../leads/types';
+import { keepSinglePageSitemapEntries, MULTI_PAGE_VALIDATORS, type SinglePageInfo } from './single-page';
 
 interface AnalyzeContext {
   results: {
     sitemaps: { urls: Record<string, SitemapUrl>; total?: number };
     /** Lead scan (`--lead`): what was selected and why. */
     leadScan?: LeadScanInfo;
+    /** Single-page audit (`--page`): the page, where it landed, whether the sitemap lists it. */
+    singlePage?: SinglePageInfo;
     isMultiLang?: boolean;
     pageData: {
       pages: Record<string, PageInfo>;
@@ -63,6 +66,8 @@ interface AnalyzeContext {
     /** Brings pages that a checkpoint save moved to disk back into `results.pageData.pages`. */
     reloadPages?: () => void;
   };
+  /** Single-page audit (`--page=<url>`): load only this page (and its same-site redirect target). */
+  singlePage?: string;
 }
 
 interface PageDataForValidation {
@@ -200,6 +205,12 @@ class AuditOrchestrator {
     if (context.lead) {
       const lead = await AuditOrchestrator.#crawlLeadPages(context, context.lead);
       await AuditOrchestrator.#finishPageAnalysis(context, lead);
+      return;
+    }
+
+    if (context.singlePage) {
+      const single = await AuditOrchestrator.#crawlSinglePage(context, context.singlePage);
+      await AuditOrchestrator.#finishPageAnalysis(context, single);
       return;
     }
 
@@ -399,7 +410,63 @@ class AuditOrchestrator {
     return { alternatesErrors, isMultiLang, failedPages };
   }
 
-  /** What follows the crawl passes, shared by the full audit and the lead scan. */
+  /**
+   * Single-page crawl: the one page, plus its target when it redirects within the site. Links on
+   * it are recorded (for the link checks) but never followed. Afterwards only the page's own
+   * sitemap entry is kept, and "not in the sitemap" is reported here because the site-wide
+   * check needs other sitemap entries to compare against.
+   */
+  static async #crawlSinglePage(
+    context: AnalyzeContext,
+    pageUrl: string,
+  ): Promise<{ alternatesErrors: string[]; isMultiLang: boolean; failedPages: string[] }> {
+    const { results, crawlerEngine, incomingLinksTracking, saveError } = context;
+    const sitemapList = Object.keys(results.sitemaps.urls);
+    const pageKey = normalizeUrlForComparison(pageUrl);
+    // The form the sitemap uses, when it lists the page, so the page counts as "in sitemap".
+    const start = sitemapList.find((u) => normalizeUrlForComparison(u) === pageKey) ?? pageUrl;
+    const crawlFrontierKeys = new Set<string>([pageKey]);
+
+    console.log(`Single page: loading ${start}...`);
+    const crawled = await crawlerEngine.crawlPages({
+      pagesToCrawl: [start],
+      collectedURLs: new Set<string>(),
+      uniquePages: new Set(sitemapList),
+      crawlFrontierKeys,
+      results,
+      incomingLinksTracking,
+      sitemapUrls: results.sitemaps.urls,
+    });
+
+    let landed = start;
+    let page: PageInfo | undefined = results.pageData.pages[start];
+    for (let hop = 0; hop < 4 && page?.redirectOnly && page.finalUrl; hop++) {
+      landed = page.finalUrl;
+      page = results.pageData.pages[landed];
+    }
+
+    const { kept, inSitemap } = keepSinglePageSitemapEntries(results.sitemaps.urls, [start, landed]);
+    results.sitemaps.urls = kept;
+    results.sitemaps.total = Object.keys(kept).length;
+    results.singlePage = {
+      url: pageUrl,
+      ...(landed !== start ? { finalUrl: landed } : {}),
+      inSitemap,
+    };
+
+    if (inSitemap === false && page && page.status === 200 && !page.nonHtml && !page.noindex) {
+      const escaped = escapeHtml(landed);
+      saveError(
+        'Some URLs are not listed in sitemap',
+        `<a href="${escaped}">${escaped}</a> is not listed in the sitemap`,
+        SEVERITY.MEDIUM,
+      );
+    }
+
+    return { alternatesErrors: crawled.alternatesErrors, isMultiLang: crawled.isMultiLang, failedPages: crawled.failedPages };
+  }
+
+  /** What follows the crawl passes, shared by the full audit, the lead scan and the single-page audit. */
   static async #finishPageAnalysis(
     context: AnalyzeContext,
     crawled: { alternatesErrors: string[]; isMultiLang: boolean; failedPages: string[] },
@@ -696,7 +763,8 @@ class AuditOrchestrator {
     siteTextFiles?: SiteTextFilesData,
     /** `probeUncrawledSitemapUrls`: check a sample of sitemap URLs the crawl never reached (not in lead scans). */
     /** `sitemapUrlsBeyondLimit`: sitemap URLs `--limit` cut before the crawl, probed with the rest. */
-    options: { probeUncrawledSitemapUrls?: boolean; sitemapUrlsBeyondLimit?: string[] } = {},
+    /** `singlePage`: one page was crawled; skip the checks that compare pages or read the link graph. */
+    options: { probeUncrawledSitemapUrls?: boolean; sitemapUrlsBeyondLimit?: string[]; singlePage?: boolean } = {},
   ) {
     // Load analysis config for analyzers that support configurable thresholds
     const config = loadConfig();
@@ -904,6 +972,7 @@ class AuditOrchestrator {
     ];
 
     for (const validator of validators) {
+      if (options.singlePage && MULTI_PAGE_VALIDATORS.has(validator.name)) continue;
       try {
         const result = AuditOrchestrator.#runWithTimeout(validator.run, validator.name, VALIDATOR_TIMEOUT_MS);
         AuditOrchestrator.#processValidationResult(result, saveError);
@@ -925,8 +994,12 @@ class AuditOrchestrator {
     // Identify orphaned pages, and reconcile sitemap URLs against crawl status
     // codes (A1.4) — both moved here (from the crawl-time analyzePages path) so
     // they read the fully-reloaded page set, not a partially-evicted one.
-    AuditOrchestrator.#reportOrphanedPages(pageData.pages, saveError);
-    AuditOrchestrator.#reportPagesMissingFromSitemap(pageData.pages, sitemapUrls, saveError);
+    // A single-page audit reports "not in sitemap" itself (#crawlSinglePage); "no incoming links"
+    // means nothing on one page, where no other page was crawled.
+    if (!options.singlePage) {
+      AuditOrchestrator.#reportOrphanedPages(pageData.pages, saveError);
+      AuditOrchestrator.#reportPagesMissingFromSitemap(pageData.pages, sitemapUrls, saveError);
+    }
     await AuditOrchestrator.#reconcileSitemapStatusCodes(
       pageData.pages,
       sitemapUrls,
@@ -936,10 +1009,11 @@ class AuditOrchestrator {
       options.sitemapUrlsBeyondLimit ?? [],
     );
 
-    await AuditOrchestrator.checkAdsTxtGate(pageData.pages, origin, saveError, siteTextFiles);
+    // ads.txt is a site file; a single-page audit does not read it.
+    if (!options.singlePage) await AuditOrchestrator.checkAdsTxtGate(pageData.pages, origin, saveError, siteTextFiles);
 
     // Run async/data-storing validators that need special result handling
-    await AuditOrchestrator.#runDataStoringValidators(pageData, origin, saveError);
+    await AuditOrchestrator.#runDataStoringValidators(pageData, origin, saveError, options.singlePage === true);
 
     // Defective/non-real pages whose fix is to remove or repair the page, not to
     // address per-page findings on it: broken-pagination tails + soft 404s (HTTP
@@ -988,7 +1062,12 @@ class AuditOrchestrator {
    * Run validators that store extra data on pageData (async or with side effects)
    * @private
    */
-  static async #runDataStoringValidators(pageData: PageDataForValidation, origin: string, saveError: SaveErrorFn) {
+  static async #runDataStoringValidators(
+    pageData: PageDataForValidation,
+    origin: string,
+    saveError: SaveErrorFn,
+    singlePage = false,
+  ) {
     // Each entry: { name, run (async fn returning result), apply (stores data on pageData) }
     const dataValidators: Array<{
       name: string;
@@ -1056,6 +1135,7 @@ class AuditOrchestrator {
     ];
 
     for (const validator of dataValidators) {
+      if (singlePage && MULTI_PAGE_VALIDATORS.has(validator.name)) continue;
       try {
         const result = await validator.run();
         validator.apply(result);

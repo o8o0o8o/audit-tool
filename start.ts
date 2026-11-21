@@ -58,6 +58,12 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
 
     const { origin, sitemap, compare, proceed, perf, saveHtml } = args;
 
+    // Fatal argument errors (e.g. a bad --page URL): stop here instead of spawning and restarting.
+    if (args.errors.some((error) => error.startsWith('--page'))) {
+      args.errors.forEach((error) => console.error(`❌ ${error}`));
+      process.exit(1);
+    }
+
     // Validate that origin or sitemap is provided
     if (!args.origin && !args.sitemap) {
       printHelp();
@@ -103,6 +109,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
       'robots.ts',
     ];
     if (origin) childArgs.push(`--origin=${origin}`);
+    if (args.page) childArgs.push(`--page=${args.page}`);
     if (sitemap) childArgs.push(`--sitemap=${sitemap}`);
     if (args.compareSitemap) childArgs.push(`--compare-sitemap=${args.compareSitemap}`);
     if (compare) childArgs.push(`--compare=${compare}`);

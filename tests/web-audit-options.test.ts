@@ -37,6 +37,7 @@ void describe('web audit options', () => {
       limit: null,
       evidenceCap: 10,
       quickScan: false,
+      singlePage: false,
     });
   });
 
@@ -88,6 +89,7 @@ void describe('web audit options', () => {
       limit: '5',
       evidence_cap: '20',
       lead: 'false',
+      page: 'false',
     });
     assert.deepStrictEqual(toCliArgs(inputs), [
       '--origin=https://example.com',
@@ -132,6 +134,7 @@ void describe('web audit options', () => {
         limit: QUICK_SCAN.pages,
         evidenceCap: QUICK_SCAN.evidenceCap,
         quickScan: true,
+        singlePage: false,
       },
     );
     const cli = toCliArgs(toWorkflowInputs(result.options, 'run-12345678'));
@@ -172,6 +175,57 @@ void describe('web audit options', () => {
     assert.match(yml, /\[ "\$IN_LEAD" = "true" \] && args\+=\("--lead"\)/);
     assert.match(yml, /then results=lead-results; else results=audit-results; fi/);
     assert.equal((yml.match(/upload-results\.mjs [^\n]*--results="\$\{RESULTS_DIR:-audit-results\}"/g) ?? []).length, 4);
+  });
+
+  void it('single page keeps the page URL and runs --page', () => {
+    const result = parseAuditRequest({ url: 'example.com/pricing?plan=pro#faq', singlePage: true, limit: 50, contentResearch: true, perf: true });
+    assert.ok(result.ok);
+    if (!result.ok) return;
+    assert.equal(result.options.url, 'https://example.com/pricing?plan=pro');
+    assert.equal(result.options.singlePage, true);
+    assert.equal(result.options.limit, null);
+    assert.equal(result.options.contentResearch, false);
+    assert.equal(result.options.perf, true);
+    const inputs = toWorkflowInputs(result.options, 'run-12345678');
+    assert.equal(inputs.page, 'true');
+    const cli = toCliArgs(inputs);
+    assert.equal(cli[0], '--page=https://example.com/pricing?plan=pro');
+    assert.ok(!cli.some((a) => a.startsWith('--origin=')));
+    const args = parseArgs(cli);
+    assert.equal(args.page, 'https://example.com/pricing?plan=pro');
+    assert.equal(args.origin, 'https://example.com');
+    assert.deepStrictEqual(args.errors, []);
+  });
+
+  void it('single page and quick scan cannot be combined', () => {
+    const result = parseAuditRequest({ url: 'https://example.com/a', singlePage: true, quickScan: true });
+    assert.equal(result.ok, false);
+  });
+
+  void it('single page estimates one page', () => {
+    const base: EstimateInput = {
+      url: '',
+      preset: null,
+      sections: [],
+      perf: false,
+      llm: false,
+      verify: false,
+      contentResearch: false,
+      concurrency: 5,
+      limit: 9000,
+      evidenceCap: 10,
+      singlePage: true,
+    };
+    const estimate = estimateAuditDuration(base);
+    assert.equal(estimate?.pages, 1);
+    assert.equal(estimate?.assumedPages, false);
+    assert.ok((estimate?.minutes ?? 99) <= 3);
+  });
+
+  void it('the workflow passes --page for a single page', () => {
+    const yml = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'audit.yml'), 'utf8');
+    assert.match(yml, /if \[ "\$IN_PAGE" = "true" \]; then args=\("--page=\$AUDIT_URL"\); else args=\("--origin=\$AUDIT_URL"\); fi/);
+    assert.match(yml, /--arg singlePage "\$IN_PAGE"/);
   });
 
   void it('keeps presets and sections in lockstep with lib/presets.ts', () => {

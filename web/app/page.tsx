@@ -81,6 +81,29 @@ const OPTIONS: readonly { name: string; label: string; flag: string; disabled?: 
   { name: 'visual', label: 'UI defect checks', flag: '--visual' },
 ];
 
+const SCANS: readonly { value: 'full' | 'quick' | 'page'; label: string; flag: string; summary: string }[] = [
+  {
+    value: 'full',
+    label: 'Full audit',
+    flag: '--origin',
+    summary: 'Every page in the sitemap, with the security probes. Pick Quick scan for a short, read-only scan, or Single page to audit one URL.',
+  },
+  {
+    value: 'quick',
+    label: 'Quick scan',
+    flag: '--lead',
+    summary:
+      'Reads 25 published pages, 3 at a time, and nothing else: no probing of hidden files or hosts, no lab performance run (real-user data only), UI checks on, no PDF report. Use it for sites whose owner did not ask for an audit. Works with any preset.',
+  },
+  {
+    value: 'page',
+    label: 'Single page',
+    flag: '--page',
+    summary:
+      'Audits only the URL you enter. robots.txt and the sitemap are read just to say whether this page is blocked or listed; checks that compare pages or probe the domain (DNS, exposed files, staging hosts) are skipped. Works with any preset.',
+  },
+];
+
 const SECTIONS: { value: string; label: string }[] = [
   { value: 'executive-summary', label: 'Executive summary' },
   { value: 'technology-stack', label: 'Technology stack' },
@@ -108,7 +131,10 @@ export default function DispatchPage() {
   const [now, setNow] = useState(() => Date.now());
   const storedRun = useRef<StoredRun | null>(null);
   const [preset, setPreset] = useState<string>('full');
-  const [quickScan, setQuickScan] = useState(false);
+  /** Full audit, Quick scan (`--lead`) or Single page (`--page`). */
+  const [scan, setScan] = useState<'full' | 'quick' | 'page'>('full');
+  const quickScan = scan === 'quick';
+  const singlePage = scan === 'page';
   const isCustom = preset === 'custom';
   const summary = PRESETS.find((p) => p.value === preset)?.summary;
   const formRef = useRef<HTMLFormElement>(null);
@@ -131,7 +157,7 @@ export default function DispatchPage() {
   // The preset radio and the quick scan switch are controlled, so recompute after React commits them.
   useEffect(() => {
     if (formRef.current) refreshEstimate(formRef.current);
-  }, [preset, quickScan]);
+  }, [preset, scan]);
 
   useEffect(() => {
     const id = readRunParam(window.location.search);
@@ -209,7 +235,8 @@ export default function DispatchPage() {
         concurrency: String(form.get('concurrency') ?? ''),
         limit: String(form.get('limit') ?? ''),
         evidenceCap: String(form.get('evidenceCap') ?? ''),
-        quickScan: form.get('quickScan') === 'on',
+        quickScan: form.get('scan') === 'quick',
+        singlePage: form.get('scan') === 'page',
       }),
     );
   }
@@ -229,7 +256,8 @@ export default function DispatchPage() {
       concurrency: form.get('concurrency'),
       limit: form.get('limit'),
       evidenceCap: form.get('evidenceCap'),
-      quickScan: form.get('quickScan') === 'on',
+      quickScan: form.get('scan') === 'quick',
+      singlePage: form.get('scan') === 'page',
     };
     setSubmitting(true);
     setError(null);
@@ -255,6 +283,7 @@ export default function DispatchPage() {
           concurrency: String(body.concurrency ?? ''),
           evidenceCap: String(body.evidenceCap ?? ''),
           quickScan: body.quickScan,
+          singlePage: body.singlePage,
         };
         storedRun.current = { dispatchedAt: Date.now(), options };
         saveStoredRun(data.runId, storedRun.current);
@@ -429,7 +458,7 @@ export default function DispatchPage() {
               <div className="contacts-form__wrap">
                 <div className="contacts-form__item">
                   <label className="contacts-form__label" htmlFor="audit-url">
-                    Website URL
+                    {singlePage ? 'Page URL' : 'Website URL'}
                   </label>
                   <input
                     id="audit-url"
@@ -438,7 +467,7 @@ export default function DispatchPage() {
                     inputMode="url"
                     autoComplete="url"
                     required
-                    placeholder="Website URL (example.com)"
+                    placeholder={singlePage ? 'Page URL (example.com/pricing)' : 'Website URL (example.com)'}
                     className="form-input"
                   />
                 </div>
@@ -495,22 +524,21 @@ export default function DispatchPage() {
                   <span className="contacts-form__label" id="audit-scan-label">
                     Scan
                   </span>
-                  <div className="contacts-form__checklist" role="group" aria-labelledby="audit-scan-label">
-                    <label className="checkbox-button" title="--lead">
-                      <input
-                        name="quickScan"
-                        type="checkbox"
-                        checked={quickScan}
-                        onChange={(e) => setQuickScan(e.target.checked)}
-                      />
-                      <span>Quick scan</span>
-                    </label>
+                  <div className="contacts-form__checklist" role="radiogroup" aria-labelledby="audit-scan-label">
+                    {SCANS.map((sc) => (
+                      <label key={sc.value} className="checkbox-button" title={sc.flag}>
+                        <input
+                          name="scan"
+                          type="radio"
+                          value={sc.value}
+                          checked={scan === sc.value}
+                          onChange={() => setScan(sc.value)}
+                        />
+                        <span>{sc.label}</span>
+                      </label>
+                    ))}
                   </div>
-                  <p className="contacts-form__hint">
-                    {quickScan
-                      ? 'Reads 25 published pages, 3 at a time, and nothing else: no probing of hidden files or hosts, no lab performance run (real-user data only), UI checks on, no PDF report. Use it for sites whose owner did not ask for an audit. Works with any preset.'
-                      : 'Full audit: every page in the sitemap, with the security probes. Switch on Quick scan for a short, read-only scan.'}
-                  </p>
+                  <p className="contacts-form__hint">{SCANS.find((sc) => sc.value === scan)?.summary}</p>
                 </div>
 
                 <div className="contacts-form__item">
@@ -590,9 +618,9 @@ export default function DispatchPage() {
                   <input
                     id="audit-limit"
                     name="limit"
-                    disabled={quickScan}
-                    key={`limit-${quickScan}`}
-                    defaultValue={quickScan ? QUICK_SCAN.pages : undefined}
+                    disabled={quickScan || singlePage}
+                    key={`limit-${scan}`}
+                    defaultValue={quickScan ? QUICK_SCAN.pages : singlePage ? 1 : undefined}
                     type="number"
                     min={1}
                     placeholder="Page limit (all pages when empty)"

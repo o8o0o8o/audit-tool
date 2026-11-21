@@ -35,6 +35,8 @@ export interface AuditOptions {
   evidenceCap: number;
   /** `--lead`: the passive 25-page scan; works with any preset. */
   quickScan: boolean;
+  /** `--page`: audit only the page at `url` (then `url` is the page, not the site origin). */
+  singlePage: boolean;
 }
 
 /**
@@ -72,7 +74,8 @@ function isPrivateHostname(hostname: string): boolean {
   return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) || a === 0 || (a === 100 && b >= 64 && b <= 127);
 }
 
-function parseUrl(raw: unknown, errors: string[]): string {
+/** The site origin, or with `keepPath` the page URL without its `#fragment`. */
+function parseUrl(raw: unknown, errors: string[], keepPath = false): string {
   if (typeof raw !== 'string' || raw.trim() === '') {
     errors.push('url is required');
     return '';
@@ -94,7 +97,9 @@ function parseUrl(raw: unknown, errors: string[]): string {
     errors.push('url must not point at localhost or a private network');
     return '';
   }
-  return parsed.origin;
+  if (!keepPath) return parsed.origin;
+  parsed.hash = '';
+  return parsed.toString();
 }
 
 function parseBool(raw: unknown): boolean {
@@ -136,7 +141,9 @@ export function parseAuditRequest(body: unknown): ParseResult {
   if (typeof body !== 'object' || body === null) return { ok: false, errors: ['request body must be a JSON object'] };
   const b = body as Record<string, unknown>;
   const errors: string[] = [];
-  const url = parseUrl(b.url, errors);
+  const singlePage = parseBool(b.singlePage);
+  const url = parseUrl(b.url, errors, singlePage);
+  if (singlePage && parseBool(b.quickScan)) errors.push('choose either quick scan or single page, not both');
   const preset = parsePreset(b.preset, errors);
   const sections = parseSections(b.sections, preset, errors);
   const concurrency = parseInteger(b.concurrency, 'concurrency', CONCURRENCY_MIN, CONCURRENCY_MAX, errors);
@@ -160,6 +167,7 @@ export function parseAuditRequest(body: unknown): ParseResult {
         limit: QUICK_SCAN.pages,
         evidenceCap: QUICK_SCAN.evidenceCap,
         quickScan: true,
+        singlePage: false,
       },
     };
   }
@@ -172,12 +180,14 @@ export function parseAuditRequest(body: unknown): ParseResult {
       perf: parseBool(b.perf),
       llm: parseBool(b.llm),
       verify: parseBool(b.verify),
-      contentResearch: parseBool(b.contentResearch),
+      // Competitor research compares whole sites; the page limit means nothing for one page.
+      contentResearch: singlePage ? false : parseBool(b.contentResearch),
       visual: parseBool(b.visual),
       concurrency: concurrency ?? CONCURRENCY_DEFAULT,
-      limit,
+      limit: singlePage ? null : limit,
       evidenceCap: evidenceCap ?? EVIDENCE_CAP_DEFAULT,
       quickScan: false,
+      singlePage,
     },
   };
 }
@@ -207,12 +217,13 @@ export function toWorkflowInputs(opts: AuditOptions, runId: string): WorkflowInp
     limit: opts.limit === null ? '' : String(opts.limit),
     evidence_cap: String(opts.evidenceCap),
     lead: String(opts.quickScan),
+    page: String(opts.singlePage),
   };
 }
 
 /** CLI flags for `start.ts`; `.github/workflows/audit.yml` builds the same list in shell. */
 export function toCliArgs(inputs: WorkflowInputs): string[] {
-  const args = [`--origin=${inputs.url}`];
+  const args = [inputs.page === 'true' ? `--page=${inputs.url}` : `--origin=${inputs.url}`];
   if (inputs.lead === 'true') args.push('--lead');
   if (inputs.preset) args.push(`--preset=${inputs.preset}`);
   if (inputs.sections) args.push(`--sections=${inputs.sections}`);
@@ -245,6 +256,8 @@ export interface EstimateInput {
   evidenceCap: string | number | null;
   /** Optional so runs stored before the option existed still estimate. */
   quickScan?: boolean;
+  /** Optional so runs stored before the option existed still estimate. */
+  singlePage?: boolean;
 }
 
 export interface AuditEstimate {
@@ -286,6 +299,7 @@ function clamp(value: number, min: number, max: number): number {
 export function estimateAuditDuration(input: EstimateInput): AuditEstimate | null {
   if (input.preset === 'custom' && input.sections.length === 0) return null;
   if (input.quickScan) return estimateQuickScan();
+  if (input.singlePage) return estimateSinglePage(input);
 
   const concurrency = clamp(toPositiveInt(input.concurrency, CONCURRENCY_DEFAULT) ?? CONCURRENCY_DEFAULT, CONCURRENCY_MIN, CONCURRENCY_MAX);
   const limit = toPositiveInt(input.limit, 0);
@@ -319,6 +333,17 @@ function estimateQuickScan(): AuditEstimate {
     batches * VISUAL_PER_PAGE_SECONDS +
     probePages * 20;
   return { minutes: Math.max(1, Math.ceil(seconds / 60)), pages, assumedPages: false };
+}
+
+/** Single page: one page load, its evidence and the chosen options; no site probes. */
+function estimateSinglePage(input: EstimateInput): AuditEstimate {
+  let seconds = SETUP_SECONDS + REPORT_SECONDS + BATCH_SECONDS * (input.perf ? PERF_BATCH_FACTOR : 1) + EVIDENCE_SECONDS;
+  if (input.perf) seconds += PSI_SECONDS;
+  if (input.llm) seconds += LLM_SECONDS + VISION_SECONDS;
+  if (input.verify) seconds += VERIFY_FIXED_SECONDS + VERIFY_PER_PAGE_SECONDS;
+  if (input.visual) seconds += VISUAL_PER_PAGE_SECONDS + 20;
+  if (!input.preset || input.preset === 'full' || input.preset === 'seo' || input.preset === 'custom') seconds += FULL_REPORT_SECONDS;
+  return { minutes: Math.max(1, Math.ceil(seconds / 60)), pages: 1, assumedPages: false };
 }
 
 export function formatEstimate(estimate: AuditEstimate): string {

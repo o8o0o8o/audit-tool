@@ -1773,6 +1773,8 @@ export interface ParsedArgs {
    * and skips the curated report and the history save. See `applyLeadMode` in `lib/args-parser.ts`.
    */
   lead: boolean;
+  /** `--page=<url>`: audit only this page (the site is its origin). See `applySinglePageMode`. */
+  page: string | null;
   /** `--passive` (implied by `--lead`): skip the site probes that go beyond reading published pages. */
   passive: boolean;
   /** Phase 4 — opt-in competitive content research + content plan. */
@@ -1802,6 +1804,8 @@ export interface SEODataOptions {
   visual?: boolean;
   /** Lead scan (`--lead`): homepage-first page selection under one total page cap (`limit`). */
   lead?: boolean;
+  /** Single-page audit (`--page=<url>`): only this page is loaded; checks that need many pages are skipped. */
+  page?: string | null;
   /** Passive site probes (`--passive`, implied by `--lead`). */
   passive?: boolean;
   /** Base folder for the run (default `audit-results`; lead scans use `lead-results`). */

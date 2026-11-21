@@ -15,10 +15,14 @@ SEO Audit Tool - Comprehensive website SEO analysis
 Usage:
   node start --origin=<url> [OPTIONS]
   node start --sitemap=<file> [OPTIONS]
+  node start --page=<url> [OPTIONS]
 
 Required (one of):
   --origin=<url>            Website URL to audit
   --sitemap=<file>          Local sitemap XML file (origin derived from URLs)
+  --page=<url>              Audit only this page (robots.txt and the sitemap are
+                            read just to say whether it is blocked or listed;
+                            domain probes and cross-page checks are skipped)
 
 Options:
   --perf                    Enable performance metrics collection (Core Web Vitals)

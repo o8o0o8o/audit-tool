@@ -70,6 +70,7 @@ const DEFAULT_ARGS = {
   evidence: true,
   evidenceCap: 10,
   lead: false,
+  page: null,
   passive: false,
   contentResearch: false,
   competitors: null,

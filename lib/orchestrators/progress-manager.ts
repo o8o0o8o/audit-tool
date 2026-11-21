@@ -48,6 +48,7 @@ interface MetadataData {
   visual?: boolean;
   passive?: boolean;
   leadScan?: unknown;
+  singlePage?: unknown;
 }
 
 /** The checkpoint's `visual` setting; a legacy checkpoint without the field never ran the visual analyzers. */
@@ -84,6 +85,7 @@ export function buildCheckpointMetadata(results: ProgressResults) {
     // Only present on runs that used the flags, so a full audit's metadata is unchanged.
     ...(results.passive ? { passive: true } : {}),
     ...(results.leadScan ? { leadScan: results.leadScan } : {}),
+    ...(results.singlePage ? { singlePage: results.singlePage } : {}),
   };
 }
 
@@ -100,6 +102,8 @@ export interface ProgressResults {
   passive?: boolean;
   /** `--lead`: page selection, sitemap sample and request counts of the lead scan. */
   leadScan?: unknown;
+  /** `--page`: the single page audited (`SinglePageInfo`). */
+  singlePage?: unknown;
   pageData: {
     pages: Record<string, PageInfo>;
     processedPages: Set<string> | string[];
@@ -233,6 +237,7 @@ class ProgressManager {
       timing: metadataTyped.timing,
       visual: checkpointVisual(metadataTyped),
       ...(metadataTyped.leadScan ? { leadScan: metadataTyped.leadScan } : {}),
+      ...(metadataTyped.singlePage ? { singlePage: metadataTyped.singlePage } : {}),
       pageData: {
         pages,
         processedPages: processedPagesSet,

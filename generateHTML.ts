@@ -174,8 +174,16 @@ function recalculateSummary(jsonData: Record<string, unknown>, pageData: PageDat
   );
 }
 
-/** A lead scan (`--lead`, the web form's Quick scan) says so next to the preset. */
+/**
+ * A lead scan (`--lead`, the web form's Quick scan) or a single-page audit (`--page`) says so
+ * next to the preset.
+ */
 export function withQuickScanLabel(label: string, jsonData: unknown): string {
+  const single = (jsonData as { singlePage?: { url?: string; finalUrl?: string } } | null)?.singlePage;
+  if (single?.url) {
+    const text = `Single page: ${single.finalUrl ?? single.url}`;
+    return label === auditTypeLabel(undefined) ? text : `${label} · ${text}`;
+  }
   const lead = (jsonData as { leadScan?: { cap?: number } } | null)?.leadScan;
   if (!lead) return label;
   const quick = `Quick scan (${lead.cap ?? 25} pages, passive)`;

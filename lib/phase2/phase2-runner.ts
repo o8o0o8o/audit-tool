@@ -740,9 +740,16 @@ function buildCover(artifacts: AuditArtifacts, preset?: string): string {
   const lines: string[] = [];
   lines.push(`# Website Technical Audit`);
   lines.push('');
-  lines.push(`**Audit type:** ${auditTypeLabel(preset)}`);
+  // A single-page audit (`--page`) names its page instead of pretending to cover the site.
+  const single = (metadata as { singlePage?: { url?: string; finalUrl?: string } }).singlePage;
+  const singleUrl = single?.finalUrl ?? single?.url;
+  lines.push(`**Audit type:** ${auditTypeLabel(preset)}${singleUrl ? ` · single page` : ''}`);
   lines.push('');
   lines.push(`## ${manifest.domain}`);
+  if (singleUrl) {
+    lines.push('');
+    lines.push(`**Page:** ${singleUrl}  `);
+  }
   lines.push('');
   lines.push(`**Generated:** ${date}  `);
   // Avoid the confusing "354 of 314" framing — crawled count includes pages
@@ -750,7 +757,7 @@ function buildCover(artifacts: AuditArtifacts, preset?: string): string {
   const ok = counts.successful;
   const err = counts.withErrors + counts.failedToLoad;
   const crawledLine = err > 0 ? `${ok} crawled, ${err} errored` : `${ok} crawled`;
-  const sitemapLine = sitemapCount ? ` (sitemap listed ${sitemapCount})` : '';
+  const sitemapLine = sitemapCount && !singleUrl ? ` (sitemap listed ${sitemapCount})` : '';
   lines.push(`**Pages:** ${crawledLine}${sitemapLine}  `);
   if (metadata.isMultiLang) lines.push(`**Multilingual:** yes  `);
   lines.push('');

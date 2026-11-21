@@ -156,6 +156,8 @@ class ReportDataProcessor {
       cruxData: metadata.cruxData ?? null,
       // Present only on lead scans (`--lead`); marks the run as one that has no audit history.
       ...((metadata as { leadScan?: unknown }).leadScan ? { leadScan: (metadata as { leadScan?: unknown }).leadScan } : {}),
+      // Present only on single-page audits (`--page`); the report labels the run and shows no history.
+      ...((metadata as { singlePage?: unknown }).singlePage ? { singlePage: (metadata as { singlePage?: unknown }).singlePage } : {}),
       repoAnalysis,
       pageData: {
         pages,
@@ -387,8 +389,10 @@ class ReportDataProcessor {
     const jsonData = this.loadAuditData(file, domainName);
     // A lead scan is not part of a domain's audit history: it neither reads nor creates it, so its
     // report shows no trend against full audits and nothing is written under `audit-results/`.
+    // A single-page audit is not part of it either: one page's score is no point on the site's trend.
     const isLeadScan = Boolean((jsonData as { leadScan?: unknown }).leadScan);
-    const historyData = isLeadScan ? null : this.loadHistory(domainName);
+    const isSinglePage = Boolean((jsonData as { singlePage?: unknown }).singlePage);
+    const historyData = isLeadScan || isSinglePage ? null : this.loadHistory(domainName);
 
     const pageData = (jsonData.pageData ?? { pages: {}, totalWithoutError: 0, totalWithError: 0, byError: {} }) as PageData & {
       incomingLinks?: Record<string, string[]>;

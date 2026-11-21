@@ -57,6 +57,10 @@ on:
         description: Quick scan (--lead) - 25 pages, passive, results in lead-results/
         type: string
         default: 'false'
+      page:
+        description: Single page (--page) - audit only the page at url
+        type: string
+        default: 'false'
 
 permissions:
   contents: read
@@ -80,6 +84,7 @@ jobs:
       IN_PRESET: ${{ inputs.preset }}
       IN_SECTIONS: ${{ inputs.sections }}
       IN_LEAD: ${{ inputs.lead }}
+      IN_PAGE: ${{ inputs.page }}
       # Either a legacy Blob read-write token, or Vercel credentials to pull OIDC Blob access
       # (see web/scripts/vercel-blob-env.sh).
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
@@ -103,6 +108,10 @@ jobs:
             echo "::error::invalid sections"; exit 1
           fi
           case "$IN_LEAD" in ''|true|false) ;; *) echo "::error::invalid lead"; exit 1 ;; esac
+          case "$IN_PAGE" in ''|true|false) ;; *) echo "::error::invalid page"; exit 1 ;; esac
+          if [ "$IN_LEAD" = "true" ] && [ "$IN_PAGE" = "true" ]; then
+            echo "::error::quick scan and single page cannot be combined"; exit 1
+          fi
           # A quick scan (--lead) writes to lead-results/, never audit-results/.
           if [ "$IN_LEAD" = "true" ]; then results=lead-results; else results=audit-results; fi
           echo "RESULTS_DIR=$results" >> "$GITHUB_ENV"
@@ -110,7 +119,7 @@ jobs:
           echo "AUDIT_OPTIONS=$(jq -cn --arg perf "$IN_PERF" --arg llm "$IN_LLM" --arg verify "$IN_VERIFY" \
             --arg contentResearch "$IN_CONTENT_RESEARCH" --arg visual "$IN_VISUAL" --arg concurrency "$IN_CONCURRENCY" \
             --arg limit "$IN_LIMIT" --arg evidenceCap "$IN_EVIDENCE_CAP" \
-            --arg preset "$IN_PRESET" --arg sections "$IN_SECTIONS" --arg quickScan "$IN_LEAD" '$ARGS.named')" >> "$GITHUB_ENV"
+            --arg preset "$IN_PRESET" --arg sections "$IN_SECTIONS" --arg quickScan "$IN_LEAD" --arg singlePage "$IN_PAGE" '$ARGS.named')" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
 
@@ -143,7 +152,7 @@ jobs:
           AUDIT_PROGRESS_FILE: ${{ runner.temp }}/audit-progress.json
         # Mirrors toCliArgs() in web/lib/audit-options.ts.
         run: |
-          args=("--origin=$AUDIT_URL")
+          if [ "$IN_PAGE" = "true" ]; then args=("--page=$AUDIT_URL"); else args=("--origin=$AUDIT_URL"); fi
           [ "$IN_LEAD" = "true" ] && args+=("--lead")
           [ -n "$IN_PRESET" ] && args+=("--preset=$IN_PRESET")
           [ -n "$IN_SECTIONS" ] && args+=("--sections=$IN_SECTIONS")

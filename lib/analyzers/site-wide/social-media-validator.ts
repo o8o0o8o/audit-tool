@@ -122,10 +122,10 @@ class SocialMediaValidator {
       });
     }
 
-    // Report 3: Default social image usage (same image on many pages)
+    // Report 3: Default social image usage (same image on many pages); one page cannot share it.
     const imageUsage = getTopEntries(socialStats.socialImages.entries(), socialStats.socialImages.size);
 
-    if (imageUsage.length > 0 && imageUsage[0][1] > pagesAnalyzed * 0.7) {
+    if (pagesAnalyzed > 1 && imageUsage.length > 0 && imageUsage[0][1] > pagesAnalyzed * 0.7) {
       issues.push({
         message: `Default social image used on most pages`,
         detail: `The same Open Graph image is used on ${imageUsage[0][1]} pages (${calcPercent(imageUsage[0][1], pagesAnalyzed)}%). Consider using unique images for each page: ${imageUsage[0][0]}`,

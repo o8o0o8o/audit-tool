@@ -379,6 +379,7 @@ async function audit() {
     if (resolveVisual(args.visual, config)) console.log(`🖼️  Visual (UI defect) checks: enabled`);
     if (!resolveAgentic(args.agentic, config)) console.log(`🤖 Agentic browsing checks: disabled`);
     if (args.limit) console.log(`🔢 Page limit: ${args.limit}${args.lead ? ' in total (lead scan)' : ''}`);
+    if (args.page) console.log(`📄 Single page: ${args.page} (checks that need many pages are skipped, no history entry)`);
     if (args.lead) console.log(`🎯 Lead scan: passive checks only, results in ${LEAD_MODE.resultsBase}/, no curated report, no history entry`);
     else if (args.passive) console.log(`🤫 Passive mode: site probes that go beyond reading published pages are skipped`);
     if (args.exclude && args.exclude.length > 0) console.log(`🚫 Excluding: ${args.exclude.join(', ')}`);
@@ -451,6 +452,7 @@ async function audit() {
       visual: resolveVisual(args.visual, config),
       agentic: resolveAgentic(args.agentic, config),
       lead: args.lead,
+      page: args.page,
       passive: args.passive,
       resultsBase: args.lead ? LEAD_MODE.resultsBase : undefined,
     });
@@ -551,8 +553,8 @@ async function audit() {
     // A lead scan is not an audit of record: it never enters the history, so trends and
     // comparisons only ever see full audits.
     try {
-      if (args.lead) {
-        // no history entry
+      if (args.lead || args.page) {
+        // no history entry: a lead scan or a one-page audit would distort the site's trend
       } else if (seo.data && seo.fileManager?.timestamp) {
         const manager = new HistoryManager(seo.domainName!);
 

@@ -22,7 +22,7 @@ export const StartAuditInput = z.object({
   url: z.string().min(1).describe('Site (any page of it) or, for mode=page, the page URL'),
   mode: AuditMode,
   preset: z.string().nullish(),
-  options: z.record(z.string(), z.unknown()).nullish().describe('RunOptions: perf, visual, pdf, limit, …'),
+  options: z.record(z.string(), z.unknown()).nullish().describe('RunOptions: perf, visual, pdf, limit, maxPages, …'),
   external_ref: z.string().max(200).nullish().describe("Caller's own reference, e.g. hubspot:company:123"),
   idempotency_key: z.string().max(200).nullish(),
   reuse_if_newer_than_hours: z

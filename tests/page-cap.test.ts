@@ -80,3 +80,31 @@ void describe('page cap', () => {
     assert.equal(parseArgs(['--origin=https://x.test', '--max-pages=abc']).maxPages, null);
   });
 });
+
+void describe('page cap as a platform run option', () => {
+  void it('is passed to full audits only, and an unset cap keeps the old profile hash', async () => {
+    const { normalizeRunOptions, toCliArgs, profileHash, comparableKey } = await import('../lib/model/run-options');
+    const base = normalizeRunOptions('full', {});
+    const capped = normalizeRunOptions('full', { maxPages: 800 });
+    const url = 'https://x.test';
+    assert.ok(
+      !toCliArgs({ mode: 'full', url, profile: 'standard', options: base }).some((a) => a.startsWith('--max-pages')),
+    );
+    assert.ok(toCliArgs({ mode: 'full', url, profile: 'standard', options: capped }).includes('--max-pages=800'));
+    assert.ok(
+      toCliArgs({
+        mode: 'full',
+        url,
+        profile: 'standard',
+        options: normalizeRunOptions('full', { maxPages: 0 }),
+      }).includes('--max-pages=0'),
+    );
+    assert.equal(normalizeRunOptions('quick', { maxPages: 800 }).maxPages, null);
+    assert.equal(normalizeRunOptions('page', { maxPages: 800 }).maxPages, null);
+    const { maxPages: _unset, ...before } = base;
+    assert.equal(profileHash('full', 'standard', base), profileHash('full', 'standard', before as typeof base));
+    assert.notEqual(profileHash('full', 'standard', base), profileHash('full', 'standard', capped));
+    assert.notEqual(comparableKey('full', 'standard', base), comparableKey('full', 'standard', capped));
+    assert.equal(comparableKey('full', 'standard', base), 'full|none|all|standard|agentic');
+  });
+});

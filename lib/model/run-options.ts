@@ -33,6 +33,14 @@ export const RunOptions = z
     visual: z.boolean().default(false).describe('UI defect checks (--visual)'),
     concurrency: z.number().int().min(1).max(20).nullable().default(null),
     limit: z.number().int().min(1).max(100000).nullable().default(null).describe('Max pages; full audits only'),
+    maxPages: z
+      .number()
+      .int()
+      .min(0)
+      .max(100000)
+      .nullable()
+      .default(null)
+      .describe('Page cap of a full audit (--max-pages): null for the default 5000, 0 for no cap'),
     evidenceCap: z.number().int().min(1).max(100).nullable().default(null),
     pdf: z.boolean().default(false).describe('Print PDFs of the reports (--pdf)'),
     passive: z.boolean().default(false).describe('Skip probes beyond reading published pages (--passive)'),
@@ -60,11 +68,12 @@ export function normalizeRunOptions(mode: AuditMode, raw: unknown): RunOptions {
       visual: true,
       concurrency: null,
       limit: null,
+      maxPages: null,
       evidenceCap: null,
       passive: true,
     };
   }
-  if (mode === 'page') return { ...o, contentResearch: false, limit: null };
+  if (mode === 'page') return { ...o, contentResearch: false, limit: null, maxPages: null };
   return o;
 }
 
@@ -85,7 +94,10 @@ const stableJson = (v: unknown): string =>
 
 /** mode + options + steps run + tool major version (§4 "Audits"). */
 export function profileHash(mode: AuditMode, profile: AuditProfile, options: RunOptions): string {
-  const body = stableJson({ mode, profile, options, steps: platformSteps(mode, profile), tool: TOOL_MAJOR });
+  // An unset page cap is left out, so audits stored before the option keep their hash.
+  const { maxPages, ...rest } = options;
+  const hashed = maxPages === null ? rest : options;
+  const body = stableJson({ mode, profile, options: hashed, steps: platformSteps(mode, profile), tool: TOOL_MAJOR });
   return createHash('sha256').update(body).digest('hex').slice(0, 32);
 }
 
@@ -97,7 +109,7 @@ export function comparableKey(mode: AuditMode, profile: AuditProfile, o: RunOpti
   return [
     mode,
     o.preset ?? 'none',
-    o.limit ?? (mode === 'quick' ? QUICK_SCAN_SETTINGS.pages : 'all'),
+    `${o.limit ?? (mode === 'quick' ? QUICK_SCAN_SETTINGS.pages : 'all')}${o.maxPages !== null ? `/max${o.maxPages}` : ''}`,
     profile,
     families,
   ].join('|');
@@ -125,6 +137,7 @@ export function toCliArgs(input: {
   if (o.visual) args.push('--visual');
   if (o.concurrency) args.push(`--concurrency=${o.concurrency}`);
   if (o.limit) args.push(`--limit=${o.limit}`);
+  if (o.maxPages !== null && mode === 'full') args.push(`--max-pages=${o.maxPages}`);
   if (o.evidenceCap) args.push(`--evidence-cap=${o.evidenceCap}`);
   if (o.pdf) args.push('--pdf');
   if (input.proceed) args.push('--proceed');

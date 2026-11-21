@@ -117,7 +117,7 @@ export function buildMcpServer(d: McpDeps): McpServer {
           .record(z.string(), z.unknown())
           .optional()
           .describe(
-            'perf, visual, pdf (needs audits:pdf), limit, concurrency, evidenceCap, llm/verify/contentResearch (full only)',
+            'perf, visual, pdf (needs audits:pdf), limit, maxPages (page cap of a full audit: default 5000, 0 = none), concurrency, evidenceCap, llm/verify/contentResearch (full only)',
           ),
         external_ref: z.string().optional().describe('Your own reference, echoed in webhooks and list_audits'),
         idempotency_key: z.string().optional().describe('Same key from the same client returns the first audit'),

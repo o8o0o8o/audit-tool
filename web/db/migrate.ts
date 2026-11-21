@@ -3,12 +3,12 @@
  * which passes a schema name so each test file gets its own copy of the tables.
  */
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 
-export const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
+// web/ runs as CommonJS under tsx, and tests import this file from the repo root.
+export const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
 export async function runMigrations(connectionString: string, schemaName?: string): Promise<void> {
   const client = new pg.Client({ connectionString });

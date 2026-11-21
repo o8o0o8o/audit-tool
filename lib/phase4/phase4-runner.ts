@@ -18,6 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { renderMarkdownToPdf } from '../reports/pdf-renderer';
+import { pdfRequested } from '../reports/pdf-policy';
 import { loadArtifacts } from '../phase2/phase2-runner';
 import { loadAllPages } from '../phase3/finding-verifier';
 import { buildTermIndex, titleCase } from './topic-extract';
@@ -340,6 +341,10 @@ export async function runContentResearchPhase(
     console.warn('⚠️  Could not write content-research-state.json:', (e as Error).message);
   }
 
+  if (!pdfRequested()) {
+    console.log(`📄 Content research report: ${mdPath}`);
+    return mdPath;
+  }
   const pdfPath = path.join(runDir, 'content-research-report.pdf');
   try {
     await renderMarkdownToPdf(markdown, pdfPath, {

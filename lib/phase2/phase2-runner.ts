@@ -20,6 +20,7 @@ import { SCORING, THRESHOLDS } from '../constants';
 import type { VisualOverlays, OverlayItem, OverlayRect } from '../crawler/visual-overlay-collector';
 import { compareExamplesWorstFirst, formatBytes } from '../utils';
 import { renderMarkdownToPdf } from '../reports/pdf-renderer';
+import { pdfRequested } from '../reports/pdf-policy';
 import { ScoreCalculator } from '../scoring/score-calculator';
 import { classifyIssue, isCataloguedErrorTier } from '../scoring/seo-catalog';
 import { nextjsOverrideFor, isNextjsAudit } from '../scoring/nextjs-recommendations';
@@ -2910,6 +2911,7 @@ export async function runPhase2(runDir: string, options: Phase2Options = {}): Pr
     console.warn('⚠️  Could not write phase2-state.json:', (e as Error).message);
   }
 
+  if (!pdfRequested()) return path.join(runDir, 'audit-report.md');
   const pdfPath = path.join(runDir, 'audit-report.pdf');
   await timedStep('Rendering PDF', () =>
     renderMarkdownToPdf(markdown, pdfPath, {

@@ -52,9 +52,14 @@
  *                 full_audit, do_not_contact. `sent` needs a recheck made the same day.
  *   precision     Approval rate per finding type, from docs/gtm/review-log.csv.
  *   resume-type <type>                 Put a suspended finding type back on the allowlist.
+ *   publish       Publish scanned runs to the audit platform (POST /api/v1/audits/import), so
+ *                 get_lead_summary covers them. Automatic after scan, gate and rerank when the API
+ *                 store is configured.  --only=<domain>
  *
  * Common options:
- *   --csv=<path>   prospect list (default docs/gtm/companies.csv)
+ *   --csv=<path>   prospect list (default docs/gtm/companies.csv); forces the CSV store
+ *   --store=csv|api  where prospects live. Default: the platform API when AUDIT_API_URL and
+ *                  AUDIT_API_KEY are set (then the CSV is never written), else the CSV
  *   --out=<dir>    where fingerprint files and logs go (default lead-results). Lead scans themselves
  *                  are always written to lead-results/<domain>/<timestamp>/.
  *
@@ -72,11 +77,11 @@ import {
   actionable,
   domainOf,
   originOf,
-  readCompanies,
-  updateCompanies,
   type CompanyRecord,
   type RowUpdate,
 } from '../lib/leads/csv-store';
+import { openProspectStore, type ApiProspectStore } from '../lib/leads/prospect-store';
+import { publishGateRun, publishRun } from '../lib/leads/publish';
 import {
   BrowserSession,
   fingerprintSite,
@@ -131,6 +136,53 @@ const numberOption = (name: string, fallback: number) => {
 
 const csvPath = option('csv') ?? DEFAULT_COMPANIES_CSV;
 const outDir = option('out') ?? LEAD_RESULTS_DIR;
+const store = openProspectStore({ csvPath, store: option('store') ?? (option('csv') ? 'csv' : null) });
+const readCompanies = (_path: string) => store.records();
+const updateCompanies = (_path: string, updates: RowUpdate[]) => store.update(updates);
+const api = () => (store.kind === 'api' ? (store as ApiProspectStore) : null);
+
+/** The platform's scan guard (or the CSV's do_not_contact rows), asked before fingerprint and scan. */
+async function guarded(domain: string): Promise<boolean> {
+  const g = await store.guard(domain);
+  if (!g.allowed) console.log(`  ✗ ${domain}: refused by the scan guard (${g.reason ?? 'blocked'}); skipped`);
+  return !g.allowed;
+}
+
+/** Publishes a run (or, when it is already published, its latest gate run) and records the audit id. */
+async function publishAfterGate(website: string, runDir: string, lead: LeadFile | null): Promise<void> {
+  const client = api();
+  if (!client) return;
+  try {
+    const res = await publishRun(client, runDir);
+    if (res.alreadyImported && lead) await publishGateRun(client, res.auditId, lead);
+    updateCompanies(csvPath, [{ website, values: { audit_id: res.auditId } }]);
+    console.log(
+      `    published: audit ${res.auditId}${res.alreadyImported ? ' (gate run appended)' : ` (${res.artifacts} file(s))`}`,
+    );
+  } catch (error) {
+    console.log(`    ⚠️  publish failed: ${(error as Error).message}`);
+  }
+}
+
+async function publish() {
+  const only = option('only');
+  const rows = actionable(readCompanies(csvPath)).filter((r) =>
+    only ? domainOf(r[KEY_COLUMN]) === domainOf(only) : r.run_dir?.trim(),
+  );
+  if (!api()) {
+    console.error(
+      'publish needs the API store: set AUDIT_API_URL and AUDIT_API_KEY (key scopes audits:publish, prospects:read, prospects:write).',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  for (const r of rows) {
+    const runDir = r.run_dir?.trim();
+    if (!runDir || !fs.existsSync(runDir)) continue;
+    console.log(domainOf(r[KEY_COLUMN]));
+    await publishAfterGate(r[KEY_COLUMN], runDir, readLeadFile(runDir));
+  }
+}
 
 function usage(): never {
   const header = fs.readFileSync(__filename, 'utf8').match(/\/\*\*([\s\S]*?)\*\//)?.[1] ?? '';
@@ -215,6 +267,7 @@ async function fingerprint() {
   try {
     await runPool(todo, concurrency, async (record: CompanyRecord) => {
       const website = record[KEY_COLUMN];
+      if (await guarded(domainOf(website))) return;
       const result = await fingerprintSite(website, { readInBrowser });
       const file = stackJsonPath(result.domain, outDir);
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -468,6 +521,7 @@ async function scan() {
 
     const website = record[KEY_COLUMN];
     const domain = domainOf(website);
+    if (await guarded(domain)) continue;
     const { origin, note: originNote } = await scanOrigin(record);
     const startedAt = new Date();
     const logFile = path.join(outDir, domain, 'scan.log');
@@ -639,6 +693,7 @@ async function gateOne(record: CompanyRecord, runDir: string, useBrowser: boolea
   }
   console.log(`      ${file}`);
   if (lead.teaserReady && !lead.disclosure.length) await writeTeaser(lead);
+  await publishAfterGate(website, runDir, lead);
   return lead;
 }
 
@@ -955,6 +1010,18 @@ async function rerank() {
       moved.push(`${domain}: ${stage} → ${next}`);
     }
     updateCompanies(csvPath, [{ website: record[KEY_COLUMN], values }]);
+    const client = api();
+    if (client && record.audit_id?.trim()) {
+      // A rerank is a gate run of its own: appended, nothing else changes.
+      const res = await publishGateRun(client, record.audit_id.trim(), {
+        ...lead,
+        rerankedAt: lead.rerankedAt ?? new Date().toISOString(),
+      }).catch((e: Error) => {
+        console.log(`    ⚠️  publish failed: ${e.message}`);
+        return null;
+      });
+      if (res && !res.duplicate) console.log(`    published gate run ${res.gate_run_id}`);
+    }
     const heavy = lead.highlights.filter((h) => h.weight === 'heavy').map((h) => h.rootCause);
     console.log(
       `${domain}: ${lead.causes.length} cause(s), heavy: ${heavy.length ? heavy.join(', ') : 'none'} → ${next}`,
@@ -988,11 +1055,24 @@ function disclosed() {
 
 async function main() {
   if (!command || flag('help')) usage();
-  if (!fs.existsSync(csvPath)) {
+  if (store.kind === 'csv' && !fs.existsSync(csvPath)) {
     console.error(`Prospect list not found: ${csvPath}`);
     process.exit(1);
   }
+  await store.load();
+  if (store.kind === 'api') console.log(`Prospects: ${process.env.AUDIT_API_URL} (API store; the CSV is not written)`);
+  try {
+    await run();
+  } finally {
+    await store.flush();
+  }
+}
+
+async function run() {
   switch (command) {
+    case 'publish':
+      await publish();
+      break;
     case 'fingerprint':
       await fingerprint();
       break;

@@ -2,7 +2,7 @@
 
 How to build steps 1–4 of [`platform-api.md`](platform-api.md) on one machine. The design doc says what the platform is and why; this guide says where the code goes, how to run it, and what proves each task done. Section numbers like "§4" point into the design doc.
 
-Status: written 2026-11-21. Nothing here exists yet; every file name and command below is a proposal to follow, not a description of the repository.
+Status: written 2026-11-21; steps 0–4 built locally the same day on branch `platform-api-local` (see "Built so far" at the end). The five acceptance checks of §7 pass.
 
 Scope: the local build only (steps 1–4). Deployment, the public site (step 5) and page rows (step 6) get their own sections when the local build is done.
 
@@ -272,3 +272,19 @@ Not needed for the local build, and not to be guessed at while building it:
 - The database driver: `pg` with a pool works locally; on Vercel it needs Neon's pooled address, to be confirmed with one pass on a Neon branch.
 - Copying existing public Blob uploads to the private store and removing the public copies.
 - `audit.yml` rewritten to run `scripts/platform-worker.ts` with `id-token: write`.
+
+## Built so far (2026-11-21)
+
+Steps 0–4 exist as described above, with these differences:
+
+- **Migrations:** three files, `0000_step1_core`, `0001_step2_prospects_api`, `0002_step3_4_results`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
+- **`prospects.extra`** (`jsonb`, not in the design's SQL) keeps the other `companies.csv` columns, so the pipeline's API store round-trips every column it reads and writes.
+- **Imports end with `POST /api/v1/audits/{id}/complete`** (not in §6): `audits/import` creates the audit and returns an upload grant; `complete` records the uploaded artifacts and sets `built`.
+- **Finding codes (3.2):** explicit codes are seeded in `lib/model/check-types.json` (`scripts/build-check-types.ts`: the 50 most frequent findings across the stored runs plus every security and email-DNS finding, 69 codes). Analyzers do not set `Issue.code` yet; codes come from titles in `lib/model/finding-codes.ts`.
+- **Password hash** format is `scrypt:<salt>:<hash>`: Next's env loader expands `$` in `.env.local` values.
+- **Worker:** `start.ts` and the worker load tsx by absolute path, so a work folder anywhere works. The audit writes `$AUDIT_CHECKPOINT_MARKER` after each completed checkpoint save; the worker snapshots on it (first marker at once, then at most every `PLATFORM_SNAPSHOT_INTERVAL_MS`, default 10 min). A homepage redirect is followed hop by hop (no full load), so a redirect to an unreachable guarded domain is still refused.
+- **`--pdf`:** Phase 2, 3 and 4 print PDFs only with the flag; the teaser stage is unchanged (open decision §12).
+- **Not built:** page rows, occurrences and the other step-6 tables; the public site (step 5); production implementations (§8). `audit.yml`, `upload-results.mjs` and `lib/blob.ts` are still the old flow.
+- **Slow tests** (`tests/platform/worker.slow.test.ts`) run only with `PLATFORM_SLOW_TESTS=1`. The audit itself may still try PageSpeed/CrUX for the loopback fixture site; those calls fail harmlessly.
+
+Measured: all 838 stored runs build a valid model (`npx tsx scripts/build-model.ts --all`, 27 s) and import in 93 s; the end-to-end quick scan of example.com takes ~36 s from `start_audit` to `succeeded`; a worker killed during the crawl was resumed by the reaper and finished 12.5 min after the kill.

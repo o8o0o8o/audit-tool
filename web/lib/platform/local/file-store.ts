@@ -1,15 +1,19 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readdir, rename, rm, stat, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { signToken, verifyToken } from '../../core/tokens';
 import type { FileStore } from '../types';
 
 /** Disk-backed FileStore: the key is the path relative to `root`. */
 export class LocalFileStore implements FileStore {
   readonly root: string;
 
-  constructor(root: string, private readonly opts: { appUrl: string; secret: string; now?: () => number }) {
+  constructor(
+    root: string,
+    private readonly opts: { appUrl: string; secret: string; now?: () => number },
+  ) {
     this.root = path.resolve(root);
   }
 
@@ -39,7 +43,10 @@ export class LocalFileStore implements FileStore {
     const abs = this.resolve(key);
     const info = await stat(abs).catch(() => null);
     if (!info?.isFile()) return null;
-    const meta = await readFile(`${abs}.meta.json`, 'utf8').then((s) => JSON.parse(s) as { contentType?: string }, () => ({}) as { contentType?: string });
+    const meta = await readFile(`${abs}.meta.json`, 'utf8').then(
+      (s) => JSON.parse(s) as { contentType?: string },
+      () => ({}) as { contentType?: string },
+    );
     return {
       body: Readable.toWeb(createReadStream(abs)) as ReadableStream<Uint8Array>,
       bytes: info.size,
@@ -67,7 +74,7 @@ export class LocalFileStore implements FileStore {
 
   async issueUpload(prefix: string, ttlSeconds: number) {
     this.resolve(`${prefix.replace(/\/+$/, '')}/x`); // refuse a prefix that leaves the root
-    const token = signUploadToken({ prefix, exp: Math.floor(this.now() / 1000) + ttlSeconds }, this.opts.secret);
+    const token = signUploadToken({ prefix }, this.opts.secret, ttlSeconds, this.now());
     return { url: `${this.opts.appUrl}/api/worker/upload`, headers: { authorization: `Bearer ${token}` } };
   }
 
@@ -76,24 +83,16 @@ export class LocalFileStore implements FileStore {
   }
 }
 
-interface UploadClaims {
-  prefix: string;
-  exp: number;
-}
-
-export function signUploadToken(claims: UploadClaims, secret: string): string {
-  const body = Buffer.from(JSON.stringify({ typ: 'upload', ...claims })).toString('base64url');
-  return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
+export function signUploadToken(
+  claims: { prefix: string },
+  secret: string,
+  ttlSeconds: number,
+  nowMs = Date.now(),
+): string {
+  return signToken('upload', claims, secret, ttlSeconds, nowMs);
 }
 
 /** Returns the prefix the token allows, or null when it is altered or expired. */
 export function verifyUploadToken(token: string, secret: string, nowMs = Date.now()): string | null {
-  const [body, sig] = token.split('.');
-  if (!body || !sig) return null;
-  const want = createHmac('sha256', secret).update(body).digest();
-  const got = Buffer.from(sig, 'base64url');
-  if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
-  const claims = JSON.parse(Buffer.from(body, 'base64url').toString()) as UploadClaims & { typ?: string };
-  if (claims.typ !== 'upload' || claims.exp * 1000 < nowMs) return null;
-  return claims.prefix;
+  return verifyToken<{ prefix: string }>('upload', token, secret, nowMs)?.prefix ?? null;
 }

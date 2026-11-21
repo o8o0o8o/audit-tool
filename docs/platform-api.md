@@ -847,6 +847,7 @@ Not settled, to measure before step 6:
 
 - **Size of `pages.sections`.** abilio.com is about 18 000 pages in 12 MB gzipped. Postgres compresses less well than gzip, so a rough estimate is 100–200 MB in the database for an audit that size. Not measured. Keep `sections` to the fields a consumer reads, set `lz4` compression on the column, and load one large audit before the page tables ship.
 - **Growth of `finding_occurrences` and `page_links`.** They grow with every full audit and are kept forever. No partitioning is planned; partitioning by audit age may be needed later.
+- **Measured on the local build (2026-11-21), site part only.** All 838 stored runs (full, lead, single-page) import in 93 s. The stored abilio.com run here has 910 pages (23 MB on disk, not the 18 000-page crawl above): its site document is 59 KB (21 KB in the `jsonb` column), 86 finding rows, built and loaded in 0.5 s. All 838 runs together: `audit_documents` 27 MB, `findings` 29 MB (91 466 rows). Page rows (step 6) are not measured yet.
 - **`findings.code` and unknown codes.** The foreign key means the loader must insert a new derived code into `check_types` before the finding, or use the `untyped` row (§8.2).
 
 ## 5. MCP server (designed first)

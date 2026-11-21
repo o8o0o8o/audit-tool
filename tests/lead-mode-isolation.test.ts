@@ -72,6 +72,9 @@ const DEFAULT_ARGS = {
   lead: false,
   page: null,
   passive: false,
+  // Platform flags (docs/platform-api.md §8.1, §8.9): off unless asked for.
+  pdf: false,
+  profile: 'standard',
   contentResearch: false,
   competitors: null,
   warnings: [],

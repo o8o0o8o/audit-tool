@@ -18,7 +18,8 @@
     "incremental": true,
     "isolatedModules": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "paths": { "@model/*": ["./lib/model/*"] }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist", "audit-results", "lead-results", "coverage", "web"]

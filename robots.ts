@@ -311,6 +311,9 @@ async function audit() {
 
     // Load configuration (from file or defaults)
     const config = loadConfig(args.config);
+    // --pdf / `pdf: true`, and the platform run profile, reach the Phase 2-4 runners and the site probes.
+    if (args.pdf || config.pdf === true) process.env.SEO_AUDIT_PDF = '1';
+    if (args.profile === 'public') process.env.SEO_AUDIT_PROFILE = 'public';
 
     // Apply user-defined thresholds from .seoauditrc to constants
     applyConfigToConstants(config, constants);

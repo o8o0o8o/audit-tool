@@ -13,14 +13,19 @@ export function testDatabaseUrl(): string | undefined {
   if (process.env.DATABASE_URL_TEST) return process.env.DATABASE_URL_TEST;
   const envFile = path.resolve(__dirname, '../../web/.env.local');
   if (!existsSync(envFile)) return undefined;
-  const line = readFileSync(envFile, 'utf8').split('\n').find((l) => l.startsWith('DATABASE_URL_TEST='));
+  const line = readFileSync(envFile, 'utf8')
+    .split('\n')
+    .find((l) => l.startsWith('DATABASE_URL_TEST='));
   return line?.slice('DATABASE_URL_TEST='.length).trim() || undefined;
 }
 
-export const SKIP_DB = testDatabaseUrl() ? false : 'DATABASE_URL_TEST not set: start `docker compose up -d db` to run platform tests';
+export const SKIP_DB = testDatabaseUrl()
+  ? false
+  : 'DATABASE_URL_TEST not set: start `docker compose up -d db` to run platform tests';
 
 export function createTestDb(): Promise<TestDb> {
   const url = testDatabaseUrl();
   if (!url) throw new Error('DATABASE_URL_TEST not set');
   return create(url);
 }
+export { and, desc, eq, sql } from '../../web/db/test-db';

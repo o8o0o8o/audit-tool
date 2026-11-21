@@ -1,0 +1,25 @@
+import { cookies } from 'next/headers';
+import { login, SESSION_COOKIE, SESSION_TTL_SECONDS } from '../../../../lib/core/auth';
+import { secretFromEnv } from '../../../../lib/core/tokens';
+import { clientIp, ctx, handle, readJson } from '../../../../lib/server';
+
+export const dynamic = 'force-dynamic';
+
+/** Internal login (design §7): password hash check, 5 failures per IP per 15 min, signed httpOnly cookie. */
+export const POST = handle(async (request: Request) => {
+  const { db } = ctx();
+  const body = (await readJson(request)) as { password?: unknown };
+  const value = await login(
+    db,
+    { password: typeof body?.password === 'string' ? body.password : '', ip: clientIp(request) },
+    { passwordHash: process.env.INTERNAL_PASSWORD_HASH, sessionSecret: secretFromEnv('SESSION_SECRET') },
+  );
+  (await cookies()).set(SESSION_COOKIE, value, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production' && !(process.env.APP_URL ?? '').startsWith('http://'),
+    path: '/',
+    maxAge: SESSION_TTL_SECONDS,
+  });
+  return Response.json({ ok: true });
+});

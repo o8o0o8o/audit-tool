@@ -1,0 +1,485 @@
+[
+  {
+    "code": "app-not-installable",
+    "title": "App not installable",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "color-contrast-fails-wcag-aa",
+    "title": "Color contrast fails WCAG AA",
+    "family": "accessibility",
+    "category": "accessibility",
+    "default_severity": "medium"
+  },
+  {
+    "code": "content-may-lack-topical-focus",
+    "title": "Content may lack topical focus",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "dmarc-policy-is-p-none-monitoring-only",
+    "title": "DMARC policy is p=none (monitoring only)",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "dmarc-record-has-no-aggregate-report-address-rua",
+    "title": "DMARC record has no aggregate report address (rua)",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "duplicate-anchor-text",
+    "title": "Duplicate anchor text",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "excessive-dom-size",
+    "title": "Excessive DOM size",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "external-scripts-missing-subresource-integrity",
+    "title": "External scripts missing Subresource Integrity",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "failed-to-fetch-a-valid-sitemap-from",
+    "title": "Failed to fetch a valid sitemap from https://forum.corsair.com/sitemap.php",
+    "family": "security",
+    "category": "seo",
+    "default_severity": "high"
+  },
+  {
+    "code": "form-inputs-without-a-label",
+    "title": "Form inputs without a label",
+    "family": "agentic",
+    "category": "agentic",
+    "default_severity": "high"
+  },
+  {
+    "code": "high-opportunity-content-gaps-identified",
+    "title": "High-opportunity content gaps identified",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "interactive-elements-without-an-accessible-name",
+    "title": "Interactive elements without an accessible name",
+    "family": "agentic",
+    "category": "agentic",
+    "default_severity": "high"
+  },
+  {
+    "code": "javascript-console-errors-detected",
+    "title": "JavaScript console errors detected",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "large-amount-of-inline-javascript",
+    "title": "Large amount of inline JavaScript",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "low"
+  },
+  {
+    "code": "large-third-party-payload",
+    "title": "Large third-party payload",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "medium"
+  },
+  {
+    "code": "lazy-loaded-content-detected",
+    "title": "Lazy-loaded content detected",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "long-cached-assets-without-cache-busting",
+    "title": "Long-cached assets without cache-busting",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "medium"
+  },
+  {
+    "code": "low-semantic-html-usage",
+    "title": "Low semantic HTML usage",
+    "family": "accessibility",
+    "category": "accessibility",
+    "default_severity": "low"
+  },
+  {
+    "code": "low-text-to-html-ratio",
+    "title": "Low text-to-HTML ratio",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "many-hub-pages-with-excessive-outbound-links",
+    "title": "Many hub pages with excessive outbound links",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "many-links-have-very-short-anchor-text",
+    "title": "Many links have very short anchor text",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "many-topics-with-thin-coverage",
+    "title": "Many topics with thin coverage",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "medium"
+  },
+  {
+    "code": "missing-cross-origin-isolation-headers",
+    "title": "Missing cross-origin isolation headers",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "missing-permissions-policy-header",
+    "title": "Missing Permissions-Policy header",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "most-content-pages-lack-author-attribution",
+    "title": "Most content pages lack author attribution",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "most-pages-lack-author-attribution",
+    "title": "Most pages lack author attribution",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "most-pages-lack-date-markup",
+    "title": "Most pages lack date markup",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "most-pages-lack-freshness-signals",
+    "title": "Most pages lack freshness signals",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "multiple-pages-target-the-same-keyword-in-their-titles",
+    "title": "Multiple pages target the same keyword in their titles",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "multiple-spf-records",
+    "title": "Multiple SPF records",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "high"
+  },
+  {
+    "code": "no-author-information-found",
+    "title": "No author information found",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-caa-record",
+    "title": "No CAA record",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-content-freshness-signals-found",
+    "title": "No content freshness signals found",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-dkim-key-found-at-common-selectors",
+    "title": "No DKIM key found at common selectors",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-dmarc-record",
+    "title": "No DMARC record",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "no-explicit-ai-crawler-rules-in-robots-txt",
+    "title": "No explicit AI crawler rules in robots.txt",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-mta-sts-policy",
+    "title": "No MTA-STS policy",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-service-worker-detected",
+    "title": "No service worker detected",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-spf-record",
+    "title": "No SPF record",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "no-tls-rpt-record",
+    "title": "No TLS-RPT record",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "no-web-app-manifest",
+    "title": "No web app manifest",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "outdated-javascript-library-with-known-vulnerabilities",
+    "title": "Outdated JavaScript library with known vulnerabilities",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "page-content-could-be-expanded",
+    "title": "Page content could be expanded",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "page-has-low-content",
+    "title": "Page has low content",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "page-has-very-thin-content",
+    "title": "Page has very thin content",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "same-anchor-text-links-to-different-pages",
+    "title": "Same anchor text links to different pages",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "security-txt-expires-field-is-missing-invalid-or-in-the-past",
+    "title": "security.txt Expires field is missing, invalid or in the past",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "security-txt-expires-is-more-than-a-year-ahead",
+    "title": "security.txt Expires is more than a year ahead",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "security-txt-found-only-at-the-legacy-security-txt-location",
+    "title": "security.txt found only at the legacy /security.txt location",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "security-txt-has-no-contact-field",
+    "title": "security.txt has no Contact field",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "security-txt-is-not-served-as-text-plain",
+    "title": "security.txt is not served as text/plain",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "security-txt-missing",
+    "title": "security.txt missing",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "sensitive-paths-exposed-in-robots-txt",
+    "title": "Sensitive paths exposed in robots.txt",
+    "family": "security",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "significant-content-rendered-by-javascript",
+    "title": "Significant content rendered by JavaScript",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "high"
+  },
+  {
+    "code": "site-wide-low-semantic-html-usage-for-ai-readiness",
+    "title": "Site-wide low semantic HTML usage for AI readiness",
+    "family": "accessibility",
+    "category": "accessibility",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-images-are-significantly-larger-than-their-display-size",
+    "title": "Some images are significantly larger than their display size",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-pages-have-descriptions-that-are-too-long",
+    "title": "Some pages have descriptions that are too long",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-pages-have-descriptions-that-are-too-short",
+    "title": "Some pages have descriptions that are too short",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-pages-have-more-than-h2-tags",
+    "title": "Some pages have more than h2 tags",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "low"
+  },
+  {
+    "code": "some-pages-have-no-incoming-links-from-other-pages",
+    "title": "Some pages have no incoming links from other pages",
+    "family": "technical",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-pages-have-titles-that-are-too-long",
+    "title": "Some pages have titles that are too long",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-pages-have-titles-that-are-too-short",
+    "title": "Some pages have titles that are too short",
+    "family": "seo",
+    "category": "seo",
+    "default_severity": "medium"
+  },
+  {
+    "code": "some-pages-have-too-many-render-blocking-resources",
+    "title": "Some pages have too many render-blocking resources",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "high"
+  },
+  {
+    "code": "some-pages-have-too-many-requests",
+    "title": "Some pages have too many requests",
+    "family": "performance",
+    "category": "performance",
+    "default_severity": "medium"
+  },
+  {
+    "code": "source-maps-exposed-in-production",
+    "title": "Source maps exposed in production",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "spf-record-exceeds-dns-lookups",
+    "title": "SPF record exceeds DNS lookups",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "high"
+  },
+  {
+    "code": "spf-record-is-neutral-all",
+    "title": "SPF record is neutral (?all)",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "medium"
+  },
+  {
+    "code": "spf-record-uses-the-deprecated-ptr-mechanism",
+    "title": "SPF record uses the deprecated ptr mechanism",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  },
+  {
+    "code": "staging-or-development-host-is-publicly-reachable",
+    "title": "Staging or development host is publicly reachable",
+    "family": "security",
+    "category": "technical",
+    "default_severity": "low"
+  }
+]

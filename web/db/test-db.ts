@@ -27,3 +27,6 @@ export async function createTestDb(url: string): Promise<TestDb> {
     },
   };
 }
+
+// Query helpers for tests under tests/platform/, which cannot resolve web/'s packages themselves.
+export { and, desc, eq, sql } from 'drizzle-orm';

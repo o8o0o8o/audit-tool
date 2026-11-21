@@ -1,6 +1,10 @@
 /** Private file storage. Keys are paths like `audits/<id>/<attempt>/model/site.json.gz`. */
 export interface FileStore {
-  put(key: string, body: Uint8Array | ReadableStream<Uint8Array>, opts?: { contentType?: string }): Promise<{ bytes: number; sha256: string }>;
+  put(
+    key: string,
+    body: Uint8Array | ReadableStream<Uint8Array>,
+    opts?: { contentType?: string },
+  ): Promise<{ bytes: number; sha256: string }>;
   get(key: string): Promise<{ body: ReadableStream<Uint8Array>; bytes: number; contentType?: string } | null>;
   list(prefix: string): AsyncIterable<{ key: string; bytes: number }>;
   delete(keys: string[]): Promise<void>;
@@ -33,6 +37,9 @@ export interface WorkerClaims {
   /** Identifies the run on the backend: GitHub's run_id, or the local child's id. */
   runId: string;
   runAttempt: number;
+  /** Local tokens name the audit (or job) and attempt they were made for; GitHub's do not. */
+  id?: string;
+  attempt?: number;
 }
 
 /** Checks the token a worker sends to `register`. Returns null when it is not valid. */

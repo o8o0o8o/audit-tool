@@ -8,8 +8,9 @@ import { FR_ORIGIN, SOCIALS } from './site-links';
 // Markup and classes copied from focusreactive.com-front src/_includes/_header.html; the sticky
 // header and burger menu follow initStickyHeader() in src/jsNew/blocks/navigation.js.
 const NAV: { title: string; href: string; tool?: boolean }[] = [
-  { title: 'New audit', href: '/', tool: true },
-  { title: 'Runs', href: '/runs', tool: true },
+  { title: 'New audit', href: '/internal', tool: true },
+  { title: 'Runs', href: '/internal/runs', tool: true },
+  { title: 'API keys', href: '/internal/keys', tool: true },
   { title: 'Services', href: `${FR_ORIGIN}/services/` },
   { title: 'Solutions', href: `${FR_ORIGIN}/solutions/` },
   { title: 'Portfolio', href: `${FR_ORIGIN}/portfolio/` },
@@ -27,7 +28,9 @@ function RollText({ text }: { text: string }) {
 }
 
 function isCurrent(pathname: string, href: string): boolean {
-  return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+  return href === '/' || href === '/internal'
+    ? pathname === href
+    : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function SiteHeader() {

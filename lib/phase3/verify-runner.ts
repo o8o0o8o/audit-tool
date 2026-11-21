@@ -22,6 +22,7 @@ import * as path from 'path';
 import * as zlib from 'zlib';
 import type { CrawlProfile } from '../types';
 import { renderMarkdownToPdf } from '../reports/pdf-renderer';
+import { pdfRequested } from '../reports/pdf-policy';
 import {
   loadArtifacts,
   preparedDetails,
@@ -302,11 +303,13 @@ async function runOfflineVerification(artifacts: AuditArtifacts, state: Resolved
   fs.writeFileSync(mdPath, markdown);
 
   const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
-  await renderMarkdownToPdf(markdown, pdfPath, {
-    title: `${artifacts.manifest.domain} — verified audit report`,
-    imageBaseDir: artifacts.runDir,
-  });
-  console.log(`📄 Verified report: ${pdfPath}`);
+  if (pdfRequested()) {
+    await renderMarkdownToPdf(markdown, pdfPath, {
+      title: `${artifacts.manifest.domain} — verified audit report`,
+      imageBaseDir: artifacts.runDir,
+    });
+    console.log(`📄 Verified report: ${pdfPath}`);
+  } else console.log(`📄 Verified report: ${mdPath}`);
 
   // Capture the deterministically-dropped findings in a separate report. Use the
   // verifier's own worst-first example selector so the URL shown is the one the
@@ -844,11 +847,13 @@ async function runLiveVerification(artifacts: AuditArtifacts, state: ResolvedSta
   fs.writeFileSync(mdPath, markdown);
 
   const pdfPath = path.join(artifacts.runDir, 'audit-report.verified.pdf');
-  await renderMarkdownToPdf(markdown, pdfPath, {
-    title: `${artifacts.manifest.domain} — verified audit report (live)`,
-    imageBaseDir: artifacts.runDir,
-  });
-  console.log(`📄 Verified report (live): ${pdfPath}`);
+  if (pdfRequested()) {
+    await renderMarkdownToPdf(markdown, pdfPath, {
+      title: `${artifacts.manifest.domain} — verified audit report (live)`,
+      imageBaseDir: artifacts.runDir,
+    });
+    console.log(`📄 Verified report (live): ${pdfPath}`);
+  } else console.log(`📄 Verified report (live): ${mdPath}`);
 
   // Capture the dropped findings in a separate report (candidate false positives).
   const refutedEntries: RefutedEntry[] = [...refutedMessages].map((m) => {

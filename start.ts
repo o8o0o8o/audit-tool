@@ -6,6 +6,7 @@ import { loadDotEnv } from './lib/utils/load-env';
 loadDotEnv(__dirname);
 
 import { spawn } from 'child_process';
+import { pathToFileURL } from 'url';
 import * as zlib from 'zlib';
 import type { ParsedArgs } from './lib/args-parser';
 import { parseArgs, visualChildArgs, agenticChildArgs, leadChildArgs, LEAD_MODE } from './lib/args-parser';
@@ -105,8 +106,10 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     const childArgs = [
       `--max-old-space-size=${heapSize}`, // Heap limit (default 8GB, configurable via NODE_HEAP_SIZE env or --heap-size arg)
       '--expose-gc', // Allow gc() calls
-      '--import=tsx', // Enable TypeScript support
-      'robots.ts',
+      // Enable TypeScript support. Resolved from this checkout, so a run folder elsewhere (the platform
+      // worker's work folder) still finds it.
+      `--import=${pathToFileURL(require.resolve('tsx', { paths: [__dirname] }).replace(/dist[\\/].*$/, 'dist/loader.mjs')).href}`,
+      path.join(__dirname, 'robots.ts'),
     ];
     if (origin) childArgs.push(`--origin=${origin}`);
     if (args.page) childArgs.push(`--page=${args.page}`);
@@ -148,6 +151,8 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
     if (args.llmNarrative || args.llmFindings || args.llmRepo || args.llmVerify) childArgs.push('--llm');
     if (args.verify) childArgs.push('--verify');
     if (args.noScore) childArgs.push('--no-score');
+    if (args.pdf) childArgs.push('--pdf');
+    if (args.profile === 'public') childArgs.push('--profile=public');
     childArgs.push(...leadChildArgs(args));
     childArgs.push(...visualChildArgs(args.visual));
     childArgs.push(...agenticChildArgs(args.agentic));

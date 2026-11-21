@@ -8,19 +8,24 @@
     "start": "next start",
     "upload-results": "node scripts/upload-results.mjs",
     "sync-fr-ui": "node scripts/sync-fr-ui.mjs",
-    "db:generate": "drizzle-kit generate && node scripts/strip-public-schema.mjs",
+    "db:generate": "node scripts/db-generate.mjs",
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/db-migrate.ts",
     "crons": "tsx --env-file-if-exists=.env.local scripts/local-crons.ts",
     "key:create": "tsx --env-file-if-exists=.env.local scripts/create-key.ts",
-    "hash-password": "tsx scripts/hash-password.ts"
+    "hash-password": "tsx scripts/hash-password.ts",
+    "seed:prospects": "tsx --env-file-if-exists=.env.local scripts/seed-prospects.ts",
+    "import-run": "tsx --env-file-if-exists=.env.local scripts/import-run.ts",
+    "tsx": "tsx --env-file-if-exists=.env.local"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@vercel/blob": "^2.8.1",
     "drizzle-orm": "^0.45.4",
     "next": "^15.5.4",
     "pg": "^8.23.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "tldts": "^7.5.5",
     "zod": "4.6.7"
   },
   "devDependencies": {

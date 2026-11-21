@@ -113,6 +113,8 @@ function parseArgs(args: string[]): ParsedArgs {
     lead: false, // --lead: lead scan of a prospect site (small, passive, own results folder)
     page: null, // --page=<url>: audit only this one page
     passive: false, // --passive: skip the site probes that go beyond reading published pages
+    pdf: false, // --pdf: print PDFs of the Phase 2/3/4 reports (off by default)
+    profile: 'standard' as 'standard' | 'public', // --profile=public: no JS-secrets scan, no takeover check (platform public scans)
     contentResearch: false, // Phase 4 — competitive content research + content plan (opt-in)
     competitors: null, // Competitor URLs (CSV or file path); optional — LLM discovers when omitted
     warnings: [] as string[], // Collect validation warnings
@@ -125,6 +127,10 @@ function parseArgs(args: string[]): ParsedArgs {
       parsed.lead = true;
     } else if (arg === '--passive') {
       parsed.passive = true;
+    } else if (arg === '--pdf') {
+      parsed.pdf = true;
+    } else if (arg === '--profile=public' || arg === '--profile=standard') {
+      parsed.profile = arg.slice('--profile='.length) as 'standard' | 'public';
     } else if (arg === '--version' || arg === '-V') {
       parsed.version = true;
     } else if (arg === '--help' || arg === '-h') {

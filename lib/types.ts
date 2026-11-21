@@ -1777,6 +1777,10 @@ export interface ParsedArgs {
   page: string | null;
   /** `--passive` (implied by `--lead`): skip the site probes that go beyond reading published pages. */
   passive: boolean;
+  /** --pdf: print PDFs of the Phase 2/3/4 reports. */
+  pdf: boolean;
+  /** --profile=public: platform public scans (no JS-secrets scan, no takeover check). */
+  profile: 'standard' | 'public';
   /** Phase 4 — opt-in competitive content research + content plan. */
   contentResearch: boolean;
   /** Comma-separated competitor URLs or a path to a file (one URL per line). Optional — LLM discovers when omitted. */

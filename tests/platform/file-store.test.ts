@@ -17,9 +17,11 @@ async function withStore(fn: (s: LocalFileStore) => Promise<void>) {
   }
 }
 
-test('local FileStore: put, get, list, delete', () =>
+void test('local FileStore: put, get, list, delete', () =>
   withStore(async (s) => {
-    const put = await s.put('audits/a/1/report.html', new TextEncoder().encode('<h1>hi</h1>'), { contentType: 'text/html' });
+    const put = await s.put('audits/a/1/report.html', new TextEncoder().encode('<h1>hi</h1>'), {
+      contentType: 'text/html',
+    });
     assert.equal(put.bytes, 11);
     assert.match(put.sha256, /^[0-9a-f]{64}$/);
     await s.put('audits/a/1/model/site.json.gz', new Blob(['zz']).stream());
@@ -39,7 +41,7 @@ test('local FileStore: put, get, list, delete', () =>
     assert.equal(await s.get('audits/a/1/report.html'), null);
   }));
 
-test('local FileStore: a key that leaves the folder is refused', () =>
+void test('local FileStore: a key that leaves the folder is refused', () =>
   withStore(async (s) => {
     for (const key of ['../x', 'audits/../../x', '/etc/passwd', '']) {
       await assert.rejects(s.put(key, new Uint8Array([1])), /invalid file key/);
@@ -47,7 +49,7 @@ test('local FileStore: a key that leaves the folder is refused', () =>
     await assert.rejects(s.issueUpload('../', 60), /invalid file key/);
   }));
 
-test('local FileStore: upload token names its prefix and expires', () =>
+void test('local FileStore: upload token names its prefix and expires', () =>
   withStore(async (s) => {
     const { url, headers } = await s.issueUpload('audits/a/1/', 60);
     assert.equal(url, 'http://localhost:3000/api/worker/upload');
@@ -57,8 +59,13 @@ test('local FileStore: upload token names its prefix and expires', () =>
     assert.equal(verifyUploadToken(token.slice(0, -2) + 'aa', SECRET), null);
   }));
 
-test('PLATFORM_MODE: local is refused in Vercel production', () => {
-  const env = { PLATFORM_MODE: 'local', APP_URL: 'http://localhost:3000', LOCAL_WORKER_SECRET: SECRET, FILES_DIR: os.tmpdir() };
+void test('PLATFORM_MODE: local is refused in Vercel production', () => {
+  const env = {
+    PLATFORM_MODE: 'local',
+    APP_URL: 'http://localhost:3000',
+    LOCAL_WORKER_SECRET: SECRET,
+    FILES_DIR: os.tmpdir(),
+  };
   assert.equal(createPlatform(env).mode, 'local');
   assert.throws(() => createPlatform({ ...env, VERCEL_ENV: 'production' }), /refused/);
   assert.throws(() => createPlatform({ ...env, PLATFORM_MODE: undefined }), /PLATFORM_MODE/);

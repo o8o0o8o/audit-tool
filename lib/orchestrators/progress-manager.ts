@@ -616,11 +616,29 @@ class ProgressManager {
     };
 
     this.fileManager.writeManifest(manifest);
+    ProgressManager.#touchCheckpointMarker();
 
     const totalBatches = this.#writtenBatches.length;
     const totalPages = this.#writtenBatches.reduce((sum, b) => sum + b.count, 0);
     if (this.verbose) {
       console.log(`💾 Saved: ${totalPages} pages in ${totalBatches} batches`);
+    }
+  }
+
+  /**
+   * The platform worker snapshots the run folder after each completed checkpoint save
+   * (docs/platform-api.md §3). It watches `$AUDIT_CHECKPOINT_MARKER`, written here only after every
+   * checkpoint file is on disk, so a snapshot never catches a save half-way.
+   */
+  static #touchCheckpointMarker() {
+    const marker = process.env.AUDIT_CHECKPOINT_MARKER;
+    if (!marker) return;
+    try {
+      const tmp = `${marker}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, new Date().toISOString());
+      fs.renameSync(tmp, marker);
+    } catch {
+      /* best effort: a missed marker only delays the next snapshot */
     }
   }
 

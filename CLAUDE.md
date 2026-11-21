@@ -103,7 +103,9 @@ Centralized CLI argument parsing. ~40 flags total — see `lib/args-parser.ts` (
 - `--llm` - run all optional LLM passes (section narrative, emergent-bug findings, source-repo reasoning, finding-revalidation; also Phase 4 competitor discovery + content-plan synthesis)
 - `--content-research` - Phase 4 competitive content research (opt-in; see Phase 4 below)
 - `--competitors=<csv|file>` - competitor hosts for `--content-research` (optional; LLM discovers when omitted; also `competitors: []` in `.seoauditrc`)
-- `--phase2` / `--no-phase2` - curated PDF report (on by default)
+- `--phase2` / `--no-phase2` - curated Phase 2 report, Markdown + HTML (on by default)
+- `--pdf` - print PDFs of the Phase 2/3/4 reports (off by default; also `pdf: true` in `.seoauditrc`). `scripts/render-pdf.ts <run dir> --kind=…` prints one for a finished run
+- `--profile=public` - the audit platform's public scans: no JS-secrets scan, no subdomain-takeover check
 - `--visual` - run the visual (UI defect) analyzers: broken images/media, template tokens, lorem ipsum, mojibake, clipped text (opt-in)
 - `--no-agentic` - skip the agentic browsing checks (accessible name, click target role, form label, hover-only content, llms.txt); on by default
 - `--no-score` - strip scores and the scoring-rules explanation from the HTML report and the Phase 2 report (CSV export unchanged); with scores on, every score links to the generated `#score-rules` block (`lib/scoring/scoring-rules.ts`)
@@ -316,6 +318,10 @@ npx playwright install
 npx tsx start.ts --origin=<website-url> [--perf] [--save-html] [--screenshots] [--proceed] [--concurrency=<number>]
 ```
 
+### Audit platform (local build)
+
+`docs/platform-api.md` is the design (Postgres, MCP server, API keys, workers); `docs/platform-api-build.md` is how to run it locally. **Read both before changing `web/lib/core/`, `web/lib/platform/`, `web/db/`, `lib/model/`, `lib/platform-worker/` or `scripts/platform-worker.ts`.** Run it: `docker compose up -d db`, `yarn --cwd web db:migrate`, `yarn --cwd web dev`, `yarn --cwd web crons`, `yarn --cwd web key:create --name=… --scopes=…`; MCP at `http://localhost:3000/api/mcp`. Rules that must hold: every core function takes a `Principal` and checks scopes itself; the scan guard runs at start, at dispatch and on a cross-domain redirect; a blocked request is never evidence (`lib/model/scan-quality.ts`); readers see only `succeeded` audits; reports open only through `/r/{token}` (sandboxed, no referrer); `PLATFORM_MODE=local` is refused in Vercel production. Platform tests: `tests/platform/` (need Docker's Postgres; skipped without `DATABASE_URL_TEST`). `scripts/build-model.ts <run dir>` builds the model of a stored run; `yarn --cwd web import-run --all` loads every stored run.
+
 ### Web app live progress
 
 When `AUDIT_PROGRESS_FILE` is set, `ProgressReporter` (`lib/utils/progress-reporter.ts`) writes `{processed,total,phase,updatedAt}` there (throttled, atomic). `.github/workflows/audit.yml` uploads it every ~20s via `web/scripts/upload-results.mjs --progress` to `audits/<runId>/progress.json`; `GET /api/runs/<runId>` merges it as `progress`, and the home page (`web/app/page.tsx`, helpers in `web/lib/audit-progress.ts`) shows a blocking progress overlay, then embeds the finished report. See `web/README.md`.
@@ -361,10 +367,10 @@ audit-results/
         ├── pages/                       # Per-batch page JSONs
         ├── audit-report.md               # Phase 2 curated markdown
         ├── audit-report.html             # Phase 2 styled HTML (renderer input)
-        ├── audit-report.pdf              # Phase 2 final curated PDF
+        ├── audit-report.pdf              # Phase 2 curated PDF (only with --pdf)
         ├── phase2-state.json             # Phase 2 → Phase 3 boundary: render inputs (suppression, narratives, anomalies, noScore) for standalone re-verify
         ├── audit-report.verified.md      # --verify variant (Phase 3; refuted dropped; every issue labelled)
-        ├── audit-report.verified.pdf     # --verify variant PDF (✓ Verified / unverified per issue)
+        ├── audit-report.verified.pdf     # --verify variant PDF, only with --pdf (✓ Verified / unverified per issue)
         ├── audit-report.refuted.md       # --verify: the findings DROPPED as refuted (candidate false positives), with each reason; omitted when none refuted
         ├── content-research-report.md     # Phase 4 (--content-research): competitive gap matrix + content plan (+ .html, .pdf)
         ├── content-research-state.json    # Phase 4 render inputs (gaps, plan, competitors) for standalone re-run

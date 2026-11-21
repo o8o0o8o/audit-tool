@@ -37,6 +37,8 @@ interface ConfigRecord {
   checks?: string[];
   /** Run the visual (UI defect) analyzers; CLI `--visual` / `--no-visual` wins. */
   visual?: boolean;
+  /** Print PDFs of the Phase 2/3/4 reports; CLI `--pdf` also turns it on. Off by default. */
+  pdf?: boolean;
   /** Run the agentic-browsing checks (default on); CLI `--agentic` / `--no-agentic` wins. */
   agentic?: boolean;
   analysis?: {
@@ -271,6 +273,7 @@ const CONFIG_SCHEMA = {
   sections: { type: 'array', itemType: 'string' },
   checks: { type: 'array', itemType: 'string' },
   visual: { type: 'boolean' },
+  pdf: { type: 'boolean' },
   agentic: { type: 'boolean' },
   analysis: {
     type: 'object',

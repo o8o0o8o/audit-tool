@@ -8,6 +8,20 @@
       "when": 1795247608952,
       "tag": "0000_step1_core",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795248297394,
+      "tag": "0001_step2_prospects_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795248334674,
+      "tag": "0002_step3_4_results",
+      "breakpoints": true
     }
   ]
 }

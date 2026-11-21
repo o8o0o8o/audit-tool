@@ -39,6 +39,8 @@ import { siteDomain, type SiteChecksData, type SiteProbeResult } from './site-ch
 type SaveErrorFn = (message: string, detail: string, severity?: string) => void;
 
 export interface SiteProbeContext {
+  /** `public`: the platform's public scans skip the JS-secrets scan and the takeover check (design §8.1). Defaults to `SEO_AUDIT_PROFILE`. */
+  profile?: 'public' | 'standard';
   /** Parsed robots.txt rules by user agent (`results.robots['user-agent']`). */
   robotsUserAgents?: Record<string, unknown>;
   /** Sitemap URL entries (`results.sitemaps.urls`). */
@@ -298,8 +300,20 @@ export function siteProbeSteps(origin: string, pages: Record<string, PageInfo>, 
           ['browser probes', () => browserProbes(samples[0], samples[1], ctx.userAgent, passive, ctx.onBrowserRequest)],
         ] as Step[])),
   ];
-  return passive ? steps.filter(([name]) => !(name in PASSIVE_SKIPPED_STEPS)) : steps;
+  const kept = passive ? steps.filter(([name]) => !(name in PASSIVE_SKIPPED_STEPS)) : steps;
+  return isPublicProfile(ctx) ? kept.filter(([name]) => !(name in PUBLIC_SKIPPED_STEPS)) : kept;
 }
+
+/**
+ * Steps the `public` run profile never runs (design: docs/platform-api.md §8.1): nobody can use the
+ * public site to look for a third party's leaked keys, and no disclosure duty arises.
+ */
+export const PUBLIC_SKIPPED_STEPS: Record<string, { checks: Array<[id: string, label: string]> }> = {
+  'subdomain takeover': { checks: [['subdomain-takeover', 'Subdomain takeover']] },
+  'JS secrets': { checks: [['js-secrets', 'Secrets in JavaScript']] },
+};
+
+export const isPublicProfile = (ctx: SiteProbeContext) => (ctx.profile ?? process.env.SEO_AUDIT_PROFILE) === 'public';
 
 export async function runSiteProbes(
   origin: string,
@@ -320,6 +334,12 @@ export async function runSiteProbes(
       data.checks.push(...result.checks);
     } catch (e) {
       console.log(`  ⚠️  ${name} check skipped: ${(e as Error).message}`);
+    }
+  }
+  if (isPublicProfile(ctx)) {
+    for (const { checks } of Object.values(PUBLIC_SKIPPED_STEPS)) {
+      for (const [id, label] of checks)
+        data.checks.push({ id, label, status: 'skipped', note: 'Not run in public scans' });
     }
   }
   if (ctx.passive) {

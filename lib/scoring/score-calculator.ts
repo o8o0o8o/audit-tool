@@ -333,8 +333,8 @@ function scoreFromUrlPass(issues: EnrichedIssue[], category: IssueCategory, tota
 
 /**
  * Performance: log-normal CDF on per-page CWV metrics, weighted by
- * PERFORMANCE_METRIC_WEIGHTS. Falls back to URL-pass on perf issues (any
- * tier) when no metrics were collected — e.g., when --perf was not enabled.
+ * PERFORMANCE_METRIC_WEIGHTS; real-user (CrUX) p75 values when no page has lab
+ * metrics; null (no score) when neither was measured.
  */
 /** Real-user p75 values (CrUX), in the units the lab metrics use (ms; CLS unitless). */
 export interface FieldMetrics {

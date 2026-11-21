@@ -56,7 +56,7 @@ export function languagePrefix(pathname: string): string | null {
   return m && LANG_CODES.has(m[1].toLowerCase()) ? first.toLowerCase() : null;
 }
 
-function pathSegments(pathname: string): string[] {
+export function pathSegments(pathname: string): string[] {
   const segments = pathname.split('/').filter(Boolean);
   return languagePrefix(pathname) ? segments.slice(1) : segments;
 }

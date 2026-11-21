@@ -163,6 +163,8 @@ class ReportDataProcessor {
       ...((metadata as { singlePage?: unknown }).singlePage
         ? { singlePage: (metadata as { singlePage?: unknown }).singlePage }
         : {}),
+      // Present only when the page cap stopped the crawl.
+      ...((metadata as { pageCap?: unknown }).pageCap ? { pageCap: (metadata as { pageCap?: unknown }).pageCap } : {}),
       repoAnalysis,
       pageData: {
         pages,

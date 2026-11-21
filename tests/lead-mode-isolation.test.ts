@@ -63,6 +63,7 @@ const DEFAULT_ARGS = {
   llmFindings: false,
   llmRepo: false,
   llmVerify: false,
+  maxPages: null,
   verify: false,
   visual: null,
   agentic: null,

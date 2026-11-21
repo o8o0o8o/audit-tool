@@ -1740,6 +1740,8 @@ export interface ParsedArgs {
   repo: string | null;
   exclude: string[];
   limit: number | null;
+  /** `--max-pages`: total page cap of a full audit; null → default, 0 → no cap. */
+  maxPages: number | null;
   dryRun: boolean;
   generateCi: boolean;
   validateConfig: boolean;
@@ -1800,6 +1802,8 @@ export interface SEODataOptions {
   open?: boolean;
   exclude?: string[];
   limit?: number | null;
+  /** `--max-pages`: total page loads of a full audit; absent → `DEFAULT_PAGE_CAP`, 0 → no cap. */
+  maxPages?: number | null;
   dryRun?: boolean;
   cruxApiKey?: string | null;
   screenshots?: boolean;

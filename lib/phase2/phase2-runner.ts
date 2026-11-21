@@ -844,6 +844,13 @@ function buildPurpose(artifacts: AuditArtifacts, noScore = false): string {
   if (artifacts.metadata.sitemaps?.total) {
     stats.push(`- **Sitemap entries:** ${artifacts.metadata.sitemaps.total}`);
   }
+  const pageCap = (artifacts.metadata as { pageCap?: { cap?: number; sitemapHeld?: number } }).pageCap;
+  if (pageCap?.cap) {
+    stats.push(
+      `- **Page cap:** ${pageCap.cap} reached; pages chosen across page templates` +
+        (pageCap.sitemapHeld ? `, ${pageCap.sitemapHeld} sitemap URLs not loaded` : ''),
+    );
+  }
   if (sampledCount > 0) {
     const evidenceParts: string[] = ['network log'];
     if (axeCaptured > 0) evidenceParts.push(`axe-core scan (${axeCaptured})`);

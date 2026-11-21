@@ -29,6 +29,14 @@ import { robotsBlockedPageFinding } from './orchestrators/single-page';
 /** Where full audits are written. Lead scans use their own base folder (`LEAD_MODE.resultsBase`). */
 export const DEFAULT_RESULTS_BASE = 'audit-results';
 import { parse } from 'node-html-parser';
+import {
+  HELD_SITEMAP_FILE,
+  fullAuditPageBudget,
+  orderForCoverage,
+  resolvePageCap,
+  sitemapShare,
+  type PageCapInfo,
+} from './crawler/page-cap';
 
 /**
  * On `--proceed` the checkpoint's pages decide whether agentic checks keep running,
@@ -42,9 +50,13 @@ import { parse } from 'node-html-parser';
 /** Page loads a single-page audit may make: the page and up to four same-site redirect hops. */
 export const SINGLE_PAGE_LOADS = 5;
 
-export function crawlPageBudget(limit: number | null | undefined, lead: boolean): number | null {
-  if (!limit) return null;
-  return lead ? limit : limit * 2;
+export function crawlPageBudget(
+  limit: number | null | undefined,
+  lead: boolean,
+  cap: number | null = null,
+): number | null {
+  if (lead) return limit || null;
+  return fullAuditPageBudget(limit, cap);
 }
 
 export function resolveResumeAgentic(requested: boolean, pages: Record<string, unknown> | undefined): boolean {
@@ -71,6 +83,10 @@ class SEOData {
   #limit: number | null;
   /** Sitemap URLs `--limit` cut before the crawl; a sample is checked for 404s after it. */
   #sitemapUrlsBeyondLimit: string[] = [];
+  /** Total page loads of a full audit (`--max-pages`, default `DEFAULT_PAGE_CAP`); null: no cap. */
+  #pageCap: number | null = null;
+  #capSitemapUrls: number | null = null;
+  #capSitemapHeld = 0;
   #dryRun: boolean;
   #cruxApiKey: string | null;
   #screenshots: boolean;
@@ -123,6 +139,7 @@ class SEOData {
     this.#open = options.open ?? false;
     this.#exclude = options.exclude ?? [];
     this.#limit = options.limit ?? null;
+    this.#pageCap = resolvePageCap(options.maxPages, options.lead === true, !!options.page);
     this.#dryRun = options.dryRun ?? false;
     this.#cruxApiKey = options.cruxApiKey ?? null;
     this.#screenshots = options.screenshots ?? false;
@@ -243,8 +260,10 @@ class SEOData {
         visual: this.#visual,
         agentic: this.#agentic,
         lead: this.#lead,
-        maxPages: this.#page ? SINGLE_PAGE_LOADS : crawlPageBudget(this.#limit, this.#lead),
-        requestObserver: this.#lead ? (this.#requestCounter ??= new RequestCounter(this.domainName)).observeBrowser : undefined,
+        maxPages: this.#page ? SINGLE_PAGE_LOADS : crawlPageBudget(this.#limit, this.#lead, this.#pageCap),
+        requestObserver: this.#lead
+          ? (this.#requestCounter ??= new RequestCounter(this.domainName)).observeBrowser
+          : undefined,
       },
       {
         saveError: this.saveError.bind(this),
@@ -535,7 +554,11 @@ class SEOData {
     // Apply --exclude patterns and --limit before crawling.
     // A lead scan keeps the whole sitemap as candidates and chooses its pages after the homepage
     // has been loaded; its limit is one total cap, enforced by the orchestrator and the crawler.
-    if (!this.#lead && (this.#exclude.length > 0 || this.#limit)) {
+    // A continued run (`--proceed`) gets back the sitemap entries the cap left out last time.
+    const heldBefore = this.#lead || this.#page ? {} : this.#readHeldSitemapEntries();
+    const hadHeld = Object.keys(heldBefore).length > 0;
+    if (!this.#lead && !this.#page && (this.#exclude.length > 0 || this.#limit || this.#pageCap || hadHeld)) {
+      for (const [url, entry] of Object.entries(heldBefore)) this.#results.sitemaps.urls[url] ??= entry;
       const urls = Object.keys(this.#results.sitemaps.urls);
       let filtered = urls;
 
@@ -551,6 +574,23 @@ class SEOData {
         this.#sitemapUrlsBeyondLimit = filtered.slice(this.#limit);
         filtered = filtered.slice(0, this.#limit);
       }
+
+      // Page cap: more sitemap pages than the run may load, so take them spread over the site's
+      // templates instead of in sitemap order, and keep the rest for a continued run.
+      const share = this.#pageCap ? sitemapShare(this.#pageCap) : null;
+      let held: string[] = [];
+      this.#capSitemapUrls = filtered.length;
+      if (share && filtered.length > share) {
+        const ordered = orderForCoverage(filtered, { home: this.origin });
+        held = ordered.slice(share);
+        filtered = ordered.slice(0, share);
+        this.#sitemapUrlsBeyondLimit = [...this.#sitemapUrlsBeyondLimit, ...held];
+        console.log(
+          `  Page cap ${this.#pageCap}: ${filtered.length} of ${ordered.length} sitemap URLs chosen across page templates`,
+        );
+      }
+      this.#capSitemapHeld = held.length;
+      this.#writeHeldSitemapEntries(held);
 
       // Rebuild sitemaps.urls with only filtered URLs
       const newUrls: Record<string, Record<string, unknown>> = {};
@@ -570,9 +610,58 @@ class SEOData {
       resultsDir: this.resultsDir,
       origin: this.origin,
       limit: this.#limit,
+      coverageOrder: this.#pageCap !== null,
       lead: this.#lead ? this.#leadContext() : undefined,
       singlePage: this.#page ?? undefined,
     });
+    this.#recordPageCap();
+  }
+
+  #heldSitemapFile() {
+    return path.join(this.resultsDir, HELD_SITEMAP_FILE);
+  }
+
+  #readHeldSitemapEntries(): Record<string, Record<string, unknown>> {
+    if (!this.#proceed || !fs.existsSync(this.#heldSitemapFile())) return {};
+    try {
+      return (FileManager.readJsonFile(this.#heldSitemapFile()) ?? {}) as Record<string, Record<string, unknown>>;
+    } catch {
+      return {};
+    }
+  }
+
+  #writeHeldSitemapEntries(held: string[]) {
+    const file = this.#heldSitemapFile();
+    if (held.length === 0) {
+      fs.rmSync(file, { force: true });
+      return;
+    }
+    const entries: Record<string, unknown> = {};
+    for (const url of held) entries[url] = this.#results.sitemaps.urls[url] ?? {};
+    this.fileManager.writeJsonFile(file, entries);
+  }
+
+  /** Records the cap in the run's metadata when it stopped the crawl, and says how to continue. */
+  #recordPageCap() {
+    delete this.#results.pageCap;
+    const cap = this.#pageCap;
+    if (!cap || this.#lead || this.#page) return;
+    const pagesLoaded = this.#results.pageData.processedPages.size as number;
+    if (this.#capSitemapHeld === 0 && pagesLoaded < cap) return;
+    const info: PageCapInfo = {
+      cap,
+      pagesLoaded,
+      sitemapUrls: this.#capSitemapUrls,
+      sitemapHeld: this.#capSitemapHeld,
+    };
+    this.#results.pageCap = info;
+    console.log(
+      `\n  Page cap of ${cap} reached after ${pagesLoaded} page loads` +
+        (info.sitemapHeld
+          ? `; ${info.sitemapHeld} sitemap URLs were not loaded.`
+          : '; more pages were found through links.') +
+        `\n  Continue this run with: --proceed --max-pages=${cap * 2} (0 = no cap)`,
+    );
   }
 
   /** Lead scan: the page cap, the robots.txt rule for all crawlers, and `--exclude` as extra disallows. */
@@ -790,7 +879,8 @@ class SEOData {
     // the pages map itself may be partly evicted to disk at this point.
     const crawledPages = this.#results.pageData.totalWithoutError ?? 0;
     const collapsed = this.#errorAggregator.collapseSiteLevelFindings(crawledPages);
-    if (collapsed.length > 0) console.log(`Collapsed ${collapsed.length} site-level finding(s) into site-wide entries.`);
+    if (collapsed.length > 0)
+      console.log(`Collapsed ${collapsed.length} site-level finding(s) into site-wide entries.`);
 
     // Stop timing
     this.#stopTiming();

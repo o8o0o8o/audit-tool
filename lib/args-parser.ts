@@ -80,6 +80,7 @@ function parseArgs(args: string[]): ParsedArgs {
     repo: null, // Path to local git repository for source code analysis
     exclude: [] as string[], // URL patterns to exclude from crawling
     limit: null, // Max pages to audit
+    maxPages: null, // Total page cap of a full audit (null: default 5000; 0: no cap)
     dryRun: false, // Show what would be audited without crawling
     generateCi: false, // Generate GitHub Actions workflow
     validateConfig: false, // Validate config file and exit
@@ -204,7 +205,9 @@ function parseArgs(args: string[]): ParsedArgs {
     } else if (arg.startsWith('--evidence-cap=')) {
       const val = parseInt(arg.substring('--evidence-cap='.length), 10);
       if (isNaN(val) || val < 1) {
-        parsed.warnings.push(`Invalid --evidence-cap value "${arg.substring('--evidence-cap='.length)}" — must be a positive integer. Ignoring.`);
+        parsed.warnings.push(
+          `Invalid --evidence-cap value "${arg.substring('--evidence-cap='.length)}" — must be a positive integer. Ignoring.`,
+        );
       } else {
         parsed.evidenceCap = Math.min(val, 100); // safety ceiling
         evidenceCapExplicit = true;
@@ -309,6 +312,16 @@ function parseArgs(args: string[]): ParsedArgs {
       } else {
         parsed.limit = value;
       }
+    } else if (arg.startsWith('--max-pages=')) {
+      const rawValue = arg.substring('--max-pages='.length);
+      const value = Number(rawValue);
+      if (!Number.isInteger(value) || value < 0) {
+        parsed.warnings.push(
+          `Invalid --max-pages value "${rawValue}" - must be 0 (no cap) or a positive number. Ignoring.`,
+        );
+      } else {
+        parsed.maxPages = value;
+      }
     } else if (
       arg !== '--origin' &&
       arg !== '--compare' &&
@@ -369,7 +382,13 @@ export function applySinglePageMode(parsed: ParsedArgs): void {
     parsed.contentResearch = false;
     parsed.warnings.push('--page ignores --content-research (it compares whole sites).');
   }
-  for (const [flag, value] of [['--lead', parsed.lead], ['--compare', parsed.compare], ['--compare-sitemap', parsed.compareSitemap], ['--sites', parsed.sites], ['--sitemap', parsed.sitemap]] as const) {
+  for (const [flag, value] of [
+    ['--lead', parsed.lead],
+    ['--compare', parsed.compare],
+    ['--compare-sitemap', parsed.compareSitemap],
+    ['--sites', parsed.sites],
+    ['--sitemap', parsed.sitemap],
+  ] as const) {
     if (value) parsed.errors.push(`--page cannot be combined with ${flag}.`);
   }
 }
@@ -410,7 +429,12 @@ export function applyLeadMode(parsed: ParsedArgs, opts: { evidenceCapExplicit?: 
     dropped.push('--content-research');
   }
   if (dropped.length) parsed.warnings.push(`--lead ignores ${dropped.join(', ')}.`);
-  for (const [flag, value] of [['--compare', parsed.compare], ['--sites', parsed.sites], ['--repo', parsed.repo], ['--sitemap', parsed.sitemap]] as const) {
+  for (const [flag, value] of [
+    ['--compare', parsed.compare],
+    ['--sites', parsed.sites],
+    ['--repo', parsed.repo],
+    ['--sitemap', parsed.sitemap],
+  ] as const) {
     if (value) parsed.errors.push(`--lead cannot be combined with ${flag}.`);
   }
 }

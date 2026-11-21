@@ -52,6 +52,8 @@ interface AnalyzeContext {
   saveError: SaveErrorFn;
   /** `--limit`: also caps the "missing from sitemap" pass; the crawler's page budget (2N) caps the total. */
   limit?: number | null;
+  /** A page cap is on: the pages found through links are loaded spread over templates, not in the order found. */
+  coverageOrder?: boolean;
   /** Site origin; when the sitemap yields no URLs the crawl is seeded from its homepage. */
   origin?: string | null;
   resultsDir: string;
@@ -154,6 +156,7 @@ import { ContentGapAnalyzer } from '../analyzers/site-wide/content-gap-analyzer'
 import { LinkingOpportunityAnalyzer } from '../analyzers/site-wide/linking-opportunity-analyzer';
 import { DNSIPv6Analyzer } from '../analyzers/performance/dns-ipv6-analyzer';
 import { normalizeUrlForComparison } from '../utils';
+import { orderForCoverage, templateCounts } from '../crawler/page-cap';
 
 /**
  * Total pages this run actually attempted — success + error, across both the
@@ -274,7 +277,11 @@ class AuditOrchestrator {
       console.log('Crawling pages that are missing in sitemap...');
 
       const discoveredData = await crawlerEngine.crawlPages({
-        pagesToCrawl: context.limit ? Array.from(collectedURLs).slice(0, context.limit) : Array.from(collectedURLs),
+        pagesToCrawl: context.limit
+          ? Array.from(collectedURLs).slice(0, context.limit)
+          : context.coverageOrder
+            ? orderForCoverage(collectedURLs, { seen: templateCounts(results.pageData.processedPages) })
+            : Array.from(collectedURLs),
         collectedURLs,
         uniquePages,
         crawlFrontierKeys,
@@ -339,7 +346,9 @@ class AuditOrchestrator {
 
     const homeLinks: HomeLink[] = [];
     for (const link of homePage?.siteHints?.navLinks ?? []) homeLinks.push({ url: link.href, position: link.position });
-    const anchors = homePage?.internalAnchors ?? (Array.isArray(homePage?.links) ? (homePage.links as Array<{ href?: string; isInternal?: boolean }>) : []);
+    const anchors =
+      homePage?.internalAnchors ??
+      (Array.isArray(homePage?.links) ? (homePage.links as Array<{ href?: string; isInternal?: boolean }>) : []);
     for (const anchor of anchors) {
       if (typeof anchor.href !== 'string' || (anchor as { isInternal?: boolean }).isInternal === false) continue;
       try {
@@ -463,7 +472,11 @@ class AuditOrchestrator {
       );
     }
 
-    return { alternatesErrors: crawled.alternatesErrors, isMultiLang: crawled.isMultiLang, failedPages: crawled.failedPages };
+    return {
+      alternatesErrors: crawled.alternatesErrors,
+      isMultiLang: crawled.isMultiLang,
+      failedPages: crawled.failedPages,
+    };
   }
 
   /** What follows the crawl passes, shared by the full audit, the lead scan and the single-page audit. */
@@ -641,7 +654,10 @@ class AuditOrchestrator {
     }
 
     const formatExamples = (urls: string[], limit = 5) => {
-      const list = urls.slice(0, limit).map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`).join('');
+      const list = urls
+        .slice(0, limit)
+        .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
+        .join('');
       const more = urls.length > limit ? ` (showing ${limit} of ${urls.length})` : '';
       return { list, more };
     };
@@ -709,7 +725,8 @@ class AuditOrchestrator {
     if (Object.keys(sitemapUrls).length === 0) return; // no sitemap: nothing can be "missing" from it
     const inSitemap = new Set(Object.keys(sitemapUrls).map((u) => normalizeUrlForComparison(u)));
     for (const [url, page] of Object.entries(pages)) {
-      if (page.foundIn !== 'discovered' || page.status !== 200 || page.redirectOnly || page.nonHtml || page.noindex) continue;
+      if (page.foundIn !== 'discovered' || page.status !== 200 || page.redirectOnly || page.nonHtml || page.noindex)
+        continue;
       if (inSitemap.has(normalizeUrlForComparison(url))) continue;
       const escapedUrl = escapeHtml(url);
       saveError(

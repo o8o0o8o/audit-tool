@@ -89,6 +89,8 @@ export function buildCheckpointMetadata(results: ProgressResults) {
     ...(results.passive ? { passive: true } : {}),
     ...(results.leadScan ? { leadScan: results.leadScan } : {}),
     ...(results.singlePage ? { singlePage: results.singlePage } : {}),
+    // Only when the page cap stopped the crawl (`PageCapInfo`).
+    ...(results.pageCap ? { pageCap: results.pageCap } : {}),
   };
 }
 
@@ -108,6 +110,8 @@ export interface ProgressResults {
   leadScan?: unknown;
   /** `--page`: the single page audited (`SinglePageInfo`). */
   singlePage?: unknown;
+  /** The page cap stopped the crawl (`PageCapInfo`). */
+  pageCap?: unknown;
   pageData: {
     pages: Record<string, PageInfo>;
     processedPages: Set<string> | string[];

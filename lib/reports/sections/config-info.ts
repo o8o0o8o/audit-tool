@@ -86,6 +86,16 @@ function getRobotsCard(jsonData: Record<string, unknown>) {
   `;
 }
 
+/** A capped crawl: says how many pages were loaded and how many sitemap URLs were left out. */
+export function pageCapNote(raw: unknown): string {
+  const cap = raw as { cap?: number; pagesLoaded?: number; sitemapHeld?: number } | null | undefined;
+  if (!cap?.cap) return '';
+  const held = cap.sitemapHeld
+    ? `${cap.sitemapHeld.toLocaleString()} sitemap URLs were not loaded`
+    : 'more pages were found through links and not loaded';
+  return `<p style="color: var(--color-warning); margin-top: 8px;">⚠ Page cap of ${cap.cap.toLocaleString()} reached: ${(cap.pagesLoaded ?? 0).toLocaleString()} pages loaded, chosen across page templates; ${held}.</p>`;
+}
+
 /**
  * Generate the sitemaps info card
  */
@@ -130,7 +140,7 @@ function getSitemapsCard(jsonData: Record<string, unknown>) {
     <div class="info-card ${sitemapStatus}">
       <h3>Sitemaps</h3>
       <p><span class="label">Total Sitemaps:</span> ${individualSitemaps.length}</p>
-      <p><span class="label">Total URLs:</span> ${totalUrls.toLocaleString()}</p>
+      <p><span class="label">Total URLs:</span> ${totalUrls.toLocaleString()}</p>${pageCapNote(jsonData.pageCap)}
       ${sitemapsList}
       ${errorsNote}
     </div>

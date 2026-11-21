@@ -300,6 +300,8 @@ async function audit() {
       console.error('  --repo=<path>           Local git repo for source code analysis');
       console.error('  --exclude=<pattern>     Exclude URLs matching regex (repeatable)');
       console.error('  --limit=<number>        Max pages to audit');
+      console.error('  --max-pages=<number>    Total page cap of a full audit (default 5000, 0 = no cap);');
+      console.error('                          with --proceed, continues a capped run up to the new cap');
       console.error('  --ci[=<threshold>]      CI mode: exit 1 if score < threshold (default: 70)');
       console.error('  --json                  Output JSON summary to stdout');
       console.error('  --config=<path>         Path to config file');
@@ -464,6 +466,7 @@ async function audit() {
       open: args.open,
       exclude: args.exclude,
       limit: args.limit,
+      maxPages: args.maxPages,
       dryRun: args.dryRun,
       screenshots: args.screenshots,
       cruxApiKey: config.apiKeys?.crux ?? null,

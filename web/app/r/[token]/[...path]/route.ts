@@ -6,6 +6,7 @@ import {
   REPORT_HEADERS,
   reportTokenAudit,
 } from '../../../../lib/core/reports';
+import { renderReportHtml } from '../../../../lib/core/render-report';
 import { secretFromEnv } from '../../../../lib/core/tokens';
 import { ctx } from '../../../../lib/server';
 
@@ -31,6 +32,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const auditId = reportTokenAudit(token, secretFromEnv('REPORT_TOKEN_SECRET'));
   if (!auditId) return deny(403, 'This link has expired or is not valid.');
   const { db, platform } = ctx();
+  if (path.length === 1 && path[0] === 'report.html') {
+    // Rendered with the current report code (cached per code version); the stored HTML is the fallback.
+    const html = await renderReportHtml(db, platform.files, auditId);
+    if (html !== null)
+      return new Response(html, {
+        headers: { ...REPORT_HEADERS, 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': 'inline' },
+      });
+  }
   const art =
     path.length === 1 && path[0] === 'report.html'
       ? await findArtifactByKind(db, auditId, 'report_html')

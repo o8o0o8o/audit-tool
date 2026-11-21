@@ -57,6 +57,8 @@ export interface HtmlReportSelection {
   preset?: string;
   /** --no-score: omit every score and the scoring-rules block. */
   noScore?: boolean;
+  /** Recompute scores with the current scoring code (a report re-rendered later, scripts/render-report.ts). */
+  rescore?: boolean;
 }
 
 /** Short labels for the sticky section navigation. */
@@ -299,8 +301,8 @@ function generateHTML(
     const visualInReport = !selection.checks || matchesChecks(VISUAL_FINDING_MESSAGES[0], 'ux', selection.checks);
     (jsonData as Record<string, unknown>).visual = visualInReport && readVisualFlag(file);
   }
-  if (selection.checks && !loadError) {
-    filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
+  if ((selection.checks || selection.rescore) && !loadError) {
+    if (selection.checks) filterFindingsByChecks(jsonData as Record<string, unknown>, selection.checks);
     recalculateSummary(jsonData as Record<string, unknown>, pageData as PageData);
   }
 

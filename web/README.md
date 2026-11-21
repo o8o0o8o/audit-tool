@@ -27,7 +27,7 @@ The lead pipeline uses the API instead of the CSV when the repo-root `.env` has 
 - `/internal` — dispatch form (full audit, quick scan, single page; presets; perf, visual, PDF). Live progress comes from the `audits` row; the finished report is embedded through a fresh `/r/{token}` link.
 - `/internal/runs` — every audit, all sources, newest first; filter by domain and status.
 - `/internal/audits/<id>` — status, phase, progress, scores, scan quality, report links, "Cancel audit", "Generate PDF".
-- `/internal/audits/<id>/view` — the one view of an HTML report: the report is the page (no iframe), served sandboxed, with the site header and footer put around it at request time from the app's own `/internal/shell` page (`lib/report-shell.ts`, each in a shadow root). The header and footer exist only in `app/components/`.
+- `/internal/audits/<id>/view` — the one view of an HTML report, rendered on view with the current report and scoring code from the audit's stored raw archive (`lib/core/render-report.ts` runs `scripts/render-report.ts`; cached per audit and per hash of the report code under `renders/`): the report is the page (no iframe), served sandboxed, with the site header and footer put around it at request time from the app's own `/internal/shell` page (`lib/report-shell.ts`, each in a shadow root). The header and footer exist only in `app/components/`.
 - `/internal/keys` — create (shown once) and revoke API keys.
 - `/r/<token>/report.html`, `/r/<token>/a/<artifact>` — the only way to open a report or file: the token names one audit and expires after 1 h; sandboxed, `Referrer-Policy: no-referrer`.
 

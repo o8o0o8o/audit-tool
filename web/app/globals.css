@@ -309,12 +309,3 @@
   background: #000;
   word-break: break-all;
 }
-
-/* /internal/audits/<id>/view: the report at full height between the site header and footer. */
-.report-embed {
-  display: block;
-  width: 100%;
-  min-height: 100vh;
-  border: 0;
-  background: transparent;
-}

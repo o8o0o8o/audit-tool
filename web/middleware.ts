@@ -10,6 +10,7 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/internal') &&
     !pathname.startsWith('/internal/login') &&
+    pathname !== '/internal/shell' &&
     !request.cookies.get('audit_session')
   ) {
     const url = new URL('/internal/login', request.url);

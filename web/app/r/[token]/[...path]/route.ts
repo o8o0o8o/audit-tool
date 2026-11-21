@@ -11,16 +11,6 @@ import { ctx } from '../../../../lib/server';
 
 export const dynamic = 'force-dynamic';
 
-const EMBED_STYLE =
-  '<style>.fr-header-bar .fr-wordmark,footer:has(.fr-footer-inner),.reading-progress{display:none!important}' +
-  '.fr-header-bar{justify-content:flex-end}html,body{overflow:hidden!important}body{padding-left:0!important;padding-right:0!important}</style>' +
-  // Tell the page our height, so the frame grows to it (the page, not the frame, scrolls).
-  // The page asks for it ("audit-report-ping") once it listens; we also repeat it, so a message sent
-  // before the page was ready is never the only one.
-  '<script>(function(){function send(){parent.postMessage({type:"audit-report-height",height:document.documentElement.scrollHeight},"*")}' +
-  'addEventListener("message",function(e){if(e.data&&e.data.type==="audit-report-ping")send()});addEventListener("load",send);' +
-  'if(window.ResizeObserver)new ResizeObserver(send).observe(document.body);setInterval(send,1000)})()</script>';
-
 const deny = (status: number, message: string) =>
   new Response(message, {
     status,
@@ -36,7 +26,7 @@ const deny = (status: number, message: string) =>
  * expiry; relative links in the report resolve under the same prefix, so screenshots need no cookie.
  * Sandboxed: a report holds text the audited site controls and must never run with the app's origin.
  */
-export async function GET(request: Request, { params }: { params: Promise<{ token: string; path: string[] }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ token: string; path: string[] }> }) {
   const { token, path } = await params;
   const auditId = reportTokenAudit(token, secretFromEnv('REPORT_TOKEN_SECRET'));
   if (!auditId) return deny(403, 'This link has expired or is not valid.');
@@ -50,14 +40,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   if (!art) return deny(404, 'not found');
   const file = await platform.files.get(art.blobKey);
   if (!file) return deny(404, 'file no longer stored');
-  // Shown inside the site shell (/internal/audits/<id>/view): the site's header and footer are the
-  // only ones, so the report's own wordmark bar and footer are hidden (its Export/Share stay).
-  if (new URL(request.url).searchParams.get('embed') === '1' && art.blobKey.endsWith('.html')) {
-    const html = (await new Response(file.body).text()).replace('</head>', `${EMBED_STYLE}</head>`);
-    return new Response(html, {
-      headers: { ...REPORT_HEADERS, 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': 'inline' },
-    });
-  }
   return new Response(file.body, {
     headers: {
       ...REPORT_HEADERS,

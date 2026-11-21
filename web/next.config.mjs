@@ -9,6 +9,10 @@ const nextConfig = {
   // web/ imports the zod model from the root lib/model/ (alias @model/*); nothing else from the root.
   experimental: { externalDir: true },
   eslint: { ignoreDuringBuilds: true },
+  // Reports are served sandboxed (an opaque origin), so their pages fetch the site fonts cross-origin.
+  async headers() {
+    return [{ source: '/assets/fonts/:path*', headers: [{ key: 'Access-Control-Allow-Origin', value: '*' }] }];
+  },
 };
 
 export default nextConfig;

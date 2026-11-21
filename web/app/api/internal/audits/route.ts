@@ -12,6 +12,11 @@ export const POST = handle(async (request: Request) => {
   const parsed = parseAuditRequest(body);
   if (!parsed.ok) throw new CoreError('invalid_input', parsed.errors.join('; '));
   const o = parsed.options;
+  // The page cap of a full audit: empty → the default, 0 → no cap.
+  const rawCap = body.maxPages;
+  const maxPages = rawCap === undefined || rawCap === null || rawCap === '' ? null : Number(rawCap);
+  if (maxPages !== null && (!Number.isInteger(maxPages) || maxPages < 0 || maxPages > 100000))
+    throw new CoreError('invalid_input', 'maxPages must be a whole number from 0 to 100000');
   const mode = o.singlePage ? 'page' : o.quickScan ? 'quick' : 'full';
   const { db } = ctx();
   const res = await startAudit(db, principal, {
@@ -27,6 +32,7 @@ export const POST = handle(async (request: Request) => {
       visual: o.visual,
       concurrency: o.concurrency,
       limit: o.limit,
+      maxPages: mode === 'full' ? maxPages : null,
       evidenceCap: o.evidenceCap,
       pdf: body.pdf === true,
     },

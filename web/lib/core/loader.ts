@@ -373,6 +373,11 @@ async function loadRowChunk(tx: Tx, files: FileStore, prefix: string, auditId: s
     await tx
       .insert(auditRunData)
       .values((Object.keys(data) as (keyof RunData)[]).map((name) => ({ auditId, name, data: data[name] })));
+    const cap = data.metadata.pageCap as { cap?: unknown } | undefined;
+    await tx
+      .update(audits)
+      .set({ pageCap: cap && typeof cap.cap === 'number' ? cap : null })
+      .where(eq(audits.id, auditId));
     return;
   }
   const n = Number(chunk.slice('pages-'.length));

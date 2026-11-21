@@ -59,6 +59,22 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
                 .join(' · ')}
             </p>
           )}
+          {a.page_cap && (
+            <p data-testid="page-cap">
+              Page cap of {a.page_cap.cap} reached: {a.page_cap.pages_loaded ?? '?'} pages loaded
+              {a.page_cap.sitemap_held ? `, ${a.page_cap.sitemap_held} sitemap URLs not loaded` : ''}. Continuing starts
+              a new audit that keeps these pages and loads more.
+            </p>
+          )}
+          {a.continued_from && (
+            <p>
+              Continues{' '}
+              <a className="link-accent" href={`/internal/audits/${a.continued_from}`}>
+                an earlier audit
+              </a>
+              .
+            </p>
+          )}
           {a.error && <p className="error">{a.error}</p>}
           {a.load_blocked && <p className="error">Load waits for a newer app: {a.load_blocked}</p>}
           <p className="muted">
@@ -94,6 +110,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
             succeeded={a.status === 'succeeded'}
             hasReportMd={a.artifacts.some((f) => f.kind === 'report_md')}
             hasPdf={a.artifacts.some((f) => f.kind === 'report_pdf')}
+            pageCap={a.mode === 'full' ? (a.page_cap?.cap ?? null) : null}
           />
           {a.status === 'succeeded' && a.artifacts.some((f) => f.kind === 'report_html') && (
             <p>

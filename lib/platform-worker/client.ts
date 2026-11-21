@@ -93,6 +93,22 @@ export class AppClient {
   uploadGrant = (area: 'audit' | 'checkpoint') => this.call<UploadGrant>('POST', '/api/worker/upload-token', { area });
   snapshot = () => this.call<{ attempt: number; manifest: SnapshotManifest } | null>('GET', '/api/worker/snapshot');
 
+  /** The stored files of the capped audit this one continues; null when it continues none. */
+  continueSource = () =>
+    this.call<{ audit_id: string; files: { path: string; key: string; bytes: number }[] } | null>(
+      'GET',
+      '/api/worker/continue',
+    );
+
+  async continueFile(key: string): Promise<Uint8Array> {
+    const res = await fetch(`${this.appUrl}/api/worker/continue/file?key=${encodeURIComponent(key)}`, {
+      headers: { authorization: `Bearer ${this.session}` },
+    });
+    if (res.status === 409) throw new StaleAttempt('stale');
+    if (!res.ok) throw new Error(`continue file ${key}: ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
   async snapshotObject(attempt: number, sha: string): Promise<Uint8Array> {
     const res = await fetch(`${this.appUrl}/api/worker/snapshot/${attempt}/${sha}`, {
       headers: { authorization: `Bearer ${this.session}` },

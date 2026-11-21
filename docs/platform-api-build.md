@@ -289,7 +289,7 @@ Order: an internal-only deployment first (items 1–7), one real audit end to en
 
 Steps 0–4 exist as described above, with these differences:
 
-- **Migrations:** seven files, `0000_step1_core` to `0006_perf_indexes`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
+- **Migrations:** eight files, `0000_step1_core` to `0007_page_cap`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
 - **`prospects.extra`** (`jsonb`, not in the design's SQL) keeps the other `companies.csv` columns, so the pipeline's API store round-trips every column it reads and writes.
 - **Imports end with `POST /api/v1/audits/{id}/complete`** (not in §6): `audits/import` creates the audit and returns an upload grant; `complete` records the uploaded artifacts and sets `built`.
 - **Finding codes (3.2):** explicit codes are seeded in `lib/model/check-types.json` (`scripts/build-check-types.ts`: the 50 most frequent findings across the stored runs plus every security and email-DNS finding, 69 codes). Analyzers do not set `Issue.code` yet; codes come from titles in `lib/model/finding-codes.ts`.
@@ -332,3 +332,12 @@ Measured on local Docker Postgres with `scripts/measure-platform.ts` (abilio.com
 A page row is 25.5 kB on average for this run. The 9 100-page case is copied pages, not a real large site, and there is no network latency to a hosted database in these numbers.
 
 Tests: `yarn test` runs 1377 tests; the five slow worker tests need `PLATFORM_SLOW_TESTS=1`.
+
+## Page cap and continuing a capped audit (2026-11-21)
+
+- **Cap.** A full audit stops after 5000 page loads (`docs/architecture.md`, "Page cap"). On the platform it is the run option `maxPages` (null: 5000, 0: no cap): `options.maxPages` in `start_audit`, and the **Page cap** field of the internal form. The worker passes it as `--max-pages`.
+- **Recorded.** When the cap stopped the crawl, the run's metadata has `pageCap`, and the loader copies it to `audits.page_cap` (migration `0007_page_cap`). `get_audit` returns `page_cap` (`cap`, `pages_loaded`, `sitemap_held`) and `list_audits` returns it per row. Audits loaded before this change get it from `yarn --cwd web tsx scripts/reload-audits.ts <audit id>`.
+- **Continue.** `continueAudit` (`web/lib/core/audits.ts`; needs `audits:start:full` and `audits:read`) starts a new full audit of the same site with the same options, a higher cap (default: twice the old one; 0: none) and `options.continueFrom` set to the first audit. It is refused unless the first audit is a succeeded full audit that the cap stopped and whose raw archive is still kept. While one continuation is queued or running, a second request returns it. `continueFrom` can only be set this way: `start_audit` drops it from a caller's options.
+- **Worker.** A worker whose audit has `continueFrom` (and no snapshot of its own) asks `GET /api/worker/continue` for the first audit's raw archive, screenshots and evidence files, reads each through `GET /api/worker/continue/file?key=` (any other key is refused), unpacks them into a new run folder and runs with `--proceed`. Pages already loaded are not loaded again; the site-wide checks run over all pages. If the archive is missing the audit starts over.
+- **The first audit is not changed.** The continued audit is a separate audit with its own rows, files and report, and `continued_from` in `get_audit`. Their `comparable_key`s differ (the cap is part of it), so score trends do not compare them.
+- **Internal pages.** `/internal/runs` marks a capped audit ("capped at N · continue"); the audit page shows the cap and a **Continue crawl** form (`POST /api/internal/audits/{id}/continue`). There is no MCP tool for it yet.

@@ -3,7 +3,7 @@
  * session token; every later call names the attempt by that session. A call from an attempt that is
  * no longer current, or for an audit that has ended, gets `stale_attempt` (409) and the worker stops.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { artifacts, auditAttempts, audits, sites } from '../../db/schema';
@@ -299,6 +299,42 @@ export async function latestSnapshot(
 export async function snapshotObject(files: FileStore, s: WorkerSession, attempt: number, sha: string) {
   if (!/^[0-9a-f]{64}$/.test(sha) || attempt < 1 || attempt >= s.attempt) throw new CoreError('invalid_input');
   const got = await files.get(`checkpoints/${s.auditId}/${attempt}/objects/${sha}`);
+  if (!got) throw new CoreError('not_found');
+  return got;
+}
+
+/** Kinds of the first audit's files a continued audit starts from: the run itself and its page evidence. */
+const CONTINUE_KINDS = ['raw_archive', 'screenshot', 'evidence'];
+
+/** The stored files of the audit this one continues, as paths inside the run folder; null when it continues none. */
+export async function continueSource(
+  db: Db,
+  s: WorkerSession,
+  now = new Date(),
+): Promise<{ audit_id: string; files: { path: string; key: string; bytes: number }[] } | null> {
+  const [audit] = await db.select({ options: audits.options }).from(audits).where(eq(audits.id, s.auditId));
+  const from = (audit?.options as { continueFrom?: string | null } | null)?.continueFrom;
+  if (!from) return null;
+  const [parent] = await db.select({ status: audits.status }).from(audits).where(eq(audits.id, from));
+  if (parent?.status !== 'succeeded') return null;
+  const rows = await db
+    .select({ key: artifacts.blobKey, bytes: artifacts.bytes, expiresAt: artifacts.expiresAt })
+    .from(artifacts)
+    .where(
+      and(eq(artifacts.auditId, from), inArray(artifacts.kind, CONTINUE_KINDS), sql`${artifacts.deletedAt} is null`),
+    );
+  const files = rows
+    .filter((r) => !r.expiresAt || r.expiresAt > now)
+    .map((r) => ({ path: r.key.replace(/^audits\/[^/]+\/\d+\//, ''), key: r.key, bytes: r.bytes }))
+    .filter((f) => f.path !== f.key && !f.path.split('/').includes('..'));
+  return { audit_id: from, files };
+}
+
+/** One of those files; any other key is refused. */
+export async function continueFile(db: Db, files: FileStore, s: WorkerSession, key: string) {
+  const source = await continueSource(db, s);
+  if (!source?.files.some((f) => f.key === key)) throw new CoreError('forbidden');
+  const got = await files.get(key);
   if (!got) throw new CoreError('not_found');
   return got;
 }

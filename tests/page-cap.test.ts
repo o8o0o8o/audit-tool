@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import {
   DEFAULT_PAGE_CAP,
   fullAuditPageBudget,
@@ -78,6 +79,14 @@ void describe('page cap', () => {
     assert.equal(parseArgs(['--origin=https://x.test', '--max-pages=0']).maxPages, 0);
     assert.equal(parseArgs(['--origin=https://x.test']).maxPages, null);
     assert.equal(parseArgs(['--origin=https://x.test', '--max-pages=abc']).maxPages, null);
+  });
+});
+
+void describe('page cap through start.ts', () => {
+  void it('is forwarded to the audit process', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(path.resolve(__dirname, '../start.ts'), 'utf8');
+    assert.match(source, /childArgs\.push\(`--max-pages=\$\{args\.maxPages\}`\)/);
   });
 });
 

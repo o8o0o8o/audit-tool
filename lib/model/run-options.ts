@@ -41,6 +41,12 @@ export const RunOptions = z
       .nullable()
       .default(null)
       .describe('Page cap of a full audit (--max-pages): null for the default 5000, 0 for no cap'),
+    continueFrom: z
+      .string()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+      .nullable()
+      .default(null)
+      .describe('Set by continue_audit only: the capped audit this one restores and crawls on from'),
     evidenceCap: z.number().int().min(1).max(100).nullable().default(null),
     pdf: z.boolean().default(false).describe('Print PDFs of the reports (--pdf)'),
     passive: z.boolean().default(false).describe('Skip probes beyond reading published pages (--passive)'),
@@ -69,11 +75,12 @@ export function normalizeRunOptions(mode: AuditMode, raw: unknown): RunOptions {
       concurrency: null,
       limit: null,
       maxPages: null,
+      continueFrom: null,
       evidenceCap: null,
       passive: true,
     };
   }
-  if (mode === 'page') return { ...o, contentResearch: false, limit: null, maxPages: null };
+  if (mode === 'page') return { ...o, contentResearch: false, limit: null, maxPages: null, continueFrom: null };
   return o;
 }
 
@@ -94,9 +101,10 @@ const stableJson = (v: unknown): string =>
 
 /** mode + options + steps run + tool major version (§4 "Audits"). */
 export function profileHash(mode: AuditMode, profile: AuditProfile, options: RunOptions): string {
-  // An unset page cap is left out, so audits stored before the option keep their hash.
-  const { maxPages, ...rest } = options;
-  const hashed = maxPages === null ? rest : options;
+  // Unset later options are left out, so audits stored before them keep their hash.
+  const hashed: Record<string, unknown> = { ...options };
+  if (options.maxPages === null) delete hashed.maxPages;
+  if (options.continueFrom === null) delete hashed.continueFrom;
   const body = stableJson({ mode, profile, options: hashed, steps: platformSteps(mode, profile), tool: TOOL_MAJOR });
   return createHash('sha256').update(body).digest('hex').slice(0, 32);
 }

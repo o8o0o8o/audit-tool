@@ -59,7 +59,17 @@ export default async function RunsPage({
                     {a.status}
                     {a.phase && !['succeeded', 'failed', 'cancelled'].includes(a.status) ? ` (${a.phase})` : ''}
                   </td>
-                  <td>{a.pages_total ? `${a.pages_processed ?? 0}/${a.pages_total}` : ''}</td>
+                  <td>
+                    {a.pages_total ? `${a.pages_processed ?? 0}/${a.pages_total}` : ''}
+                    {a.status === 'succeeded' && a.page_cap && (
+                      <>
+                        {' '}
+                        <a className="link-accent" href={`/internal/audits/${a.audit_id}`} data-testid="continue-link">
+                          capped at {a.page_cap.cap} · continue
+                        </a>
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

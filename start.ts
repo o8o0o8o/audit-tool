@@ -130,6 +130,7 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
       args.exclude.forEach((pattern) => childArgs.push(`--exclude=${pattern}`));
     }
     if (args.limit) childArgs.push(`--limit=${args.limit}`);
+    if (args.maxPages !== null) childArgs.push(`--max-pages=${args.maxPages}`);
     if (args.dryRun) childArgs.push('--dry-run');
     if (args.preset) childArgs.push(`--preset=${args.preset}`);
     if (args.sections?.length) childArgs.push(`--sections=${args.sections.join(',')}`);
@@ -182,7 +183,10 @@ async function audit(restoredArgs?: ParsedArgs, restartCount: number = 0) {
           if (latestRun) {
             const manifestPath = path.join(latestRun, 'manifest.json.gz');
             if (fs.existsSync(manifestPath)) {
-              const data = readCompressedJson<{ pageData?: { processedPages?: unknown[]; pages?: Record<string, unknown> }; sitemaps?: { total?: number } }>(manifestPath);
+              const data = readCompressedJson<{
+                pageData?: { processedPages?: unknown[]; pages?: Record<string, unknown> };
+                sitemaps?: { total?: number };
+              }>(manifestPath);
               const processed = data.pageData?.processedPages?.length ?? Object.keys(data.pageData?.pages ?? {}).length;
               const total = data.sitemaps?.total ?? 0;
               if (total > 0) {

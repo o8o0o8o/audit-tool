@@ -73,6 +73,8 @@ export async function startAudit(
     source?: 'internal' | 'api' | 'pipeline' | 'public';
     profile?: AuditProfile;
     allowPrivateTarget?: boolean;
+    /** Set by `continueAudit` only: the capped audit to restore and crawl on from. */
+    continueFrom?: string;
   } = {},
 ): Promise<StartAuditResult> {
   const input = StartAuditInput.parse(rawInput);
@@ -87,6 +89,8 @@ export async function startAudit(
     options = normalizeRunOptions(mode, {
       ...(input.options ?? {}),
       ...(input.preset !== undefined ? { preset: input.preset ?? null } : {}),
+      // Never from the caller: it names the audit whose stored run the worker is given.
+      continueFrom: opts.continueFrom ?? null,
     });
   } catch (err) {
     throw new CoreError('invalid_input', zodMessage(err));
@@ -251,11 +255,24 @@ export interface AuditView {
   finished_at: string | null;
   scan_quality: string | null;
   scores: Record<string, number | null>;
+  /** The page cap stopped the crawl; such an audit can be continued. */
+  page_cap: { cap: number; pages_loaded: number | null; sitemap_held: number | null } | null;
+  continued_from: string | null;
   artifacts: { id: string; kind: string; key: string; bytes: number }[];
   links: { internal: string };
 }
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
+
+function pageCapView(raw: unknown): AuditView['page_cap'] {
+  const c = raw as { cap?: unknown; pagesLoaded?: unknown; sitemapHeld?: unknown } | null;
+  if (!c || typeof c.cap !== 'number') return null;
+  return {
+    cap: c.cap,
+    pages_loaded: typeof c.pagesLoaded === 'number' ? c.pagesLoaded : null,
+    sitemap_held: typeof c.sitemapHeld === 'number' ? c.sitemapHeld : null,
+  };
+}
 
 export async function getAudit(db: Db, principal: Principal, auditId: string): Promise<AuditView> {
   if (!canReadAudit(principal, auditId)) throw new CoreError('forbidden', 'missing scope audits:read');
@@ -294,6 +311,8 @@ export async function getAudit(db: Db, principal: Principal, auditId: string): P
     finished_at: iso(row.finishedAt),
     scan_quality: quality?.state ?? null,
     scores: Object.fromEntries(scoreRows.map((s) => [s.category, s.score])),
+    page_cap: pageCapView(row.pageCap),
+    continued_from: (row.options as { continueFrom?: string | null } | null)?.continueFrom ?? null,
     artifacts: files.filter((f) => f.kind !== 'screenshot'),
     links: { internal: `/internal/audits/${row.id}` },
   };
@@ -344,13 +363,77 @@ export async function listAudits(db: Db, principal: Principal, raw: z.infer<type
       created_at: audits.createdAt,
       finished_at: audits.finishedAt,
       legacy_run_id: audits.legacyRunId,
+      page_cap: audits.pageCap,
     })
     .from(audits)
     .innerJoin(sites, eq(sites.id, audits.siteId))
     .where(where.length ? and(...where) : undefined)
     .orderBy(desc(audits.createdAt))
     .limit(input.limit ?? 50);
-  return rows.map((r) => ({ ...r, created_at: r.created_at.toISOString(), finished_at: iso(r.finished_at) }));
+  return rows.map((r) => ({
+    ...r,
+    created_at: r.created_at.toISOString(),
+    finished_at: iso(r.finished_at),
+    page_cap: pageCapView(r.page_cap),
+  }));
+}
+
+export const ContinueAuditInput = z.object({
+  audit_id: z.uuid(),
+  /** The new page cap: more than the cap that stopped the audit, or 0 for none. Default: twice that cap. */
+  max_pages: z.number().int().min(0).max(100000).nullish(),
+});
+
+/**
+ * Continues a full audit the page cap stopped: a new audit of the same site with the same options
+ * and a higher cap. Its worker restores the stored run of the first audit and loads only the pages
+ * not loaded yet. The first audit stays as it is.
+ */
+export async function continueAudit(
+  db: Db,
+  principal: Principal,
+  raw: z.infer<typeof ContinueAuditInput>,
+  opts: { now?: Date } = {},
+): Promise<StartAuditResult> {
+  if (principal.kind === 'report') throw new CoreError('forbidden');
+  requireScope(principal, 'audits:start:full');
+  requireScope(principal, 'audits:read');
+  const input = ContinueAuditInput.parse(raw);
+  const row = await getAuditRow(db, input.audit_id);
+  if (!row) throw new CoreError('not_found', 'audit not found');
+  if (row.mode !== 'full') throw new CoreError('invalid_input', 'only a full audit can be continued');
+  if (row.status !== 'succeeded') throw new CoreError('audit_not_ready', 'the audit has not succeeded');
+  const cap = pageCapView(row.pageCap);
+  if (!cap) throw new CoreError('invalid_input', 'the page cap did not stop this audit; there is nothing to continue');
+  const maxPages = input.max_pages ?? Math.min(cap.cap * 2, 100000);
+  if (maxPages !== 0 && maxPages <= cap.cap)
+    throw new CoreError('invalid_input', `max_pages must be more than ${cap.cap}, or 0 for no cap`);
+  const [archive] = await db
+    .select({ id: artifacts.id })
+    .from(artifacts)
+    .where(and(eq(artifacts.auditId, row.id), eq(artifacts.kind, 'raw_archive'), sql`${artifacts.deletedAt} is null`))
+    .limit(1);
+  if (!archive) throw new CoreError('not_generated', 'the stored run of this audit is no longer kept');
+  // One continuation at a time: a second request gets the one already queued or running.
+  const [running] = await db
+    .select({ id: audits.id, status: audits.status })
+    .from(audits)
+    .where(
+      and(
+        eq(audits.siteId, row.siteId),
+        sql`${audits.options}->>'continueFrom' = ${row.id}`,
+        inArray(audits.status, [...ACTIVE_AUDIT_STATUSES]),
+      ),
+    )
+    .limit(1);
+  if (running) return { audit_id: running.id, status: running.status, estimate_minutes: 0, reused: 'in_progress' };
+  const { continueFrom: _earlier, ...parentOptions } = (row.options ?? {}) as Record<string, unknown>;
+  return startAudit(
+    db,
+    principal,
+    { url: row.targetUrl, mode: 'full', options: { ...parentOptions, maxPages } },
+    { now: opts.now, profile: row.profile as AuditProfile, continueFrom: row.id },
+  );
 }
 
 export const TERMINAL_STATUSES = ['succeeded', 'failed', 'cancelled'] as const;

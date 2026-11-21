@@ -88,6 +88,8 @@ export const audits = pgTable(
     status: text('status').notNull(),
     phase: text('phase'),
     loadBlocked: text('load_blocked'),
+    /** Set by the loader when the page cap stopped the crawl: `{ cap, pagesLoaded, sitemapUrls, sitemapHeld }`. */
+    pageCap: jsonb('page_cap'),
     pagesProcessed: integer('pages_processed'),
     pagesTotal: integer('pages_total'),
     progressAt: tz('progress_at'),

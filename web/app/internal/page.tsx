@@ -262,6 +262,7 @@ export default function DispatchPage() {
       pdf: form.get('pdf') === 'on',
       concurrency: form.get('concurrency'),
       limit: form.get('limit'),
+      maxPages: form.get('maxPages'),
       evidenceCap: form.get('evidenceCap'),
       quickScan: form.get('scan') === 'quick',
       singlePage: form.get('scan') === 'page',
@@ -608,6 +609,20 @@ export default function DispatchPage() {
                         type="number"
                         min={1}
                         placeholder="Page limit (all pages when empty)"
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="contacts-form__item">
+                      <label className="contacts-form__label" htmlFor="audit-max-pages">
+                        Page cap (optional)
+                      </label>
+                      <input
+                        id="audit-max-pages"
+                        name="maxPages"
+                        type="number"
+                        min={0}
+                        max={100000}
+                        placeholder="Page cap (5000 when empty, 0 = no cap)"
                         className="form-input"
                       />
                     </div>

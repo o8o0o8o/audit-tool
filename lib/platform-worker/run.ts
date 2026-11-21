@@ -3,8 +3,8 @@
  * resuming, guard a cross-domain homepage, run `start.ts`, forward progress, snapshot after each
  * checkpoint, then the platform steps (fingerprint, gate, secrets masking, model build) and upload.
  */
-import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { MODEL_VERSION } from '../model/version';
@@ -15,6 +15,8 @@ import { uploadRun } from './files';
 import { auditChildEnv } from './env';
 import { killTree } from './proc-tree';
 import { MASK_MARK } from './mask-secrets';
+import { sanitizeDomainName } from '../../validators';
+import { FileManager } from '../storage/file-manager';
 
 export interface WorkerEnv {
   appUrl: string;
@@ -113,6 +115,56 @@ async function finalHost(url: string): Promise<string | null> {
   return new URL(current).hostname.toLowerCase();
 }
 
+/**
+ * Puts the stored run of the audit being continued into a new run folder: the raw archive unpacked,
+ * and its screenshots and evidence files. Returns the number of files fetched; 0 when the archive
+ * is not there or holds no checkpoint (the audit then starts over).
+ */
+export async function restoreContinued(
+  client: AppClient,
+  workDir: string,
+  base: string,
+  targetUrl: string,
+): Promise<number> {
+  const source = await client.continueSource();
+  const archive = source?.files.find((f) => f.path === 'model/raw-archive.tar.gz');
+  if (!source || !archive) return 0;
+  const runDir = path.join(
+    workDir,
+    base,
+    sanitizeDomainName(targetUrl.replace(/\/+$/, '')),
+    FileManager.generateTimestamp(),
+  );
+  mkdirSync(runDir, { recursive: true });
+  const tarFile = path.join(workDir, 'continue-archive.tar.gz');
+  writeFileSync(tarFile, await client.continueFile(archive.key));
+  try {
+    execFileSync('tar', ['-xzf', tarFile, '-C', runDir]);
+  } finally {
+    rmSync(tarFile, { force: true });
+  }
+  if (!existsSync(path.join(runDir, 'manifest.json.gz'))) {
+    rmSync(runDir, { recursive: true, force: true });
+    return 0;
+  }
+  let n = 1;
+  for (const f of source.files) {
+    if (f === archive || f.path.startsWith('model/')) continue;
+    const dest = path.join(runDir, f.path);
+    if (path.isAbsolute(f.path) || !dest.startsWith(runDir + path.sep)) continue;
+    try {
+      const body = await client.continueFile(f.key);
+      mkdirSync(path.dirname(dest), { recursive: true });
+      writeFileSync(dest, body);
+      n++;
+    } catch (err) {
+      if (err instanceof StaleAttempt) throw err;
+      log(`evidence file not restored: ${f.path}`);
+    }
+  }
+  return n;
+}
+
 export interface PlatformSteps {
   fingerprint?: (ctx: StepContext) => Promise<void>;
   gate?: (ctx: StepContext) => Promise<void>;
@@ -195,6 +247,20 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
       } else log('no snapshot to resume from; starting over');
     }
 
+    // Continue: no snapshot of this audit, but it continues a capped one. Its stored run is put
+    // where `--proceed` looks for the latest run, with the page evidence it already has.
+    const options = normalizeRunOptions(audit.mode, audit.options);
+    if (!proceed && options.continueFrom && audit.mode === 'full') {
+      await client.progress({ phase: 'restore' });
+      const n = await restoreContinued(client, env.workDir, base, audit.target_url);
+      proceed = n > 0;
+      log(
+        proceed
+          ? `restored ${n} file(s) of audit ${options.continueFrom} to continue it`
+          : `the run of audit ${options.continueFrom} could not be restored; starting over`,
+      );
+    }
+
     // Guard a homepage that lands on another host before anything else is loaded.
     const host = await finalHost(audit.target_url);
     if (host && host !== audit.host) {
@@ -206,7 +272,6 @@ export async function runWorker(env: WorkerEnv, steps: PlatformSteps = {}): Prom
       }
     }
 
-    const options = normalizeRunOptions(audit.mode, audit.options);
     const args = toCliArgs({ mode: audit.mode, url: audit.target_url, profile: audit.profile, options, proceed });
     const progressFile = path.join(env.workDir, 'progress.json');
     const marker = path.join(env.workDir, 'checkpoint.marker');

@@ -312,23 +312,31 @@ function enrichIssues(analysisData: {
  * the category, divide by totalPages × 100. Falls back to occurrence-count
  * semantics for findings whose examples don't carry URLs (defensive).
  */
+/**
+ * SEO and technical: every Error-tier issue lowers the score in proportion to how much of the site
+ * it reaches, and issues compound: 100 × Π (1 − ERROR_ISSUE_WEIGHT × share). One issue on every
+ * page gives 50, the same issue on 1 page in 25 gives 98. A finding with no page URL and a count
+ * of 1 is site-wide (share 1). Warnings and notices are reported but not scored.
+ *
+ * Before: "pages with no error ÷ pages crawled", so one issue on every page gave 0 whatever else
+ * the site got right.
+ */
 function scoreFromUrlPass(issues: EnrichedIssue[], category: IssueCategory, totalPages: number): number {
-  const errorIssues = issues.filter((i) => i.category === category && i.tier === 'error');
-
-  // Primary path: union of distinct URLs across all error-tier findings.
-  const urlSet = new Set<string>();
-  let fallbackCount = 0;
-  for (const issue of errorIssues) {
-    if (issue.urls.length > 0) {
-      for (const u of issue.urls) urlSet.add(u);
-    } else {
-      // Finding had no URL examples (e.g. site-level finding) — credit it as
-      // affecting one URL conservatively, so we don't silently drop it.
-      fallbackCount += Math.min(issue.affected, totalPages);
-    }
+  let score = 1;
+  for (const issue of issues) {
+    if (issue.category !== category || issue.tier !== 'error') continue;
+    // Page URLs when the finding names them (examples may be capped, so the count can be higher);
+    // a finding with no URL and a count of 1 is site-wide (no sitemap, robots.txt, …).
+    const reach =
+      issue.urls.length > 0
+        ? Math.max(new Set(issue.urls).size, Math.min(issue.affected, totalPages))
+        : issue.affected > 1
+          ? issue.affected
+          : totalPages;
+    const share = Math.min(1, reach / totalPages);
+    score *= 1 - SCORING.ERROR_ISSUE_WEIGHT * share;
   }
-  const pagesWithErrors = Math.min(urlSet.size + fallbackCount, totalPages);
-  return urlPassScore(pagesWithErrors, totalPages);
+  return score * 100;
 }
 
 /**

@@ -768,6 +768,38 @@ void describe('ScoreCalculator', () => {
     );
   });
 
+  void it('SEO score is graduated: one error on every page is 50, not 0; issues compound', () => {
+    const pages: Record<string, Record<string, unknown>> = {};
+    for (let i = 0; i < 25; i++) pages[`https://example.com/${i}`] = {};
+    const urls = (n: number) => Array.from({ length: n }, (_, i) => `<a href="https://example.com/${i}">x</a>`);
+    const score = (details: Record<string, { severity: 'high'; count: number; examples: string[] }>) =>
+      ScoreCalculator.calculateCategoryScores({ bySeverity: { critical: [], high: [], medium: [], low: [] }, details }, pages as unknown as Record<string, PageInfo>).seo;
+    assert.equal(score({ 'Some pages have missing or empty title': { severity: 'high', count: 25, examples: urls(25) } }), 50);
+    assert.equal(score({ 'Some pages have missing or empty title': { severity: 'high', count: 1, examples: urls(1) } }), 98);
+    assert.equal(
+      score({
+        'Some pages have missing or empty title': { severity: 'high', count: 25, examples: urls(25) },
+        'Canonicals are not set for some pages': { severity: 'high', count: 25, examples: urls(25) },
+      }),
+      25,
+    );
+  });
+
+  void it('privacy and consent findings never lower the SEO score', () => {
+    const pages: Record<string, Record<string, unknown>> = { 'https://example.com/': {} };
+    const s = ScoreCalculator.calculateCategoryScores(
+      {
+        bySeverity: { critical: [], high: [], medium: [], low: [] },
+        details: {
+          'Tracking cookies without consent banner': { severity: 'high', count: 1, examples: ['<a href="https://example.com/">x</a>'] },
+          'Privacy policy link missing on many pages': { severity: 'high', count: 1, examples: ['x'] },
+        },
+      },
+      pages as unknown as Record<string, PageInfo>,
+    );
+    assert.equal(s.seo, 100);
+  });
+
   void it('SEO score scales with breadth of affected pages', () => {
     const pages100: Record<string, Record<string, unknown>> = {};
     for (let i = 0; i < 100; i++) pages100[`https://example.com/${i}`] = {};

@@ -251,6 +251,9 @@ export const THRESHOLDS = {
  *   • Overall       — weighted average of category scores
  */
 export const SCORING = {
+  /** SEO/technical: how much one Error-tier issue on every page lowers the score (0.5 → 50/100). */
+  ERROR_ISSUE_WEIGHT: 0.5,
+
   /** Overall = Σ CATEGORY_WEIGHTS[k] · categoryScores[k]. Sums to 1. */
   CATEGORY_WEIGHTS: {
     seo: 0.3,

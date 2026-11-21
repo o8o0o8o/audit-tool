@@ -228,6 +228,12 @@ const CATEGORY_PATTERNS: Array<{ category: IssueCategory; rx: RegExp }> = [
     rx: /\b(contrast|aria|focus indicator|keyboard|alt (text|attribute)|label|landmark|tabindex|wcag|a11y|accessibility|prefers-reduced-motion|touch target|skip link)\b/i,
   },
   {
+    // Privacy and consent findings are not SEO. The security score is measured from headers and
+    // cookies on each page, so these are reported but never lower the SEO score.
+    category: 'security',
+    rx: /\b(cookies?|consent|privacy policy|gdpr|tracking before consent)\b/i,
+  },
+  {
     category: 'security',
     rx: /\b(csp|content[- ]security[- ]policy|hsts|strict-transport|https|tls|ssl|sri|subresource integrity|cookie|mixed content|x-frame|frame-ancestors|permissions[- ]policy|x-content-type|cors|xss|csrf|insecure|integrity)\b/i,
   },

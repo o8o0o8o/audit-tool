@@ -17,9 +17,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_METHODS: Record<string, string> = {
-  seo: 'Share of crawled pages with no Error-tier SEO issue (URL-pass): (pages without errors ÷ pages crawled) × 100. Warnings and notices are reported but not scored.',
-  technical:
-    'Share of crawled pages with no Error-tier technical issue (URL-pass): (pages without errors ÷ pages crawled) × 100.',
+  seo: 'Each Error-tier SEO issue lowers the score by half its reach, and issues compound: 100 × Π (1 − 0.5 × share of crawled pages it affects). One issue on every page gives 50; on 1 page in 25, 98. A site-wide issue counts as every page. Warnings and notices are reported but not scored.',
+  technical: 'Like SEO: 100 × Π (1 − 0.5 × share of crawled pages it affects) over Error-tier technical issues.',
   performance: '', // filled from PERFORMANCE_METRIC_WEIGHTS below
   accessibility:
     'Mean of the per-page accessibility scores (axe-style deductions per violation; 100 − 10 per violation when only a count is known).',
@@ -46,7 +45,7 @@ export function getScoringRules(): ScoringRules {
   const metricWeights = Object.entries(SCORING.PERFORMANCE_METRIC_WEIGHTS)
     .map(([m, w]) => `${m} ${w}%`)
     .join(', ');
-  const perfMethod = `Per page, each Core Web Vital is scored 0–100 on a Lighthouse log-normal curve (top-decile value → 90, median → 50) and the metrics are blended by weight: ${metricWeights}. The category is the mean across pages; without performance metrics it falls back to URL-pass on performance issues.`;
+  const perfMethod = `Per page, each Core Web Vital is scored 0–100 on a Lighthouse log-normal curve (top-decile value → 90, median → 50) and the metrics are blended by weight: ${metricWeights}. The category is the mean across pages; without lab metrics it uses real-user (CrUX) p75 values; with neither it has no score and is left out of the overall.`;
 
   const categories = Object.entries(SCORING.CATEGORY_WEIGHTS).map(([key, w]) => ({
     key,
@@ -70,7 +69,8 @@ export function getScoringRules(): ScoringRules {
     worstWeightPct,
     overall: `Overall = ${meanWeightPct}% × weighted category mean + ${worstWeightPct}% × worst category score, so one failing category can't be averaged away.`,
     grades,
-    passRate: 'Pass Rate = pages loaded without an error ÷ pages crawled. Issue counts are distinct kinds of issue, not affected pages.',
+    passRate:
+      'Pass Rate = pages loaded without an error ÷ pages crawled. Issue counts are distinct kinds of issue, not affected pages.',
     estimate: `Estimated score after fixes = the overall formula above applied after each measured category recovers ${pct(FIX_RECOVERY_RATIO)}% of its headroom to 100; unmeasured categories get no credit.`,
     perPageNote:
       "Per-page Security, Cache, A11y and Content columns are each analyzer's own 0–100 check score for that page; they are shown for diagnosis and are separate from the weighted category blend.",

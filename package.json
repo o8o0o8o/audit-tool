@@ -28,7 +28,8 @@
     "marked": "^18.0.4",
     "node-html-parser": "^6.1.13",
     "playwright": "^1.49.1",
-    "web-vitals": "^4.2.4"
+    "web-vitals": "^4.2.4",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

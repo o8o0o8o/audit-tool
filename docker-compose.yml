@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: audit
+      POSTGRES_PASSWORD: audit
+      POSTGRES_DB: audit
+    ports: ['5433:5432'] # 5433, so a Postgres already on the machine is not in the way
+    volumes:
+      - audit-db:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro # creates audit_test
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'audit']
+      interval: 2s
+      retries: 30
+volumes:
+  audit-db:

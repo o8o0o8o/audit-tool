@@ -65,3 +65,6 @@ web/node_modules
 
 # Generated brand preview of the HTML report (yarn run preview:report)
 web/public/report/
+
+# local platform files (file store, worker folders, logs)
+/.platform/

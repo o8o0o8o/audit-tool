@@ -6,6 +6,8 @@ const nextConfig = {
   // web/ is its own app; stop Next from picking the repo-root yarn.lock as the workspace root.
   outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
   // ESLint isn't a dependency of web/; linting runs from the repo root.
+  // web/ imports the zod model from the root lib/model/ (alias @model/*); nothing else from the root.
+  experimental: { externalDir: true },
   eslint: { ignoreDuringBuilds: true },
 };
 

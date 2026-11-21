@@ -14,7 +14,6 @@
     "key:create": "tsx --env-file-if-exists=.env.local scripts/create-key.ts",
     "hash-password": "tsx scripts/hash-password.ts",
     "seed:prospects": "tsx --env-file-if-exists=.env.local scripts/seed-prospects.ts",
-    "import-run": "tsx --env-file-if-exists=.env.local scripts/import-run.ts",
     "tsx": "tsx --env-file-if-exists=.env.local"
   },
   "dependencies": {

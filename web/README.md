@@ -17,7 +17,7 @@ claude mcp add --transport http audit-local http://localhost:3000/api/mcp --head
 
 Each dispatched audit runs `scripts/platform-worker.ts` as a child process in `.platform/work/<audit>-<attempt>/`; its output is in `.platform/logs/<audit>-<attempt>.log`. Files are stored under `.platform/files/`. Reset everything: `docker compose down -v && rm -rf .platform`.
 
-Seed data: `yarn --cwd web seed:prospects` (`docs/gtm/companies.csv`, or `--sample` for five made-up rows); `yarn --cwd web import-run --all` imports every stored run in `audit-results/` and `lead-results/` (`--with-evidence` also copies screenshots and evidence).
+Seed data: `yarn --cwd web seed:prospects` (`docs/gtm/companies.csv`, or `--sample` for five made-up rows). Runs made before the platform (`audit-results/`, `lead-results/`) are not imported: only audits run through the platform, or published by the lead pipeline, are in the database.
 
 The lead pipeline uses the API instead of the CSV when the repo-root `.env` has `AUDIT_API_URL=http://localhost:3000` and `AUDIT_API_KEY=<key with audits:publish, prospects:read, prospects:write>`.
 

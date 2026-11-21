@@ -368,16 +368,17 @@ function getStyles() {
               white-space: nowrap;
           }
 
-          td[title]:not([title=""]) {
+          /* Only the pages table opens a cell on click (scripts.ts), so only it gets the ℹ marker. */
+          #pagesTable td[title]:not([title=""]) {
               cursor: pointer;
               position: relative;
           }
 
-          td[title]:not([title=""]):hover {
+          #pagesTable td[title]:not([title=""]):hover {
               background: var(--color-bg-surface-alt);
           }
 
-          td[title]:not([title=""])::after {
+          #pagesTable td[title]:not([title=""])::after {
               content: 'ℹ';
               position: absolute;
               top: 2px;
@@ -388,7 +389,7 @@ function getStyles() {
               transition: opacity 0.2s;
           }
 
-          td[title]:not([title=""]):hover::after {
+          #pagesTable td[title]:not([title=""]):hover::after {
               opacity: 1;
               color: var(--color-info);
           }
@@ -876,7 +877,7 @@ function getStyles() {
               text-transform: uppercase;
               letter-spacing: 0.5px;
           }
-          .issues-table-row:hover { background: var(--color-bg-page); }
+          .issues-table-row:hover { background: var(--color-bg-surface-alt); }
           .issues-table-row td {
               padding: 10px 12px;
               border-bottom: 1px solid var(--color-bg-surface-alt);

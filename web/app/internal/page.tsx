@@ -394,7 +394,7 @@ export default function DispatchPage() {
         <section className="run-result">
           <p className="run-result-actions">
             Audit finished.{' '}
-            <a className="link-accent" href={src} target="_blank" rel="noreferrer">
+            <a className="link-accent" href={`/internal/audits/${id}/view`} target="_blank" rel="noreferrer">
               Open report in a new tab
             </a>{' '}
             {newAudit}

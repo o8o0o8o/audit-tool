@@ -74,7 +74,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
                     className="link-accent"
                     href={
                       f.kind === 'report_html'
-                        ? `/internal/audits/${a.audit_id}/report`
+                        ? `/internal/audits/${a.audit_id}/view`
                         : `/internal/audits/${a.audit_id}/a/${f.id}`
                     }
                     target="_blank"

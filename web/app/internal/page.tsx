@@ -56,8 +56,8 @@ function formatRemaining(minutes: number | null): string {
 const PRESETS = [
   {
     value: 'full',
-    label: 'Full audit',
-    summary: 'Every report section, using the options you would get with no preset.',
+    label: 'All sections',
+    summary: 'Every report section, with no preset applied.',
   },
   {
     value: 'sales',
@@ -564,57 +564,59 @@ export default function DispatchPage() {
                   </div>
                 </div>
 
-                <div className="contacts-form__item contacts-form__item--span-1 contacts-form__item--keep-label">
-                  <label className="contacts-form__label" htmlFor="audit-concurrency">
-                    Concurrency (1–20)
-                  </label>
-                  <input
-                    id="audit-concurrency"
-                    name="concurrency"
-                    disabled={quickScan}
-                    // Remount on Quick scan so the field shows the value the run will use.
-                    key={`concurrency-${quickScan}`}
-                    type="number"
-                    min={1}
-                    max={20}
-                    defaultValue={quickScan ? QUICK_SCAN.concurrency : 5}
-                    placeholder="Concurrency (1–20)"
-                    className="form-input"
-                  />
-                </div>
-                <div className="contacts-form__item contacts-form__item--span-1 contacts-form__item--keep-label">
-                  <label className="contacts-form__label" htmlFor="audit-evidence-cap">
-                    Evidence cap (1–100)
-                  </label>
-                  <input
-                    id="audit-evidence-cap"
-                    name="evidenceCap"
-                    disabled={quickScan}
-                    key={`evidenceCap-${quickScan}`}
-                    type="number"
-                    min={1}
-                    max={100}
-                    defaultValue={quickScan ? QUICK_SCAN.evidenceCap : 10}
-                    placeholder="Evidence cap (1–100)"
-                    className="form-input"
-                  />
-                </div>
-                <div className="contacts-form__item">
-                  <label className="contacts-form__label" htmlFor="audit-limit">
-                    Page limit (optional)
-                  </label>
-                  <input
-                    id="audit-limit"
-                    name="limit"
-                    disabled={quickScan || singlePage}
-                    key={`limit-${scan}`}
-                    defaultValue={quickScan ? QUICK_SCAN.pages : singlePage ? 1 : undefined}
-                    type="number"
-                    min={1}
-                    placeholder="Page limit (all pages when empty)"
-                    className="form-input"
-                  />
-                </div>
+                {scan === 'full' ? (
+                  <>
+                    <div className="contacts-form__item contacts-form__item--span-1 contacts-form__item--keep-label">
+                      <label className="contacts-form__label" htmlFor="audit-concurrency">
+                        Concurrency (1–20)
+                      </label>
+                      <input
+                        id="audit-concurrency"
+                        name="concurrency"
+                        type="number"
+                        min={1}
+                        max={20}
+                        defaultValue={5}
+                        placeholder="Concurrency (1–20)"
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="contacts-form__item contacts-form__item--span-1 contacts-form__item--keep-label">
+                      <label className="contacts-form__label" htmlFor="audit-evidence-cap">
+                        Evidence cap (1–100)
+                      </label>
+                      <input
+                        id="audit-evidence-cap"
+                        name="evidenceCap"
+                        type="number"
+                        min={1}
+                        max={100}
+                        defaultValue={10}
+                        placeholder="Evidence cap (1–100)"
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="contacts-form__item">
+                      <label className="contacts-form__label" htmlFor="audit-limit">
+                        Page limit (optional)
+                      </label>
+                      <input
+                        id="audit-limit"
+                        name="limit"
+                        type="number"
+                        min={1}
+                        placeholder="Page limit (all pages when empty)"
+                        className="form-input"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="contacts-form__item contacts-form__hint">
+                    {quickScan
+                      ? `Crawl settings are fixed for a quick scan: ${QUICK_SCAN.pages} pages, ${QUICK_SCAN.concurrency} at a time, evidence for ${QUICK_SCAN.evidenceCap}.`
+                      : 'Crawl settings do not apply to a single page.'}
+                  </p>
+                )}
 
                 <div className="contacts-form__item">
                   <button type="submit" className="btn btn--xl btn--block roll" disabled={submitting}>

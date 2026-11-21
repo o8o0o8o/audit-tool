@@ -874,6 +874,7 @@ Conventions:
 | `list_audits` | `domain?`, `mode?`, `status?`, `source?`, `external_ref?`, `since?` | audits, newest first |
 | `wait_for_audit` | `audit_id`, `timeout_seconds?` (max 50) | returns as soon as the audit finishes, or its current status and progress at the timeout; the caller calls again. For scripts and agents that have no webhook address |
 | `cancel_audit` | `audit_id` | new status; only the client that started it, or internal |
+| `continue_audit` | `audit_id`, `max_pages?` (more than the cap that stopped it, or 0 for none; default twice that cap) | a new full audit that keeps the loaded pages of a capped one and loads more: `audit_id`, `status`, `estimate_minutes`, `reused` (`in_progress`/null). Needs `audits:start:full` and `audits:read` |
 
 `start_audit`, in this order:
 

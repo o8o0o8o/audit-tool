@@ -6,7 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import type { Platform } from '../platform/types';
-import { cancelAudit, getAudit, listAudits, startAudit, TERMINAL_STATUSES } from '../core/audits';
+import { cancelAudit, continueAudit, getAudit, listAudits, startAudit, TERMINAL_STATUSES } from '../core/audits';
 import { CoreError } from '../core/errors';
 import { requestPdf } from '../core/jobs';
 import { getLeadSummary } from '../core/lead-summary';
@@ -140,7 +140,7 @@ export function buildMcpServer(d: McpDeps): McpServer {
     {
       title: 'Get an audit',
       description:
-        'Status, phase, progress, timings, options, model version, scores, scan quality and stored files of one audit.',
+        'Status, phase, progress, timings, options, model version, scores, scan quality and stored files of one audit. page_cap is set when the page cap stopped the crawl (see continue_audit); continued_from names the audit this one continues.',
       inputSchema: { audit_id: z.string() },
     },
     wrap(async (a) => getAudit(db, principal, a.audit_id)),
@@ -182,6 +182,31 @@ export function buildMcpServer(d: McpDeps): McpServer {
       },
     },
     wrap(async (a) => ({ audits: await listAudits(db, principal, a) })),
+  );
+
+  server.registerTool(
+    'continue_audit',
+    {
+      title: 'Continue a capped audit',
+      description:
+        'For a full audit the page cap stopped (get_audit / list_audits show page_cap): starts a new full audit of the same site with the same options and a higher cap. It keeps the pages already loaded and loads more; the first audit is not changed. Needs audits:start:full and audits:read. Returns a new audit_id (reused=in_progress when a continuation is already queued or running); then call wait_for_audit. Refused when the audit was not stopped by the cap, has not succeeded, or its stored run is no longer kept.',
+      inputSchema: {
+        audit_id: z.string().describe('The capped audit'),
+        max_pages: z
+          .number()
+          .int()
+          .min(0)
+          .max(100000)
+          .optional()
+          .describe('New page cap: more than the cap that stopped the audit, or 0 for none. Default: twice that cap'),
+      },
+    },
+    wrap(async (a) => {
+      const res = await continueAudit(db, principal, a);
+      if (res.status === 'queued' && !res.reused)
+        await dispatchNext(db, d.platform, { onFinished: finished, max: 2 }).catch(() => {});
+      return res;
+    }),
   );
 
   server.registerTool(

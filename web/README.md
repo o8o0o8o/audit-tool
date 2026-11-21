@@ -33,7 +33,7 @@ The lead pipeline uses the API instead of the CSV when the repo-root `.env` has 
 
 ## Routes
 
-- `POST /api/mcp` — MCP (Streamable HTTP, stateless), API key as bearer. Tools: `start_audit`, `get_audit`, `wait_for_audit`, `list_audits`, `cancel_audit`, `get_lead_summary`, `get_site`, `list_findings`, `get_tech_stack`, `get_recommendations`, `get_site_checks`, `list_check_types`, `get_prospect`, `list_prospects`, `get_report_url`, `request_pdf`.
+- `POST /api/mcp` — MCP (Streamable HTTP, stateless), API key as bearer. Tools: `start_audit`, `get_audit`, `wait_for_audit`, `list_audits`, `cancel_audit`, `continue_audit`, `get_lead_summary`, `get_site`, `list_findings`, `get_tech_stack`, `get_recommendations`, `get_site_checks`, `list_check_types`, `get_prospect`, `list_prospects`, `get_report_url`, `request_pdf`.
 - `/api/v1/guard`, `/api/v1/prospects`, `/api/v1/prospects/<id>`, `/api/v1/audits/import`, `/api/v1/audits/<id>/complete`, `/api/v1/audits/<id>/gate-runs` — the lead pipeline.
 - `/api/worker/*` — register, heartbeat, status, progress, guard, upload-token, upload (local file store), snapshot, file (PDF jobs).
 - `/api/internal/*` — what the internal pages call.

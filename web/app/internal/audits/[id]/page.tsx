@@ -32,7 +32,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     throw err;
   }
   const active = !['succeeded', 'failed', 'cancelled'].includes(a.status);
-  const reports = a.artifacts.filter((f) => f.kind !== 'gate_evidence');
+  // The HTML report has its own button below (rendered on view), so it is not listed as a file.
+  const reports = a.artifacts.filter((f) => f.kind !== 'gate_evidence' && f.kind !== 'report_html');
   return (
     <section className="section">
       <div className="container">

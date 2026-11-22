@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { and, asc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lt, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { auditDocuments, auditRunData, audits, pages, scores } from '../../db/schema';
 import type { FileStore } from '../platform/types';
@@ -53,8 +53,12 @@ export interface HistoryEntry {
   high: number;
 }
 
-async function auditHistoryIds(db: Db, audit: AuditRow): Promise<string[]> {
-  if (!audit.finishedAt) return [];
+/**
+ * A public scan's report has no History: its reader must not learn that the site was scanned
+ * before, or how it scored then. Public scans are also never part of another audit's History.
+ */
+export async function auditHistoryIds(db: Db, audit: AuditRow): Promise<string[]> {
+  if (!audit.finishedAt || audit.source === 'public') return [];
   const rows = await db
     .select({ id: audits.id })
     .from(audits)
@@ -63,6 +67,7 @@ async function auditHistoryIds(db: Db, audit: AuditRow): Promise<string[]> {
         eq(audits.siteId, audit.siteId),
         eq(audits.comparableKey, audit.comparableKey),
         eq(audits.status, 'succeeded'),
+        ne(audits.source, 'public'),
         lt(audits.finishedAt, audit.finishedAt),
       ),
     )
@@ -75,7 +80,7 @@ async function auditHistoryIds(db: Db, audit: AuditRow): Promise<string[]> {
  * (mode, preset, page limit, checks), finished before this one, oldest first.
  */
 export async function auditHistory(db: Db, audit: AuditRow): Promise<HistoryEntry[]> {
-  if (!audit.finishedAt) return [];
+  if (!audit.finishedAt || audit.source === 'public') return [];
   const earlier = await db
     .select({ id: audits.id, finishedAt: audits.finishedAt, document: auditDocuments.document })
     .from(audits)
@@ -85,6 +90,7 @@ export async function auditHistory(db: Db, audit: AuditRow): Promise<HistoryEntr
         eq(audits.siteId, audit.siteId),
         eq(audits.comparableKey, audit.comparableKey),
         eq(audits.status, 'succeeded'),
+        ne(audits.source, 'public'),
         lt(audits.finishedAt, audit.finishedAt),
       ),
     )

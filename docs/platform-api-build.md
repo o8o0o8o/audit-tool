@@ -365,3 +365,7 @@ Tests: `yarn test` runs 1377 tests; the five slow worker tests need `PLATFORM_SL
 - **Worker.** A worker whose audit has `continueFrom` (and no snapshot of its own) asks `GET /api/worker/continue` for the first audit's raw archive, screenshots and evidence files, reads each through `GET /api/worker/continue/file?key=` (any other key is refused), unpacks them into a new run folder and runs with `--proceed`. Pages already loaded are not loaded again; the site-wide checks run over all pages. If the archive is missing the audit starts over.
 - **The first audit is not changed.** The continued audit is a separate audit with its own rows, files and report, and `continued_from` in `get_audit`. Their `comparable_key`s differ (the cap is part of it), so score trends do not compare them.
 - **Internal pages.** `/internal/runs` marks a capped audit ("capped at N · continue"); the audit page shows the cap and a **Continue crawl** form (`POST /api/internal/audits/{id}/continue`). The MCP tool is `continue_audit` (`audit_id`, `max_pages?`).
+
+## Public scans and History (2026-11-22)
+
+A public user and an admin may audit the same site. The report of an audit with source `public` has no History, and audits with source `public` are in no other audit's History (`auditHistory` in `web/lib/core/render-report.ts`). Admins see every audit of a site, public ones included, in `/internal/runs` and through `list_audits`.

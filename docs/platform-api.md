@@ -1096,7 +1096,7 @@ Cut from the first build because the first consumer does not need them. Each com
 | Decision | Recommendation |
 |---|---|
 | Database | Neon Postgres through the Vercel integration (preview branches, serverless driver) |
-| Internal auth | One shared password now (login rate-limited, actions logged); Google Workspace SSO (FR domain only) when more people use it |
+| Internal auth | Changed 2026-11-22: each person has an email and password in `admins`, so audits and usage are counted per person; the shared password works only until the first admin exists. Google Workspace SSO (FR domain only) when more people use it |
 | Worker | Goal: everything on Vercel, compute and storage. GitHub Actions stays for now. The worker talks to the app only through worker routes and Blob, and resumes from snapshots, so moving it means changing the runtime and the dispatcher. First check whether Vercel compute can run Chromium for a full audit's length, or in resumable chunks |
 | MCP auth | API keys now; OAuth only if an external client (e.g. claude.ai connectors) must connect |
 | Disclosure owner | Who works the `disclosures` queue (sending, follow-up). Must be named before step 3 ships |

@@ -1,7 +1,7 @@
-import { scryptSync } from 'node:crypto';
+import { randomBytes, scryptSync } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
-import { apiClients } from '../../db/schema';
+import { admins, apiClients } from '../../db/schema';
 import { CoreError } from './errors';
 import { type Principal, type Scope } from './principal';
 import { countRate, recordRate, takeRate } from './rate';
@@ -26,19 +26,57 @@ const LOGIN_MAX_FAILURES_ALL = 30;
 
 export const ipBucket = (ip: string, secret: string) => `login:ip:${sha256Hex(`${secret}:${ip}`).slice(0, 32)}`;
 
+export const MIN_PASSWORD_LENGTH = 12;
+
+/** `scrypt:<salt hex>:<hash hex>` for a new password. */
+export function hashPassword(password: string): string {
+  if (password.length < MIN_PASSWORD_LENGTH) throw new Error(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+  const salt = randomBytes(16);
+  return `scrypt:${salt.toString('hex')}:${scryptSync(password, salt, 64).toString('hex')}`;
+}
+
+export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+/** Adds a person who can log in to /internal, or gives an existing one a new password and enables them. */
+export async function upsertAdmin(
+  db: Db,
+  input: { email: string; name?: string | null; password: string },
+): Promise<{ id: string; created: boolean }> {
+  const email = normalizeEmail(input.email);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('not an email address');
+  const passwordHash = hashPassword(input.password);
+  const [had] = await db.select({ id: admins.id }).from(admins).where(eq(admins.email, email));
+  if (had) {
+    await db
+      .update(admins)
+      .set({ passwordHash, disabledAt: null, ...(input.name ? { name: input.name } : {}) })
+      .where(eq(admins.id, had.id));
+    return { id: had.id, created: false };
+  }
+  const [row] = await db
+    .insert(admins)
+    .values({ email, name: input.name ?? null, passwordHash })
+    .returning({ id: admins.id });
+  return { id: row!.id, created: true };
+}
+
+/** A hash no password matches, checked when the email is unknown so both cases take the same time. */
+const NO_ADMIN_HASH = `scrypt:${'00'.repeat(16)}:${'00'.repeat(64)}`;
+
 /**
- * Internal login. Failed attempts are counted per IP (keyed hash); after 5 in 15 minutes every
- * attempt is refused, even with the right password, until the window passes.
- * Returns the session cookie value.
+ * Internal login. With an email: that person's password, and the session names them. Without one:
+ * the shared `INTERNAL_PASSWORD_HASH`, accepted only while the `admins` table is empty, so that once
+ * people exist every session belongs to one of them. Failed attempts are counted per IP (keyed
+ * hash); after 5 in 15 minutes every attempt is refused, even with the right password, until the
+ * window passes. Returns the session cookie value.
  */
 export async function login(
   db: Db,
-  input: { password: string; ip: string },
+  input: { email?: string; password: string; ip: string },
   cfg: { passwordHash: string | undefined; sessionSecret: string },
   now = new Date(),
 ): Promise<string> {
-  if (!cfg.passwordHash) throw new CoreError('unauthorized', 'INTERNAL_PASSWORD_HASH is not set');
-  const hash = cfg.passwordHash;
+  const email = input.email ? normalizeEmail(input.email) : '';
   const bucket = ipBucket(input.ip, cfg.sessionSecret);
   // Count, check and record under one lock, so parallel guesses cannot each see "4 so far".
   // The overall bucket stops guessing from many addresses.
@@ -49,14 +87,28 @@ export async function login(
       (await countRate(tx, LOGIN_ALL_BUCKET, LOGIN_WINDOW_MS, now)) >= LOGIN_MAX_FAILURES_ALL
     )
       return 'limited' as const;
-    if (verifyPassword(input.password, hash)) return 'ok' as const;
+    if (email) {
+      const [admin] = await tx.select().from(admins).where(eq(admins.email, email));
+      const usable = admin && !admin.disabledAt ? admin : null;
+      if (verifyPassword(input.password, usable?.passwordHash ?? NO_ADMIN_HASH) && usable) {
+        await tx.update(admins).set({ lastLoginAt: now }).where(eq(admins.id, usable.id));
+        return { admin: usable.id, email: usable.email };
+      }
+    } else {
+      const [anyAdmin] = await tx.select({ id: admins.id }).from(admins).limit(1);
+      if (anyAdmin) return 'need_email' as const;
+      if (!cfg.passwordHash) return 'not_set' as const;
+      if (verifyPassword(input.password, cfg.passwordHash)) return {};
+    }
     await recordRate(tx, bucket, now);
     await recordRate(tx, LOGIN_ALL_BUCKET, now);
     return 'wrong' as const;
   });
   if (outcome === 'limited') throw new CoreError('rate_limited', 'too many failed logins; try again later');
-  if (outcome === 'wrong') throw new CoreError('unauthorized', 'wrong password');
-  return signToken('session', { sub: 'internal' }, cfg.sessionSecret, SESSION_TTL_SECONDS, now.getTime());
+  if (outcome === 'need_email') throw new CoreError('unauthorized', 'log in with your email and password');
+  if (outcome === 'not_set') throw new CoreError('unauthorized', 'INTERNAL_PASSWORD_HASH is not set');
+  if (outcome === 'wrong') throw new CoreError('unauthorized', email ? 'wrong email or password' : 'wrong password');
+  return signToken('session', { sub: 'internal', ...outcome }, cfg.sessionSecret, SESSION_TTL_SECONDS, now.getTime());
 }
 
 export function sessionPrincipal(
@@ -65,8 +117,11 @@ export function sessionPrincipal(
   nowMs = Date.now(),
 ): Principal | null {
   if (!cookie) return null;
-  const claims = verifyToken<{ sub: string }>('session', cookie, sessionSecret, nowMs);
-  return claims?.sub === 'internal' ? { kind: 'internal', label: 'internal' } : null;
+  const claims = verifyToken<{ sub: string; admin?: string; email?: string }>('session', cookie, sessionSecret, nowMs);
+  if (claims?.sub !== 'internal') return null;
+  return claims.admin && claims.email
+    ? { kind: 'internal', label: `admin:${claims.email}`, adminId: claims.admin }
+    : { kind: 'internal', label: 'internal' };
 }
 
 const revokedBucket = (cookie: string) => `session:revoked:${sha256Hex(cookie).slice(0, 40)}`;

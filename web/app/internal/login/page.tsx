@@ -10,11 +10,13 @@ export default function LoginPage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const password = String(new FormData(e.currentTarget).get('password') ?? '');
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get('email') ?? '').trim();
+    const password = String(form.get('password') ?? '');
     const res = await fetch('/api/internal/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ ...(email ? { email } : {}), password }),
     });
     if (res.ok) {
       const next = new URLSearchParams(window.location.search).get('next');
@@ -31,6 +33,19 @@ export default function LoginPage() {
       <div className="container">
         <h1 className="section__title section__title--sm">Internal login</h1>
         <form className="internal-form" onSubmit={onSubmit} style={{ maxWidth: 440 }}>
+          <div className="contacts-form__item">
+            <label className="contacts-form__label" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              placeholder="you@company.com"
+              type="email"
+              autoComplete="username"
+              className="form-input"
+            />
+          </div>
           <div className="contacts-form__item">
             <label className="contacts-form__label" htmlFor="password">
               Password

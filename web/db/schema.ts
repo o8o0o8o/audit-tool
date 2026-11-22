@@ -38,6 +38,20 @@ export const apiClients = pgTable('api_clients', {
   revokedAt: tz('revoked_at'),
 });
 
+/** People who log in to /internal. Each audit they start names them, so usage is counted per person. */
+export const admins = pgTable('admins', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** Lower-case. */
+  email: text('email').notNull().unique(),
+  name: text('name'),
+  /** `scrypt:<salt hex>:<hash hex>`, as `yarn hash-password` prints it. */
+  passwordHash: text('password_hash').notNull(),
+  createdAt: tz('created_at').notNull().defaultNow(),
+  lastLoginAt: tz('last_login_at'),
+  /** Set instead of deleting the row, so earlier audits keep their name. A disabled admin cannot log in. */
+  disabledAt: tz('disabled_at'),
+});
+
 // ── Sites ───────────────────────────────────────────────────────────────────
 
 export const sites = pgTable(
@@ -96,6 +110,8 @@ export const audits = pgTable(
     currentAttempt: integer('current_attempt').notNull().default(0),
     source: text('source').notNull(),
     createdByClientId: uuid('created_by_client_id').references(() => apiClients.id),
+    /** The person who started it from /internal; null for API, pipeline and public audits. */
+    createdByAdminId: uuid('created_by_admin_id').references(() => admins.id, { onDelete: 'set null' }),
     externalRef: text('external_ref'),
     idempotencyKey: text('idempotency_key'),
     toolVersion: text('tool_version'),
@@ -138,6 +154,10 @@ export const audits = pgTable(
       .where(sql`status = 'queued'`),
     // The runs list: every audit, newest first.
     index('audits_created').on(t.createdAt),
+    // Usage per person, by time.
+    index('audits_admin')
+      .on(t.createdByAdminId, t.createdAt)
+      .where(sql`created_by_admin_id is not null`),
     // Retention: finished audits that still have their page data, oldest first.
     index('audits_page_data')
       .on(t.finishedAt)

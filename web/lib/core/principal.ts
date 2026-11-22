@@ -14,7 +14,11 @@ export type Scope = (typeof SCOPES)[number];
 
 /** Who is calling (§4 "Access"). Every core function takes one and checks it itself. */
 export type Principal =
-  | { kind: 'internal'; label: string }
+  | {
+      kind: 'internal';
+      label: string;
+      /** The logged-in person; absent for scripts and the shared password. */ adminId?: string;
+    }
   | { kind: 'client'; clientId: string; name: string; scopes: readonly Scope[] }
   | { kind: 'report'; auditId: string };
 

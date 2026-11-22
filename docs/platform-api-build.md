@@ -326,6 +326,8 @@ Decided 2026-11-22: the worker stays on GitHub Actions for now; §9 (Vercel Sand
 
 - **Page data of old audits** (design §9, decided 2026-11-22): the daily retention run also deletes the page data of audits that ended more than 90 days ago (`dropOldPageData` in `web/lib/core/retention.ts`; at most 200 audits or two minutes per run, oldest first). Files are deleted first and `audits.pages_dropped_at` is set last, so a run that stops halfway is finished by the next. Migration `0009_pages_dropped`. Readers already cope with an audit that has no run data: the report routes serve the stored HTML and re-scoring marks it as having no data.
 
+- **Admins and usage per user** (2026-11-22). `admins` (email, name, password hash, `disabled_at`) holds the people who log in to `/internal`; `yarn --cwd web admin:create --email=<email> [--name=…]` adds one or sets a new password, `--disable` stops one. Login takes an email and that person's password, and the session names them (`Principal.adminId`, label `admin:<email>` in `action_log`). The shared `INTERNAL_PASSWORD_HASH` logs in only while `admins` is empty. An audit started from `/internal` records the person in `audits.created_by_admin_id`. Usage has no table of its own: `usageByUser` (`web/lib/core/usage.ts`, internal only) counts audits, websites, pages and audit types per admin, per API client, and per source for audits with no user, over a period; `/internal/usage` shows it. It counts audits that still exist, so deleting a site removes its usage. A disabled admin's open session lasts until it expires (12 hours at most). Migration `0010_admins`.
+
 ### Settings
 
 Vercel project (root directory `web`):
@@ -343,7 +345,7 @@ Vercel project (root directory `web`):
 | `WORKER_OIDC_AUDIENCE` | any fixed string; the same value as the repository variable `PLATFORM_OIDC_AUDIENCE` |
 | `CRON_SECRET` | 16+ random characters; the same value as the repository secret `PLATFORM_CRON_SECRET` |
 | `SESSION_SECRET`, `REPORT_TOKEN_SECRET` | 32+ random characters each |
-| `INTERNAL_PASSWORD_HASH` | from `yarn --cwd web hash-password` |
+| `INTERNAL_PASSWORD_HASH` | from `yarn --cwd web hash-password`; used only until the first admin is created (`yarn --cwd web admin:create`) |
 | `PAGE_DATA_RETENTION_DAYS` | optional; days an audit keeps its page data (default 90, `0`: for ever) |
 
 GitHub repository: variables `PLATFORM_APP_URLS` (space-separated addresses), `PLATFORM_OIDC_AUDIENCE` and `PLATFORM_CRON_URL` (the app's address; while it is not set the cron workflow does nothing); secrets `PLATFORM_CRON_SECRET`, and `ANTHROPIC_API_KEY`, `CRUX_API_KEY`, `WPSCAN_API_TOKEN` (each optional). The repository is public, so the logs of worker and cron runs are readable by anyone: a worker's log names the audit it runs. GitHub starts a `workflow_dispatch` only for a workflow file that is on the default branch, so `platform-worker.yml` has to be on `main` before the first dispatch; `WORKER_REF` picks the branch the run then uses.

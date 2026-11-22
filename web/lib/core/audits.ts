@@ -201,6 +201,7 @@ export async function startAudit(
       status: 'queued',
       source: opts.source ?? sourceOf(principal),
       createdByClientId: clientId,
+      createdByAdminId: principal.kind === 'internal' ? (principal.adminId ?? null) : null,
       externalRef: input.external_ref ?? null,
       idempotencyKey: input.idempotency_key ?? null,
       createdAt: now,

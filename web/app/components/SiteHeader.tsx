@@ -11,6 +11,7 @@ const NAV: { title: string; href: string; tool?: boolean }[] = [
   { title: 'New audit', href: '/internal', tool: true },
   { title: 'Runs', href: '/internal/runs', tool: true },
   { title: 'API keys', href: '/internal/keys', tool: true },
+  { title: 'Usage', href: '/internal/usage', tool: true },
   { title: 'Services', href: `${FR_ORIGIN}/services/` },
   { title: 'Solutions', href: `${FR_ORIGIN}/solutions/` },
   { title: 'Portfolio', href: `${FR_ORIGIN}/portfolio/` },

@@ -12,6 +12,7 @@
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/db-migrate.ts",
     "crons": "tsx --env-file-if-exists=.env.local scripts/local-crons.ts",
     "key:create": "tsx --env-file-if-exists=.env.local scripts/create-key.ts",
+    "admin:create": "tsx --env-file-if-exists=.env.local scripts/create-admin.ts",
     "hash-password": "tsx scripts/hash-password.ts",
     "seed:prospects": "tsx --env-file-if-exists=.env.local scripts/seed-prospects.ts",
     "tsx": "tsx --env-file-if-exists=.env.local"

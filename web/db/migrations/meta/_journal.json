@@ -64,6 +64,13 @@
       "when": 1795331576961,
       "tag": "0008_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795376549303,
+      "tag": "0009_pages_dropped",
+      "breakpoints": true
     }
   ]
 }

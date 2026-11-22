@@ -258,6 +258,8 @@ export interface AuditView {
   /** The page cap stopped the crawl; such an audit can be continued. */
   page_cap: { cap: number; pages_loaded: number | null; sitemap_held: number | null } | null;
   continued_from: string | null;
+  /** When retention deleted this audit's page data; findings, scores and reports remain. */
+  pages_dropped_at: string | null;
   artifacts: { id: string; kind: string; key: string; bytes: number }[];
   links: { internal: string };
 }
@@ -313,6 +315,7 @@ export async function getAudit(db: Db, principal: Principal, auditId: string): P
     scores: Object.fromEntries(scoreRows.map((s) => [s.category, s.score])),
     page_cap: pageCapView(row.pageCap),
     continued_from: (row.options as { continueFrom?: string | null } | null)?.continueFrom ?? null,
+    pages_dropped_at: iso(row.pagesDroppedAt),
     artifacts: files.filter((f) => f.kind !== 'screenshot'),
     links: { internal: `/internal/audits/${row.id}` },
   };

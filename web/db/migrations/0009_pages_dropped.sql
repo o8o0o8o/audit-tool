@@ -1,0 +1,2 @@
+ALTER TABLE "audits" ADD COLUMN "pages_dropped_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "audits_page_data" ON "audits" USING btree ("finished_at") WHERE pages_dropped_at is null and finished_at is not null;

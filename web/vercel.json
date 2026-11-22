@@ -1,13 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "crons": [
-    { "path": "/api/cron/reaper", "schedule": "* * * * *" },
-    { "path": "/api/cron/dispatch", "schedule": "* * * * *" },
-    { "path": "/api/cron/jobs", "schedule": "* * * * *" },
-    { "path": "/api/cron/loader", "schedule": "* * * * *" },
-    { "path": "/api/cron/webhooks", "schedule": "* * * * *" },
-    { "path": "/api/cron/rescore", "schedule": "*/10 * * * *" },
-    { "path": "/api/cron/retention", "schedule": "17 3 * * *" }
-  ]
+  "framework": "nextjs"
 }

@@ -1010,11 +1010,13 @@ There is one way to open a report or a file, whoever asks:
 
 Decided 2026-11-21. Data is kept; binary files expire:
 
-| Source | Rows, site document, raw archive, report text, gate evidence | Screenshots, other evidence, PDFs |
+| Source | Audit row, findings and the other site rows, site document, report text, gate evidence | Screenshots, other evidence, PDFs |
 |---|---|---|
 | public | kept | 30 days |
 | api, pipeline | kept | 180 days |
 | internal | kept | kept |
+
+Changed 2026-11-22: **page data is kept for 90 days.** When an audit of any source ended more than 90 days ago, the retention cron deletes its page data: the `pages` rows and the run data (`audit_run_data`) in Postgres, and in the file store the model's page chunks, its run data and the raw archive. The audit row, findings, scores, recommendations, site checks, the site document and the stored reports stay, and screenshots until their own expiry above. `audits.pages_dropped_at` records it and `get_audit` returns it. Such an audit cannot be re-scored, re-rendered, reloaded or continued, and `rebuild-model` (§11) cannot reach it; its report is the HTML stored by the run. The newest audit of a site is not an exception. `PAGE_DATA_RETENTION_DAYS` changes the number of days; `0` keeps page data for ever.
 
 A retention cron deletes expired files and marks their `artifacts` rows. Site data deletion (§7) removes everything for a site on a confirmed request.
 

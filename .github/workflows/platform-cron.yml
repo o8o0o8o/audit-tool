@@ -1,0 +1,50 @@
+name: Platform cron
+
+# The audit platform's two timers, kept on GitHub Actions for now (build guide §10):
+#   tick       every 5 minutes: reaper, dispatch, PDF jobs, loader, re-score, webhooks
+#   retention  daily: expired files, finished audits' snapshots
+# Each is one request to the app, which does the work. While the platform is idle a tick reads two
+# small files and leaves the database alone.
+#
+# Repository variable PLATFORM_CRON_URL: the app's address (no trailing slash). Not set: nothing runs.
+# Repository secret PLATFORM_CRON_SECRET: the app's CRON_SECRET.
+#
+# GitHub runs a schedule only from the default branch, often some minutes late, and stops it after
+# 60 days without activity in a public repository.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      step:
+        description: tick or retention
+        type: choice
+        options: [tick, retention]
+        default: tick
+
+permissions: {}
+
+concurrency:
+  group: platform-cron-${{ github.event.schedule == '17 3 * * *' && 'retention' || inputs.step || 'tick' }}
+  cancel-in-progress: false
+
+jobs:
+  call:
+    if: vars.PLATFORM_CRON_URL != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      APP_URL: ${{ vars.PLATFORM_CRON_URL }}
+      CRON_SECRET: ${{ secrets.PLATFORM_CRON_SECRET }}
+      STEP: ${{ github.event.schedule == '17 3 * * *' && 'retention' || inputs.step || 'tick' }}
+    steps:
+      - name: Call the app
+        run: |
+          case "$APP_URL" in https://*) ;; *) echo "::error::PLATFORM_CRON_URL must be an https address"; exit 1 ;; esac
+          if [ -z "$CRON_SECRET" ]; then echo "::error::PLATFORM_CRON_SECRET is not set"; exit 1; fi
+          # Only the status is printed: this log is readable by anyone who can see the repository.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 330 \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/$STEP") || code=000
+          echo "$STEP: HTTP $code"
+          [ "$code" = "200" ]

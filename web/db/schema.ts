@@ -110,6 +110,11 @@ export const audits = pgTable(
     createdAt: tz('created_at').notNull().defaultNow(),
     startedAt: tz('started_at'),
     finishedAt: tz('finished_at'),
+    /**
+     * Set by retention when the audit's page data was deleted (design §9): the `pages` rows, the run
+     * data, the model's page chunks and the raw archive. Findings, scores and reports stay.
+     */
+    pagesDroppedAt: tz('pages_dropped_at'),
     error: text('error'),
   },
   (t) => [
@@ -133,6 +138,10 @@ export const audits = pgTable(
       .where(sql`status = 'queued'`),
     // The runs list: every audit, newest first.
     index('audits_created').on(t.createdAt),
+    // Retention: finished audits that still have their page data, oldest first.
+    index('audits_page_data')
+      .on(t.finishedAt)
+      .where(sql`pages_dropped_at is null and finished_at is not null`),
   ],
 );
 

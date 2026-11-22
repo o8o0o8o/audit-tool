@@ -8,8 +8,10 @@ import { activeSessionPrincipal, authenticateApiKey, SESSION_COOKIE } from './co
 import { CoreError, errorResponse } from './core/errors';
 import type { Principal } from './core/principal';
 import { sessionKeyFromEnv } from './core/tokens';
-import { onAuditFinished } from './core/webhooks';
+import { deliverDueWebhooks, onAuditFinished } from './core/webhooks';
 import { dispatchNext } from './core/queue';
+import { dispatchJobs } from './core/jobs';
+import { runLoader } from './core/loader';
 
 export { errorResponse };
 
@@ -46,6 +48,29 @@ export async function kickQueue(): Promise<void> {
     await dispatchNext(db, platform, { onFinished, max: 3 });
   } catch (err) {
     console.warn('dispatch from request failed; the cron will retry', err);
+  }
+}
+
+/**
+ * What follows a worker's final report, done right away instead of waiting for the next cron tick:
+ * a built run is loaded, due webhooks go out, and the slot the run held goes to the next queued
+ * audit or PDF job. Every step locks its rows, so a cron tick at the same moment does no double
+ * work; a step that fails here is picked up by that tick.
+ */
+export async function followWorkerReport(opts: { loaderBudgetMs?: number } = {}): Promise<void> {
+  const { db, platform } = ctx();
+  const steps: Array<[string, () => Promise<unknown>]> = [
+    ['loader', () => runLoader(db, platform.files, { budgetMs: opts.loaderBudgetMs ?? 240_000, onFinished })],
+    ['webhooks', () => deliverDueWebhooks(db, { allowPrivate: platform.mode === 'local' })],
+    ['dispatch', () => dispatchNext(db, platform, { onFinished })],
+    ['jobs', () => dispatchJobs(db, platform)],
+  ];
+  for (const [name, fn] of steps) {
+    try {
+      await fn();
+    } catch (err) {
+      console.warn(`[follow] ${name} failed; the cron will retry`, err);
+    }
   }
 }
 

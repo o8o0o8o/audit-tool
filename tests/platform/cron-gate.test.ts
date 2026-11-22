@@ -2,10 +2,12 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createTestDb, eq, SKIP_DB, type TestDb } from './db-harness';
-import { tempStore } from './helpers';
+import { FakeDispatcher, tempStore } from './helpers';
 import { audits } from '../../web/db/schema';
 import { findOrCreateSite } from '../../web/lib/core/sites';
 import { CLOCK_MARGIN_MS, cronGate, gated, IDLE_SINCE_KEY, raiseWork } from '../../web/lib/core/cron-gate';
+import { cronTick, TICK_STEPS } from '../../web/lib/core/cron-steps';
+import type { Platform } from '../../web/lib/platform/types';
 
 let t: TestDb;
 const files = tempStore();
@@ -102,6 +104,78 @@ void test('gated: a skipped step returns null and never calls the step', { skip:
     assert.equal(await step(), null);
     assert.equal(calls, before);
   } finally {
+    store.cleanup();
+  }
+});
+
+void test(
+  'cron tick: runs every step but retention in one call, dispatches a queued audit, then goes idle',
+  { skip: SKIP_DB },
+  async () => {
+    const store = tempStore();
+    try {
+      await t.db.update(audits).set({ status: 'succeeded' }); // nothing open from the tests above
+      const dispatcher = new FakeDispatcher();
+      const platform: Platform = {
+        mode: 'local',
+        files: store.store,
+        dispatcher,
+        identity: { verify: async () => null },
+      };
+      const id = await audit('queued');
+      // Raised two minutes ago: a raise inside the clock margin would keep the idle mark away.
+      await raiseWork(store.store, Date.now() - 120_000);
+
+      const first = await cronTick(t.db, platform);
+      assert.ok(first);
+      assert.deepEqual(Object.keys(first).sort(), [...TICK_STEPS].sort());
+      assert.ok(!('retention' in first));
+      assert.ok(
+        Object.values(first).every((r) => r.ok),
+        JSON.stringify(first),
+      );
+      assert.deepEqual(
+        dispatcher.requests.map((r) => r.id),
+        [id],
+      );
+      assert.equal(await store.store.get(IDLE_SINCE_KEY), null, 'an audit is open: not idle');
+
+      // The audit ends: the next tick records idle, and the one after leaves the database alone.
+      await t.db.update(audits).set({ status: 'succeeded' }).where(eq(audits.id, id));
+      assert.ok(await cronTick(t.db, platform));
+      assert.ok(await store.store.get(IDLE_SINCE_KEY));
+      assert.equal(await cronTick(t.db, platform), null);
+    } finally {
+      store.cleanup();
+    }
+  },
+);
+
+void test('cron tick: a step that throws does not stop the others', { skip: SKIP_DB }, async () => {
+  const store = tempStore();
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    await t.db.update(audits).set({ status: 'succeeded' });
+    const dispatcher = new FakeDispatcher();
+    dispatcher.dispatch = async () => {
+      throw new Error('backend exploded');
+    };
+    const id = await audit('queued');
+    const tick = await cronTick(t.db, {
+      mode: 'local',
+      files: store.store,
+      dispatcher,
+      identity: { verify: async () => null },
+    });
+    assert.ok(tick);
+    assert.deepEqual(tick.dispatch, { ok: false, error: 'backend exploded' });
+    assert.equal(tick.reaper?.ok, true);
+    assert.equal(tick.loader?.ok, true);
+    const [row] = await t.db.select({ status: audits.status }).from(audits).where(eq(audits.id, id));
+    assert.equal(row?.status, 'queued', 'the audit is back in the queue');
+  } finally {
+    console.error = quiet;
     store.cleanup();
   }
 });

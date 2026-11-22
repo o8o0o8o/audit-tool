@@ -1,4 +1,4 @@
-import { CRON_STEPS, cronSteps, type CronStepName } from '../../../../lib/core/cron-steps';
+import { cronRetention, cronTick } from '../../../../lib/core/cron-steps';
 import { safeEqual } from '../../../../lib/core/tokens';
 import { ctx } from '../../../../lib/server';
 
@@ -8,9 +8,10 @@ export const maxDuration = 300;
 const LOADER_BUDGET_MS = 240_000;
 
 /**
- * One cron step per request, scheduled in `vercel.json`. Vercel calls with
- * `Authorization: Bearer $CRON_SECRET`; anything else is refused, and so is every call while the
- * secret is not set.
+ * The platform's two timers: `tick` (every 5 minutes: reaper, dispatch, jobs, loader, rescore,
+ * webhooks) and `retention` (daily). Called by `.github/workflows/platform-cron.yml` with
+ * `Authorization: Bearer $CRON_SECRET`, which is also what a Vercel cron sends; anything else is
+ * refused, and so is every call while the secret is not set.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ step: string }> }) {
   const secret = process.env.CRON_SECRET;
@@ -18,12 +19,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ step
   if (!secret || secret.length < 16 || !safeEqual(sent, `Bearer ${secret}`))
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   const { step } = await params;
-  if (!(CRON_STEPS as readonly string[]).includes(step)) return Response.json({ error: 'not_found' }, { status: 404 });
+  if (step !== 'tick' && step !== 'retention') return Response.json({ error: 'not_found' }, { status: 404 });
   const { db, platform } = ctx();
   try {
-    const steps = cronSteps(db, platform, { loaderBudgetMs: LOADER_BUDGET_MS, gateRetention: false });
-    const result = await steps[step as CronStepName]();
-    return Response.json({ step, skipped: result === null, result: result ?? null });
+    if (step === 'retention') return Response.json({ step, result: (await cronRetention(db, platform)) ?? null });
+    const result = await cronTick(db, platform, { loaderBudgetMs: LOADER_BUDGET_MS });
+    const failed = result ? Object.values(result).some((r) => !r.ok) : false;
+    return Response.json({ step, skipped: result === null, result }, { status: failed ? 500 : 200 });
   } catch (err) {
     console.error(`[cron] ${step} failed`, err);
     return Response.json({ step, error: 'failed' }, { status: 500 });

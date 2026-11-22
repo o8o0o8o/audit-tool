@@ -7,15 +7,8 @@
  */
 import { closeDb, getDb } from '../db/client';
 import { getPlatform } from '../lib/platform';
-import { dispatchNext } from '../lib/core/queue';
-import { runLoader } from '../lib/core/loader';
-import { reap } from '../lib/core/reaper';
-import { deliverDueWebhooks, onAuditFinished } from '../lib/core/webhooks';
-import { runRetention } from '../lib/core/retention';
-import { dispatchJobs } from '../lib/core/jobs';
-import { rescoreStale } from '../lib/core/rescore';
+import { cronSteps } from '../lib/core/cron-steps';
 import { runCronLoops, type CronStep } from '../lib/platform/local/cron-loop';
-import { gated } from '../lib/core/cron-gate';
 
 const once = process.argv.includes('--once');
 const interval = Number(process.env.CRON_INTERVAL_MS) || 15_000;
@@ -25,22 +18,7 @@ process.on('SIGTERM', () => (stopping = true));
 
 type Step = CronStep;
 
-function steps(): Step[] {
-  const db = getDb();
-  const platform = getPlatform();
-  const onFinished = (id: string) => onAuditFinished(db, id);
-  const steps: Step[] = [
-    ['reaper', () => reap(db, platform.dispatcher, { onFinished })],
-    ['dispatch', () => dispatchNext(db, platform, { onFinished })],
-    ['jobs', () => dispatchJobs(db, platform)],
-    ['loader', () => runLoader(db, platform.files, { budgetMs: 60_000, onFinished })],
-    ['rescore', () => rescoreStale(db, platform.files)],
-    ['webhooks', () => deliverDueWebhooks(db, { allowPrivate: platform.mode === 'local' })],
-    ['retention', () => runRetention(db, platform.files)],
-  ];
-  // The reaper's tick also records the platform as idle once nothing is open.
-  return steps.map(([name, fn]) => [name, gated(db, platform.files, fn, { settle: name === 'reaper' })]);
-}
+const steps = (): Step[] => Object.entries(cronSteps(getDb(), getPlatform()));
 
 async function run([name, fn]: Step): Promise<void> {
   try {

@@ -11,7 +11,11 @@ export const POST = handle(async (request: Request) => {
   const job = await jobSession(db, auth);
   if (job) {
     const prefix = `audits/${job.auditId}/${job.attempt}/`;
-    return Response.json({ prefix, ...(await platform.files.issueUpload(prefix, 3600)) });
+    return Response.json({
+      prefix,
+      ...(await platform.files.issueUpload(prefix, 3600)),
+      ...(platform.files.presignUpload ? { presign: true } : {}),
+    });
   }
   return Response.json(
     await issueWorkerUpload(

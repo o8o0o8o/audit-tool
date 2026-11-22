@@ -7,7 +7,7 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -36,6 +36,23 @@ export function hashSources(root: string, sources: string[]): string {
   for (const f of files)
     h.update(path.relative(root, f).split(path.sep).join('/')).update('\0').update(readFileSync(f));
   return h.digest('hex').slice(0, 16);
+}
+
+let toolAt: { root: string; ok: boolean } | null = null;
+
+/**
+ * Is the audit tool (its scripts and tsx) where the app runs? Re-scoring and report rendering start
+ * it as a child process. A Vercel function has only the web app, so there it is not: stored scores
+ * and the report HTML stored by the run are served as they are (build guide §8, item 3).
+ */
+export function auditToolAvailable(root = repoRootFrom()): boolean {
+  if (toolAt?.root === root) return toolAt.ok;
+  const ok =
+    existsSync(path.join(root, 'scripts', 'score-run.ts')) &&
+    existsSync(path.join(root, 'scripts', 'render-report.ts')) &&
+    existsSync(path.join(root, 'node_modules', 'tsx', 'dist', 'loader.mjs'));
+  toolAt = { root, ok };
+  return ok;
 }
 
 /** Hash of the scoring code (checked at most every 2 s). */
@@ -81,6 +98,7 @@ export async function ensureScored(
 ): Promise<void> {
   if (!auditIds.length) return;
   const root = repoRootFrom();
+  if (!auditToolAvailable(root)) return;
   const version = scoringVersion(root);
   const stale = await db
     .select()
@@ -192,6 +210,7 @@ export function scoresCurrent(storedVersion: string | null): boolean {
  * failed before go last and the newest go first, so one that cannot be scored never holds the rest.
  */
 export async function rescoreStale(db: Db, files: FileStore | null, max = 20): Promise<number> {
+  if (!auditToolAvailable()) return 0;
   const version = scoringVersion();
   const rows = await db
     .select({ id: audits.id })

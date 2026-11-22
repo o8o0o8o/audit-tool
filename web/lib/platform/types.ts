@@ -10,6 +10,17 @@ export interface FileStore {
   delete(keys: string[]): Promise<void>;
   /** What a worker needs to upload under `prefix` and nowhere else. Local: a URL on the app plus a signed token. */
   issueUpload(prefix: string, ttlSeconds: number): Promise<{ url: string; headers: Record<string, string> }>;
+  /**
+   * Production only: a URL that accepts one upload of the file at `key`. When a store has this, the
+   * worker asks the app for it per file (`/api/worker/upload-url`) and sends the file straight to storage.
+   */
+  presignUpload?(key: string, ttlSeconds: number, contentType?: string): Promise<PresignedUpload>;
+}
+
+export interface PresignedUpload {
+  method: 'PUT';
+  url: string;
+  headers: Record<string, string>;
 }
 
 export type WorkerKind = 'audit' | 'render-pdf';

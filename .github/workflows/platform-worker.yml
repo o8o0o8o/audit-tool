@@ -1,0 +1,95 @@
+name: Platform worker
+
+# Keep in step with runTitle() in web/lib/platform/production/github-dispatcher.ts: the app finds a run by this name.
+run-name: "platform ${{ inputs.kind }} ${{ inputs.id }} #${{ inputs.attempt }}"
+
+# Started by the audit platform (web/lib/platform/production/github-dispatcher.ts), one run per audit
+# attempt or PDF job. No platform secret is passed in: the run proves itself to the app with GitHub's
+# OIDC token and then works through /api/worker/*.
+#
+# Repository variables: PLATFORM_APP_URLS (the app addresses a run may talk to, space-separated),
+# PLATFORM_OIDC_AUDIENCE (the app's WORKER_OIDC_AUDIENCE).
+# Repository secrets, all optional: ANTHROPIC_API_KEY, CRUX_API_KEY, WPSCAN_API_TOKEN.
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: audit or render-pdf
+        required: true
+        type: string
+      id:
+        description: audits.id or jobs.id
+        required: true
+        type: string
+      attempt:
+        description: Attempt number
+        required: true
+        type: string
+      nonce:
+        description: One-use dispatch nonce (not a secret)
+        required: true
+        type: string
+      app_url:
+        description: The app that dispatched this run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  worker:
+    # Pinned: ubuntu-latest (26.04) is not supported by Playwright 1.50.
+    runs-on: ubuntu-24.04
+    # GitHub's limit for a hosted job. The worker stops a full audit itself before that (see below).
+    timeout-minutes: 360
+    env:
+      WORKER_KIND: ${{ inputs.kind }}
+      WORKER_ID: ${{ inputs.id }}
+      WORKER_ATTEMPT: ${{ inputs.attempt }}
+      DISPATCH_NONCE: ${{ inputs.nonce }}
+      APP_URL: ${{ inputs.app_url }}
+      ALLOWED_APP_URLS: ${{ vars.PLATFORM_APP_URLS }}
+      PLATFORM_OIDC_AUDIENCE: ${{ vars.PLATFORM_OIDC_AUDIENCE }}
+    steps:
+      - name: Validate inputs
+        run: |
+          case "$WORKER_KIND" in audit|render-pdf) ;; *) echo "::error::invalid kind"; exit 1 ;; esac
+          if ! printf '%s' "$WORKER_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "::error::invalid id"; exit 1
+          fi
+          if ! printf '%s' "$WORKER_ATTEMPT" | grep -Eq '^[1-9][0-9]{0,2}$'; then
+            echo "::error::invalid attempt"; exit 1
+          fi
+          if ! printf '%s' "$DISPATCH_NONCE" | grep -Eq '^[A-Za-z0-9_-]{8,64}$'; then
+            echo "::error::invalid nonce"; exit 1
+          fi
+          # The identity token is sent to APP_URL, so only an address listed in the repository is accepted.
+          ok=false
+          for u in $ALLOWED_APP_URLS; do [ "$u" = "$APP_URL" ] && ok=true; done
+          if [ "$ok" != "true" ]; then echo "::error::app_url is not in PLATFORM_APP_URLS"; exit 1; fi
+          if [ -z "$PLATFORM_OIDC_AUDIENCE" ]; then echo "::error::PLATFORM_OIDC_AUDIENCE is not set"; exit 1; fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: |
+          yarn install --frozen-lockfile
+          npx playwright install --with-deps chromium
+
+      - name: Run worker
+        env:
+          WORK_DIR: ${{ runner.temp }}/platform-work
+          # Install and upload take part of the job's 360 minutes.
+          PLATFORM_MAX_RUN_MINUTES_FULL: '320'
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CRUX_API_KEY: ${{ secrets.CRUX_API_KEY }}
+          WPSCAN_API_TOKEN: ${{ secrets.WPSCAN_API_TOKEN }}
+        run: npx tsx scripts/platform-worker.ts

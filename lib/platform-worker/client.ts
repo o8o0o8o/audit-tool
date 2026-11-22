@@ -23,6 +23,8 @@ export interface UploadGrant {
   prefix: string;
   url: string;
   headers: Record<string, string>;
+  /** The store takes uploads directly: `url` answers with an address for each file. */
+  presign?: boolean;
 }
 
 export interface ArtifactRecord {
@@ -118,32 +120,43 @@ export class AppClient {
     return new Uint8Array(await res.arrayBuffer());
   }
 
-  /** Uploads one file under a grant; refreshes the grant when it has expired. */
+  /**
+   * Uploads one file under a grant; refreshes the grant when it has expired. With a `presign` grant
+   * the app names an address for this one file (asked again on every try) and the file goes straight
+   * to storage.
+   */
   async upload(
     grant: { current: UploadGrant; area: 'audit' | 'checkpoint' },
     key: string,
     body: Uint8Array,
     contentType?: string,
   ): Promise<void> {
+    const type = contentType ?? 'application/octet-stream';
     for (let i = 0; i < 4; i++) {
       try {
-        const res = await fetch(grant.current.url, {
-          method: 'POST',
-          headers: {
-            ...grant.current.headers,
-            'x-file-key': key,
-            'content-type': contentType ?? 'application/octet-stream',
-          },
-          body: Buffer.from(body),
-        });
-        if (res.status === 401) {
-          grant.current = await this.uploadGrant(grant.area);
-          continue;
+        let res: Response;
+        if (grant.current.presign) {
+          const target = await this.call<{ method: string; url: string; headers: Record<string, string> }>(
+            'POST',
+            new URL(grant.current.url).pathname,
+            { area: grant.area, key, content_type: type },
+          );
+          res = await fetch(target.url, { method: target.method, headers: target.headers, body: Buffer.from(body) });
+        } else {
+          res = await fetch(grant.current.url, {
+            method: 'POST',
+            headers: { ...grant.current.headers, 'x-file-key': key, 'content-type': type },
+            body: Buffer.from(body),
+          });
+          if (res.status === 401) {
+            grant.current = await this.uploadGrant(grant.area);
+            continue;
+          }
         }
         if (!res.ok) throw new Error(`upload ${key}: ${res.status} ${(await res.text()).slice(0, 200)}`);
         return;
       } catch (err) {
-        if (i === 3) throw err;
+        if (err instanceof StaleAttempt || (err as { fatal?: boolean }).fatal || i === 3) throw err;
         await new Promise((r) => setTimeout(r, 1000 * 2 ** i));
       }
     }

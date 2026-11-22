@@ -258,9 +258,18 @@ export async function reportStatus(
 
 export type UploadArea = 'audit' | 'checkpoint';
 
+/** Where an attempt may write: its own folder of the audit's files, or of its checkpoint snapshots. */
+export const uploadPrefix = (s: WorkerSession, area: UploadArea) =>
+  area === 'audit' ? `audits/${s.auditId}/${s.attempt}/` : `checkpoints/${s.auditId}/${s.attempt}/`;
+
+/** `presign`: the store takes uploads directly; the worker asks `url` for an address per file. */
 export async function issueWorkerUpload(files: FileStore, s: WorkerSession, area: UploadArea, ttlSeconds = 3600) {
-  const prefix = area === 'audit' ? `audits/${s.auditId}/${s.attempt}/` : `checkpoints/${s.auditId}/${s.attempt}/`;
-  return { prefix, ...(await files.issueUpload(prefix, ttlSeconds)) };
+  const prefix = uploadPrefix(s, area);
+  return {
+    prefix,
+    ...(await files.issueUpload(prefix, ttlSeconds)),
+    ...(files.presignUpload ? { presign: true } : {}),
+  };
 }
 
 /**

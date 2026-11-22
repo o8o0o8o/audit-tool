@@ -6,8 +6,8 @@
  * and per length of the history, so a change to the generator shows on the next view.
  *
  * The renderer is the audit tool's own `scripts/render-report.ts`, run as a child process on a
- * folder rebuilt from the rows: web/ imports nothing from the root besides lib/model/. Production
- * will run it in a worker job.
+ * folder rebuilt from the rows: web/ imports nothing from the root besides lib/model/. Where the
+ * app runs without the audit tool (a Vercel function), nothing is rendered here.
  */
 import { execFile } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ import type { Db } from '../../db/client';
 import { auditDocuments, auditRunData, audits, pages, scores } from '../../db/schema';
 import type { FileStore } from '../platform/types';
 import { repoRootFrom } from '../platform/local/dispatcher';
-import { ensureScored, hashSources } from './rescore';
+import { auditToolAvailable, ensureScored, hashSources } from './rescore';
 
 /** The audit tool's files the report depends on; their contents version the cache. */
 const RENDERER_SOURCES = [
@@ -122,8 +122,13 @@ export async function auditHistory(db: Db, audit: AuditRow): Promise<HistoryEntr
 
 const inflight = new Map<string, Promise<string | null>>();
 
-/** The report HTML for an audit, rendered from the database with the current code (cached), or null. */
+/**
+ * The report HTML for an audit, rendered from the database with the current code (cached), or null.
+ * Null also where the audit tool is not installed next to the app: the caller then serves the HTML
+ * the run stored.
+ */
 export async function renderReportHtml(db: Db, files: FileStore, auditId: string): Promise<string | null> {
+  if (!auditToolAvailable()) return null;
   const [audit] = await db.select().from(audits).where(eq(audits.id, auditId));
   if (!audit || audit.status !== 'succeeded') return null;
   const [hasData] = await db

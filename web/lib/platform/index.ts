@@ -2,6 +2,9 @@ import path from 'node:path';
 import { LocalDispatcher, repoRootFrom } from './local/dispatcher';
 import { LocalFileStore } from './local/file-store';
 import { LocalWorkerIdentity } from './local/identity';
+import { BlobFileStore } from './production/blob-file-store';
+import { GitHubDispatcher } from './production/github-dispatcher';
+import { GitHubWorkerIdentity } from './production/github-identity';
 import type { Dispatcher, Platform, WorkerIdentity } from './types';
 
 type Env = Record<string, string | undefined>;
@@ -12,7 +15,10 @@ function required(env: Env, name: string): string {
   return v;
 }
 
-/** Picks the platform implementations by PLATFORM_MODE. `local` refuses to run in Vercel production. */
+/**
+ * Picks the platform implementations by PLATFORM_MODE. `local` refuses to run in Vercel production.
+ * `production`: a private Vercel Blob store, workers as GitHub Actions runs, GitHub OIDC identity.
+ */
 export function createPlatform(
   env: Env = process.env,
   parts: { dispatcher?: Dispatcher; identity?: WorkerIdentity } = {},
@@ -33,7 +39,27 @@ export function createPlatform(
       identity: parts.identity ?? identity,
     };
   }
-  if (mode === 'production') throw new Error('PLATFORM_MODE=production is written at deployment (build guide §8)');
+  if (mode === 'production') {
+    const appUrl = required(env, 'APP_URL').replace(/\/$/, '');
+    if (!appUrl.startsWith('https://')) throw new Error('APP_URL must be an https address in production mode');
+    const repository = required(env, 'WORKER_REPOSITORY');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error('WORKER_REPOSITORY must be "owner/name"');
+    const worker = {
+      repository,
+      workflow: env.WORKER_WORKFLOW || 'platform-worker.yml',
+      ref: env.WORKER_REF || 'main',
+    };
+    const audience = required(env, 'WORKER_OIDC_AUDIENCE');
+    return {
+      mode,
+      files: new BlobFileStore({ token: required(env, 'PLATFORM_BLOB_READ_WRITE_TOKEN'), appUrl }),
+      dispatcher:
+        parts.dispatcher ?? new GitHubDispatcher({ ...worker, token: required(env, 'GITHUB_DISPATCH_TOKEN'), appUrl }),
+      identity:
+        parts.identity ??
+        new GitHubWorkerIdentity({ ...worker, audience, repositoryId: env.WORKER_REPOSITORY_ID || undefined }),
+    };
+  }
   throw new Error(`PLATFORM_MODE must be "local" or "production", got ${JSON.stringify(mode)}`);
 }
 

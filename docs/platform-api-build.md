@@ -2,7 +2,7 @@
 
 How to build steps 1–4 of [`platform-api.md`](platform-api.md) on one machine. The design doc says what the platform is and why; this guide says where the code goes, how to run it, and what proves each task done. Section numbers like "§4" point into the design doc.
 
-Status: written 2026-11-21; steps 0–4 built locally the same day on branch `platform-api-local` (see "Built so far" at the end). The five acceptance checks of §7 pass.
+Status: written 2026-11-21; steps 0–4 built locally the same day on branch `platform-api-local` (see "Built so far" at the end). The five acceptance checks of §7 pass. The production implementations were written on 2026-11-22 and have not run on the real services yet (§10).
 
 Scope: the local build only (steps 1–4). Deployment, the public site (step 5) and page rows (step 6) get their own sections when the local build is done.
 
@@ -91,7 +91,7 @@ web/
       types.ts               the three interfaces (§4 below)
       index.ts               picks implementations by PLATFORM_MODE
       local/                 disk file store, child-process dispatcher, HMAC identity
-      production/            Blob, GitHub dispatch, GitHub OIDC (written at deployment, not now)
+      production/            private Vercel Blob, GitHub dispatch, GitHub OIDC (§10 below)
     core/                    every operation, each taking a Principal:
       principal.ts  audits.ts  queue.ts  guard.ts  attempts.ts  reaper.ts  loader.ts
       prospects.ts  reports.ts  webhooks.ts  jobs.ts  lead-summary.ts  results.ts
@@ -265,7 +265,7 @@ The local build is done when these five pass, in order (they are the five checks
 
 ## 8. Left for deployment
 
-The app does not start in production yet: `PLATFORM_MODE=production` throws on purpose. What has to exist first, as of 2026-11-21:
+This is the list as of 2026-11-21. Items 1, 2 and 4 were written on 2026-11-22 and item 3 has an interim answer: see §10, which also says what is still open. The list is kept as it was written.
 
 1. **Production implementations of the three interfaces.** Only the local ones exist. To write: a Vercel Blob `FileStore`, a GitHub Actions `Dispatcher`, and a `WorkerIdentity` that verifies GitHub's OIDC token.
 2. **The worker workflow.** `.github/workflows/audit.yml` is still the old flow with `upload-results.mjs`. It has to run `scripts/platform-worker.ts` with `id-token: write`.
@@ -309,6 +309,50 @@ Written 2026-11-21. The goal in design §13 ("Worker"): compute and storage all 
 
 **Cost estimate, not measured** (2026-11-21, `iad1` list prices: Sandbox $0.128 per active CPU hour, $0.0212 per GB-hour of memory). For the plentific.com full audit (617 pages, 97 min): the crawl on a 4 vCPU / 8 GB Sandbox about $0.50–1.10, mostly the CPU share, which is a guess (30–60 %); loader, re-score and render under $0.01; Blob about 77 MB kept, about $0.005; Neon storage about 13 MB (`pages` rows about 19.5 kB each). Neon compute is billed while the database is awake; with the gated crons it sleeps between audits.
 
+## 10. Production on GitHub Actions (2026-11-22)
+
+Decided 2026-11-22: the worker stays on GitHub Actions for now; §9 (Vercel Sandbox) remains the goal. `PLATFORM_MODE=production` now starts. Nothing below has run against Vercel, Neon or GitHub yet: the code is tested against stand-ins (`tests/platform/production.test.ts`), and the first run on the real services is the check.
+
+### What was written
+
+- **`BlobFileStore`** (`web/lib/platform/production/blob-file-store.ts`): a private Blob store, read and written with its read-write token. Files that are overwritten (cron markers, snapshot manifests) are read past the CDN cache; an attempt's files and rendered reports are cached.
+- **Worker uploads.** The worker never gets the store token. The upload grant of a production store says `presign: true`, and for each file the worker asks `POST /api/worker/upload-url {area, key, content_type}` with its session. The app checks that the key lies under the session's own prefix and answers with a presigned `PUT` for that one pathname, valid 15 minutes. The app holds one store-wide upload delegation (`issueSignedToken`, renewed hourly) and signs each address itself, so a file costs no call to the Blob API. This answers the "upload tokens" check of design §12 in code; whether the Blob API accepts the request exactly as written is still to be seen.
+- **`GitHubDispatcher`** (`github-dispatcher.ts`): `workflow_dispatch` of `.github/workflows/platform-worker.yml` with `kind`, `id`, `attempt`, `nonce`, `app_url`. Any refusal or network error is `DispatchUnavailable`, so the row stays queued; a 4xx is also logged, because it means a wrong token, repository or workflow. `state` and `cancel` find the run by its name (`platform <kind> <id> #<attempt>`) in the last 300 runs of the workflow. When GitHub cannot be read, `state` answers `waiting` and the reaper's 60-minute limit decides.
+- **`GitHubWorkerIdentity`** (`github-identity.ts`): verifies the RS256 signature against GitHub's published keys (cached for an hour) and checks issuer, audience, expiry, `repository`, optionally `repository_id`, `event_name` = `workflow_dispatch`, `ref` and `workflow_ref` (the worker workflow on the configured branch). Returns `run_id` and `run_attempt`. The claims do not name the audit; the nonce does.
+- **The worker workflow** (`.github/workflows/platform-worker.yml`): validates its inputs, refuses an `app_url` that is not in the repository variable `PLATFORM_APP_URLS` (the identity token is sent there), installs, and runs `scripts/platform-worker.ts`. The worker asks GitHub for the OIDC token itself, right before `register` (`lib/platform-worker/github-oidc.ts`); the audit child never sees the two variables that could mint another one. A full audit is stopped by the worker after 320 minutes, inside the job's 360. `audit.yml` and `upload-results.mjs` are the old flow and are not touched.
+- **Cron routes**: `GET /api/cron/<step>` for `reaper`, `dispatch`, `jobs`, `loader`, `rescore`, `webhooks`, `retention`, scheduled in `web/vercel.json` (every minute; `rescore` every 10 minutes; `retention` daily). Each needs `Authorization: Bearer $CRON_SECRET`. The steps are defined once in `web/lib/core/cron-steps.ts` and the local loop runs the same ones. The daily retention run is not gated: the idle gate would skip it.
+- **Reports and scores without the audit tool** (item 3, interim): a Vercel function has only the web app, so it cannot start the report generator or the scorer. `auditToolAvailable()` (`web/lib/core/rescore.ts`) is false there; the report routes then serve the HTML the worker stored at the end of the run, and stored scores are returned as the run computed them. So in production a report has no History section and does not change when the report or scoring code changes, and `scores_current` is false. Where reports are rendered in production is still not decided.
+
+### Settings
+
+Vercel project (root directory `web`):
+
+| Variable | Value |
+|---|---|
+| `PLATFORM_MODE` | `production` |
+| `APP_URL` | the deployment's `https://` address, no trailing slash; must be listed in the repository variable `PLATFORM_APP_URLS` |
+| `DATABASE_URL` | Neon's pooled connection string |
+| `PLATFORM_BLOB_READ_WRITE_TOKEN` | read-write token of a new **private** Blob store (connect it with the prefix `PLATFORM_BLOB`). Never the public store of the old flow |
+| `GITHUB_DISPATCH_TOKEN` | fine-grained token for this repository with Actions: read and write |
+| `WORKER_REPOSITORY` | `owner/name` |
+| `WORKER_REPOSITORY_ID` | optional: the repository's numeric id (`gh api repos/<owner>/<name> --jq .id`) |
+| `WORKER_WORKFLOW`, `WORKER_REF` | optional; default `platform-worker.yml` and `main` |
+| `WORKER_OIDC_AUDIENCE` | any fixed string; the same value as the repository variable `PLATFORM_OIDC_AUDIENCE` |
+| `CRON_SECRET` | 16+ random characters; Vercel sends it to the cron routes |
+| `SESSION_SECRET`, `REPORT_TOKEN_SECRET` | 32+ random characters each |
+| `INTERNAL_PASSWORD_HASH` | from `yarn --cwd web hash-password` |
+
+GitHub repository: variables `PLATFORM_APP_URLS` (space-separated addresses) and `PLATFORM_OIDC_AUDIENCE`; secrets `ANTHROPIC_API_KEY`, `CRUX_API_KEY`, `WPSCAN_API_TOKEN` (each optional). GitHub starts a `workflow_dispatch` only for a workflow file that is on the default branch, so `platform-worker.yml` has to be on `main` before the first dispatch; `WORKER_REF` picks the branch the run then uses.
+
+### Still open, in order
+
+1. **Neon** (§8 item 5): the migrations, the pooled connection and the advisory locks through the pooler, on a Neon branch.
+2. **The Vercel build** (§8 item 7): tried on a copy of the repository with no root `node_modules`, which is what Vercel has with root directory `web`. Two things failed and are fixed in `web/next.config.mjs`: root files that `web/` imports now take their packages from `web/node_modules`, and the type check is skipped when `VERCEL` is set (it follows imports into root files whose packages are not installed there). The build then passes. Still to see on Vercel itself: that the project includes files outside `web/` in the build (the default).
+3. **One real audit on a preview deployment** against the Neon branch. It shows what the stand-ins cannot: the presigned upload request, GitHub's claim values, private Blob reads, and the cron schedule on the plan (every minute needs a paid plan).
+4. **Large files through the app.** A resumed or continued run reads snapshot objects and the first audit's raw archive through `/api/worker/snapshot/…` and `/api/worker/continue/file`, which stream from Blob through a function. Not tried with a file of tens of megabytes; if it does not hold, these get presigned read addresses like the uploads.
+5. **Where reports are rendered** (item 3): a worker job, or the generator bundled into a function.
+6. The four checks of design §12, of which upload tokens and OIDC claims are answered in code and wait for step 3; the public site (§8 item 8); the copy of the old public uploads (§8 item 9).
+
 ## Built so far (2026-11-21)
 
 Steps 0–4 exist as described above, with these differences:
@@ -322,7 +366,7 @@ Steps 0–4 exist as described above, with these differences:
 - **`--pdf`:** Phase 2, 3 and 4 print PDFs only with the flag. The lead pipeline writes `teaser.md` and `email.md` always and `teaser.pdf` only with `--pdf` (`npx tsx scripts/lead-pipeline.ts teaser --only=<domain> --pdf` prints it later).
 - **Stored runs are not imported (decided 2026-11-21):** only audits run through the platform, or published by the lead pipeline (`audits/import`), are in the database. Task 3.8 and acceptance check 2 are dropped; `import-run.ts` was built, measured (below) and removed.
 - **Reports render from the database (step 6, first part; decided 2026-11-21):** `pages` (one row per page, the full page record in `sections`) and `audit_run_data` (manifest, metadata, analysis, incoming links; not in the design's SQL) are loaded as row chunks (`model/run-data.json.gz`, `model/pages-NNNN.ndjson.gz`). On every view the app rebuilds the renderer's input from those rows (screenshots from the file store) and runs `scripts/render-report.ts` with the current code; History comes from earlier audits of the same site and `comparable_key`. Stored scores are kept current: `audits.scoring_version` (not in the design) records the scoring code they came from, and stale audits are re-scored from their rows (`scripts/score-run.ts`, on view and by the cron). `web/scripts/reload-audits.ts` backfills audits loaded before a model change.
-- **Not built:** occurrences, link edges and the other step-6 tables; the public site (step 5); production implementations (§8). `audit.yml`, `upload-results.mjs` and `lib/blob.ts` are still the old flow.
+- **Not built:** occurrences, link edges and the other step-6 tables; the public site (step 5). The production implementations came on 2026-11-22 (§10). `audit.yml`, `upload-results.mjs` and `lib/blob.ts` are still the old flow.
 - **Slow tests** (`tests/platform/worker.slow.test.ts`) run only with `PLATFORM_SLOW_TESTS=1`. The audit itself may still try PageSpeed/CrUX for the loopback fixture site; those calls fail harmlessly.
 
 Measured: all 838 stored runs build a valid model (`npx tsx scripts/build-model.ts --all`, 27 s) and imported in 93 s before the import was dropped; the end-to-end quick scan of example.com takes ~36 s from `start_audit` to `succeeded`; a worker killed during the crawl was resumed by the reaper and finished 12.5 min after the kill.

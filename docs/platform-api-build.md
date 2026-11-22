@@ -369,3 +369,7 @@ Tests: `yarn test` runs 1377 tests; the five slow worker tests need `PLATFORM_SL
 ## Public scans and History (2026-11-22)
 
 A public user and an admin may audit the same site. The report of an audit with source `public` has no History, and audits with source `public` are in no other audit's History (`auditHistory` in `web/lib/core/render-report.ts`). Admins see every audit of a site, public ones included, in `/internal/runs` and through `list_audits`.
+
+## What `pages.sections` holds (2026-11-22)
+
+`sections` is the page record as the analyzers wrote it, minus two things (`slimSections` in `lib/model/build/build-audit-model.ts`): crawl-time working data (`siteHints`, `contentHash`: inputs of checks that ran during the audit) and a key that equals another one on the same page (`ctas` is `ctaData.ctas`; the lists of `resourceHints` are in `resourceHintsData`). Every other key is kept, read by the report or not, and so is any key a new analyzer adds. The raw archive keeps the full record. Measured on three runs: 10–23 % less page data, and the report and the scores are identical. The report and re-scoring read about 40 of the roughly 120 keys; the rest is data the report could show (anchor texts and link targets, outbound domains, structured data per page, cookies and consent, AI-readiness and trust signals). Audits loaded before this get the smaller records from `scripts/reload-audits.ts <audit id>`.

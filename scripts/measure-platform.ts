@@ -8,6 +8,7 @@
  * --scale=N repeats the run's pages N times under made-up URLs, to see how a larger audit behaves.
  */
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +17,7 @@ import { createTestDb, sql } from '../web/db/test-db';
 import { audits } from '../web/db/schema';
 import { buildAuditModel, buildRowParts, readRun } from '../lib/model/build/build-audit-model';
 import { PAGE_CHUNK_SIZE } from '../lib/model/page';
+import { getAudit, listAudits } from '../web/lib/core/audits';
 import { loadAudit } from '../web/lib/core/loader';
 import { getLeadSummary } from '../web/lib/core/lead-summary';
 import { internalPrincipal } from '../web/lib/core/principal';
@@ -37,17 +39,32 @@ function memory(): number {
   return gc ? process.memoryUsage().heapUsed : process.memoryUsage().rss;
 }
 
+/** Every statement sent to Postgres (one network round trip each), counted per step. */
+let queries = 0;
+{
+  const pg = createRequire(path.resolve(__dirname, '../web/package.json'))('pg') as {
+    Client: { prototype: { query: (...a: unknown[]) => unknown } };
+  };
+  const original = pg.Client.prototype.query;
+  pg.Client.prototype.query = function (...args: unknown[]) {
+    queries++;
+    return original.apply(this, args);
+  };
+}
+
 async function timed<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
   const before = memory();
   let peak = 0;
   const watch = setInterval(() => (peak = Math.max(peak, process.memoryUsage().rss)), 50);
   const t0 = performance.now();
+  const q0 = queries;
   const out = await fn();
+  const sent = queries - q0;
   const ms = performance.now() - t0;
   clearInterval(watch);
   const kept = Math.max(0, memory() - before) / 1e6;
   const time = ms < 1000 ? `${ms.toFixed(0)} ms` : `${(ms / 1000).toFixed(1)} s`;
-  rows.push([name, `${time.padEnd(9)} kept +${kept.toFixed(0)} MB, process peak ${(peak / 1e6).toFixed(0)} MB`]);
+  rows.push([name, `${time.padEnd(9)} ${String(sent).padStart(4)} queries, kept +${kept.toFixed(0)} MB, process peak ${(peak / 1e6).toFixed(0)} MB`]);
   return out;
 }
 
@@ -109,6 +126,8 @@ async function main(): Promise<void> {
       mkdirSync(out, { recursive: true });
       await materialize(t.db, null, audit!, out);
     });
+    await timed('get_audit', () => getAudit(t.db, p, id));
+    await timed('list_audits', () => listAudits(t.db, p, { limit: 100 }));
     await timed('get_site', () => getSite(t.db, p, { domain }));
     await timed('get_site (second call)', () => getSite(t.db, p, { domain }));
     await timed('list_findings (first 100)', () => listFindings(t.db, p, { domain, limit: 100 }));

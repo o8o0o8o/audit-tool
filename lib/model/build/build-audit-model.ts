@@ -631,10 +631,40 @@ export function buildRowParts(runDir: string, source?: RunSource): { runData: Ru
       weight: Object.values(weight).some((v) => v !== null) ? weight : null,
       requests: intOrNull(p.totalNumberOfRequests),
       selectionReason: reasons.get(p.url) || null,
-      sections: p,
+      sections: slimSections(p),
     });
   });
   return { runData: { manifest, metadata, analysis, 'incoming-links': incoming }, pages };
+}
+
+/** Crawl-time working data: inputs of checks that ran during the audit; nothing reads them afterwards. */
+const WORKING_KEYS = ['siteHints', 'contentHash'];
+
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The page record as stored in `pages.sections`: the record the analyzers wrote, without the
+ * crawl-time working data and without a key that repeats another one exactly (`ctas` is
+ * `ctaData.ctas`; every list of `resourceHints` is in `resourceHintsData`). A key is dropped as a
+ * duplicate only when it equals its copy on that page. Any other key, known or new, is kept. The
+ * raw archive keeps the full record.
+ */
+export function slimSections(page: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...page };
+  for (const k of WORKING_KEYS) delete out[k];
+  const ctaData = page.ctaData as { ctas?: unknown } | undefined;
+  if (page.ctas !== undefined && ctaData?.ctas !== undefined && sameJson(page.ctas, ctaData.ctas)) delete out.ctas;
+  const hints = page.resourceHints as Record<string, unknown> | undefined;
+  const hintsData = page.resourceHintsData as Record<string, unknown> | undefined;
+  if (
+    hints &&
+    typeof hints === 'object' &&
+    hintsData &&
+    typeof hintsData === 'object' &&
+    Object.keys(hints).every((k) => sameJson(hints[k], hintsData[k]))
+  )
+    delete out.resourceHints;
+  return out;
 }
 
 /** Writes model/site.json.gz, model/run-data.json.gz, model/pages-NNNN.ndjson.gz and model/raw-archive.tar.gz. */

@@ -131,6 +131,8 @@ export const audits = pgTable(
     index('audits_queue')
       .on(t.source, t.createdAt)
       .where(sql`status = 'queued'`),
+    // The runs list: every audit, newest first.
+    index('audits_created').on(t.createdAt),
   ],
 );
 
@@ -187,6 +189,10 @@ export const artifacts = pgTable(
     index('artifacts_expires')
       .on(t.expiresAt)
       .where(sql`deleted_at is null`),
+    // Deleting findings (an audit delete or reload) clears this reference.
+    index('artifacts_finding')
+      .on(t.findingId)
+      .where(sql`finding_id is not null`),
   ],
 );
 
@@ -278,6 +284,8 @@ export const jobs = pgTable(
     index('jobs_session')
       .on(t.sessionHash)
       .where(sql`session_hash is not null`),
+    // The indexes on audit_id below serve the cascade when an audit is deleted.
+    index('jobs_audit').on(t.auditId),
     uniqueIndex('jobs_active')
       .on(t.type, t.auditId, t.kind)
       .where(sql`status in ('queued','dispatched','running')`),
@@ -306,6 +314,8 @@ export const webhookDeliveries = pgTable(
     index('webhook_due')
       .on(t.nextAttemptAt)
       .where(sql`delivered_at is null`),
+    index('webhook_deliveries_audit').on(t.auditId),
+    index('webhook_deliveries_client').on(t.clientId),
   ],
 );
 
@@ -538,6 +548,12 @@ export const disclosures = pgTable(
     index('disclosures_open')
       .on(t.siteId)
       .where(sql`status = 'open'`),
+    index('disclosures_first_audit')
+      .on(t.firstAuditId)
+      .where(sql`first_audit_id is not null`),
+    index('disclosures_last_seen_audit')
+      .on(t.lastSeenAuditId)
+      .where(sql`last_seen_audit_id is not null`),
   ],
 );
 

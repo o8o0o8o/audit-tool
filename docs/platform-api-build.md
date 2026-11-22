@@ -313,7 +313,7 @@ Written 2026-11-21. The goal in design §13 ("Worker"): compute and storage all 
 
 Steps 0–4 exist as described above, with these differences:
 
-- **Migrations:** eight files, `0000_step1_core` to `0007_page_cap`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
+- **Migrations:** nine files, `0000_step1_core` to `0008_fk_indexes`. `yarn db:generate --name=<name>` strips the `"public".` schema prefix drizzle-kit writes, so tests can run migrations into a schema of their own. `docker/init-db.sql` creates `audit_test` when the volume is new.
 - **`prospects.extra`** (`jsonb`, not in the design's SQL) keeps the other `companies.csv` columns, so the pipeline's API store round-trips every column it reads and writes.
 - **Imports end with `POST /api/v1/audits/{id}/complete`** (not in §6): `audits/import` creates the audit and returns an upload grant; `complete` records the uploaded artifacts and sets `built`.
 - **Finding codes (3.2):** explicit codes are seeded in `lib/model/check-types.json` (`scripts/build-check-types.ts`: the 50 most frequent findings across the stored runs plus every security and email-DNS finding, 69 codes). Analyzers do not set `Issue.code` yet; codes come from titles in `lib/model/finding-codes.ts`.

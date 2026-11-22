@@ -57,6 +57,13 @@
       "when": 1795269696018,
       "tag": "0007_page_cap",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795331576961,
+      "tag": "0008_fk_indexes",
+      "breakpoints": true
     }
   ]
 }

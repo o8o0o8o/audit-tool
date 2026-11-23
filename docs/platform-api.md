@@ -892,6 +892,7 @@ A webhook is sent only for audits the client started (cases 2, 3 and 5). Sharing
 |---|---|---|---|
 | `get_site` | `domain` | host, aliases, audits per mode, latest scores, stack and vendors, tracking IDs, site profile, scan quality, homepage screenshot link, prospect state (with `prospects:read`), score trend (same `comparable_key` only) | 4 |
 | `get_lead_summary` | `domain` or `audit_id` | See below | 4 |
+| `list_lead_summaries` | `latest_only?` (default true), `mode?`, `domain?`, `scan_quality?`, `teaser_ready?`, `outreach_blocked?`, `min_heavy_facts?`, `max_overall_score?`, `prospect_stage?`, `limit?`, `cursor?` | one row per site and scan type with the default lead signals (the `lead_summary` views, added 2026-11-23); `next_cursor` | 4 |
 | `get_recommendations` | `audit_id`/`domain`, `quick_wins_only?`, `effort_max?` | fixes ranked by impact, with effort and the findings each resolves | 4 |
 | `list_findings` | `audit_id`/`domain`, `severity_min?`, `category?`, `codes?`, `scope?`, `page_url?` (step 6), `verification?` (step 6) | findings with code, params, title, severity, occurrence count | 4 |
 | `get_site_checks` | `audit_id`/`domain`, `check_ids?`, `status?` | check rows | 4 |

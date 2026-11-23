@@ -19,6 +19,7 @@ import { loadAudit } from '../../web/lib/core/loader';
 import { findOrCreateSite } from '../../web/lib/core/sites';
 import { buildAuditModel } from '../../lib/model/build/build-audit-model';
 import { getLeadSummary } from '../../web/lib/core/lead-summary';
+import { listLeadSummaries } from '../../web/lib/core/lead-summaries';
 import { internalPrincipal } from '../../web/lib/core/principal';
 import {
   getSite,
@@ -28,7 +29,7 @@ import {
   getSiteChecks,
   listCheckTypes,
 } from '../../web/lib/core/results';
-import { LeadSummary } from '../../lib/model/lead-summary';
+import { LeadSummary, LeadSummaryRow } from '../../lib/model/lead-summary';
 
 let t: TestDb;
 const files = tempStore();
@@ -47,21 +48,19 @@ async function builtAudit(
   const run = writeFixtureRun(opts);
   const id = randomUUID();
   const site = await findOrCreateSite(t.db, opts.domain ?? 'fixture.example');
-  await t.db
-    .insert(audits)
-    .values({
-      id,
-      siteId: site.id,
-      mode: opts.lead ? 'quick' : 'full',
-      targetUrl: `https://${opts.domain ?? 'fixture.example'}`,
-      profile: 'standard',
-      profileHash: randomUUID(),
-      comparableKey: 'k',
-      status: 'built',
-      source: 'internal',
-      currentAttempt: 1,
-      finishedAt: new Date(),
-    });
+  await t.db.insert(audits).values({
+    id,
+    siteId: site.id,
+    mode: opts.lead ? 'quick' : 'full',
+    targetUrl: `https://${opts.domain ?? 'fixture.example'}`,
+    profile: 'standard',
+    profileHash: randomUUID(),
+    comparableKey: 'k',
+    status: 'built',
+    source: 'internal',
+    currentAttempt: 1,
+    finishedAt: new Date(),
+  });
   const model = buildAuditModel({ runDir: run.runDir, auditId: id });
   await files.store.put(`audits/${id}/1/model/site.json.gz`, gzipSync(JSON.stringify(doc ? doc(model) : model)));
   run.cleanup();
@@ -176,3 +175,118 @@ void test('disclosures: a second scan of the same exposure updates the row', { s
   assert.equal(rows[0]!.firstAuditId, a.id);
   assert.equal(rows[0]!.lastSeenAuditId, b.id);
 });
+
+void test(
+  'lead summaries: one query gives every site, and each row agrees with get_lead_summary',
+  { skip: SKIP_DB },
+  async () => {
+    const day = 86400_000;
+    const older = await builtAudit({ domain: 'list-a.example', lead: true, gateRun: GATE_RUN });
+    await loadAudit(t.db, files.store, older.id);
+    await t.db
+      .update(audits)
+      .set({ finishedAt: new Date(Date.now() - 3 * day) })
+      .where(eq(audits.id, older.id));
+    const newer = await builtAudit({ domain: 'list-a.example', lead: true, gateRun: GATE_RUN });
+    await loadAudit(t.db, files.store, newer.id);
+    const full = await builtAudit({ domain: 'list-a.example' });
+    await loadAudit(t.db, files.store, full.id);
+    const blocked = await builtAudit({
+      domain: 'list-blocked.example',
+      lead: true,
+      homepageBlocked: true,
+      blockedPaths: ['/about', '/pricing'],
+      gateRun: GATE_RUN,
+    });
+    await loadAudit(t.db, files.store, blocked.id);
+    const pub = await builtAudit({ domain: 'list-public.example', lead: true });
+    await loadAudit(t.db, files.store, pub.id);
+    await t.db.update(audits).set({ source: 'public' }).where(eq(audits.id, pub.id));
+    const running = await builtAudit({ domain: 'list-running.example', lead: true });
+
+    const mine = (rows: LeadSummaryRow[]) => rows.filter((r) => r.domain.startsWith('list-'));
+    const latest = mine((await listLeadSummaries(t.db, internalPrincipal(), { limit: 500 })).summaries);
+    assert.deepEqual(
+      latest.map((r) => `${r.domain} ${r.mode} ${r.audit_id === older.id ? 'older' : 'latest'}`).sort(),
+      ['list-a.example full latest', 'list-a.example quick latest', 'list-blocked.example quick latest'],
+      'newest per site and scan type; no public scan, no unfinished audit',
+    );
+    assert.ok(!latest.some((r) => r.audit_id === pub.id || r.audit_id === running.id));
+    const all = mine(
+      (await listLeadSummaries(t.db, internalPrincipal(), { latest_only: false, limit: 500 })).summaries,
+    );
+    assert.ok(
+      all.some((r) => r.audit_id === older.id),
+      'latest_only=false has the earlier audit too',
+    );
+
+    // Every row says what get_lead_summary says about the same audit.
+    for (const row of latest) {
+      const one = await getLeadSummary(t.db, internalPrincipal(), { audit_id: row.audit_id });
+      assert.equal(row.scan_quality, one.scan_quality.state);
+      assert.equal(row.pages_read, one.scan_quality.pages_read);
+      assert.equal(row.outreach_blocked, one.outreach_blocked);
+      assert.equal(row.facts.teaser_ready, one.teaser_ready);
+      assert.equal(row.facts.heavy + row.facts.medium + row.facts.light, one.facts.length, row.domain);
+      assert.deepEqual(
+        row.facts.top.map((f) => f.fact),
+        one.facts.slice(0, 3).map((f) => f.fact),
+      );
+      assert.equal(row.scores.overall, one.scores?.overall ?? null);
+      assert.equal(row.scores.seo, one.scores?.seo ?? null);
+      assert.equal(row.issues.total, Object.values(one.counts).reduce((a, b) => a + b, 0) * (one.scores ? 1 : 0));
+      assert.deepEqual(row.quick_wins, one.quick_wins);
+      assert.deepEqual(row.site.languages, one.site_profile.languages);
+      assert.equal(row.stack.cms, one.stack.find((s) => s.kind === 'cms')?.name ?? null);
+      assert.equal(
+        row.tracking.has_ga4,
+        one.tracking_ids.some((i) => i.kind === 'ga4'),
+      );
+      assert.equal(row.links.report, one.links.report);
+    }
+    const b = latest.find((r) => r.audit_id === blocked.id)!;
+    assert.equal(b.scan_quality, 'blocked');
+    assert.equal(b.scores.overall, null);
+    assert.equal(b.issues.total, 0);
+    assert.deepEqual(b.quick_wins, []);
+
+    // An open disclosure blocks outreach in the list too, and filters select on it.
+    await t.db
+      .insert(disclosures)
+      .values({ siteId: newer.siteId, code: 'js-secrets', target: 'https://list-a.example/x.js' });
+    const blockedOut = mine(
+      (await listLeadSummaries(t.db, internalPrincipal(), { outreach_blocked: true, limit: 500 })).summaries,
+    );
+    assert.deepEqual([...new Set(blockedOut.map((r) => r.domain))], ['list-a.example']);
+    assert.ok(blockedOut.every((r) => !r.facts.teaser_ready));
+    assert.ok(!JSON.stringify(blockedOut).includes('js-secrets'), 'no detail of the disclosure');
+    const quick = mine(
+      (await listLeadSummaries(t.db, internalPrincipal(), { mode: 'quick', domain: 'list-a' })).summaries,
+    );
+    assert.deepEqual(
+      quick.map((r) => r.audit_id),
+      [newer.id],
+    );
+
+    // Pages: the cursor reaches every row once.
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await listLeadSummaries(t.db, internalPrincipal(), { latest_only: false, limit: 2, cursor });
+      seen.push(...page.summaries.map((r) => r.audit_id));
+      cursor = page.next_cursor ?? undefined;
+    } while (cursor);
+    assert.equal(new Set(seen).size, seen.length);
+    for (const r of all) assert.ok(seen.includes(r.audit_id));
+
+    // Scopes: audits:read is needed; prospect data only with prospects:read.
+    const reader = { kind: 'client', clientId: randomUUID(), name: 'r', scopes: ['audits:read'] } as const;
+    assert.ok((await listLeadSummaries(t.db, reader, {})).summaries.every((r) => r.prospect === null));
+    await assert.rejects(listLeadSummaries(t.db, reader, { prospect_stage: 'new' }), /prospects:read/);
+    await assert.rejects(
+      listLeadSummaries(t.db, { kind: 'client', clientId: randomUUID(), name: 'n', scopes: [] }, {}),
+      /audits:read/,
+    );
+    for (const r of all) LeadSummaryRow.parse(r);
+  },
+);

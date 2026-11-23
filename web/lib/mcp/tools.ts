@@ -11,6 +11,7 @@ import { CoreError } from '../core/errors';
 import { requestPdf } from '../core/jobs';
 import { raiseWork } from '../core/cron-gate';
 import { getLeadSummary } from '../core/lead-summary';
+import { listLeadSummaries, ListLeadSummariesInput } from '../core/lead-summaries';
 import type { Principal } from '../core/principal';
 import { getProspect, listProspects } from '../core/prospects';
 import { dispatchNext } from '../core/queue';
@@ -24,7 +25,7 @@ import {
   listFindings,
 } from '../core/results';
 import { onAuditFinished } from '../core/webhooks';
-import { LeadSummary } from '@model/lead-summary';
+import { LeadSummary, LeadSummaryRow } from '@model/lead-summary';
 
 export interface McpDeps {
   db: Db;
@@ -245,6 +246,30 @@ export function buildMcpServer(d: McpDeps): McpServer {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(s, null, 1) }],
           structuredContent: s as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_lead_summaries',
+    {
+      title: 'Lead summaries of every site',
+      description:
+        'One row per site (latest full and latest quick audit; set latest_only=false for every audit) with the default lead signals: scan quality, whether outreach is blocked, scores, issue counts, gate-verified facts (counts and the three heaviest), real-user speed, stack, tracking, site profile, SPF and DMARC, quick wins, links. Public scans and single-page audits are not included. ' +
+        'Filter by mode, domain, scan_quality, teaser_ready, outreach_blocked, min_heavy_facts, max_overall_score, prospect_stage. Newest first; pass next_cursor back as cursor for the next page. ' +
+        'Scores and issue counts are empty for a blocked scan. Never start outreach when outreach_blocked is true. For the full detail of one site use get_lead_summary.',
+      inputSchema: ListLeadSummariesInput.shape,
+      outputSchema: { summaries: z.array(LeadSummaryRow), count: z.number().int(), next_cursor: z.string().nullable() },
+    },
+    async (a) => {
+      try {
+        const res = await listLeadSummaries(db, principal, a);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(res, null, 1) }],
+          structuredContent: res as unknown as Record<string, unknown>,
         };
       } catch (err) {
         return fail(err);

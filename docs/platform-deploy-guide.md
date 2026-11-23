@@ -2,7 +2,7 @@
 
 How to take branch `platform-api-local` from the repository to a deployed app that two or three people use. Written 2026-11-22. Settings are explained in [`platform-api-build.md`](platform-api-build.md) §10; the design is [`platform-api.md`](platform-api.md).
 
-The database and the Vercel build are checked (see below). The worker's path (GitHub dispatch, its identity token, uploads to the private store) has not run yet: the first quick scan in step 6 is that test, and step 7 is the way back if it fails.
+The database, the private Blob store (including the worker's upload request) and the Vercel build are checked (see below). The worker's path through GitHub (dispatch and its identity token) has not run yet: the first quick scan in step 6 is that test, and step 7 is the way back if it fails.
 
 ## What changes on merge
 
@@ -21,17 +21,25 @@ Vercel project `audit-tool` in the FocusReactive team, production address `https
 - **GitHub repository:** variables `PLATFORM_APP_URLS`, `PLATFORM_OIDC_AUDIENCE`, `PLATFORM_CRON_URL` and secret `PLATFORM_CRON_SECRET` (the same value as `CRON_SECRET`).
 - **The Vercel build:** the branch's preview deployment built and is Ready.
 
-Still to do: the private Blob store (step 1), the admins (step 2), then merge (step 5).
+- **Admins:** three people are created in the production database (step 2).
 
-## 1. The private Blob store
+Still to do: merge (step 5) and the checks after it (step 6).
 
-The project already has a public Blob store (`audit-tool`), which the live app reads through `BLOB_STORE_ID`. A second store connected with the default names could replace that variable, so the new one is connected under a prefix of its own. The CLI has no option for the prefix; the dashboard has.
+## 1. The private Blob store (done 2026-11-23)
 
-In Vercel → Storage: create a Blob store with **private** access (region `fra1`), connect it to the `audit-tool` project for Production, and set the environment variable prefix to `PLATFORM_BLOB`. The platform reads `PLATFORM_BLOB_STORE_ID` (with the OIDC token Vercel gives each function) or `PLATFORM_BLOB_READ_WRITE_TOKEN`, whichever the connection creates. Check afterwards that `BLOB_STORE_ID` still names the old store (`store_hsH12rqmrTtK…`).
+Store `audit-platform-private` (`store_DKt6f8ffQrOKXk8t`, private, region `fra1`) is connected to the project's Production environment under the prefix `PLATFORM_BLOB`, which gave `PLATFORM_BLOB_READ_WRITE_TOKEN`. The public store of the live app is untouched: `BLOB_STORE_ID` still names `store_hsH12rqmrTtK…`.
 
-## 2. Admins
+The prefix matters. The live app and the old workflow find the public store through `BLOB_STORE_ID` in all three environments (the workflow reads the Development one), and a second store connected with the default prefix `BLOB` would claim that name. `vercel blob create-store` always connects with the default prefix, so the store was created through the API without a connection and then connected with the prefix (`POST /v1/storage/stores/<id>/connections` with `envVarPrefix`), which is what the dashboard's "custom prefix" does.
 
-Run once per person, with the **unpooled** Neon address (Vercel → project → Settings → Environment Variables → `DATABASE_URL_UNPOOLED`):
+Checked against the real store with `web/scripts/check-blob-store.ts`: put, get, list, delete, a presigned upload sent the way the worker sends it, an overwrite, and that a presigned address refuses another pathname (403). All pass. Run it again after any change to the store code:
+
+```bash
+PLATFORM_BLOB_READ_WRITE_TOKEN='<from Vercel>' yarn --cwd web tsx scripts/check-blob-store.ts
+```
+
+## 2. Admins (three created 2026-11-23)
+
+For each further person, run with the **unpooled** Neon address (Vercel → project → Settings → Environment Variables → `DATABASE_URL_UNPOOLED`):
 
 ```bash
 DATABASE_URL='<DATABASE_URL_UNPOOLED>' yarn --cwd web admin:create --email=you@company.com --name="You"
@@ -49,7 +57,7 @@ It asks for a password (12+ characters). Because admins exist from the start, th
 | `PLATFORM_MODE` | `production` |
 | `APP_URL` | `https://audit-tool-focusreactive.vercel.app` |
 | `DATABASE_URL` | set by the Neon integration (pooled) |
-| `PLATFORM_BLOB_STORE_ID` or `PLATFORM_BLOB_READ_WRITE_TOKEN` | set by connecting the private store (step 1) |
+| `PLATFORM_BLOB_READ_WRITE_TOKEN` | set by connecting the private store (step 1) |
 | `GITHUB_TOKEN` | already there; `GITHUB_DISPATCH_TOKEN` overrides it |
 | `WORKER_REPOSITORY`, `WORKER_REPOSITORY_ID` | `o8o0o8o/audit-tool` and its numeric id |
 | `WORKER_OIDC_AUDIENCE` | `audit-platform` |
@@ -83,7 +91,7 @@ If the Vercel project deploys from `main`, this push deploys it. The two new wor
    | A "Platform worker" run appears in GitHub Actions within seconds | Dispatch failed. Vercel logs show `[dispatch] GitHub refused the run`: the existing `GITHUB_TOKEN` cannot start workflows in this repository, or the workflow is not on `main`. |
    | The run passes "Validate inputs" | `PLATFORM_APP_URLS` does not contain `APP_URL` exactly, or the audience variable is missing. |
    | The worker registers and the audit shows `running` | `401 worker identity not valid`: the audience or `WORKER_REPOSITORY` does not match, or GitHub's token fields differ from what the code expects. |
-   | The worker uploads its files | `upload …: 4xx`: the Blob API did not accept the upload request as written. This is the least certain part. |
+   | The worker uploads its files | `upload …: 4xx`: unexpected, since the same request passed against the real store (step 1); the response text says why. |
    | The audit turns `succeeded` shortly after the run ends | Loading failed; the Vercel log of `/api/worker/status` has the reason. |
    | The report opens from the audit page | Reading from the private store failed. |
 

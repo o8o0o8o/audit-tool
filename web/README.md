@@ -39,6 +39,10 @@ The server is at `<app address>/api/mcp` (Streamable HTTP, stateless). A client 
 
 Tools: `start_audit`, `get_audit`, `wait_for_audit`, `list_audits`, `continue_audit`, `cancel_audit`, `get_lead_summary`, `list_lead_summaries`, `get_site`, `list_findings`, `get_tech_stack`, `get_recommendations`, `get_site_checks`, `list_check_types`, `get_prospect`, `list_prospects`, `get_report_url`, `request_pdf`.
 
+Waiting for an audit: `wait_for_audit` holds one call for up to 280 seconds and returns the moment the audit ends, so a quick scan or single page is one call. Its answer is short on purpose (status, pages, estimated time left, what to do next), and for a long full audit it tells the assistant to report the time left instead of calling in a loop. A client that cuts tool calls at 60 seconds needs a smaller `timeout_seconds`.
+
+Answers are kept small, because an assistant pays for every character it reads (`lib/mcp/thrift.ts`): compact JSON with one copy of the answer, null and empty fields left out of rows, short pages by default (20 audits, 25 findings, lead summaries, check types and prospects, 10 recommendations), and the long parts only on request (`detail="full"`, `with_fix`, `with_record`, a larger `limit`). No tool sends an output schema with the tool list. The server still checks `get_lead_summary` against its schema (`lib/model/lead-summary.ts`).
+
 Limits:
 
 - A key makes 60 calls an hour unless another number is set when it is created.

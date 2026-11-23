@@ -865,6 +865,8 @@ Conventions:
 
 ### Tools
 
+Changed 2026-11-23: answers are sized for a reader that pays per character. Lists are short by default and take `limit`; long parts come only on request (`detail="full"` on `list_lead_summaries`, `with_fix` on `get_recommendations`, `with_record` on `list_prospects`, `search` on `list_check_types`); rows leave out null and empty fields; no output schema is sent with the tool list. The tables below name what each tool can return, not its default page. Details: build guide §10, "What the MCP server costs its reader".
+
 **Run audits**
 
 | Tool | Input | Output |
@@ -872,7 +874,7 @@ Conventions:
 | `start_audit` | `url`, `mode` (`quick`/`page`/`full`), `preset?`, `options?` (incl. `pdf`), `external_ref?`, `idempotency_key?`, `reuse_if_newer_than_hours?` | `audit_id`, `status`, `estimate_minutes`, `reused` (`idempotent`/`in_progress`/`recent`/null) |
 | `get_audit` | `audit_id` | status, phase, progress, timings, options, model version, scores, counts, report links |
 | `list_audits` | `domain?`, `mode?`, `status?`, `source?`, `external_ref?`, `since?` | audits, newest first |
-| `wait_for_audit` | `audit_id`, `timeout_seconds?` (max 50) | returns as soon as the audit finishes, or its current status and progress at the timeout; the caller calls again. For scripts and agents that have no webhook address |
+| `wait_for_audit` | `audit_id`, `timeout_seconds?` (default 50, max 280) | held until the audit finishes or the timeout passes; a short answer: status, pages, `eta_seconds`, `next_step` (wait once more, or tell the user and come back), and the scores once finished. Changed 2026-11-23 from a 50-second limit and the whole audit view, which made an assistant call it in a loop | returns as soon as the audit finishes, or its current status and progress at the timeout; the caller calls again. For scripts and agents that have no webhook address |
 | `cancel_audit` | `audit_id` | new status; only the client that started it, or internal |
 | `continue_audit` | `audit_id`, `max_pages?` (more than the cap that stopped it, or 0 for none; default twice that cap) | a new full audit that keeps the loaded pages of a capped one and loads more: `audit_id`, `status`, `estimate_minutes`, `reused` (`in_progress`/null). Needs `audits:start:full` and `audits:read` |
 

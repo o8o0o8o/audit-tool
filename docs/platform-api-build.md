@@ -334,6 +334,14 @@ Decided 2026-11-22: the worker stays on GitHub Actions for now; §9 (Vercel Sand
 
 - **Set up MCP in one click** (2026-11-23). `/internal/mcp` has one button: `POST /api/internal/mcp-setup` makes a personal API key for the logged-in person (`createPersonalMcpKey` in `web/lib/core/auth.ts`; `api_clients.admin_id`, migration `0012_personal_keys`) and returns it once, inside a prompt (`mcpSetupPrompt`) that names the server's address, the header and the `claude mcp add` command, and asks the assistant to connect, call `list_audits` and say what it can do. The page shows the prompt with a copy button, and the bare command below it. A person has one personal key: a new one revokes the one before, since a key cannot be shown twice. Its scopes are all but `prospects:write` and `audits:publish`, at 300 calls an hour. An audit started with it records the person (`audits.created_by_admin_id`), so the usage page counts the form and the key as one user. The key is refused once its owner is disabled.
 
+- **What the MCP server costs its reader** (2026-11-23). Measured on the local database with every tool, then cut (`web/lib/mcp/thrift.ts`; the core functions and the REST routes are unchanged):
+  - *Every answer was sent twice*, as indented text and again as `structuredContent`; the text was cut at 100 KB but the second copy was not (a `list_prospects` call sent 400 000 characters). Now one copy, compact, with a plain note when a caller asks for more than 60 000 characters.
+  - *The tool list*, paid once per session whether used or not, was 27 800 characters, half of it the output schemas of two tools. Now 15 500: no output schema is sent.
+  - *Defaults that returned everything*: `list_check_types` (113 000 characters) now takes `search` and returns 25 rows of three fields with the total; `list_prospects` returned up to 5000 rows, now 25 with `more`; `list_lead_summaries` returns a short row (about 190 characters, against 1000) unless `detail="full"`, 25 per page; `list_audits` 20 rows; `list_findings` 25; `get_recommendations` 10, without the fix text unless `with_fix`.
+  - *Fields nobody reads*: `get_audit` listed one row per stored file (hundreds for a full audit), now the report kinds and a count per other kind; row ids no tool accepts are gone; `get_site_checks` shows the first 5 rows of a long detail list and its length, and none for a check that passed; null and empty fields are left out of rows.
+  - *Waiting*: `wait_for_audit` holds up to 280 seconds and answers in about 400 characters with what to do next, where an assistant used to call it, or `list_audits`, in a loop.
+  - The server's `instructions` say in five lines how to read the answers and how not to waste calls. `tests/platform/mcp-thrift.test.ts` holds the sizes.
+
 ### Settings
 
 Vercel project (root directory `web`):

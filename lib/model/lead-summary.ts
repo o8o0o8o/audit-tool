@@ -1,6 +1,8 @@
 /**
  * `get_lead_summary` output (design §5): a fixed, documented shape so a script maps fields 1:1 and
- * an agent knows what each field means. Published as the tool's output schema.
+ * an agent knows what each field means. The server checks every answer against it. It is not sent
+ * to clients as the tool's output schema: that cost every session about 3 000 tokens, used or not,
+ * and the MCP answer leaves out null and empty fields (`web/lib/mcp/thrift.ts`).
  */
 import { z } from 'zod';
 import { FieldMetric, LeadFact, Technology, TrackingId } from './site';

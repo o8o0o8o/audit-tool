@@ -475,3 +475,119 @@ export async function cancelAudit(
   await deps.onFinished?.(row.id);
   return { audit_id: row.id, status: 'cancelled' };
 }
+
+// ── Waiting for an audit ────────────────────────────────────────────────────
+
+/** Time a run needs after the last page: site checks, reports, model build, upload, load. */
+const TAIL_SECONDS = { full: 150, quick: 60, page: 40 } as const;
+
+/**
+ * Seconds until the audit is expected to end, from what the row says now: the crawl's own pace once
+ * pages are counted, the start estimate before that. Null when it cannot be told (not started yet
+ * and no estimate); 0 when it has ended. An estimate, not a promise.
+ */
+export function auditEtaSeconds(view: AuditView, now = new Date()): number | null {
+  if ((TERMINAL_STATUSES as readonly string[]).includes(view.status)) return 0;
+  const mode = view.mode as keyof typeof TAIL_SECONDS;
+  const tail = TAIL_SECONDS[mode] ?? 60;
+  if (['built', 'loading'].includes(view.status)) return 20;
+  const started = view.started_at ? new Date(view.started_at).getTime() : null;
+  const { processed, total } = view.progress;
+  if (started && total && processed && processed > 0 && processed < total) {
+    const elapsed = Math.max(1, (now.getTime() - started) / 1000);
+    return Math.round((elapsed * (total - processed)) / processed + tail);
+  }
+  if (started && total && processed && processed >= total) return tail;
+  let minutes: number;
+  try {
+    minutes = estimateMinutes(
+      view.mode as 'full' | 'quick' | 'page',
+      normalizeRunOptions(view.mode as 'full', view.options ?? {}),
+    );
+  } catch {
+    return null;
+  }
+  const since = started ?? new Date(view.created_at).getTime();
+  return Math.max(30, Math.round(minutes * 60 - (now.getTime() - since) / 1000));
+}
+
+export const WAIT_MAX_SECONDS = 280;
+export const WAIT_DEFAULT_SECONDS = 50;
+
+/**
+ * The answer of a wait: only what the caller needs to decide what to do next. It is deliberately
+ * small (no options, no file list): an assistant pays for every field of every call.
+ */
+export interface WaitResult {
+  audit_id: string;
+  domain: string;
+  mode: string;
+  status: string;
+  finished: boolean;
+  phase: string | null;
+  pages: { processed: number | null; total: number | null };
+  /** Estimated seconds left; null when unknown. */
+  eta_seconds: number | null;
+  /** What the caller should do now, so an assistant does not call in a loop. */
+  next_step: string;
+  /** Present once finished. */
+  scores?: Record<string, number | null>;
+  scan_quality?: string | null;
+  error?: string | null;
+}
+
+/**
+ * Holds the call until the audit ends or `timeoutSeconds` pass (at most 280: the route may run for
+ * 300), reading the row every few seconds. The answer carries an estimate of the time left and what
+ * to do next: wait once more when the end is near, or tell the user and come back when it is far.
+ */
+export async function waitForAudit(
+  db: Db,
+  principal: Principal,
+  auditId: string,
+  opts: { timeoutSeconds?: number; pollMs?: number; sleep?: (ms: number) => Promise<void>; now?: () => number } = {},
+): Promise<WaitResult> {
+  const now = opts.now ?? Date.now;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const timeout = Math.min(WAIT_MAX_SECONDS, Math.max(1, opts.timeoutSeconds ?? WAIT_DEFAULT_SECONDS));
+  const until = now() + timeout * 1000;
+  const pollMs = opts.pollMs ?? 3000;
+  for (;;) {
+    const view = await getAudit(db, principal, auditId);
+    const finished = (TERMINAL_STATUSES as readonly string[]).includes(view.status);
+    if (finished || now() >= until) {
+      const eta = auditEtaSeconds(view, new Date(now()));
+      return {
+        audit_id: view.audit_id,
+        domain: view.domain,
+        mode: view.mode,
+        status: view.status,
+        finished,
+        phase: finished ? null : view.phase,
+        pages: { processed: view.progress.processed, total: view.progress.total },
+        eta_seconds: eta,
+        next_step: nextStep(view, finished, eta),
+        ...(finished ? { scores: view.scores, scan_quality: view.scan_quality, error: view.error } : {}),
+      };
+    }
+    await sleep(Math.min(pollMs, Math.max(0, until - now())));
+  }
+}
+
+function nextStep(view: AuditView, finished: boolean, eta: number | null): string {
+  if (finished) {
+    return view.status === 'succeeded'
+      ? 'Finished. Read the results: get_lead_summary, list_findings or get_report_url.'
+      : `Ended as ${view.status}${view.error ? ` (${view.error})` : ''}. Nothing more to wait for.`;
+  }
+  if (eta !== null && eta <= WAIT_MAX_SECONDS - 20) {
+    const t = Math.min(WAIT_MAX_SECONDS, eta + 30);
+    return `About ${eta} s left. Call wait_for_audit once more with timeout_seconds=${t}; it should end within that call.`;
+  }
+  const minutes = eta === null ? null : Math.max(1, Math.round(eta / 60));
+  return (
+    `${minutes === null ? 'It has not started yet, so the time left is unknown' : `About ${minutes} min left`}. ` +
+    'Do not call in a loop. Tell the user how long it will take; if they want to wait, call wait_for_audit with ' +
+    `timeout_seconds=${WAIT_MAX_SECONDS} (each call holds up to that long), otherwise check later with get_audit.`
+  );
+}

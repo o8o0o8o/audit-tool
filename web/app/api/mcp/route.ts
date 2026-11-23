@@ -5,7 +5,8 @@ import { buildMcpServer } from '../../../lib/mcp/tools';
 import { apiPrincipal, appUrl, ctx } from '../../../lib/server';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+/** `wait_for_audit` holds a call for up to 280 seconds. */
+export const maxDuration = 300;
 
 /** MCP over Streamable HTTP, stateless: a server per request, the principal from the API key. */
 async function handle(request: Request): Promise<Response> {

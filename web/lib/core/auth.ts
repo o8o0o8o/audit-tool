@@ -272,7 +272,7 @@ export function mcpSetupPrompt(appUrl: string, key: string): { prompt: string; c
     '',
     'The key is a secret: do not print it again, and do not write it into a file that is committed or shared.',
     '',
-    'When the server is connected (I may have to restart or reload you first), call its list_audits tool to check that it answers, then tell me in a few lines what I can do with it. Good first requests: "run a quick scan of <site> and show the lead summary", "list the lead summaries", "show the top findings of the last audit".',
+    'When the server is connected (I may have to restart or reload you first), call its list_audits tool with limit 1 to check that it answers, then tell me in a few lines what I can do with it. Good first requests: "run a quick scan of <site> and show the lead summary", "list the lead summaries", "show the top findings of the last audit".',
   ].join('\n');
   return { prompt, command, url };
 }

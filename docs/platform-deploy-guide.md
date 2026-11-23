@@ -116,11 +116,15 @@ To add the bot check later: in Cloudflare → Turnstile, add a widget for `audit
 
 Optional: `PUBLIC_CONTACT_EMAIL`, the address for deletion requests from the result page (without it the link goes to the contact page).
 
+## 9. Giving someone the MCP server
+
+An admin creates an API key at `/internal/keys` (name, scopes) and hands the key over once; the person adds the server to their client with the app's address plus `/api/mcp` and the key as a bearer token. The steps, the scopes and the limits are in [`web/README.md`](../web/README.md), "Using the MCP server".
+
 ## What the first users should know
 
 - **Reports are as the run stored them:** no History section, and they do not change when report code changes.
 - **Concurrency:** two internal audits at a time; a third waits in the queue.
 - **Actions logs are public:** the repository is public, so each worker run's log shows the audited URL.
-- **Stuck audits recover slowly:** a dead worker is noticed after 10–15 minutes, plus however late GitHub runs the 5-minute schedule.
+- **Stuck audits recover slowly:** a dead worker is noticed after 10–15 minutes, plus however late GitHub runs the 5-minute schedule. On the first day (2026-11-23) the schedule had not fired once in its first 95 minutes on `main`; only a run started by hand had. Until it fires, nothing recovers an audit whose worker dies; audits that finish normally do not need it. If it stays silent, the tick needs another trigger.
 - **Old page data:** audits lose their page data after 90 days; findings and reports stay.
 - **Not tried yet:** resuming or continuing a large audit, which reads big files back through the app.

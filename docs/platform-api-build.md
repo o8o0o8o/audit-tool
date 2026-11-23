@@ -4,7 +4,7 @@ How to build steps 1–4 of [`platform-api.md`](platform-api.md) on one machine.
 
 Status: written 2026-11-21; steps 0–4 built locally the same day on branch `platform-api-local` (see "Built so far" at the end). The five acceptance checks of §7 pass. The production implementations were written on 2026-11-22 and have not run on the real services yet (§10).
 
-Scope: the local build only (steps 1–4). Deployment, the public site (step 5) and page rows (step 6) get their own sections when the local build is done.
+Scope: sections 1–7 are the local build (steps 1–4). Production is §10; the public site (step 5), admins, usage and lead summaries are recorded there too, in the order they were built. For running the app and using the MCP server see [`web/README.md`](../web/README.md); for the first deployment, [`platform-deploy-guide.md`](platform-deploy-guide.md).
 
 ## 1. What you need
 

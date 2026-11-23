@@ -325,7 +325,7 @@ npx tsx start.ts --origin=<website-url> [--perf] [--save-html] [--screenshots] [
 
 ### Web app live progress
 
-When `AUDIT_PROGRESS_FILE` is set, `ProgressReporter` (`lib/utils/progress-reporter.ts`) writes `{processed,total,phase,updatedAt}` there (throttled, atomic). `.github/workflows/audit.yml` uploads it every ~20s via `web/scripts/upload-results.mjs --progress` to `audits/<runId>/progress.json`; `GET /api/runs/<runId>` merges it as `progress`, and the home page (`web/app/page.tsx`, helpers in `web/lib/audit-progress.ts`) shows a blocking progress overlay, then embeds the finished report. See `web/README.md`.
+When `AUDIT_PROGRESS_FILE` is set, `ProgressReporter` (`lib/utils/progress-reporter.ts`) writes `{processed,total,phase,updatedAt}` there (throttled, atomic). The platform worker (`lib/platform-worker/run.ts`) reads it and reports to `/api/worker/progress` at most every 15 s; the count lives on the `audits` row. The internal form polls `GET /api/internal/audits/<id>/status` (shape in `web/lib/audit-progress.ts`) and the public result page polls `GET /api/public/scans/<id>`. `.github/workflows/audit.yml` with `web/scripts/upload-results.mjs` is the flow from before the platform; the app no longer reads its uploads. See `web/README.md`.
 
 ### Report theme preview
 

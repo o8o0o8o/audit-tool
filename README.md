@@ -275,24 +275,16 @@ Resume loads checkpoint + archive files automatically.
 
 The LLM passes additionally rely on the `claude` CLI being on `PATH` when no API key is set.
 
-## Web dispatcher (Vercel)
+## Audit platform (`web/`)
 
-`web/` is a small Next.js app that starts audits from a browser and shows their reports. Audits can't run inside Vercel functions (Playwright, long runtimes), so the page dispatches `.github/workflows/audit.yml` through the GitHub API; the workflow runs `npx tsx start.ts`, uploading `audits/<run_id>/progress.json` to Vercel Blob about every 20s while it runs, then uploads the run folder under `audits/<run_id>/` together with a `status.json` the page reads. While the audit runs, the page stays on `/` behind a live progress overlay, then embeds the finished report (see `web/README.md`).
+`web/` is the audit platform: a Next.js app with a public scan form, an internal app behind a login, an MCP server and an API, over Postgres. It runs at `https://audit-tool-focusreactive.vercel.app`. Audits can't run inside Vercel functions (Playwright, long runtimes), so the app starts each one as a run of `.github/workflows/platform-worker.yml`, which runs `scripts/platform-worker.ts`: it registers with the app, runs `start.ts`, uploads the results to a private Blob store, and the app loads them into the database.
 
-**Vercel project**
+- [`web/README.md`](web/README.md) — running it locally, the pages and routes, and **how to use the MCP server**.
+- [`docs/platform-api.md`](docs/platform-api.md) — the design.
+- [`docs/platform-api-build.md`](docs/platform-api-build.md) — the build guide; §10 lists the production settings.
+- [`docs/platform-deploy-guide.md`](docs/platform-deploy-guide.md) — how the first deployment was set up and how to check it.
 
-- Import the repo and set **Root Directory** to `web`.
-- Link a Vercel Blob store (provides `BLOB_READ_WRITE_TOKEN`).
-- Environment variables: `GITHUB_TOKEN` (fine-grained token, repository access to this repo, **Actions: read & write**), `DISPATCH_SECRET` (required; every dispatch is refused with a 500 while it is unset), and optionally `DISPATCH_RATE_LIMIT` (dispatches per IP per window, default 5), `GITHUB_OWNER` (default `o8o0o8o`), `GITHUB_REPO` (default `audit-tool`), `GITHUB_WORKFLOW` (default `audit.yml`), `GITHUB_REF` (default `main`). See `web/.env.example`.
-
-**GitHub repository secrets**
-
-- Blob access for the upload steps, one of:
-  - `VERCEL_TOKEN` (account token), `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` — for newer OIDC-only Blob stores (no read-write token). The workflow runs `vercel env pull` for the Development environment before each upload to get `BLOB_STORE_ID` + a short-lived `VERCEL_OIDC_TOKEN` (`web/scripts/vercel-blob-env.sh`), so the store must be connected to Development and OIDC federation enabled.
-  - `BLOB_READ_WRITE_TOKEN` — for older stores that still issue one; takes precedence when set.
-- Optional: `ANTHROPIC_API_KEY` (for `--llm` / `--verify` LLM stages), `CRUX_API_KEY`.
-
-Dispatch requires the `DISPATCH_SECRET` value in the `x-dispatch-key` header; without `DISPATCH_SECRET` configured the endpoint fails closed and refuses every dispatch. A best-effort per-IP rate limit (`DISPATCH_RATE_LIMIT`, per serverless instance) answers excess requests with 429. Private/localhost targets are rejected by hostname; the crawler's own URL guards still apply on the runner. Results are also kept for 14 days as a workflow artifact.
+`.github/workflows/platform-cron.yml` calls the app's two timers (a tick every 5 minutes, retention daily). `.github/workflows/audit.yml` is the flow from before the platform; the app no longer uses it.
 
 ## Development
 
@@ -307,7 +299,7 @@ yarn test         # tsx --test tests/**/*.test.ts
 yarn preview:report  # render the fixture audit to web/public/report/index.html
 ```
 
-The HTML report and the web dispatcher use the FocusReactive brand theme (black background, `#00E56D` accent, Inter). Tokens live in `lib/reports/sections/design-tokens.ts` (report) and `web/app/globals.css` (web app); `yarn preview:report` renders `tests/fixtures/report-fixture/` so the theme can be viewed at `/report/index.html` under `yarn --cwd web dev`.
+The HTML report and the web app use the FocusReactive brand theme (black background, `#00E56D` accent, Inter). Tokens live in `lib/reports/sections/design-tokens.ts` (report) and `web/app/globals.css` (web app); `yarn preview:report` renders `tests/fixtures/report-fixture/` so the theme can be viewed at `/report/index.html` under `yarn --cwd web dev`.
 
 Run `typecheck`, `lint`, `format:check`, and `test` before committing — these are the same checks a CI workflow should gate on.
 

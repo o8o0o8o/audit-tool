@@ -1,0 +1,107 @@
+# Audit platform: first deployment
+
+How to take branch `platform-api-local` from the repository to a deployed app that two or three people use. Written 2026-11-22. Settings are explained in [`platform-api-build.md`](platform-api-build.md) §10; the design is [`platform-api.md`](platform-api.md).
+
+The database and the Vercel build are checked (see below). The worker's path (GitHub dispatch, its identity token, uploads to the private store) has not run yet: the first quick scan in step 6 is that test, and step 7 is the way back if it fails.
+
+## What changes on merge
+
+- The app at the Vercel address becomes the internal platform: `/` redirects to `/internal`, behind a login. The old public form is gone.
+- Reports from before the platform are not shown in the new app. Their files stay in the old public Blob store.
+- The old `audit.yml` workflow is untouched.
+- The merge is a fast-forward: `main` has nothing the branch lacks.
+
+## Done on 2026-11-23
+
+Vercel project `audit-tool` in the FocusReactive team, production address `https://audit-tool-focusreactive.vercel.app`:
+
+- **Neon database** `audit-platform` (region `fra1`) created through the Vercel integration and connected to Production: `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` are set. All migrations are applied (31 tables). Advisory locks were checked through the pooled address and work.
+- **Vercel variables** (Production): `PLATFORM_MODE`, `APP_URL`, `WORKER_REPOSITORY`, `WORKER_REPOSITORY_ID`, `WORKER_OIDC_AUDIENCE`, `SESSION_SECRET`, `REPORT_TOKEN_SECRET`, `CRON_SECRET`. The live app from `main` reads none of them.
+- **GitHub token:** none to create. The project already has `GITHUB_TOKEN`, which the old app dispatches workflows with; the platform uses it when `GITHUB_DISPATCH_TOKEN` is not set.
+- **GitHub repository:** variables `PLATFORM_APP_URLS`, `PLATFORM_OIDC_AUDIENCE`, `PLATFORM_CRON_URL` and secret `PLATFORM_CRON_SECRET` (the same value as `CRON_SECRET`).
+- **The Vercel build:** the branch's preview deployment built and is Ready.
+
+Still to do: the private Blob store (step 1), the admins (step 2), then merge (step 5).
+
+## 1. The private Blob store
+
+The project already has a public Blob store (`audit-tool`), which the live app reads through `BLOB_STORE_ID`. A second store connected with the default names could replace that variable, so the new one is connected under a prefix of its own. The CLI has no option for the prefix; the dashboard has.
+
+In Vercel → Storage: create a Blob store with **private** access (region `fra1`), connect it to the `audit-tool` project for Production, and set the environment variable prefix to `PLATFORM_BLOB`. The platform reads `PLATFORM_BLOB_STORE_ID` (with the OIDC token Vercel gives each function) or `PLATFORM_BLOB_READ_WRITE_TOKEN`, whichever the connection creates. Check afterwards that `BLOB_STORE_ID` still names the old store (`store_hsH12rqmrTtK…`).
+
+## 2. Admins
+
+Run once per person, with the **unpooled** Neon address (Vercel → project → Settings → Environment Variables → `DATABASE_URL_UNPOOLED`):
+
+```bash
+DATABASE_URL='<DATABASE_URL_UNPOOLED>' yarn --cwd web admin:create --email=you@company.com --name="You"
+```
+
+It asks for a password (12+ characters). Because admins exist from the start, the shared password is never used and `INTERNAL_PASSWORD_HASH` stays unset. Later: the same command with an existing email sets a new password, and `--disable` stops a person from logging in.
+
+## 3. Vercel project settings (set; listed for reference)
+
+- **Root Directory:** `web` (already so).
+- **Function duration:** the team is on the Pro plan; the status route and the cron route ask for 300 seconds.
+
+| Variable | Value |
+|---|---|
+| `PLATFORM_MODE` | `production` |
+| `APP_URL` | `https://audit-tool-focusreactive.vercel.app` |
+| `DATABASE_URL` | set by the Neon integration (pooled) |
+| `PLATFORM_BLOB_STORE_ID` or `PLATFORM_BLOB_READ_WRITE_TOKEN` | set by connecting the private store (step 1) |
+| `GITHUB_TOKEN` | already there; `GITHUB_DISPATCH_TOKEN` overrides it |
+| `WORKER_REPOSITORY`, `WORKER_REPOSITORY_ID` | `o8o0o8o/audit-tool` and its numeric id |
+| `WORKER_OIDC_AUDIENCE` | `audit-platform` |
+| `SESSION_SECRET`, `REPORT_TOKEN_SECRET`, `CRON_SECRET` | generated |
+
+Optional: `PAGE_DATA_RETENTION_DAYS` (default 90), `QUEUE_CAP_INTERNAL` (default 2 audits at a time).
+
+If the production address changes (a custom domain), change `APP_URL` and the repository variables `PLATFORM_APP_URLS` and `PLATFORM_CRON_URL` together: they must match exactly.
+
+## 4. GitHub repository settings (set; listed for reference)
+
+Variables `PLATFORM_APP_URLS`, `PLATFORM_OIDC_AUDIENCE`, `PLATFORM_CRON_URL`; secret `PLATFORM_CRON_SECRET`. `CRUX_API_KEY` was already a secret. Add `ANTHROPIC_API_KEY` only for the LLM passes, and `WPSCAN_API_TOKEN` only for WordPress vulnerability data.
+
+## 5. Merge and deploy
+
+```bash
+git push origin platform-api-local
+git checkout main && git merge --ff-only platform-api-local && git push origin main
+```
+
+If the Vercel project deploys from `main`, this push deploys it. The two new workflows (`platform-worker.yml`, `platform-cron.yml`) become usable the moment they are on `main`: GitHub starts a dispatch or a schedule only for a workflow file on the default branch.
+
+## 6. Check it works, in this order
+
+1. **App is up:** open `<address>/api/health`; expect 200.
+2. **Login:** open `<address>` and log in with your email and password.
+3. **Quick scan:** start a Quick scan of a small site from "New audit". Then watch for these:
+
+   | What should happen | If it does not |
+   |---|---|
+   | A "Platform worker" run appears in GitHub Actions within seconds | Dispatch failed. Vercel logs show `[dispatch] GitHub refused the run`: the existing `GITHUB_TOKEN` cannot start workflows in this repository, or the workflow is not on `main`. |
+   | The run passes "Validate inputs" | `PLATFORM_APP_URLS` does not contain `APP_URL` exactly, or the audience variable is missing. |
+   | The worker registers and the audit shows `running` | `401 worker identity not valid`: the audience or `WORKER_REPOSITORY` does not match, or GitHub's token fields differ from what the code expects. |
+   | The worker uploads its files | `upload …: 4xx`: the Blob API did not accept the upload request as written. This is the least certain part. |
+   | The audit turns `succeeded` shortly after the run ends | Loading failed; the Vercel log of `/api/worker/status` has the reason. |
+   | The report opens from the audit page | Reading from the private store failed. |
+
+   The first run takes a few minutes, mostly installing Chromium on the runner.
+
+4. **Cron:** in GitHub Actions, run "Platform cron" by hand once. It should print `tick: HTTP 200`.
+5. **Full audit:** run one full audit of a small site; it uploads far more files than a quick scan.
+6. **Usage:** open `/internal/usage` and check your audits are under your name.
+
+## 7. If it goes wrong
+
+In Vercel, promote the previous production deployment. The old app and old workflow still work, because nothing of theirs was changed or deleted. The new database and Blob store can be left as they are.
+
+## What the first users should know
+
+- **Reports are as the run stored them:** no History section, and they do not change when report code changes.
+- **Concurrency:** two internal audits at a time; a third waits in the queue.
+- **Actions logs are public:** the repository is public, so each worker run's log shows the audited URL.
+- **Stuck audits recover slowly:** a dead worker is noticed after 10–15 minutes, plus however late GitHub runs the 5-minute schedule.
+- **Old page data:** audits lose their page data after 90 days; findings and reports stay.
+- **Not tried yet:** resuming or continuing a large audit, which reads big files back through the app.

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { LocalDispatcher, repoRootFrom } from './local/dispatcher';
 import { LocalFileStore } from './local/file-store';
 import { LocalWorkerIdentity } from './local/identity';
-import { BlobFileStore } from './production/blob-file-store';
+import { BlobFileStore, type BlobAuth } from './production/blob-file-store';
 import { GitHubDispatcher } from './production/github-dispatcher';
 import { GitHubWorkerIdentity } from './production/github-identity';
 import type { Dispatcher, Platform, WorkerIdentity } from './types';
@@ -13,6 +13,16 @@ function required(env: Env, name: string): string {
   const v = env[name];
   if (!v) throw new Error(`${name} is not set`);
   return v;
+}
+
+/**
+ * The private store's credentials, under names of their own: the project's default `BLOB_STORE_ID`
+ * and `BLOB_READ_WRITE_TOKEN` belong to the public store of the old flow and are never used here.
+ */
+function blobAuth(env: Env): BlobAuth {
+  if (env.PLATFORM_BLOB_READ_WRITE_TOKEN) return { token: env.PLATFORM_BLOB_READ_WRITE_TOKEN };
+  if (env.PLATFORM_BLOB_STORE_ID) return { storeId: env.PLATFORM_BLOB_STORE_ID };
+  throw new Error('PLATFORM_BLOB_STORE_ID or PLATFORM_BLOB_READ_WRITE_TOKEN is not set');
 }
 
 /**
@@ -52,9 +62,15 @@ export function createPlatform(
     const audience = required(env, 'WORKER_OIDC_AUDIENCE');
     return {
       mode,
-      files: new BlobFileStore({ token: required(env, 'PLATFORM_BLOB_READ_WRITE_TOKEN'), appUrl }),
+      files: new BlobFileStore({ ...blobAuth(env), appUrl }),
       dispatcher:
-        parts.dispatcher ?? new GitHubDispatcher({ ...worker, token: required(env, 'GITHUB_DISPATCH_TOKEN'), appUrl }),
+        parts.dispatcher ??
+        new GitHubDispatcher({
+          ...worker,
+          // GITHUB_TOKEN: the token the app already dispatched workflows with before the platform.
+          token: env.GITHUB_DISPATCH_TOKEN || env.GITHUB_TOKEN || required(env, 'GITHUB_DISPATCH_TOKEN'),
+          appUrl,
+        }),
       identity:
         parts.identity ??
         new GitHubWorkerIdentity({ ...worker, audience, repositoryId: env.WORKER_REPOSITORY_ID || undefined }),

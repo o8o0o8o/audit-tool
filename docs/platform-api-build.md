@@ -337,8 +337,8 @@ Vercel project (root directory `web`):
 | `PLATFORM_MODE` | `production` |
 | `APP_URL` | the deployment's `https://` address, no trailing slash; must be listed in the repository variable `PLATFORM_APP_URLS` |
 | `DATABASE_URL` | Neon's pooled connection string |
-| `PLATFORM_BLOB_READ_WRITE_TOKEN` | read-write token of a new **private** Blob store (connect it with the prefix `PLATFORM_BLOB`). Never the public store of the old flow |
-| `GITHUB_DISPATCH_TOKEN` | fine-grained token for this repository with Actions: read and write |
+| `PLATFORM_BLOB_STORE_ID` or `PLATFORM_BLOB_READ_WRITE_TOKEN` | a new **private** Blob store, connected with the prefix `PLATFORM_BLOB`: its id (the app then uses the OIDC token Vercel gives each function) or its read-write token. Never the public store of the old flow, whose `BLOB_STORE_ID` the platform does not read |
+| `GITHUB_DISPATCH_TOKEN` | a token for this repository with Actions: read and write. When it is not set, `GITHUB_TOKEN` is used, which the project has from the old flow |
 | `WORKER_REPOSITORY` | `owner/name` |
 | `WORKER_REPOSITORY_ID` | optional: the repository's numeric id (`gh api repos/<owner>/<name> --jq .id`) |
 | `WORKER_WORKFLOW`, `WORKER_REF` | optional; default `platform-worker.yml` and `main` |
@@ -352,8 +352,8 @@ GitHub repository: variables `PLATFORM_APP_URLS` (space-separated addresses), `P
 
 ### Still open, in order
 
-1. **Neon** (§8 item 5): the migrations, the pooled connection and the advisory locks through the pooler, on a Neon branch.
-2. **The Vercel build** (§8 item 7): tried on a copy of the repository with no root `node_modules`, which is what Vercel has with root directory `web`. Two things failed and are fixed in `web/next.config.mjs`: root files that `web/` imports now take their packages from `web/node_modules`, and the type check is skipped when `VERCEL` is set (it follows imports into root files whose packages are not installed there). The build then passes. Still to see on Vercel itself: that the project includes files outside `web/` in the build (the default).
+1. **Neon** (§8 item 5): done 2026-11-23 on the production database: the eleven migrations applied over the direct address, and a transaction-level advisory lock held and released correctly between two sessions over the pooled address. The first deployment is described in [`platform-deploy-guide.md`](platform-deploy-guide.md).
+2. **The Vercel build** (§8 item 7): tried on a copy of the repository with no root `node_modules`, which is what Vercel has with root directory `web`. Two things failed and are fixed in `web/next.config.mjs`: root files that `web/` imports now take their packages from `web/node_modules`, and the type check is skipped when `VERCEL` is set (it follows imports into root files whose packages are not installed there). The build then passes. Confirmed on Vercel 2026-11-22: the branch's preview deployment built.
 3. **One real audit on a preview deployment** against the Neon branch. It shows what the stand-ins cannot: the presigned upload request, GitHub's claim values, private Blob reads, and how late GitHub's schedule runs in practice.
 4. **Large files through the app.** A resumed or continued run reads snapshot objects and the first audit's raw archive through `/api/worker/snapshot/…` and `/api/worker/continue/file`, which stream from Blob through a function. Not tried with a file of tens of megabytes; if it does not hold, these get presigned read addresses like the uploads.
 5. **Where reports are rendered** (item 3): a worker job, or the generator bundled into a function.

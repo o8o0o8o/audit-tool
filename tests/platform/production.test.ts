@@ -120,6 +120,22 @@ void test('Blob FileStore: files that are overwritten are read past the cache', 
   assert.deepEqual(puts, [60, undefined]);
 });
 
+void test('Blob FileStore: with a store id, calls carry the id and no token', async () => {
+  const f = fakeBlob();
+  const s = new BlobFileStore({ storeId: 'store_abc123', appUrl: 'https://app.example', api: f.api });
+  await s.put('audits/a/1/x', new Uint8Array([1]));
+  await s.get('audits/a/1/x');
+  const up = await s.presignUpload('audits/a/1/y', 900);
+  assert.equal(up.headers['x-vercel-blob-store-id'], 'abc123');
+  for (const c of f.calls.filter((c) => c.fn === 'put' || c.fn === 'get')) {
+    const o = c.args[1] as Record<string, unknown>;
+    assert.equal(o.storeId, 'abc123');
+    assert.equal(o.token, undefined);
+  }
+  const issue = f.calls.find((c) => c.fn === 'issueSignedToken')!.args[0] as Record<string, unknown>;
+  assert.equal(issue.storeId, 'abc123');
+});
+
 void test('Blob FileStore: a key that leaves the store is refused', async () => {
   const s = new BlobFileStore({ token: TOKEN, appUrl: 'https://app.example', api: fakeBlob().api });
   for (const key of ['../x', 'audits/../../x', '/etc/passwd', '']) {
@@ -374,15 +390,34 @@ void test('PLATFORM_MODE=production needs every setting, and builds the producti
   assert.ok(p.files instanceof BlobFileStore);
   assert.ok(p.dispatcher instanceof GitHubDispatcher);
   assert.ok(p.identity instanceof GitHubWorkerIdentity);
-  for (const name of Object.keys(env).filter((k) => !['PLATFORM_MODE', 'VERCEL_ENV'].includes(k))) {
+  for (const name of ['APP_URL', 'WORKER_REPOSITORY', 'WORKER_OIDC_AUDIENCE', 'GITHUB_DISPATCH_TOKEN']) {
     assert.throws(() => createPlatform({ ...env, [name]: '' }), new RegExp(name), name);
   }
+  assert.throws(() => createPlatform({ ...env, PLATFORM_BLOB_READ_WRITE_TOKEN: '' }), /PLATFORM_BLOB_STORE_ID/);
+  // A store connected to the project is named by its id; the token the old flow dispatched with is accepted.
+  const byId = createPlatform({
+    ...env,
+    PLATFORM_BLOB_READ_WRITE_TOKEN: undefined,
+    PLATFORM_BLOB_STORE_ID: 'store_abc123',
+    GITHUB_DISPATCH_TOKEN: undefined,
+    GITHUB_TOKEN: 'ghp_old',
+  });
+  assert.equal((byId.files as BlobFileStore).storeId, 'abc123');
+  assert.throws(
+    () => createPlatform({ ...env, PLATFORM_BLOB_READ_WRITE_TOKEN: undefined, PLATFORM_BLOB_STORE_ID: '../x' }),
+    /not valid/,
+  );
+  // The public store's default id is never picked up.
+  assert.throws(
+    () => createPlatform({ ...env, PLATFORM_BLOB_READ_WRITE_TOKEN: undefined, BLOB_STORE_ID: 'store_public' }),
+    /PLATFORM_BLOB_STORE_ID/,
+  );
   assert.throws(() => createPlatform({ ...env, APP_URL: 'http://app.example' }), /https/);
   assert.throws(() => createPlatform({ ...env, WORKER_REPOSITORY: 'just-a-name' }), /owner\/name/);
   // A public store's default token is never picked up by itself.
   assert.throws(
     () => createPlatform({ ...env, PLATFORM_BLOB_READ_WRITE_TOKEN: undefined, BLOB_READ_WRITE_TOKEN: TOKEN }),
-    /PLATFORM_BLOB_READ_WRITE_TOKEN/,
+    /PLATFORM_BLOB_STORE_ID/,
   );
 });
 

@@ -40,16 +40,30 @@ export function storeIdOf(token: string): string {
   return id;
 }
 
+/** How the app proves itself to the store: a read-write token, or the store's id with Vercel's OIDC token. */
+export type BlobAuth = { token: string } | { storeId: string };
+
 /**
- * FileStore on a private Vercel Blob store. The app reads and writes with the store's read-write
- * token. A worker never gets that token: for each file it asks the app (`/api/worker/upload-url`),
- * and the app answers with a presigned URL for that one pathname.
+ * FileStore on a private Vercel Blob store. The app reads and writes either with the store's
+ * read-write token or, for a store connected to the Vercel project, with the store id and the OIDC
+ * token Vercel gives each function (the SDK finds that token itself). A worker never gets either:
+ * for each file it asks the app (`/api/worker/upload-url`), and the app answers with a presigned URL
+ * for that one pathname.
  */
 export class BlobFileStore implements FileStore {
   private delegation: { clientSigningToken: string; delegationToken: string; validUntil: number } | null = null;
+  private readonly auth: BlobAuth;
+  readonly storeId: string;
 
-  constructor(private readonly opts: { token: string; appUrl: string; api?: BlobApi; now?: () => number }) {
-    storeIdOf(opts.token);
+  constructor(private readonly opts: BlobAuth & { appUrl: string; api?: BlobApi; now?: () => number }) {
+    if ('token' in opts && opts.token) {
+      this.auth = { token: opts.token };
+      this.storeId = storeIdOf(opts.token);
+    } else if ('storeId' in opts && opts.storeId) {
+      this.storeId = opts.storeId.replace(/^store_/, '');
+      if (!/^[A-Za-z0-9]+$/.test(this.storeId)) throw new Error('the Blob store id is not valid');
+      this.auth = { storeId: this.storeId };
+    } else throw new Error('a Blob token or store id is needed');
   }
 
   private get api(): BlobApi {
@@ -65,7 +79,7 @@ export class BlobFileStore implements FileStore {
     const bytes = body instanceof Uint8Array ? body : new Uint8Array(await new Response(body).arrayBuffer());
     await this.api.put(key, Buffer.from(bytes), {
       access: 'private',
-      token: this.opts.token,
+      ...this.auth,
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType: opts?.contentType ?? 'application/octet-stream',
@@ -78,7 +92,7 @@ export class BlobFileStore implements FileStore {
     checkKey(key);
     const got = await this.api.get(key, {
       access: 'private',
-      token: this.opts.token,
+      ...this.auth,
       useCache: IMMUTABLE.test(key),
     });
     if (!got || got.statusCode !== 200) return null;
@@ -93,7 +107,7 @@ export class BlobFileStore implements FileStore {
   async *list(prefix: string): AsyncIterable<{ key: string; bytes: number }> {
     let cursor: string | undefined;
     do {
-      const page = await this.api.list({ prefix, cursor, limit: 1000, token: this.opts.token });
+      const page = await this.api.list({ prefix, cursor, limit: 1000, ...this.auth });
       for (const b of page.blobs) yield { key: b.pathname, bytes: b.size };
       cursor = page.hasMore ? page.cursor : undefined;
     } while (cursor);
@@ -102,7 +116,7 @@ export class BlobFileStore implements FileStore {
   async delete(keys: string[]) {
     for (const key of keys) checkKey(key);
     for (let i = 0; i < keys.length; i += 500) {
-      await this.api.del(keys.slice(i, i + 500), { token: this.opts.token });
+      await this.api.del(keys.slice(i, i + 500), { ...this.auth });
     }
   }
 
@@ -117,7 +131,7 @@ export class BlobFileStore implements FileStore {
     const now = this.now();
     if (!this.delegation || this.delegation.validUntil - now < DELEGATION_MARGIN_MS) {
       this.delegation = await this.api.issueSignedToken({
-        token: this.opts.token,
+        ...this.auth,
         pathname: '*',
         operations: ['put'],
         validUntil: now + DELEGATION_TTL_MS,
@@ -137,7 +151,7 @@ export class BlobFileStore implements FileStore {
       url: presignedUrl,
       headers: {
         'x-api-version': BLOB_API_VERSION,
-        'x-vercel-blob-store-id': storeIdOf(this.opts.token),
+        'x-vercel-blob-store-id': this.storeId,
         'x-vercel-blob-access': 'private',
         'x-add-random-suffix': '0',
         'x-allow-overwrite': '1',

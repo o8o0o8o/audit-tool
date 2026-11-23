@@ -23,7 +23,10 @@ Vercel project `audit-tool` in the FocusReactive team, production address `https
 
 - **Admins:** three people are created in the production database (step 2).
 
-Still to do: merge (step 5) and the checks after it (step 6).
+- **Merged and deployed** (2026-11-23), and Vercel's own login (Deployment Protection) now covers preview deployments only. It used to cover the production address too, which sends every request from outside, the GitHub worker's and the cron's included, to Vercel's login instead of the app. The app is therefore reachable from the internet and protected by its own login and API keys.
+- **First audit in production:** a quick scan of example.com went from `start_audit` to `succeeded` in about 100 seconds: dispatch with the existing `GITHUB_TOKEN`, GitHub's identity token accepted, uploads to the private store, load into Neon. The cron workflow answered `tick: HTTP 200`. One fault showed and is fixed: Blob serves text compressed and reports its size as 0, and the report route sent that as the length, so the report came back empty.
+
+Still to do: steps 6.2, 6.5 and 6.6 below (a login in the browser, one full audit, the usage page).
 
 ## 1. The private Blob store (done 2026-11-23)
 

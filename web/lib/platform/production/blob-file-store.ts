@@ -97,11 +97,12 @@ export class BlobFileStore implements FileStore {
     });
     if (!got || got.statusCode !== 200) return null;
     const type = got.blob.contentType;
-    return {
-      body: got.stream,
-      bytes: got.blob.size,
-      ...(type && type !== 'application/octet-stream' ? { contentType: type } : {}),
-    };
+    const meta = type && type !== 'application/octet-stream' ? { contentType: type } : {};
+    // Blob serves text compressed, with no length: `size` is then 0 although the file is not empty.
+    // Callers send `bytes` as Content-Length, so such a file is read here to learn its real size.
+    if (got.blob.size > 0) return { body: got.stream, bytes: got.blob.size, ...meta };
+    const whole = new Uint8Array(await new Response(got.stream).arrayBuffer());
+    return { body: new Blob([whole]).stream() as ReadableStream<Uint8Array>, bytes: whole.byteLength, ...meta };
   }
 
   async *list(prefix: string): AsyncIterable<{ key: string; bytes: number }> {

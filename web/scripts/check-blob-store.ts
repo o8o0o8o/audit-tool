@@ -38,6 +38,20 @@ async function main(): Promise<void> {
     expect(got?.text === '{"n":1}', `read back ${JSON.stringify(got)}`);
     return { type: got!.type, bytes: got!.bytes };
   });
+  await step(
+    'a large text file reports its real size (the service sends it compressed, without a length)',
+    async () => {
+      const html = `<html><body>${'<p>the same line again</p>'.repeat(20_000)}</body></html>`;
+      await store.put(`${prefix}report.html`, text(html), { contentType: 'text/html' });
+      const got = await store.get(`${prefix}report.html`);
+      const read = got ? (await new Response(got.body).arrayBuffer()).byteLength : -1;
+      expect(
+        got?.bytes === html.length && read === html.length,
+        `bytes ${got?.bytes}, read ${read}, wrote ${html.length}`,
+      );
+      return { bytes: got!.bytes };
+    },
+  );
   await step('get a missing file gives null', async () =>
     expect((await read(`${prefix}missing`)) === null, 'not null'),
   );
@@ -69,7 +83,10 @@ async function main(): Promise<void> {
   await step('list', async () => {
     const keys: string[] = [];
     for await (const f of store.list(prefix)) keys.push(f.key.slice(prefix.length));
-    expect(keys.includes('a.json') && keys.includes('evidence/shot.png'), `listed ${keys.join(', ')}`);
+    expect(
+      keys.includes('a.json') && keys.includes('evidence/shot.png') && keys.includes('report.html'),
+      `listed ${keys.join(', ')}`,
+    );
     return keys.sort();
   });
   await step('delete', async () => {

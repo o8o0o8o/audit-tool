@@ -104,6 +104,22 @@ void test('Blob FileStore: put, get, list across pages, delete; private and neve
   assert.equal(await s.get('audits/a/1/report.html'), null);
 });
 
+void test('Blob FileStore: a file served without a length still reports its real size', async () => {
+  const f = fakeBlob();
+  const real = f.api.get;
+  // What the service does for text: the body arrives, the size says 0.
+  f.api.get = (async (...args: Parameters<typeof real>) => {
+    const got = await real(...args);
+    if (got && got.statusCode === 200) (got.blob as { size: number }).size = 0;
+    return got;
+  }) as typeof real;
+  const s = new BlobFileStore({ token: TOKEN, appUrl: 'https://app.example', api: f.api });
+  await s.put('audits/a/1/site.html', new TextEncoder().encode('<h1>report</h1>'), { contentType: 'text/html' });
+  const got = await s.get('audits/a/1/site.html');
+  assert.equal(got?.bytes, 15);
+  assert.equal(await new Response(got!.body).text(), '<h1>report</h1>');
+});
+
 void test('Blob FileStore: files that are overwritten are read past the cache', async () => {
   const f = fakeBlob();
   const s = new BlobFileStore({ token: TOKEN, appUrl: 'https://app.example', api: f.api });

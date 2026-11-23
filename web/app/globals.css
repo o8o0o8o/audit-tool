@@ -23,6 +23,11 @@
   color: var(--color-grey-700);
 }
 
+.mcp-hint {
+  margin: 16px 0;
+  font-size: 14px;
+}
+
 .error {
   color: var(--color-error);
 }

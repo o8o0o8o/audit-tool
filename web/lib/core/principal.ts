@@ -19,7 +19,13 @@ export type Principal =
       label: string;
       /** The logged-in person; absent for scripts and the shared password. */ adminId?: string;
     }
-  | { kind: 'client'; clientId: string; name: string; scopes: readonly Scope[] }
+  | {
+      kind: 'client';
+      clientId: string;
+      name: string;
+      scopes: readonly Scope[];
+      /** A personal key's owner. */ adminId?: string;
+    }
   | { kind: 'report'; auditId: string };
 
 export const internalPrincipal = (label = 'internal'): Principal => ({ kind: 'internal', label });

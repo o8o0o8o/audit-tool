@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { admins, apiClients } from '../../db/schema';
 import { CoreError } from './errors';
@@ -191,8 +191,88 @@ export async function authenticateApiKey(
     .from(apiClients)
     .where(eq(apiClients.keyHash, sha256Hex(key)));
   if (!client || client.revokedAt) throw new CoreError('unauthorized', 'invalid or revoked API key');
+  // A personal key stops working with its owner.
+  if (client.adminId) {
+    const [owner] = await db.select({ off: admins.disabledAt }).from(admins).where(eq(admins.id, client.adminId));
+    if (!owner || owner.off) throw new CoreError('unauthorized', 'invalid or revoked API key');
+  }
   if (!(await takeRate(db, `client:${client.id}`, client.rateLimitPerHour, 3600_000, now))) {
     throw new CoreError('rate_limited', `rate limit of ${client.rateLimitPerHour} calls per hour reached`);
   }
-  return { kind: 'client', clientId: client.id, name: client.name, scopes: client.scopes as Scope[] };
+  return {
+    kind: 'client',
+    clientId: client.id,
+    name: client.name,
+    scopes: client.scopes as Scope[],
+    ...(client.adminId ? { adminId: client.adminId } : {}),
+  };
+}
+
+/** What a personal MCP key may do: what its owner does in the internal app, except managing prospects. */
+export const PERSONAL_MCP_SCOPES: Scope[] = [
+  'audits:read',
+  'audits:start:quick',
+  'audits:start:full',
+  'audits:cancel',
+  'audits:pdf',
+  'prospects:read',
+];
+export const PERSONAL_MCP_RATE_PER_HOUR = 300;
+
+/**
+ * The "Set up MCP" page's one action: a personal API key for the logged-in person. A person has one
+ * such key at a time: making a new one revokes the one before, because a key is shown only once
+ * and cannot be shown again. Audits started with it name the person, as audits from the form do.
+ */
+export async function createPersonalMcpKey(
+  db: Db,
+  principal: Principal,
+  now = new Date(),
+): Promise<{ id: string; key: string; replaced: number }> {
+  if (principal.kind !== 'internal') throw new CoreError('forbidden', 'internal only');
+  const adminId = principal.adminId ?? null;
+  const owner = principal.label.replace(/^admin:/, '');
+  const key = `${KEY_PREFIX}${randomToken(32)}`;
+  return db.transaction(async (tx) => {
+    const old = adminId
+      ? await tx
+          .update(apiClients)
+          .set({ revokedAt: now })
+          .where(and(eq(apiClients.adminId, adminId), isNull(apiClients.revokedAt)))
+          .returning({ id: apiClients.id })
+      : [];
+    const [row] = await tx
+      .insert(apiClients)
+      .values({
+        name: `mcp:${owner}:${randomToken(4)}`,
+        keyHash: sha256Hex(key),
+        scopes: PERSONAL_MCP_SCOPES,
+        rateLimitPerHour: PERSONAL_MCP_RATE_PER_HOUR,
+        adminId,
+      })
+      .returning({ id: apiClients.id });
+    return { id: row!.id, key, replaced: old.length };
+  });
+}
+
+/** The text a person pastes into their AI assistant: it holds everything the assistant needs to connect. */
+export function mcpSetupPrompt(appUrl: string, key: string): { prompt: string; command: string; url: string } {
+  const url = `${appUrl.replace(/\/$/, '')}/api/mcp`;
+  const command = `claude mcp add --transport http audit ${url} --header "Authorization: Bearer ${key}"`;
+  const prompt = [
+    'Set up the "audit" MCP server for me. It runs website audits and returns their findings.',
+    '',
+    `- Address: ${url}`,
+    '- Transport: HTTP (streamable)',
+    `- Header: Authorization: Bearer ${key}`,
+    '',
+    'If you are Claude Code, run this command yourself:',
+    command,
+    'In any other client, add it to this client\'s MCP settings as an HTTP server named "audit" with that address and header.',
+    '',
+    'The key is a secret: do not print it again, and do not write it into a file that is committed or shared.',
+    '',
+    'When the server is connected (I may have to restart or reload you first), call its list_audits tool to check that it answers, then tell me in a few lines what I can do with it. Good first requests: "run a quick scan of <site> and show the lead summary", "list the lead summaries", "show the top findings of the last audit".',
+  ].join('\n');
+  return { prompt, command, url };
 }

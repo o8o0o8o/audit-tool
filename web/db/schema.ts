@@ -26,18 +26,6 @@ const tz = (name: string) => timestamp(name, { withTimezone: true });
 
 // ── Access ──────────────────────────────────────────────────────────────────
 
-export const apiClients = pgTable('api_clients', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull().unique(),
-  keyHash: text('key_hash').notNull().unique(),
-  scopes: text('scopes').array().notNull(),
-  webhookUrl: text('webhook_url'),
-  webhookSecret: text('webhook_secret'),
-  rateLimitPerHour: integer('rate_limit_per_hour').notNull().default(60),
-  createdAt: tz('created_at').notNull().defaultNow(),
-  revokedAt: tz('revoked_at'),
-});
-
 /** People who log in to /internal. Each audit they start names them, so usage is counted per person. */
 export const admins = pgTable('admins', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -50,6 +38,23 @@ export const admins = pgTable('admins', {
   lastLoginAt: tz('last_login_at'),
   /** Set instead of deleting the row, so earlier audits keep their name. A disabled admin cannot log in. */
   disabledAt: tz('disabled_at'),
+});
+
+export const apiClients = pgTable('api_clients', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  keyHash: text('key_hash').notNull().unique(),
+  scopes: text('scopes').array().notNull(),
+  webhookUrl: text('webhook_url'),
+  webhookSecret: text('webhook_secret'),
+  rateLimitPerHour: integer('rate_limit_per_hour').notNull().default(60),
+  createdAt: tz('created_at').notNull().defaultNow(),
+  revokedAt: tz('revoked_at'),
+  /**
+   * Set for a personal key made on the "Set up MCP" page: audits started with it count as that
+   * person's. Null for service keys.
+   */
+  adminId: uuid('admin_id').references(() => admins.id, { onDelete: 'set null' }),
 });
 
 // ── Sites ───────────────────────────────────────────────────────────────────

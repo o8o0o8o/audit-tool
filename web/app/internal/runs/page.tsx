@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { listAudits } from '../../../lib/core/audits';
 import { ctx, internalPrincipal } from '../../../lib/server';
+import { McpHint } from '../../components/McpHint';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ export default async function RunsPage({
     <section className="section">
       <div className="container">
         <h1 className="section__title section__title--sm">Audit runs</h1>
+        <McpHint text="You can also list audits and their lead summaries from your AI assistant." />
         <form className="internal-filter" method="get">
           <input name="domain" defaultValue={q.domain ?? ''} placeholder="domain" className="form-input" />
           <input name="status" defaultValue={q.status ?? ''} placeholder="status" className="form-input" />

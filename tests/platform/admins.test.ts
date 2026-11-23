@@ -7,7 +7,10 @@ import { admins, audits } from '../../web/db/schema';
 import {
   authenticateApiKey,
   createApiKey,
+  createPersonalMcpKey,
   hashPassword,
+  mcpSetupPrompt,
+  PERSONAL_MCP_SCOPES,
   login,
   sessionPrincipal,
   upsertAdmin,
@@ -146,3 +149,55 @@ void test('usage: audits, websites, pages and types are counted per user', { ski
     1,
   );
 });
+
+void test(
+  'MCP setup: a personal key in one step, counted as the person, replaced by the next, dead with its owner',
+  { skip: SKIP_DB },
+  async () => {
+    await t.db.delete(audits);
+    const eve = await upsertAdmin(t.db, { email: 'eve@example.com', name: 'Eve', password: 'eve password 123' });
+    const session: Principal = { kind: 'internal', label: 'admin:eve@example.com', adminId: eve.id };
+
+    const first = await createPersonalMcpKey(t.db, session);
+    assert.equal(first.replaced, 0);
+    const viaKey = await authenticateApiKey(t.db, `Bearer ${first.key}`);
+    assert.equal(viaKey.kind, 'client');
+    assert.equal(viaKey.kind === 'client' && viaKey.adminId, eve.id);
+    assert.deepEqual(viaKey.kind === 'client' && [...viaKey.scopes].sort(), [...PERSONAL_MCP_SCOPES].sort());
+    assert.ok(!PERSONAL_MCP_SCOPES.includes('prospects:write') && !PERSONAL_MCP_SCOPES.includes('audits:publish'));
+
+    // The prompt carries all an assistant needs, with the address the person uses.
+    const setup = mcpSetupPrompt('https://app.example/', first.key);
+    assert.equal(setup.url, 'https://app.example/api/mcp');
+    assert.ok(setup.prompt.includes(setup.url) && setup.prompt.includes(`Bearer ${first.key}`));
+    assert.ok(
+      setup.prompt.includes(setup.command) && setup.command.startsWith('claude mcp add --transport http audit '),
+    );
+    assert.match(setup.prompt, /list_audits/);
+    assert.match(setup.prompt, /do not print it again/);
+
+    // An audit from the key and one from the form are one user on the usage page.
+    const a = await startAudit(t.db, viaKey, { url: 'https://mcp-one.example', mode: 'quick' });
+    const b = await startAudit(t.db, session, { url: 'https://mcp-two.example', mode: 'quick' });
+    for (const id of [a.audit_id, b.audit_id])
+      assert.equal((await t.db.select().from(audits).where(eq(audits.id, id)))[0]!.createdByAdminId, eve.id);
+    const usage = (await usageByUser(t.db, internalPrincipal())).rows.filter((r) => r.audits > 0);
+    assert.deepEqual(
+      usage.map((r) => [r.user_kind, r.user, r.audits, r.websites]),
+      [['admin', 'eve@example.com', 2, 2]],
+    );
+
+    // A new key switches the old one off; other people's keys and service keys are left alone.
+    const service = await createApiKey(t.db, { name: 'svc-keep', scopes: ['audits:read'] });
+    const second = await createPersonalMcpKey(t.db, session);
+    assert.equal(second.replaced, 1);
+    await assert.rejects(authenticateApiKey(t.db, `Bearer ${first.key}`), code('unauthorized'));
+    assert.ok(await authenticateApiKey(t.db, `Bearer ${second.key}`));
+    assert.ok(await authenticateApiKey(t.db, `Bearer ${service.key}`));
+
+    // Only a logged-in person can make one; a disabled person's key stops at once.
+    await assert.rejects(createPersonalMcpKey(t.db, viaKey), code('forbidden'));
+    await t.db.update(admins).set({ disabledAt: new Date() }).where(eq(admins.id, eve.id));
+    await assert.rejects(authenticateApiKey(t.db, `Bearer ${second.key}`), code('unauthorized'));
+  },
+);

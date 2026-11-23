@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { McpHint } from '../../../components/McpHint';
 import { getAudit } from '../../../../lib/core/audits';
 import { CoreError } from '../../../../lib/core/errors';
 import { ctx, internalPrincipal } from '../../../../lib/server';
@@ -38,6 +39,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     <section className="section">
       <div className="container">
         <h1 className="section__title section__title--sm">Audit</h1>
+        <McpHint text="You can also read this audit's findings and summary from your AI assistant." />
         <div className="run-details">
           <p className="muted">{a.audit_id}</p>
           <p data-testid="run-status">

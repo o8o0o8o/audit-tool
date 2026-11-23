@@ -1,0 +1,2 @@
+ALTER TABLE "api_clients" ADD COLUMN "admin_id" uuid;--> statement-breakpoint
+ALTER TABLE "api_clients" ADD CONSTRAINT "api_clients_admin_id_admins_id_fk" FOREIGN KEY ("admin_id") REFERENCES "admins"("id") ON DELETE set null ON UPDATE no action;

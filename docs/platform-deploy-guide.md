@@ -118,7 +118,7 @@ Optional: `PUBLIC_CONTACT_EMAIL`, the address for deletion requests from the res
 
 ## 9. Giving someone the MCP server
 
-An admin creates an API key at `/internal/keys` (name, scopes) and hands the key over once; the person adds the server to their client with the app's address plus `/api/mcp` and the key as a bearer token. The steps, the scopes and the limits are in [`web/README.md`](../web/README.md), "Using the MCP server".
+A person with a login needs nothing from anyone: **Set up MCP** in the internal menu makes their own key and a prompt to paste into their AI assistant, which then connects itself. For a service, an admin creates a key at `/internal/keys` (name, scopes). Both ways, the scopes and the limits are in [`web/README.md`](../web/README.md), "Using the MCP server".
 
 ## What the first users should know
 

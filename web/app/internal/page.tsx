@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { McpHint } from '../components/McpHint';
 
 import {
   QUICK_SCAN,
@@ -448,6 +449,7 @@ export default function DispatchPage() {
               <li>Prioritised findings</li>
               <li>PDF and HTML report</li>
             </ul>
+            <McpHint text="You can also start audits and read their results from your AI assistant." />
           </div>
 
           <div className="contacts__wrap-right">

@@ -1,6 +1,7 @@
 /**
  * Usage per user, counted from the `audits` rows: no table of its own. A user is a person who logs
- * in to /internal (`audits.created_by_admin_id`), an API client (`created_by_client_id`), or, for
+ * in to /internal (`audits.created_by_admin_id`: audits from the form and from their personal MCP
+ * key), an API client (`created_by_client_id`), or, for
  * audits that name neither, their source (public scans, the pipeline, scripts).
  *
  * Counts cover audits that still exist: deleting a site deletes its audits and their usage with it.
@@ -44,11 +45,12 @@ export async function usageByUser(
   const rows = await db
     .select({
       adminId: audits.createdByAdminId,
-      clientId: audits.createdByClientId,
+      // An audit that names a person counts as theirs, whether it came from the form or their key.
+      clientId: sql<string | null>`case when ${audits.createdByAdminId} is null then ${audits.createdByClientId} end`,
       source: sql<string>`case when ${audits.createdByAdminId} is null and ${audits.createdByClientId} is null then ${audits.source} end`,
       email: admins.email,
       adminName: admins.name,
-      clientName: apiClients.name,
+      clientName: sql<string | null>`case when ${audits.createdByAdminId} is null then ${apiClients.name} end`,
       audits: sql<number>`count(*)::int`,
       websites: sql<number>`count(distinct ${audits.siteId})::int`,
       pages: sql<number>`coalesce(sum(${audits.pagesProcessed}), 0)::int`,
@@ -65,11 +67,11 @@ export async function usageByUser(
     .where(and(gte(audits.createdAt, from), lt(audits.createdAt, to)))
     .groupBy(
       audits.createdByAdminId,
-      audits.createdByClientId,
+      sql`case when ${audits.createdByAdminId} is null then ${audits.createdByClientId} end`,
       sql`case when ${audits.createdByAdminId} is null and ${audits.createdByClientId} is null then ${audits.source} end`,
       admins.email,
       admins.name,
-      apiClients.name,
+      sql`case when ${audits.createdByAdminId} is null then ${apiClients.name} end`,
     )
     .orderBy(desc(sql`coalesce(sum(${audits.pagesProcessed}), 0)`), desc(sql`count(*)`));
   return {

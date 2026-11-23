@@ -11,6 +11,10 @@ Next.js app: the public scan form, the internal app behind a login, the MCP serv
 
 The server is at `<app address>/api/mcp` (Streamable HTTP, stateless). A client sends an API key as `Authorization: Bearer <key>`.
 
+**The short way, for a person with a login:** open **Set up MCP** in the internal menu (`/internal/mcp`) and press the button. The app makes your own key and shows a prompt that holds it; paste the prompt into your AI assistant, and the assistant adds the server and checks it. Audits started through that key count as yours on the usage page. You have one such key at a time: a new prompt switches the earlier key off, and the key stops working if your login is disabled.
+
+**By hand, or for a service:**
+
 1. **Get a key.** An admin logs in at `/internal`, opens **API keys**, enters a name, ticks the scopes and creates the key. It is shown once; only its hash is stored. Locally the same is done with `yarn --cwd web key:create --name=<name> --scopes=<a,b>`.
 2. **Connect a client.** Claude Code:
 
@@ -38,7 +42,7 @@ Tools: `start_audit`, `get_audit`, `wait_for_audit`, `list_audits`, `continue_au
 Limits:
 
 - A key makes 60 calls an hour unless another number is set when it is created.
-- A key is not tied to a person: its audits count under the key's name on the usage page.
+- A key made on the **API keys** page is not tied to a person: its audits count under the key's name on the usage page. A key from **Set up MCP** is its owner's, allows 300 calls an hour, and has every scope except `prospects:write` and `audits:publish`.
 - A key that has `audits:read` reads every audit; it cancels only the audits it started.
 - Clients that sign in with OAuth (claude.ai connectors, for example) cannot connect: the server accepts API keys only.
 - Revoking a key on the **API keys** page takes effect at once.
@@ -85,6 +89,7 @@ Internal (login required):
 - `/internal/audits/<id>` — status, phase, progress, scores, scan quality, report links, "Cancel audit", "Continue crawl", "Generate PDF".
 - `/internal/audits/<id>/view` — the HTML report with the site header and footer around it, served sandboxed. Where the audit tool is installed next to the app (locally) it is rendered on view from the database with the current report and scoring code; in production it is the HTML the run stored.
 - `/internal/keys` — create (shown once) and revoke API keys.
+- `/internal/mcp` — "Set up MCP": one click makes the logged-in person's own API key and a prompt to paste into an AI assistant. The form, the runs list and the audit page each carry a one-line hint that links here.
 - `/internal/usage` — audits, websites, pages and audit types per user (admin, API key, or source) for a period.
 
 Reports and files:

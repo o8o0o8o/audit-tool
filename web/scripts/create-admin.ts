@@ -25,7 +25,7 @@ async function main(): Promise<void> {
       .returning({ id: admins.id });
     if (!done.length) throw new Error(`no admin ${email}`);
     await db.insert(actionLog).values({ principal: 'cli', action: 'admin_disabled', target: normalizeEmail(email) });
-    console.log(`disabled ${normalizeEmail(email)}; an open session ends within 12 hours`);
+    console.log(`disabled ${normalizeEmail(email)}; their MCP key stops at once, an open session ends within 12 hours`);
     return;
   }
   const password =

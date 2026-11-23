@@ -6,7 +6,6 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === '/') return NextResponse.redirect(new URL('/internal', request.url));
   if (
     pathname.startsWith('/internal') &&
     !pathname.startsWith('/internal/login') &&
@@ -20,4 +19,4 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ['/', '/internal/:path*'] };
+export const config = { matcher: ['/internal/:path*'] };

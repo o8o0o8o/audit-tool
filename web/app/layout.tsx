@@ -7,7 +7,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'Website Audit | FocusReactive',
-  description: 'Dispatch audits to GitHub Actions and view their reports',
+  description: 'Check a website for SEO, performance, accessibility, security and UX problems',
 };
 
 // Same shell as focusreactive.com (src/_layouts/redesignPage.njk): main-wrapper > header, main, footer.

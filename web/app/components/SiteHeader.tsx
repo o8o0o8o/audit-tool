@@ -7,6 +7,7 @@ import { FR_ORIGIN, SOCIALS } from './site-links';
 
 // Markup and classes copied from focusreactive.com-front src/_includes/_header.html; the sticky
 // header and burger menu follow initStickyHeader() in src/jsNew/blocks/navigation.js.
+// `tool` items are the internal app's own pages; they are shown only inside /internal.
 const NAV: { title: string; href: string; tool?: boolean }[] = [
   { title: 'New audit', href: '/internal', tool: true },
   { title: 'Runs', href: '/internal/runs', tool: true },
@@ -68,7 +69,7 @@ export function SiteHeader() {
 
         <nav className={`header__nav${open ? ' is-open' : ''}`} role="navigation">
           <ul className="header__nav-list">
-            {NAV.map((item) => (
+            {NAV.filter((item) => !item.tool || pathname.startsWith('/internal')).map((item) => (
               <li
                 key={item.href}
                 className={`header__nav-item${item.tool && isCurrent(pathname, item.href) ? ' header__nav-item--current' : ''}`}

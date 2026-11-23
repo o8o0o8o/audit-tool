@@ -108,6 +108,14 @@ If the Vercel project deploys from `main`, this push deploys it. The two new wor
 
 In Vercel, promote the previous production deployment. The old app and old workflow still work, because nothing of theirs was changed or deleted. The new database and Blob store can be left as they are.
 
+## 8. The public site
+
+The public form at `/` is on in production through `PUBLIC_SCANS=on` (2026-11-23), **without a bot check**. Its protection is the limits: 3 new scans per hour from one address, at most 5 public scans queued or running (one runs at a time; `QUEUE_CAP_PUBLIC` changes that), 100 public scans in 24 hours over all visitors, and a repeat of the same target within a day opens the scan that exists. Public scans are quick scans or single pages, passive, and their screenshots expire after 30 days.
+
+To add the bot check later: in Cloudflare → Turnstile, add a widget for `audit-tool-focusreactive.vercel.app`, set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` on the Vercel project (Production) and redeploy. To close the public site: remove `PUBLIC_SCANS` (and the keys) and redeploy; `/` then redirects to `/internal`.
+
+Optional: `PUBLIC_CONTACT_EMAIL`, the address for deletion requests from the result page (without it the link goes to the contact page).
+
 ## What the first users should know
 
 - **Reports are as the run stored them:** no History section, and they do not change when report code changes.

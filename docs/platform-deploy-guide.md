@@ -81,7 +81,7 @@ git push origin platform-api-local
 git checkout main && git merge --ff-only platform-api-local && git push origin main
 ```
 
-If the Vercel project deploys from `main`, this push deploys it. The two new workflows (`platform-worker.yml`, `platform-cron.yml`) become usable the moment they are on `main`: GitHub starts a dispatch or a schedule only for a workflow file on the default branch.
+If the Vercel project deploys from `main`, this push deploys it. The two new workflows (`platform-worker.yml`, `platform-cron.yml`) become usable the moment they are on `main`: GitHub starts a dispatch only for a workflow file on the default branch. The schedule is on Vercel (`web/vercel.json`).
 
 ## 6. Check it works, in this order
 
@@ -100,7 +100,7 @@ If the Vercel project deploys from `main`, this push deploys it. The two new wor
 
    The first run takes a few minutes, mostly installing Chromium on the runner.
 
-4. **Cron:** in GitHub Actions, run "Platform cron" by hand once. It should print `tick: HTTP 200`.
+4. **Cron:** in Vercel → project → Settings → Cron Jobs, both jobs are listed; the function logs show `/api/cron/tick` answering 200 every 5 minutes. To call one by hand, run "Platform cron" in GitHub Actions: it prints `tick: HTTP 200`.
 5. **Full audit:** run one full audit of a small site; it uploads far more files than a quick scan.
 6. **Usage:** open `/internal/usage` and check your audits are under your name.
 
@@ -125,6 +125,6 @@ A person with a login needs nothing from anyone: **Set up MCP** in the internal 
 - **Reports are as the run stored them:** no History section, and they do not change when report code changes.
 - **Concurrency:** two internal audits at a time; a third waits in the queue.
 - **Actions logs are public:** the repository is public, so each worker run's log shows the audited URL.
-- **Stuck audits recover slowly:** a dead worker is noticed after 10–15 minutes, plus however late GitHub runs the 5-minute schedule. On the first day (2026-11-23) the schedule had not fired once in its first 95 minutes on `main`; only a run started by hand had. Until it fires, nothing recovers an audit whose worker dies; audits that finish normally do not need it. If it stays silent, the tick needs another trigger.
+- **Stuck audits recover slowly:** a dead worker is noticed after 10–15 minutes, on the next 5-minute tick. The tick and the daily cleanup are Vercel crons (`web/vercel.json`). They were a GitHub schedule first, which did not fire once in its first 7 hours on `main` (2026-11-23).
 - **Old page data:** audits lose their page data after 90 days; findings and reports stay.
 - **Not tried yet:** resuming or continuing a large audit, which reads big files back through the app.

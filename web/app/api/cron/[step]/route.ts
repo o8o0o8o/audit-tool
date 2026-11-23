@@ -9,8 +9,8 @@ const LOADER_BUDGET_MS = 240_000;
 
 /**
  * The platform's two timers: `tick` (every 5 minutes: reaper, dispatch, jobs, loader, rescore,
- * webhooks) and `retention` (daily). Called by `.github/workflows/platform-cron.yml` with
- * `Authorization: Bearer $CRON_SECRET`, which is also what a Vercel cron sends; anything else is
+ * webhooks) and `retention` (daily). Called by the Vercel crons in `web/vercel.json` with
+ * `Authorization: Bearer $CRON_SECRET` (`.github/workflows/platform-cron.yml` sends the same by hand); anything else is
  * refused, and so is every call while the secret is not set.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ step: string }> }) {

@@ -106,7 +106,7 @@ Reports and files:
 - `POST /api/public/scans`, `GET /api/public/scans/<id>` — the public form's start and the result page's polling.
 - `/api/v1/guard`, `/api/v1/prospects`, `/api/v1/prospects/<id>`, `/api/v1/audits/import`, `/api/v1/audits/<id>/complete`, `/api/v1/audits/<id>/gate-runs` — the lead pipeline.
 - `/api/worker/*` — register, heartbeat, status, progress, guard, upload-token, upload-url (production: an upload address per file), upload (local file store), snapshot, continue, file (PDF jobs).
-- `GET /api/cron/tick`, `GET /api/cron/retention` — the two timers, called by `.github/workflows/platform-cron.yml` with `Authorization: Bearer $CRON_SECRET`.
+- `GET /api/cron/tick`, `GET /api/cron/retention` — the two timers, called by the Vercel crons in `vercel.json` (a tick every 5 minutes, retention daily) with `Authorization: Bearer $CRON_SECRET`. `.github/workflows/platform-cron.yml` calls either one by hand.
 - `/api/internal/*` — what the internal pages call.
 - `/api/health` — `{ ok, modelVersion }`.
 - `/api/dev/webhook-log` — local mode only: logs webhook deliveries to `.platform/logs/webhooks.log` (use `http://localhost:3000/api/dev/webhook-log` as a key's webhook URL).

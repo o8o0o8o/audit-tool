@@ -284,7 +284,7 @@ The LLM passes additionally rely on the `claude` CLI being on `PATH` when no API
 - [`docs/platform-api-build.md`](docs/platform-api-build.md) — the build guide; §10 lists the production settings.
 - [`docs/platform-deploy-guide.md`](docs/platform-deploy-guide.md) — how the first deployment was set up and how to check it.
 
-`.github/workflows/platform-cron.yml` calls the app's two timers (a tick every 5 minutes, retention daily). `.github/workflows/audit.yml` is the flow from before the platform; the app no longer uses it.
+The app's two timers (a tick every 5 minutes, retention daily) are Vercel crons in `web/vercel.json`; `.github/workflows/platform-cron.yml` calls either one by hand. `.github/workflows/audit.yml` is the flow from before the platform; the app no longer uses it.
 
 ## Development
 

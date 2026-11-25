@@ -1,7 +1,7 @@
 /**
  * The cron steps (design §3 "Crons"), defined once: the local loop (`scripts/local-crons.ts`) and
  * production's two timers (`/api/cron/tick` and `/api/cron/retention`, called on a schedule by
- * `.github/workflows/platform-cron.yml`) run the same functions. Every
+ * the Vercel crons in `web/vercel.json`) run the same functions. Every
  * step locks the rows it works on, so one that fires twice or overlaps itself does no double work.
  * Each step first asks the cron gate: while nothing is open it skips the database, so Neon can scale
  * to zero.

@@ -27,7 +27,7 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
     <section className="section">
       <div className="container">
         <h1 className="section__title section__title--sm">Website Audit</h1>
-        <p className="muted run-details">
+        <p className="muted scan-meta">
           {what} of {view.target} · started {view.created_at.slice(0, 16).replace('T', ' ')} UTC
         </p>
         {view.status === 'running' && <ScanProgress auditId={view.audit_id} initial={view} />}
@@ -52,11 +52,10 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
         />
       )}
       <div className="container">
-        <p className="muted run-details">
+        <p className="scan-links">
           <a className="link-accent" href="/">
             Scan another site
-          </a>{' '}
-          ·{' '}
+          </a>
           <a className="link-accent" href={REMOVAL}>
             Own this site? Ask us to delete this data
           </a>

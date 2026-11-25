@@ -169,6 +169,19 @@
   margin-top: 40px;
 }
 
+/* Public scan page: the line under the title, and the links under the card. */
+.scan-meta {
+  margin: -12px 0 32px;
+  overflow-wrap: anywhere;
+}
+
+.scan-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  margin-top: 40px;
+}
+
 .run-list {
   list-style: none;
   margin-top: 40px;

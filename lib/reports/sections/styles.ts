@@ -861,6 +861,7 @@ function getStyles() {
               transition: all 0.15s;
               display: inline-flex;
               align-items: center;
+              gap: 6px;
           }
 
           .sev-pill:hover { border-color: var(--color-text-disabled); }

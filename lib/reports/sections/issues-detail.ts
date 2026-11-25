@@ -238,9 +238,9 @@ function renderFilterPill(value: string, label: string, count: number, active = 
   const sev = SEVERITY_STYLES[value];
   const activeStyle = active ? 'background:var(--color-accent);color:#000;border-color:var(--color-accent);' : '';
   const dotHtml = sev
-    ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sev.dot};margin-right:4px;"></span>`
+    ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sev.dot};"></span>`
     : '';
-  return `<button class="sev-pill${active ? ' active' : ''}" onclick="filterIssueSev('${value}',this)" style="${activeStyle}">${dotHtml}${label} <span style="opacity:0.7;">${count}</span></button>`;
+  return `<button class="sev-pill${active ? ' active' : ''}" onclick="filterIssueSev('${value}',this)" style="${activeStyle}">${dotHtml}<span>${label}</span><span style="opacity:0.7;">${count}</span></button>`;
 }
 
 // ── Table row ────────────────────────────────────────────────────────────────

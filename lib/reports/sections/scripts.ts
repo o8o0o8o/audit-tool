@@ -1089,9 +1089,29 @@ ${noScore ? '' : `        'Security Score': {
               });
           }
 
+          // A chart with nothing to plot is removed with its card (no empty frame, no
+          // "no data" placeholder); when no chart is left, the whole Data Insights block goes.
+          function dropChart(ctx) {
+              const card = ctx && ctx.closest('.chart-card');
+              if (!card) return;
+              const section = card.closest('.charts-section');
+              card.remove();
+              if (section && !section.querySelector('.chart-card')) section.remove();
+          }
+          function sumOf(values) {
+              return values.reduce((a, b) => a + (Number(b) || 0), 0);
+          }
+          function hasCounts(obj) {
+              return !!obj && sumOf(Object.values(obj)) > 0;
+          }
+
           // Chart 1: Issue Distribution by Severity
           const issueCtx = document.getElementById('issueChart');
-          if (issueCtx) {
+          const issueTotal = sumOf([summary.criticalCount, summary.highCount, summary.mediumCount, summary.lowCount])
+              + (isComparison && compareChartData ? sumOf([compareChartData.summary.criticalCount, compareChartData.summary.highCount, compareChartData.summary.mediumCount, compareChartData.summary.lowCount]) : 0);
+          if (issueCtx && issueTotal === 0) {
+              dropChart(issueCtx);
+          } else if (issueCtx) {
               const issueDatasets = [{
                   label: isComparison ? originLabel : 'Issues',
                   data: [
@@ -1212,6 +1232,8 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
+          } else {
+              dropChart(frequencyCtx);
           }
 
           // Chart 3: Performance Metrics Distribution (pre-calculated)
@@ -1264,13 +1286,15 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
+          } else {
+              dropChart(performanceCtx);
           }
 
           // Chart 4: Pages by Status Code (pre-calculated)
           const statusCodes = chartData.statusCodes;
 
           const statusCtx = document.getElementById('statusChart');
-          if (statusCtx && Object.keys(statusCodes).length > 0) {
+          if (statusCtx && hasCounts(statusCodes)) {
               new Chart(statusCtx, {
                   type: 'pie',
                   data: {
@@ -1310,13 +1334,17 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
+          } else {
+              dropChart(statusCtx);
           }
 
           // Chart 5: Word Count Distribution (pre-calculated)
           const wordCountBuckets = chartData.wordCountBuckets;
 
           const wordCountCtx = document.getElementById('wordCountChart');
-          if (wordCountCtx) {
+          if (wordCountCtx && !hasCounts(wordCountBuckets) && !(isComparison && compareChartData && hasCounts(compareChartData.wordCountBuckets))) {
+              dropChart(wordCountCtx);
+          } else if (wordCountCtx) {
               const wcDatasets = [{
                   label: isComparison ? originLabel : 'Pages',
                   data: Object.values(wordCountBuckets),
@@ -1368,7 +1396,9 @@ ${noScore ? '' : `        'Security Score': {
           const indexability = chartData.indexability;
 
           const indexabilityCtx = document.getElementById('indexabilityChart');
-          if (indexabilityCtx) {
+          if (indexabilityCtx && !hasCounts(indexability)) {
+              dropChart(indexabilityCtx);
+          } else if (indexabilityCtx) {
               new Chart(indexabilityCtx, {
                   type: 'doughnut',
                   data: {
@@ -1449,14 +1479,14 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
-          } else if (coverageCtx) {
-              coverageCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No code coverage data (enable --perf)</div>';
+          } else {
+              dropChart(coverageCtx);
           }
 
           // Chart 8: Language Distribution
           const languageDist = chartData.languageDist;
           const langCtx = document.getElementById('languageChart');
-          if (langCtx && Object.keys(languageDist).length > 0) {
+          if (langCtx && hasCounts(languageDist)) {
               const langColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
               new Chart(langCtx, {
                   type: 'doughnut',
@@ -1477,13 +1507,13 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
-          } else if (langCtx) {
-              langCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No language detection data</div>';
+          } else {
+              dropChart(langCtx);
           }
 
           // Chart 9: PageRank Distribution
           const pageRankCtx = document.getElementById('pageRankChart');
-          if (pageRankCtx && chartData.pageRankBuckets) {
+          if (pageRankCtx && hasCounts(chartData.pageRankBuckets)) {
               const prBuckets = chartData.pageRankBuckets;
               new Chart(pageRankCtx, {
                   type: 'bar',
@@ -1508,13 +1538,13 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
-          } else if (pageRankCtx) {
-              pageRankCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No PageRank data</div>';
+          } else {
+              dropChart(pageRankCtx);
           }
 
           // Chart 10: CTA Distribution
           const ctaCtx = document.getElementById('ctaChart');
-          if (ctaCtx && chartData.ctaBuckets) {
+          if (ctaCtx && hasCounts(chartData.ctaBuckets)) {
               const ctaB = chartData.ctaBuckets;
               new Chart(ctaCtx, {
                   type: 'doughnut',
@@ -1535,8 +1565,8 @@ ${noScore ? '' : `        'Security Score': {
                       }
                   }
               });
-          } else if (ctaCtx) {
-              ctaCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-disabled);font-size:var(--font-size-sm);">No CTA data</div>';
+          } else {
+              dropChart(ctaCtx);
           }
       })();
 
